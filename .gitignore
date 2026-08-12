@@ -1,0 +1,12 @@
+# Build outputs and local application data
+bluntcode.exe
+dist/
+web/dist/
+web/node_modules/
+coverage/
+.bluntcode/
+
+# Test/editor noise
+*.test.db
+*.log
+.DS_Store

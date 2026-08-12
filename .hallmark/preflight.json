@@ -1,0 +1,8 @@
+{
+  "date": "2026-08-12",
+  "framework": "React + Vite",
+  "existing_system": "none",
+  "entry_stylesheet": "web/src/styles.css",
+  "scope": ["web/src/App.tsx", "web/src/styles.css", "web/src/tokens.css"],
+  "constraints": ["local-first", "no browser automation", "use live SSE events", "preserve API routes"]
+}

@@ -1,0 +1,1 @@
+{"diagnostics":[{"category":"lint/correctness/noUnusedVariables","severity":"warning","description":"This variable is unused.","location":{"path":"src/main.ts"},"advices":[{"log":"Remove the unused variable."}]}]}

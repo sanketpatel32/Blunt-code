@@ -1,0 +1,1 @@
+{"results":[{"check_id":"javascript.lang.security.detect-eval-with-expression.detect-eval-with-expression","path":"src/main.ts","start":{"line":3,"col":1},"end":{"line":3,"col":14},"extra":{"message":"Detected eval","severity":"WARNING","metadata":{"category":"security"}}}],"errors":[]}

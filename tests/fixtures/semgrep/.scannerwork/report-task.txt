@@ -1,0 +1,6 @@
+projectKey=bluntcode:4c17cb62-fbc1-c8d1-23cc-8e6ed6060502
+serverUrl=http://127.0.0.1:62290
+serverVersion=26.8.0.126808
+dashboardUrl=http://127.0.0.1:62290/dashboard?id=bluntcode%3A4c17cb62-fbc1-c8d1-23cc-8e6ed6060502
+ceTaskId=a062dd38-7b78-4a54-a58a-361ccee5ca68
+ceTaskUrl=http://127.0.0.1:62290/api/ce/task?id=a062dd38-7b78-4a54-a58a-361ccee5ca68

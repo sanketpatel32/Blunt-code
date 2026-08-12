@@ -1,0 +1,76 @@
+{
+  "artifacts": [
+    {
+      "tool_id": "ruff",
+      "version": "0.16.0",
+      "platform": "windows-amd64",
+      "source_url": "https://github.com/astral-sh/ruff/releases/download/0.16.0/ruff-x86_64-pc-windows-msvc.zip",
+      "sha256": "c5d1185c47261f86361d03b547da25be79120226a6f1721d623b2aba9d27668b",
+      "archive_type": "zip",
+      "executable": "ruff.exe",
+      "license_url": "https://github.com/astral-sh/ruff/blob/0.16.0/LICENSE-APACHE"
+    },
+    {
+      "tool_id": "biome",
+      "version": "2.5.6",
+      "platform": "windows-amd64",
+      "source_url": "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.5.6/biome-win32-x64.exe",
+      "sha256": "47b7c8f59181870782dbeb26bfa45a51229a277ffd458f5cf852dc96dfd3999c",
+      "archive_type": "exe",
+      "executable": "biome.exe",
+      "license_url": "https://github.com/biomejs/biome/blob/%40biomejs/biome%402.5.6/LICENSE-MIT"
+    },
+    {
+      "tool_id": "uv",
+      "version": "0.11.16",
+      "platform": "windows-amd64",
+      "source_url": "https://github.com/astral-sh/uv/releases/download/0.11.16/uv-x86_64-pc-windows-msvc.zip",
+      "sha256": "dd9d6d6554bfab265bfa98aa8e8a406c5c3a7b97582f93de1f4d48d9154a0395",
+      "archive_type": "zip",
+      "executable": "uv.exe",
+      "license_url": "https://github.com/astral-sh/uv/blob/0.11.16/LICENSE-APACHE"
+    },
+    {
+      "tool_id": "semgrep",
+      "version": "1.172.0",
+      "platform": "windows-amd64",
+      "source_url": "https://files.pythonhosted.org/packages/8d/2b/db00aa8b50d4a3172f7d1a90005d359875004cf840b50db4b8606845453b/semgrep-1.172.0-cp310.cp311.cp312.cp313.cp314.py310.py311.py312.py313.py314-none-win_amd64.whl",
+      "sha256": "e32868faeb67b241bbd3fabd82a12fba4b467464dedde9da285b9bf78e808ba3",
+      "archive_type": "wheel",
+      "executable": "semgrep.exe",
+      "license_url": "https://github.com/semgrep/semgrep/blob/v1.172.0/LICENSE",
+      "install_kind": "uv_tool",
+      "package": "semgrep==1.172.0"
+    },
+    {
+      "tool_id": "sonarqube-server",
+      "version": "26.8.0.126808",
+      "platform": "windows-amd64",
+      "source_url": "https://binaries.sonarsource.com/Distribution/sonarqube/sonarqube-26.8.0.126808.zip",
+      "sha256": "ea1c5c1932f9c25350eafc4cdb1a839527c117e5d98b5fcf222a715b6b50a1f2",
+      "archive_type": "zip",
+      "executable": "sonarqube-26.8.0.126808/bin/windows-x86-64/StartSonar.bat",
+      "license_url": "https://www.sonarsource.com/open-source-editions/sonarqube-community-build/"
+    },
+    {
+      "tool_id": "sonar-scanner",
+      "version": "7.3.0.5189",
+      "platform": "windows-amd64",
+      "source_url": "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-7.3.0.5189-windows-x64.zip",
+      "sha256": "76d66269943d503381d9f5e273e5d7a90d6e5001c90615e63008ed1fc0b76921",
+      "archive_type": "zip",
+      "executable": "sonar-scanner-7.3.0.5189-windows-x64/bin/sonar-scanner.bat",
+      "license_url": "https://github.com/SonarSource/sonar-scanner-cli/blob/master/LICENSE"
+    },
+    {
+      "tool_id": "java",
+      "version": "21.0.12+8",
+      "platform": "windows-amd64",
+      "source_url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12%2B8/OpenJDK21U-jdk_x64_windows_hotspot_21.0.12_8.zip",
+      "sha256": "9ba963ee2371874a74185d18bc7bb2ab9407df7683300855ed7606e0662321d0",
+      "archive_type": "zip",
+      "executable": "jdk-21.0.12+8/bin/java.exe",
+      "license_url": "https://adoptium.net/about/"
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+{"issues":[{"key":"issue-1","rule":"javascript:S1523","severity":"CRITICAL","type":"VULNERABILITY","message":"Avoid eval","component":"bluntcode:test:src/main.ts","textRange":{"startLine":3,"startOffset":0,"endLine":3,"endOffset":4}}]}
