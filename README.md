@@ -1,35 +1,268 @@
-# Blunt Code
+# Blunt Code 🛡️
 
-Blunt Code is a Windows-first, local-only code-analysis application. Choose a
-project, analyze it, and read one combined report from Ruff, Biome, Semgrep,
-and managed SonarQube.
+> **All-in-One Local Code Quality & Security Analyzer for Windows**
 
-It does not upload source code, findings, or reports; after initial managed
-tool setup, scans can run offline. Ruff, Biome, Semgrep, Java, SonarScanner,
-and SonarQube are version-pinned and installed only under Blunt Code’s local
-app-data folder. Semgrep runs only bundled local rules. See
-[docs/analyzers.md](docs/analyzers.md) and [docs/release.md](docs/release.md)
-for exact privacy, offline, and validation limits.
+**Blunt Code** is a desktop application for Windows that runs deep code analysis on your local software projects and aggregates findings into a single, unified report. It features an interactive, modern web interface that runs 100% locally on your computer—requiring **no cloud accounts, no API keys, and no pre-installed linters or language runtimes**.
 
-## Development
+---
 
-Run `go test ./...` for the backend suite. Run `./scripts/build.ps1` on
-Windows to build Vite, copy its output into the Go embed directory, and produce
-`bluntcode.exe`. Run `./scripts/package.ps1` to create a checksum file and a
-Windows ZIP. Install a release ZIP with
-`./scripts/install.ps1 -PackagePath <zip> -Sha256 <sha256>`.
-For a hosted release, use the same checksum gate without trusting the download:
-`./scripts/install.ps1 -PackageUrl https://.../BluntCode-...zip -Sha256Url https://.../BluntCode-...zip.sha256 -AddToPath`.
+## 📌 Table of Contents
 
-Run `bluntcode doctor` (or `bluntcode doctor --json`) for local diagnostics.
-It checks the data directory, free disk space, SQLite migrations, loopback binding, and managed
-tool readiness without downloading, installing, starting an analyzer, or
-sending diagnostics anywhere. Only one backend can use a given data directory
-at a time.
+- [✨ Key Features](#-key-features)
+- [💻 System Requirements](#-system-requirements)
+- [🚀 Installation Options](#-installation-options)
+  - [Option 1: One-Line PowerShell Installer (Recommended)](#option-1-one-line-powershell-installer-recommended)
+  - [Option 2: Standalone ZIP Download (Portable)](#option-2-standalone-zip-download-portable)
+  - [Option 3: Build from Source](#option-3-build-from-source)
+- [🎯 Quick Start Guide](#-quick-start-guide)
+- [🛠️ Managed Analyzers & Languages](#️-managed-analyzers--languages)
+- [🖥️ Command-Line Interface (CLI)](#️-command-line-interface-cli)
+- [📁 Data Storage & Privacy](#-data-storage--privacy)
+- [❓ Troubleshooting & FAQ](#-troubleshooting--faq)
+- [🗑️ Uninstalling](#️-uninstalling)
+- [🤝 Contributing](#-contributing)
+- [📜 License](#-license)
 
-Analyzer command output is retained only as bounded, redacted local diagnostic
-logs under the app-data directory; no source is uploaded.
+---
 
-## License
+## ✨ Key Features
 
-MIT. Third-party tools retain their own licenses; see THIRD_PARTY_NOTICES.md.
+- **100% Local & Private:** Runs entirely on loopback (`127.0.0.1`). Your code, findings, reports, and logs never leave your device.
+- **Zero-Config Managed Tools:** Automatically installs and sandboxes code analyzers in isolated application directories. No manual `PATH` configuring or Python/Java/Node dependency hassle.
+- **Multi-Tool Coverage:** Runs **Ruff**, **Biome**, **Semgrep**, and **SonarQube** concurrently to check for lint issues, security SAST vulnerabilities, formatting errors, and code smells.
+- **Interactive UI Dashboard:** Built-in web app with real-time scan logs, file-level previews, filtering by tool/severity, and one-click **Markdown Export**.
+- **Offline Capable:** Once analyzers are downloaded on initial setup, full scans can run 100% offline without internet access.
+
+---
+
+## 💻 System Requirements
+
+| Requirement | Specification |
+| :--- | :--- |
+| **Operating System** | Windows 10 or Windows 11 (64-bit / amd64) |
+| **User Rights** | Standard user account (Administrator privileges **not** required) |
+| **Network** | Internet connection required **only on first run** to download managed analyzer tools |
+| **Dependencies** | **None!** Global Python, Java, or Node.js installations are **not required** |
+
+---
+
+## 🚀 Installation Options
+
+Choose the method that suits your workflow best:
+
+### Option 1: One-Line PowerShell Installer (Recommended)
+
+This automated script downloads the latest release, verifies its SHA-256 checksum, installs Blunt Code to `%LOCALAPPDATA%\Programs\BluntCode`, creates a **Start Menu** shortcut, and launches the app.
+
+1. Open **PowerShell** (Press `Win + R`, type `powershell`, and press `Enter`).
+2. Paste and execute the command:
+
+```powershell
+powershell -ExecutionPolicy Bypass -Command "Invoke-RestMethod -Uri 'https://raw.githubusercontent.com/sanketpatel32/Blunt-code/main/scripts/install-latest.ps1' | Invoke-Expression"
+```
+
+---
+
+### Option 2: Standalone ZIP Download (Portable)
+
+If you prefer to download and verify files manually without running a web-based script:
+
+1. Open the [Latest Release Page](https://github.com/sanketpatel32/Blunt-code/releases/latest).
+2. Download `BluntCode-<version>-windows-amd64.zip` and `BluntCode-<version>-windows-amd64.zip.sha256`.
+3. Open **PowerShell** in your download folder and run:
+
+```powershell
+# 1. Verify file integrity
+$package = '.\BluntCode-0.1.0-windows-amd64.zip' # Update filename to match download
+$expected = (Get-Content "$package.sha256" -Raw).Trim().Split()[0].ToLowerInvariant()
+$actual = (Get-FileHash $package -Algorithm SHA256).Hash.ToLowerInvariant()
+
+if ($actual -ne $expected) {
+    throw 'Checksum mismatch! Download may be corrupted or modified.'
+}
+Write-Host 'SHA256 verified successfully!' -ForegroundColor Green
+
+# 2. Extract and launch
+Expand-Archive $package -DestinationPath .\BluntCode -Force
+Set-Location .\BluntCode\BluntCode*
+.\bluntcode.exe
+```
+
+> [!TIP]
+> **PowerShell Execution Policy Note:** If Windows blocks running `.ps1` installer scripts, append `-ExecutionPolicy Bypass` to your PowerShell invocation:
+> ```powershell
+> powershell -ExecutionPolicy Bypass -File .\Install-BluntCode.ps1
+> ```
+> This applies solely to that single process execution and does not change your computer-wide security policy.
+
+---
+
+### Option 3: Build from Source
+
+For developers and contributors who wish to compile Blunt Code from source:
+
+**Prerequisites:**
+- [Go 1.26 or higher](https://go.dev/dl/)
+- [Node.js 18 or higher](https://nodejs.org/) with `npm`
+
+```powershell
+# Clone the repository
+git clone https://github.com/sanketpatel32/Blunt-code.git
+Set-Location Blunt-code
+
+# Build frontend & embed into Go binary
+.\scripts\build.ps1
+
+# Run the compiled binary
+.\bluntcode.exe
+```
+
+---
+
+## 🎯 Quick Start Guide
+
+Using Blunt Code takes less than two minutes:
+
+1. **Launch the App:** Start Blunt Code from your Start Menu or by running `bluntcode.exe`. The app starts a loopback server on `127.0.0.1` and opens your browser automatically.
+2. **Add Workspace:** Click **Add workspace** on the main screen and choose your project folder.
+3. **Configure File Exclusions (Optional):** Click **Configure files** to exclude build outputs, vendor directories, or binary files.
+4. **Run Scan:** Click **Run scan**.
+   > *Note: On the first scan, Blunt Code will download managed analyzers. Subsequent scans run locally and instantly.*
+5. **Inspect & Preview:** View issues grouped by analyzer. Click any finding to inspect line numbers and source code snippets.
+6. **Export Report:** Click **Export Markdown** to generate a single-file summary report saved inside your project workspace.
+
+---
+
+## 🛠️ Managed Analyzers & Languages
+
+Blunt Code isolates and manages analyzer binaries in `%LOCALAPPDATA%\BluntCode\tools`. They never alter your global `PATH`.
+
+| Analyzer | Languages Covered | What It Checks |
+| :--- | :--- | :--- |
+| **Ruff** | Python | Ultra-fast Python linting, syntax errors, and style violations. |
+| **Biome** | JavaScript, TypeScript | Code formatting, correctness, performance, and modern syntax checks. |
+| **Semgrep** | Python, JavaScript, TypeScript | Local security SAST rules, vulnerability patterns, and security risks. |
+| **SonarQube** | Polyglot (Project-wide) | Deep code quality, security hotspots, code smells, and structural metrics. |
+
+---
+
+## 🖥️ Command-Line Interface (CLI)
+
+`bluntcode.exe` supports CLI arguments and flags for headless execution, custom ports, or system diagnostics:
+
+```powershell
+# Open Blunt Code with a specific project folder loaded
+.\bluntcode.exe "C:\Projects\my-python-app"
+
+# Start the server on port 52160 without launching a web browser window
+.\bluntcode.exe --no-browser --port 52160
+
+# Run local system diagnostics
+.\bluntcode.exe doctor
+
+# Output diagnostic results in structured JSON (useful for troubleshooting)
+.\bluntcode.exe doctor --json
+```
+
+---
+
+## 📁 Data Storage & Privacy
+
+Blunt Code is designed from the ground up for **complete data privacy**:
+
+- **Strict Loopback Binding:** The server listens only on `127.0.0.1`.
+- **Zero Telemetry:** No user metrics, project code, or telemetry are ever sent to external cloud servers.
+- **Local Application Data:** All databases, logs, tools, and reports stay on your local drive.
+
+```text
+%LOCALAPPDATA%\BluntCode
+├── bluntcode.db       # SQLite database (workspaces, scan history, findings)
+├── reports\           # Generated Markdown scan reports
+├── logs\              # Redacted diagnostic log files
+└── tools\             # Sandboxed managed tool binaries (Ruff, Biome, Semgrep, SonarQube)
+```
+
+---
+
+## ❓ Troubleshooting & FAQ
+
+<details>
+<summary><b>1. PowerShell script execution is blocked by Windows.</b></summary>
+<br>
+
+By default, Windows restricts running PowerShell scripts downloaded from the web. You can safely bypass this restriction for the installer by running:
+```powershell
+powershell -ExecutionPolicy Bypass -File .\Install-BluntCode.ps1
+```
+This flag only applies to the installer process and leaves your overall system security policy intact.
+</details>
+
+<details>
+<summary><b>2. Why is the initial scan taking longer than expected?</b></summary>
+<br>
+
+The very first time an analyzer (like SonarQube or Semgrep) runs, Blunt Code downloads its sandboxed binary package and initializes the local server environment. Subsequent scans use the pre-booted local setup and complete much faster.
+</details>
+
+<details>
+<summary><b>3. How do I enable Offline Mode?</b></summary>
+<br>
+
+Once managed tools are installed during your first scan, open **Settings** in the Blunt Code web interface and toggle **Offline mode** ON. Blunt Code will perform scans using only local assets without making external network requests.
+</details>
+
+<details>
+<summary><b>4. Error: "Only one Blunt Code process can use the data directory."</b></summary>
+<br>
+
+Blunt Code locks its SQLite database to prevent data corruption. If another instance is running in the background, close it via Task Manager or run:
+```powershell
+.\bluntcode.exe doctor
+```
+to inspect active local processes.
+</details>
+
+---
+
+## 🗑️ Uninstalling
+
+To uninstall Blunt Code, use the included PowerShell uninstallation script:
+
+```powershell
+# Standard Uninstall (Removes app executable & shortcut; keeps your saved scan database & reports)
+Set-Location "$env:LOCALAPPDATA\Programs\BluntCode"
+.\uninstall.ps1
+
+# Full Cleanup Uninstall (Removes app AND deletes all local scan databases, logs, and settings)
+.\uninstall.ps1 -RemoveData
+```
+
+---
+
+## 🤝 Contributing
+
+Contributions, bug reports, and feature requests are welcome!
+
+```powershell
+# Run backend tests
+go test ./...
+
+# Run web UI tests & build check
+Set-Location web
+npm test
+npm run build
+Set-Location ..
+
+# Package a release zip & checksum
+.\scripts\package.ps1 -Version 0.1.0
+```
+
+For guidelines on coding standards and codebase architecture, see [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/architecture.md](docs/architecture.md).
+
+---
+
+## 📜 License
+
+This project is licensed under the **MIT License**. See [LICENSE](LICENSE) for details.
+Managed third-party analyzers retain their respective open-source licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+

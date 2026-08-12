@@ -4,7 +4,7 @@ param(
   [string]$PackageUrl,
   [string]$Sha256,
   [string]$Sha256Url,
-  [string]$InstallDir = (Join-Path $env:LOCALAPPDATA 'BluntCode'),
+  [string]$InstallDir = (Join-Path $env:LOCALAPPDATA 'Programs\BluntCode'),
   [switch]$AddToPath
 )
 

@@ -22,8 +22,10 @@ Copy-Item -LiteralPath (Join-Path $root 'README.md') -Destination $payload
 Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination $payload
 Copy-Item -LiteralPath (Join-Path $root 'THIRD_PARTY_NOTICES.md') -Destination $payload
 Copy-Item -LiteralPath (Join-Path $root 'scripts\uninstall.ps1') -Destination $payload
+Copy-Item -LiteralPath (Join-Path $root 'scripts\install-latest.ps1') -Destination $output -Force
 Compress-Archive -LiteralPath $payload -DestinationPath $archive -Force
 $hash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
 Set-Content -LiteralPath "$archive.sha256" -Value "$hash  $(Split-Path -Leaf $archive)" -NoNewline
 Write-Host "Package: $archive"
 Write-Host "SHA256:  $hash"
+Write-Host "Installer: $(Join-Path $output 'Install-BluntCode.ps1')"
