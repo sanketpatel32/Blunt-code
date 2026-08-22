@@ -7,12 +7,13 @@ import { message } from '../lib/notice';
 import { date, relativeTime } from '../lib/format';
 import { useLoad } from '../hooks/useLoad';
 import { Empty, ErrorPanel, LanguageBadges } from '../components/ui';
+import { FolderIcon } from '../components/icons';
 import { SkeletonCards } from '../components/skeletons';
 import { ConfirmationDialog } from '../components/dialogs';
 
 export function WorkspacesPage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd: () => void; notify: (n: Notice) => void }) {
   const state = useLoad(api.workspaces, []);
-  return <div className="page"><header className="page-heading"><div><p className="eyebrow">Workspaces</p><h1>Your local projects</h1><p>Each workspace saves its file rules and scan history on this computer.</p></div><button className="button primary" onClick={onAdd}>+ Add workspace</button></header>{state.loading ? <SkeletonCards count={6} variant="workspace" /> : state.error ? <ErrorPanel error={state.error} retry={state.reload} /> : state.data?.length ? <div className="workspace-grid">{state.data.map((workspace) => <WorkspaceCard key={workspace.id} workspace={workspace} go={go} notify={notify} onRemoved={state.reload} />)}</div> : <Empty title="No workspaces yet">Use the folder picker to add a project.</Empty>}</div>;
+  return <div className="page"><header className="page-heading"><div><p className="eyebrow">Workspaces</p><h1>Your local projects</h1><p>Each workspace saves its file rules and scan history on this computer.</p></div><button className="button primary" onClick={onAdd}>+ Add workspace</button></header>{state.loading ? <SkeletonCards count={6} variant="workspace" /> : state.error ? <ErrorPanel error={state.error} retry={state.reload} /> : state.data?.length ? <div className="workspace-grid">{state.data.map((workspace) => <WorkspaceCard key={workspace.id} workspace={workspace} go={go} notify={notify} onRemoved={state.reload} />)}</div> : <Empty title="No workspaces yet" icon={<FolderIcon />}>Use the folder picker to add a project.</Empty>}</div>;
 }
 
 function WorkspaceCard({ workspace, go, notify, onRemoved }: { workspace: Workspace; go: (r: Route) => void; notify?: (n: Notice) => void; onRemoved?: () => void }) {

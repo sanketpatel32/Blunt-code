@@ -7,6 +7,7 @@ import { message } from '../lib/notice';
 import { date, relativeTime } from '../lib/format';
 import { useLoad } from '../hooks/useLoad';
 import { Empty, ErrorPanel, LanguageBadges } from '../components/ui';
+import { FolderIcon } from '../components/icons';
 import { SkeletonLines, SkeletonTable } from '../components/skeletons';
 import { ConfirmationDialog } from '../components/dialogs';
 
@@ -16,7 +17,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
   const readyTools = tools.data?.filter((tool) => tool.ready).length ?? 0;
   return <div className="page dashboard-page"><header className="dashboard-heading"><div><h1>Workspaces</h1><p>Run a local scan, then follow every result in one place.</p></div></header>
     <section className="dashboard-list" aria-labelledby="recent-workspaces"><header><div><h2 id="recent-workspaces">Recent projects</h2><p>{workspaces.data?.length ? `${workspaces.data.length} saved locally` : 'Choose a project to begin.'}</p></div><button className="text-button" onClick={() => go({ page: 'workspaces' })}>All workspaces</button></header>
-      {workspaces.loading ? <SkeletonTable rows={6} cols={5} className="workspace-table" /> : workspaces.error ? <ErrorPanel error={workspaces.error} retry={workspaces.reload} /> : !workspaces.data?.length ? <Empty title="No workspaces yet" action={<button className="button primary" onClick={onAdd}>Add workspace</button>}>Choose a folder. Blunt Code never changes your source files.</Empty> : <WorkspaceTable workspaces={workspaces.data.slice(0, 6)} go={go} notify={notify} onRemoved={workspaces.reload} />}
+      {workspaces.loading ? <SkeletonTable rows={6} cols={5} className="workspace-table" /> : workspaces.error ? <ErrorPanel error={workspaces.error} retry={workspaces.reload} /> : !workspaces.data?.length ? <Empty title="No workspaces yet" icon={<FolderIcon />} action={<button className="button primary" onClick={onAdd}>Add workspace</button>}>Choose a folder. Blunt Code never changes your source files.</Empty> : <WorkspaceTable workspaces={workspaces.data.slice(0, 6)} go={go} notify={notify} onRemoved={workspaces.reload} />}
     </section>
     <section className="dashboard-tools" aria-label="Tool readiness">{tools.loading ? <SkeletonLines lines={2} /> : tools.error ? <ErrorPanel error={tools.error} retry={tools.reload} /> : <><div><span>Tool status</span><strong>{readyTools} of {tools.data?.length ?? 0} tools ready</strong><p>Managed locally. No source files leave this computer.</p></div><button className="button secondary" onClick={() => go({ page: 'tools' })}>Manage tools</button></>}</section>
   </div>;

@@ -241,4 +241,23 @@ describe('Blunt Code home', () => {
     expect(host.textContent).toContain('Scan interrupted — completed checks are still available.');
     expect(host.textContent).not.toContain('Cancel scan');
   });
+
+  it('celebrates a completed scan with zero findings and no filters', async () => {
+    window.history.replaceState({}, '', '/scans/scan-clean');
+    class FakeEventSource { addEventListener() {} close() {} }
+    vi.stubGlobal('EventSource', FakeEventSource);
+    const scan = { id: 'scan-clean', workspace_id: 'ws-1', state: 'completed', started_at: '2026-08-12T00:00:00Z', finished_at: '2026-08-12T00:00:02Z', total_findings: 0, analyzer_runs: [{ analyzer_id: 'ruff', status: 'succeeded' }, { analyzer_id: 'semgrep', status: 'succeeded' }] };
+    const fetchMock = vi.fn((input: string) => {
+      if (input.endsWith('/scans/scan-clean')) return Promise.resolve(json(scan));
+      if (input.endsWith('/scans/scan-clean/report')) return Promise.resolve(json({ scan, comparison: { new_count: 0, fixed_count: 0, persistent_count: 0 }, warnings: [], findings: [] }));
+      if (input.includes('/scans/scan-clean/findings')) return Promise.resolve(json({ items: [], total: 0, limit: 25, offset: 0, has_more: false }));
+      return Promise.resolve(json({ items: [] }));
+    });
+    const host = await render(fetchMock);
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(host.textContent).toContain('All clear — no findings');
+    expect(host.textContent).toContain('Every analyzer finished and found nothing to flag. Nice work.');
+    expect(host.textContent).not.toContain('No findings match these filters');
+    expect(host.querySelector('.empty.positive .empty-icon svg')).not.toBeNull();
+  });
 });

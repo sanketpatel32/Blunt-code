@@ -6,6 +6,7 @@ import { message } from '../lib/notice';
 import { useLoad } from '../hooks/useLoad';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { Empty, ErrorPanel } from '../components/ui';
+import { MagnifierIcon } from '../components/icons';
 import { SkeletonLines } from '../components/skeletons';
 
 export function FilesPage({ id, notify }: { id: string; notify: (n: Notice) => void }) {
@@ -24,7 +25,7 @@ export function FilesPage({ id, notify }: { id: string; notify: (n: Notice) => v
   const save = async () => { try { await api.saveRules(id, rules); await api.savePathOverrides(id, overrides); await loadTree(); setTreeKey((value) => value + 1); notify({ kind: 'info', text: 'File selection saved for this workspace.' }); } catch (e) { notify({ kind: 'error', text: message(e) }); } };
   const filtered = debouncedQuery ? nodes.filter((node) => node.path.toLowerCase().includes(debouncedQuery.toLowerCase())) : nodes;
   return <div className="page"><header className="page-heading"><div><p className="eyebrow">File selection</p><h1>{workspace.data?.name ?? 'Workspace files'}</h1><p>Choose source paths to analyze. Default exclusions protect dependencies and build output.</p></div><div className="action-row"><button className="button secondary" onClick={() => { setRules({ rules: [] }); setOverrides([]); }}>Reset to defaults</button><button className="button primary" onClick={save}>Save selection</button></div></header>
-    <section className="file-layout"><div className="tree-panel"><label className="search"><span>Search paths</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="src or package.json" /></label>{loadingTree ? <SkeletonLines lines={6} /> : treeError ? <ErrorPanel error={treeError} retry={loadTree} /> : filtered.length ? <FileTree key={treeKey} nodes={filtered} workspaceId={id} overrides={overrides} onOverrides={setOverrides} /> : <Empty title="No matching paths">Try a shorter search.</Empty>}</div><RuleEditor rules={rules.rules} setRules={(items) => setRules({ rules: items })} /></section>
+    <section className="file-layout"><div className="tree-panel"><label className="search"><span>Search paths</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="src or package.json" /></label>{loadingTree ? <SkeletonLines lines={6} /> : treeError ? <ErrorPanel error={treeError} retry={loadTree} /> : filtered.length ? <FileTree key={treeKey} nodes={filtered} workspaceId={id} overrides={overrides} onOverrides={setOverrides} /> : <Empty title="No matching paths" icon={<MagnifierIcon />}>Try a shorter search.</Empty>}</div><RuleEditor rules={rules.rules} setRules={(items) => setRules({ rules: items })} /></section>
   </div>;
 }
 

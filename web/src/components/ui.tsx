@@ -10,8 +10,9 @@ export function Loading() {
   return <div className="loading" aria-live="polite">Loading…</div>;
 }
 
-export function Empty({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
-  return <section className="empty"><h2>{title}</h2><p>{children}</p>{action}</section>;
+/** Shared empty-state panel. `icon` renders inside a circular medallion; `tone: 'positive'` switches the medallion to the success tokens (used for the all-clear scan state). */
+export function Empty({ title, children, action, icon, tone = 'neutral' }: { title: string; children: ReactNode; action?: ReactNode; icon?: ReactNode; tone?: 'neutral' | 'positive' }) {
+  return <section className={`empty${tone === 'positive' ? ' positive' : ''}`}>{icon && <span className="empty-icon">{icon}</span>}<h2>{title}</h2><p>{children}</p>{action}</section>;
 }
 
 export function PrivacyNotice() {
