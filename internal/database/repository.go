@@ -174,7 +174,9 @@ func (d *DB) Rules(ctx context.Context, workspaceID string) ([]core.WorkspaceRul
 		return nil, err
 	}
 	defer rows.Close()
-	var rr []core.WorkspaceRule
+	// Lists are initialized (never nil) so JSON responses serialize empty
+	// results as [] instead of null; typed API clients expect arrays.
+	rr := make([]core.WorkspaceRule, 0)
 	for rows.Next() {
 		var r core.WorkspaceRule
 		var enabled int
@@ -219,7 +221,7 @@ func (d *DB) PathOverrides(ctx context.Context, workspaceID string) ([]core.Path
 		return nil, err
 	}
 	defer rows.Close()
-	var result []core.PathOverride
+	result := make([]core.PathOverride, 0)
 	for rows.Next() {
 		var override core.PathOverride
 		if err := rows.Scan(&override.WorkspaceID, &override.RelativePath, &override.Mode); err != nil {
@@ -316,7 +318,7 @@ func (d *DB) Scans(ctx context.Context, workspaceID string) ([]core.Scan, error)
 		return nil, err
 	}
 	defer rows.Close()
-	var result []core.Scan
+	result := make([]core.Scan, 0)
 	for rows.Next() {
 		var s core.Scan
 		var st, fin sql.NullString
@@ -410,7 +412,7 @@ func (d *DB) RecentScans(ctx context.Context, filter RecentScansFilter) ([]Recen
 		return nil, 0, err
 	}
 	defer rows.Close()
-	var result []RecentScan
+	result := make([]RecentScan, 0)
 	for rows.Next() {
 		var item RecentScan
 		var started, finished sql.NullString
@@ -561,7 +563,7 @@ func (d *DB) Findings(ctx context.Context, scanID string) ([]analyzers.Finding, 
 		return nil, err
 	}
 	defer rows.Close()
-	var output []analyzers.Finding
+	output := make([]analyzers.Finding, 0)
 	for rows.Next() {
 		var f analyzers.Finding
 		var severity, category, metadata string
@@ -759,7 +761,7 @@ func (d *DB) FindingsPage(ctx context.Context, scan core.Scan, filter FindingFil
 		return FindingsPage{}, err
 	}
 	defer rows.Close()
-	page := FindingsPage{Total: total, Limit: filter.Limit, Offset: filter.Offset}
+	page := FindingsPage{Total: total, Limit: filter.Limit, Offset: filter.Offset, Items: make([]analyzers.Finding, 0)}
 	for rows.Next() {
 		f, err := scanFindingRow(rows)
 		if err != nil {
@@ -836,12 +838,12 @@ func (d *DB) FixedFindings(ctx context.Context, scan core.Scan, limit int) (Fixe
 	}
 	previousID, err := d.PreviousCompletedScanID(ctx, scan.WorkspaceID, scan.ID)
 	if errors.Is(err, sql.ErrNoRows) {
-		return FixedFindingsResult{}, nil
+		return FixedFindingsResult{Items: []analyzers.Finding{}}, nil
 	}
 	if err != nil {
 		return FixedFindingsResult{}, err
 	}
-	result := FixedFindingsResult{ComparisonAvailable: true, PreviousScanID: previousID}
+	result := FixedFindingsResult{ComparisonAvailable: true, PreviousScanID: previousID, Items: []analyzers.Finding{}}
 	// The fingerprint predicate mirrors the comparison status in
 	// buildFindingQuery pointed the other way: previous findings whose
 	// fingerprint no longer exists in the current scan are gone. The analyzer
@@ -873,7 +875,7 @@ func (d *DB) Metrics(ctx context.Context, scanID string) ([]analyzers.Metric, er
 		return nil, err
 	}
 	defer rows.Close()
-	var output []analyzers.Metric
+	output := make([]analyzers.Metric, 0)
 	for rows.Next() {
 		var m analyzers.Metric
 		if err := rows.Scan(&m.AnalyzerID, &m.Key, &m.Label, &m.Value, &m.Unit); err != nil {

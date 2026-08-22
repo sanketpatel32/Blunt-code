@@ -43,7 +43,7 @@ func Build(in Input) Model {
 	for _, f := range in.Findings {
 		counts[f.Severity]++
 	}
-	m := Model{Input: in, Counts: counts}
+	m := Model{Input: in, Counts: counts, Warnings: []string{}}
 	for _, r := range in.Runs {
 		if r.State != "completed" && r.State != "success" && r.State != "succeeded" {
 			m.Partial = true

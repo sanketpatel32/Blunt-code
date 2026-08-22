@@ -983,3 +983,80 @@ func extractID(body string) string {
 	end := strings.Index(body[start:], `"`)
 	return body[start : start+end]
 }
+
+// assertJSONList fetches target and asserts the response is 200 and contains
+// the exact substring want. Raw-body matching is required for null-vs-[]
+// checks because encoding/json decodes both into an empty Go slice.
+func assertJSONList(t *testing.T, s *Server, target, want string) {
+	t.Helper()
+	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1"+target, nil)
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("%s: got %d %s", target, response.Code, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), want) {
+		t.Fatalf("%s: body must contain %s: %s", target, want, response.Body.String())
+	}
+}
+
+// TestEmptyListsSerializeAsArraysNotNull pins the API consistency rule that
+// every list payload serializes as a JSON array, never null, when empty:
+// typed clients decode these responses into slices and must not be forced to
+// null-check each one. The regression covers the dashboard feed, per-resource
+// lists, and the report's embedded findings, metrics, and warnings lists.
+func TestEmptyListsSerializeAsArraysNotNull(t *testing.T) {
+	s := testServer(t)
+	// A completely empty database must still feed the dashboard arrays.
+	assertJSONList(t, s, "/api/v1/scans", `"scans":[]`)
+	assertJSONList(t, s, "/api/v1/workspaces", `"items":[]`)
+
+	ctx := context.Background()
+	empty, err := s.db.CreateWorkspace(ctx, core.Workspace{RootPath: t.TempDir(), Name: "Empty"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A workspace that exists but has never been scanned.
+	assertJSONList(t, s, "/api/v1/workspaces/"+empty.ID+"/scans", `"items":[]`)
+	assertJSONList(t, s, "/api/v1/workspaces/"+empty.ID+"/rules", `"items":[]`)
+	assertJSONList(t, s, "/api/v1/workspaces/"+empty.ID+"/path-overrides", `"items":[]`)
+	assertJSONList(t, s, "/api/v1/workspaces/"+empty.ID+"/tree", `"items":[]`)
+
+	// A completed scan with no findings: list, fixed panel, and report must
+	// all serialize their empty collections as arrays.
+	scanned, err := s.db.CreateWorkspace(ctx, core.Workspace{RootPath: t.TempDir(), Name: "Scanned"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scan := completedScan(t, s, scanned.ID, "completed")
+	assertJSONList(t, s, "/api/v1/scans/"+scan.ID+"/findings", `"items":[]`)
+	assertJSONList(t, s, "/api/v1/scans/"+scan.ID+"/fixed", `"fixed":[]`)
+	assertJSONList(t, s, "/api/v1/scans/"+scan.ID+"/report", `"findings":[]`)
+	assertJSONList(t, s, "/api/v1/scans/"+scan.ID+"/report", `"metrics":[]`)
+	assertJSONList(t, s, "/api/v1/scans/"+scan.ID+"/report", `"warnings":[]`)
+}
+
+// TestFindingsAndCSVRejectIdenticalEnumInputs pins the agreement between the
+// JSON findings list and the CSV export: both parse their filters through the
+// shared findingQueryFilter, so every invalid enum value (severity, status,
+// sort, order) must draw the same 400 INVALID_FINDING_QUERY envelope from
+// both endpoints. limit and offset deliberately differ: the export ignores
+// pagination because it writes every matching row.
+func TestFindingsAndCSVRejectIdenticalEnumInputs(t *testing.T) {
+	s := testServer(t)
+	work, err := s.db.CreateWorkspace(context.Background(), core.Workspace{RootPath: t.TempDir(), Name: "Example"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scan := completedScan(t, s, work.ID, "completed", finding("ruff", "F401", "src/main.py", "unused import", analyzers.SeverityHigh, analyzers.CategoryCorrectness))
+	for _, q := range []string{"?severity=bogus", "?status=bogus", "?sort=bogus", "?order=sideways"} {
+		for _, suffix := range []string{"findings", "findings.csv"} {
+			request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+scan.ID+"/"+suffix+q, nil)
+			response := httptest.NewRecorder()
+			s.Handler().ServeHTTP(response, request)
+			if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "INVALID_FINDING_QUERY") {
+				t.Fatalf("%s%s: got %d %s", suffix, q, response.Code, response.Body.String())
+			}
+		}
+	}
+}
