@@ -346,3 +346,40 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .shortcut-row dt .kbd-hint { margin: 0; }
 .shortcut-row dd { margin: 0; color: var(--color-ink-soft); font-size: var(--text-sm); }
 @media (max-width: 38rem) { .shortcut-groups { grid-template-columns: 1fr; } }
+
+/* settings folders */
+.data-folders { display: flex; align-items: center; justify-content: space-between; gap: var(--space-lg); padding: var(--space-lg) 0; border-bottom: var(--rule) solid var(--color-rule); }
+.data-folders h3 { margin: 0 0 var(--space-2xs); font-size: var(--text-sm); }
+.data-folders p { max-width: 36rem; margin: 0; color: var(--color-ink-soft); font-size: var(--text-sm); line-height: 1.5; }
+.data-folders code { display: block; max-width: 36rem; margin-top: var(--space-sm); font-size: var(--text-xs); }
+.folder-buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-sm); }
+.folder-buttons .button { gap: var(--space-2xs); }
+.folder-buttons svg { width: 1rem; height: 1rem; color: var(--color-ink-faint); }
+@media (max-width: 38rem) { .data-folders { flex-direction: column; align-items: flex-start; } .folder-buttons { justify-content: flex-start; } }
+
+/* finding row actions + exports */
+/* Loops 16/17/18 · Report export dropdown: a token-styled popover anchored to
+   the header button. It sits above page content but below dialogs (nav is 10,
+   dialog backdrop 20). Items are plain links, so they reuse the app's focus
+   ring; the caret flip is a short transition that the global reduced-motion
+   block clamps to 120ms. */
+.export-menu { position: relative; }
+.export-toggle .export-caret { display: inline-block; margin-left: var(--space-3xs); font-size: .85em; transition: transform var(--dur-base) var(--ease-out); }
+.export-menu.open .export-caret { transform: rotate(180deg); }
+.export-popover { position: absolute; z-index: 15; top: calc(100% + var(--space-2xs)); right: 0; display: grid; min-width: 16rem; padding: var(--space-2xs); border: var(--rule) solid var(--color-rule-strong); border-radius: var(--radius-md); background: var(--color-surface); box-shadow: var(--shadow-dialog); }
+.export-item { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-lg); padding: var(--space-xs) var(--space-sm); border-radius: var(--radius-sm); color: var(--color-ink); font-size: var(--text-sm); font-weight: 600; text-decoration: none; }
+.export-item small { flex: none; color: var(--color-ink-faint); font: 600 var(--text-xs) var(--font-mono); }
+@media (hover: hover) { .export-item:hover { background: var(--color-surface-muted); color: var(--color-accent-strong); } }
+
+/* Loop 25 · Row copy buttons: the shared .icon-button chrome sized down to sit
+   in the status cell next to the state text. Success turns the check green —
+   an inline confirm, not a toast. The print rule drops the button, where row
+   actions have no meaning. */
+.finding-actions-cell { display: flex; align-items: center; justify-content: space-between; gap: var(--space-xs); }
+.copy-finding { flex: none; width: 1.5rem; height: 1.5rem; color: var(--color-ink-faint); }
+.copy-finding svg { width: .9rem; height: .9rem; }
+.copy-finding.copied { color: var(--color-success); }
+@media (hover: hover) { .copy-finding:hover { background: var(--color-surface-muted); color: var(--color-ink); } }
+@media print { .copy-finding { display: none; } .finding-actions-cell { justify-content: flex-start; } }
+.copy-location.copied { color: var(--color-success); border-color: var(--color-success); }
+
