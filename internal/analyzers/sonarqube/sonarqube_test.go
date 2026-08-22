@@ -300,3 +300,23 @@ func TestScannerPropertiesRemainInAppData(t *testing.T) {
 		t.Fatal("properties missing expected values")
 	}
 }
+
+func TestScannerTaskParsesDefaultScannerOutput(t *testing.T) {
+	// Real sonar-scanner stdout (Windows CRLF): the task id only appears in
+	// the human-readable INFO line. The old parser looked for a debug-only
+	// `ceTaskUrl=` key, found nothing, skipped WaitForTask, and issues were
+	// fetched before the compute engine had processed the report.
+	stdout := "INFO: Analysis report uploaded\r\n" +
+		"INFO: ANALYSIS SUCCESSFUL, you can find the results at: http://127.0.0.1:58449/dashboard?id=demo\r\n" +
+		"INFO: Note that you will be able to access the updated dashboard once the server has processed the submitted analysis report\r\n" +
+		"INFO: More about the report processing at http://127.0.0.1:58449/api/ce/task?id=db28af73-8ecc-4d26-b2a1-3473847bebb3\r\n" +
+		"INFO: ANALYSIS SUCCESSFUL, you can find the results at: http://127.0.0.1:58449/dashboard?id=demo\r\n" +
+		"INFO: EXECUTION SUCCESS\r\n"
+	if got := scannerTask(stdout); got != "db28af73-8ecc-4d26-b2a1-3473847bebb3" {
+		t.Fatalf("scannerTask = %q, want the compute-engine task id from the INFO line", got)
+	}
+	// Debug dump format keeps working.
+	if got := scannerTask("ceTaskUrl=http://127.0.0.1:9000/api/ce/task?id=abc123\n"); got != "abc123" {
+		t.Fatalf("scannerTask(debug) = %q, want abc123", got)
+	}
+}

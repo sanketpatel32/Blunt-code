@@ -391,11 +391,20 @@ func (c *APIClient) WaitForTask(ctx context.Context, id string) error {
 	return fmt.Errorf("SonarQube compute task timed out")
 }
 func (c *APIClient) Issues(ctx context.Context, key string) ([]Issue, error) {
-	var payload apiIssueResponse
-	if err := c.do(ctx, "/api/issues/search?componentKeys="+url.QueryEscape(key)+"&ps=500", &payload); err != nil {
-		return nil, err
+	// The search endpoint caps one page at 500 issues; without walking the
+	// remaining pages, any project with more than that silently under-reported.
+	var all []Issue
+	for page := 1; ; page++ {
+		var payload apiIssueResponse
+		path := fmt.Sprintf("/api/issues/search?componentKeys=%s&ps=500&p=%d", url.QueryEscape(key), page)
+		if err := c.do(ctx, path, &payload); err != nil {
+			return nil, err
+		}
+		all = append(all, payload.Issues...)
+		if len(payload.Issues) < 500 {
+			return all, nil
+		}
 	}
-	return payload.Issues, nil
 }
 func (c *APIClient) Metrics(ctx context.Context, key string) ([]Metric, error) {
 	var payload struct {

@@ -52,7 +52,13 @@ type Adapter struct {
 }
 
 func New(i Installer, r Runtime, s Server, c Client) *Adapter {
-	return &Adapter{Installer: i, Runtime: r, Server: s, Client: c, BaseURL: "http://127.0.0.1:9000", StartupTimeout: 3 * time.Minute}
+	// A cold community-server boot (JVM plus embedded search index) routinely
+	// takes more than three minutes on consumer Windows hardware, which made
+	// healthy installs report "did not become healthy within 3m0s". Ten
+	// minutes still leaves room for the analysis itself inside the sonarqube
+	// analyzer timeout; warm servers answer the first health check and skip
+	// the wait entirely.
+	return &Adapter{Installer: i, Runtime: r, Server: s, Client: c, BaseURL: "http://127.0.0.1:9000", StartupTimeout: 10 * time.Minute}
 }
 func (a *Adapter) ID() string          { return ID }
 func (a *Adapter) DisplayName() string { return "SonarQube" }
@@ -194,6 +200,9 @@ func (a *Adapter) Normalize(ctx context.Context, r analyzers.AnalyzerResult) ([]
 	out := make([]analyzers.Finding, 0, len(issues))
 	for _, x := range issues {
 		f := x.Finding()
+		// The issues API reports component paths as "<project-key>:<path>";
+		// strip the prefix so reports show workspace-relative paths.
+		f.RelativePath = strings.TrimPrefix(f.RelativePath, key+":")
 		f.SetFingerprint()
 		out = append(out, f)
 	}
@@ -250,10 +259,20 @@ func ScannerProperties(dataDir, root, key, serverURL, token string, exclusions a
 	return p, func() { os.RemoveAll(dir) }, nil
 }
 func scannerTask(stdout string) string {
+	// The compute-engine task id reaches us in two shapes: a debug dump line
+	// `ceTaskUrl=<url>`, and the default human-readable INFO line "More about
+	// the report processing at <url>". The second is what normal scans emit;
+	// missing it skipped WaitForTask entirely, so issues were fetched before
+	// the server had processed the report and every scan looked clean.
 	for _, line := range strings.Split(stdout, "\n") {
+		line = strings.TrimRight(line, "\r")
 		if i := strings.Index(line, "ceTaskUrl="); i >= 0 {
-			u, err := url.Parse(strings.TrimSpace(line[i+10:]))
-			if err == nil {
+			if u, err := url.Parse(strings.TrimSpace(line[i+10:])); err == nil {
+				return u.Query().Get("id")
+			}
+		}
+		if i := strings.Index(line, "api/ce/task?id="); i >= 0 {
+			if u, err := url.Parse(line[i:]); err == nil {
 				return u.Query().Get("id")
 			}
 		}
