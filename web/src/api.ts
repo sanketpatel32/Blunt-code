@@ -67,5 +67,13 @@ export const api = {
   tools: async () => list<Tool>(await request<Tool[] | { tools?: Tool[] }>('/tools')),
   toolAction: (id: string, action: 'install' | 'repair' | 'update') => request<Tool>(`/tools/${encodeURIComponent(id)}/${action}`, { method: 'POST' }),
   stopServer: () => request<{ state: string }>('/system/stop', { method: 'POST' }),
+  openFolder: (kind: 'data' | 'reports' | 'logs' | 'tools') => request<void>('/system/open-folder', { method: 'POST', body: JSON.stringify({ kind }) }),
   markdownUrl: (scanId: string) => `${PREFIX}/scans/${encodeURIComponent(scanId)}/report.md`,
+  /** URL for the attachment exports (plain GET navigations, not JSON requests). CSV accepts the same filter/sort params as findings — minus limit/offset — so the file matches the on-screen list. */
+  exportUrl: (scanId: string, format: 'html' | 'sarif' | 'csv', params?: Record<string, string>) => {
+    const base = `${PREFIX}/scans/${encodeURIComponent(scanId)}/${format === 'csv' ? 'findings.csv' : `report.${format}`}`;
+    if (!params) return base;
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value)).toString();
+    return query ? `${base}?${query}` : base;
+  },
 };

@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { api } from '../../api';
 import type { AnalyzerRun, Finding, Scan, Severity } from '../../types';
 import { analyzerName, findingLocation } from '../../lib/format';
+import { copyToClipboard } from '../../lib/clipboard';
 import { useLoad } from '../../hooks/useLoad';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { Empty, ErrorPanel, SummaryCard } from '../../components/ui';
@@ -48,6 +49,27 @@ export type SortState = { key: SortKey; dir: SortDir };
  */
 const SORT_DEFAULT_DIR: Record<SortKey, SortDir> = { severity: 'desc', path: 'asc', analyzer: 'asc', status: 'asc' };
 
+/** How long a row's copy button shows its check-mark confirm before reverting; short by design so 25 rows cannot toast-spam. */
+const COPY_CONFIRM_MS = 800;
+
+/** Multi-line plain-text summary for the clipboard; missing fields are skipped rather than emitting empty lines. */
+function findingSummaryText(finding: Finding) {
+  const lines = [`[${finding.severity}]${finding.rule_id ? ` ${finding.rule_id}` : ''} — ${finding.message}`];
+  if (finding.relative_path) lines.push(findingLocation(finding));
+  lines.push(`analyzer: ${finding.analyzer_id}`);
+  if (finding.remediation) lines.push(`remediation: ${finding.remediation}`);
+  return lines.join('\n');
+}
+
+/** Small decorative row-action icons; they inherit the button color and carry no semantics. */
+function ClipboardIcon() {
+  return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15h-.25A1.75 1.75 0 0 1 3 13.25V4.75C3 3.78 3.78 3 4.75 3h8.5c.97 0 1.75.78 1.75 1.75V5" /></svg>;
+}
+
+function CheckIcon() {
+  return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d="m5 13 4.2 4.2L19 6.5" /></svg>;
+}
+
 export function ReportView({ scanId }: { scanId: string }) {
   const report = useLoad(() => api.report(scanId), [scanId]);
   const [filters, setFilters] = useState<FindingFilter>(EMPTY_FILTER);
@@ -60,6 +82,8 @@ export function ReportView({ scanId }: { scanId: string }) {
   const debouncedPath = useDebouncedValue(filters.path, filters.path ? TEXT_FILTER_DELAY_MS : 0);
   const debouncedQ = useDebouncedValue(filters.q, filters.q ? TEXT_FILTER_DELAY_MS : 0);
   const params = useMemo(() => ({ ...filters, category: debouncedCategory, path: debouncedPath, q: debouncedQ, limit: String(limit), offset: String(offset), sort: sort.key, order: sort.dir }), [filters, debouncedCategory, debouncedPath, debouncedQ, limit, offset, sort]);
+  /** CSV export query: the on-screen filters + sort minus paging, built exactly like the findings request so the file mirrors the list. */
+  const csvParams = useMemo(() => Object.fromEntries(Object.entries(params).filter(([key]) => key !== 'limit' && key !== 'offset')), [params]);
   const findings = useLoad(() => api.findings(scanId, params), [scanId, ...Object.values(params)]);
   const list = findings.data?.items ?? [];
   const updateFilters = (next: FindingFilter) => { setFilters(next); setOffset(0); };
@@ -76,7 +100,41 @@ export function ReportView({ scanId }: { scanId: string }) {
   const noFindingsCopy = filters.analyzer ? 'This analyzer completed without reportable issues for the selected files.' : 'Try clearing one or more filters.';
   /** A completed scan with zero findings and no active filters earns the celebratory panel; anything else keeps the filter-empty messaging. */
   const allClear = !activeFilterCount && data.scan.state === 'completed' && (data.scan.total_findings ?? 0) === 0;
-  return <section className="report"><header className="report-header"><div><p className="eyebrow">Report</p><h2>Analysis overview</h2><p>{data.warnings?.length ? 'Analysis completed with limitations.' : 'Analysis completed.'}</p></div><a className="button secondary" href={api.markdownUrl(scanId)}>Export Markdown</a></header>{data.warnings?.length ? <div className="inline-warning"><strong>Incomplete analysis</strong>{data.warnings.map((warning) => <span key={warning}>{warning}</span>)}</div> : null}<section className="summary-grid"><SummaryCard label="Total findings" value={data.scan.total_findings ?? 0} /><SummaryCard label="New" value={data.comparison?.new_count ?? data.scan.new_count ?? 0} /><SummaryCard label="Fixed" value={data.comparison?.fixed_count ?? 0} /><SummaryCard label="Persistent" value={data.comparison?.persistent_count ?? 0} /></section><SeverityDistribution scan={data.scan} /><AnalyzerResults runs={data.scan.analyzer_runs} findings={data.findings} selectedAnalyzer={filters.analyzer} onSelect={(analyzer) => updateFilters({ ...filters, analyzer: filters.analyzer === analyzer ? '' : analyzer })} /><section className="findings-section"><div className="section-head"><div><h2>Findings</h2><p>Filter results without leaving the report.</p></div><div className="findings-toolbar"><button className="button secondary" aria-expanded={filtersOpen} aria-controls="finding-filters" onClick={() => setFiltersOpen((open) => !open)}>Filters{activeFilterCount ? ` (${activeFilterCount})` : ''}</button>{activeFilterCount ? <button className="text-button" onClick={clearFilters}>Clear</button> : null}</div></div><FilterChips filters={filters} onRemove={removeFilter} />{filtersOpen && <FindingFilters filters={filters} setFilters={updateFilters} analyzers={data.scan.analyzer_runs} />}<SeverityPills scan={data.scan} selected={filters.severity} onToggle={toggleSeverity} /><div className="finding-list">{findings.loading ? <SkeletonTable rows={5} cols={5} className="findings-table" /> : findings.error ? <ErrorPanel error={findings.error} retry={findings.reload} /> : list.length ? <FindingsTable findings={list} sort={sort} onSort={changeSort} onPreview={setPreviewFinding} /> : allClear ? <Empty title="All clear — no findings" tone="positive" icon={<><CheckShieldIcon /><span className="empty-sparkle one"><SparkleIcon /></span><span className="empty-sparkle two"><SparkleIcon /></span></>}>Every analyzer finished and found nothing to flag. Nice work.</Empty> : <Empty title={noFindingsTitle} icon={<MagnifierIcon />}>{noFindingsCopy}</Empty>}</div>{findings.data && <FindingsPagination total={findings.data.total} offset={findings.data.offset} limit={findings.data.limit} hasMore={findings.data.has_more} onLimit={(next) => { setLimit(next); setOffset(0); }} onPrevious={() => setOffset(Math.max(0, offset - limit))} onNext={() => findings.data?.next_offset !== undefined && setOffset(findings.data.next_offset)} />}</section>{previewFinding && <FindingPreviewDialog scanId={scanId} finding={previewFinding} onClose={() => setPreviewFinding(undefined)} />}</section>;
+  return <section className="report"><header className="report-header"><div><p className="eyebrow">Report</p><h2>Analysis overview</h2><p>{data.warnings?.length ? 'Analysis completed with limitations.' : 'Analysis completed.'}</p></div><ExportMenu scanId={scanId} csvParams={csvParams} /></header>{data.warnings?.length ? <div className="inline-warning"><strong>Incomplete analysis</strong>{data.warnings.map((warning) => <span key={warning}>{warning}</span>)}</div> : null}<section className="summary-grid"><SummaryCard label="Total findings" value={data.scan.total_findings ?? 0} /><SummaryCard label="New" value={data.comparison?.new_count ?? data.scan.new_count ?? 0} /><SummaryCard label="Fixed" value={data.comparison?.fixed_count ?? 0} /><SummaryCard label="Persistent" value={data.comparison?.persistent_count ?? 0} /></section><SeverityDistribution scan={data.scan} /><AnalyzerResults runs={data.scan.analyzer_runs} findings={data.findings} selectedAnalyzer={filters.analyzer} onSelect={(analyzer) => updateFilters({ ...filters, analyzer: filters.analyzer === analyzer ? '' : analyzer })} /><section className="findings-section"><div className="section-head"><div><h2>Findings</h2><p>Filter results without leaving the report.</p></div><div className="findings-toolbar"><button className="button secondary" aria-expanded={filtersOpen} aria-controls="finding-filters" onClick={() => setFiltersOpen((open) => !open)}>Filters{activeFilterCount ? ` (${activeFilterCount})` : ''}</button>{activeFilterCount ? <button className="text-button" onClick={clearFilters}>Clear</button> : null}</div></div><FilterChips filters={filters} onRemove={removeFilter} />{filtersOpen && <FindingFilters filters={filters} setFilters={updateFilters} analyzers={data.scan.analyzer_runs} />}<SeverityPills scan={data.scan} selected={filters.severity} onToggle={toggleSeverity} /><div className="finding-list">{findings.loading ? <SkeletonTable rows={5} cols={5} className="findings-table" /> : findings.error ? <ErrorPanel error={findings.error} retry={findings.reload} /> : list.length ? <FindingsTable findings={list} sort={sort} onSort={changeSort} onPreview={setPreviewFinding} /> : allClear ? <Empty title="All clear — no findings" tone="positive" icon={<><CheckShieldIcon /><span className="empty-sparkle one"><SparkleIcon /></span><span className="empty-sparkle two"><SparkleIcon /></span></>}>Every analyzer finished and found nothing to flag. Nice work.</Empty> : <Empty title={noFindingsTitle} icon={<MagnifierIcon />}>{noFindingsCopy}</Empty>}</div>{findings.data && <FindingsPagination total={findings.data.total} offset={findings.data.offset} limit={findings.data.limit} hasMore={findings.data.has_more} onLimit={(next) => { setLimit(next); setOffset(0); }} onPrevious={() => setOffset(Math.max(0, offset - limit))} onNext={() => findings.data?.next_offset !== undefined && setOffset(findings.data.next_offset)} />}</section>{previewFinding && <FindingPreviewDialog scanId={scanId} finding={previewFinding} onClose={() => setPreviewFinding(undefined)} />}</section>;
+}
+
+/** Header export dropdown (Loops 16/17/18): plain `<a download>` GET links for the Markdown/HTML/SARIF attachments plus a CSV of the currently filtered findings. Lightweight menu a11y — role=menu/menuitem, Escape and outside mousedown close, focus moves to the first item on open and back to the toggle on Escape. */
+function ExportMenu({ scanId, csvParams }: { scanId: string; csvParams: Record<string, string> }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') { setOpen(false); toggleRef.current?.focus(); } };
+    const onMouseDown = (event: MouseEvent) => { if (!wrapRef.current?.contains(event.target as Node)) setOpen(false); };
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('mousedown', onMouseDown);
+    menuRef.current?.querySelector<HTMLElement>('a[role="menuitem"]')?.focus();
+    return () => { document.removeEventListener('keydown', onKeyDown); document.removeEventListener('mousedown', onMouseDown); };
+  }, [open]);
+  /** Arrow keys cycle the items; anything else falls through to normal tabbing. */
+  const onMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    event.preventDefault();
+    const items = [...(menuRef.current?.querySelectorAll<HTMLElement>('a[role="menuitem"]') ?? [])];
+    if (!items.length) return;
+    const current = Math.max(0, items.indexOf(document.activeElement as HTMLElement));
+    const next = event.key === 'ArrowDown' ? (current + 1) % items.length : (current - 1 + items.length) % items.length;
+    items[next].focus();
+  };
+  const items = [
+    { label: 'Markdown report', ext: '.md', href: api.markdownUrl(scanId) },
+    { label: 'HTML report', ext: '.html', href: api.exportUrl(scanId, 'html') },
+    { label: 'SARIF (code scanning)', ext: '.sarif', href: api.exportUrl(scanId, 'sarif') },
+    { label: 'Findings CSV (current filters)', ext: '.csv', href: api.exportUrl(scanId, 'csv', csvParams) },
+  ];
+  return <div className={`export-menu${open ? ' open' : ''}`} ref={wrapRef}><button ref={toggleRef} type="button" className="button secondary export-toggle" aria-haspopup="menu" aria-expanded={open} aria-controls={open ? 'export-menu' : undefined} onClick={() => setOpen((value) => !value)}>Export <span className="export-caret" aria-hidden="true">⌄</span></button>{open && <div id="export-menu" ref={menuRef} className="export-popover" role="menu" aria-label="Export report" onKeyDown={onMenuKeyDown}>{items.map((item) => <a key={item.label} role="menuitem" className="export-item" href={item.href} download onClick={() => setOpen(false)}>{item.label}<small>{item.ext}</small></a>)}</div>}</div>;
 }
 
 function FilterChips({ filters, onRemove }: { filters: FindingFilter; onRemove: (key: keyof FindingFilter) => void }) {
@@ -126,4 +184,28 @@ function FindingsPagination({ total, offset, limit, hasMore, onLimit, onPrevious
 
 function SortHeader({ label, column, sort, onSort }: { label: string; column: SortKey; sort: SortState; onSort: (key: SortKey) => void }) { const active = sort.key === column; return <th scope="col" aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}><button type="button" className={`th-sort${active ? ' active' : ''}`} onClick={() => onSort(column)}>{label}<span className="sort-arrow" aria-hidden="true">{active ? (sort.dir === 'asc' ? '▲' : '▼') : '↕'}</span>{active && <span className="sr-only"> (sorted {sort.dir === 'asc' ? 'ascending' : 'descending'})</span>}</button></th>; }
 
-function FindingsTable({ findings, sort, onSort, onPreview }: { findings: Finding[]; sort: SortState; onSort: (key: SortKey) => void; onPreview: (finding: Finding) => void }) { return <div className="findings-table table-wrap"><table><thead><tr><SortHeader label="Severity" column="severity" sort={sort} onSort={onSort} /><th scope="col">Finding</th><SortHeader label="File" column="path" sort={sort} onSort={onSort} /><SortHeader label="Tool" column="analyzer" sort={sort} onSort={onSort} /><SortHeader label="Status" column="status" sort={sort} onSort={onSort} /></tr></thead><tbody>{findings.map((finding) => <tr key={finding.id || finding.fingerprint}><td><span className={`severity ${finding.severity}`}>{finding.severity}</span></td><td className="finding-summary"><strong>{finding.title ?? finding.rule_id ?? 'Finding'}</strong><span className="finding-message">{finding.message}</span>{finding.remediation && <span className="finding-remediation">Fix: {finding.remediation}</span>}{finding.documentation_url && <a href={finding.documentation_url} target="_blank" rel="noreferrer">Rule docs</a>}</td><td>{finding.relative_path && finding.id ? <button type="button" className="finding-file" onClick={() => onPreview(finding)} aria-label={`Preview ${findingLocation(finding)}`}><code>{findingLocation(finding)}</code></button> : <code>{findingLocation(finding)}</code>}</td><td><span className="badge">{finding.analyzer_id}</span>{finding.rule_id && <code>{finding.rule_id}</code>}</td><td>{finding.status ? <span className="status-text">{finding.status}</span> : '—'}</td></tr>)}</tbody></table></div>; }
+/** Loop 25 · Findings table: each row ends in a copy-details icon button (clipboard with a hidden-textarea fallback for non-secure loopback origins; success swaps in a check for 800ms). The buttons form a roving-tabindex group — only the current row's button is tabbable, ArrowUp/ArrowDown/Home/End move focus, and the handlers live on the buttons themselves so arrows are never hijacked elsewhere. */
+function FindingsTable({ findings, sort, onSort, onPreview }: { findings: Finding[]; sort: SortState; onSort: (key: SortKey) => void; onPreview: (finding: Finding) => void }) {
+  const [focusIndex, setFocusIndex] = useState(0);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const copyTimer = useRef<number | undefined>(undefined);
+  const copyRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  useEffect(() => () => window.clearTimeout(copyTimer.current), []);
+  /** Clamped so a page-size change leaving focusIndex past the end still keeps exactly one tabbable row button. */
+  const activeIndex = Math.min(focusIndex, Math.max(0, findings.length - 1));
+  const onCopyKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, index: number) => {
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const last = findings.length - 1;
+    const next = event.key === 'ArrowDown' ? Math.min(index + 1, last) : event.key === 'ArrowUp' ? Math.max(index - 1, 0) : event.key === 'Home' ? 0 : last;
+    setFocusIndex(next);
+    copyRefs.current[next]?.focus();
+  };
+  const copyFinding = async (finding: Finding) => {
+    if (!(await copyToClipboard(findingSummaryText(finding)))) return;
+    setCopiedKey(finding.id || finding.fingerprint || null);
+    window.clearTimeout(copyTimer.current);
+    copyTimer.current = window.setTimeout(() => setCopiedKey(null), COPY_CONFIRM_MS);
+  };
+  return <div className="findings-table table-wrap"><table><thead><tr><SortHeader label="Severity" column="severity" sort={sort} onSort={onSort} /><th scope="col">Finding</th><SortHeader label="File" column="path" sort={sort} onSort={onSort} /><SortHeader label="Tool" column="analyzer" sort={sort} onSort={onSort} /><SortHeader label="Status" column="status" sort={sort} onSort={onSort} /></tr></thead><tbody>{findings.map((finding, index) => { const rowKey = finding.id || finding.fingerprint || String(index); const copied = copiedKey === rowKey; return <tr key={rowKey}><td><span className={`severity ${finding.severity}`}>{finding.severity}</span></td><td className="finding-summary"><strong>{finding.title ?? finding.rule_id ?? 'Finding'}</strong><span className="finding-message">{finding.message}</span>{finding.remediation && <span className="finding-remediation">Fix: {finding.remediation}</span>}{finding.documentation_url && <a href={finding.documentation_url} target="_blank" rel="noreferrer">Rule docs</a>}</td><td>{finding.relative_path && finding.id ? <button type="button" className="finding-file" onClick={() => onPreview(finding)} aria-label={`Preview ${findingLocation(finding)}`}><code>{findingLocation(finding)}</code></button> : <code>{findingLocation(finding)}</code>}</td><td><span className="badge">{finding.analyzer_id}</span>{finding.rule_id && <code>{finding.rule_id}</code>}</td><td><div className="finding-actions-cell">{finding.status ? <span className="status-text">{finding.status}</span> : '—'}<button ref={(element) => { copyRefs.current[index] = element; }} type="button" className={`icon-button copy-finding${copied ? ' copied' : ''}`} tabIndex={index === activeIndex ? 0 : -1} aria-label="Copy finding details" title="Copy finding details" onKeyDown={(event) => onCopyKeyDown(event, index)} onClick={() => void copyFinding(finding)}>{copied ? <CheckIcon /> : <ClipboardIcon />}</button></div></td></tr>; })}</tbody></table></div>;
+}

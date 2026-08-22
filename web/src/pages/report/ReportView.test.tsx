@@ -309,3 +309,103 @@ describe('ReportView analyzer mini-bars', () => {
     });
   });
 });
+
+describe('ReportView export menu', () => {
+  function pressKey(key: string) {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+  }
+
+  it('lists the four export targets with plain download links and closes on Escape', async () => {
+    const host = await render();
+    const toggle = host.querySelector<HTMLButtonElement>('.export-toggle')!;
+    expect(toggle.textContent).toContain('Export');
+    expect(host.querySelector('.export-popover')).toBeNull();
+
+    await click(host.querySelector<HTMLButtonElement>('.severity-pill.high')!); // filter first so the CSV link carries it
+    await click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    const items = [...host.querySelectorAll('[role="menuitem"]')] as HTMLAnchorElement[];
+    expect(items.map((item) => item.textContent)).toEqual(['Markdown report.md', 'HTML report.html', 'SARIF (code scanning).sarif', 'Findings CSV (current filters).csv']);
+    expect(items[0].getAttribute('href')).toBe('/api/v1/scans/scan-1/report.md');
+    expect(items[1].getAttribute('href')).toBe('/api/v1/scans/scan-1/report.html');
+    expect(items[2].getAttribute('href')).toBe('/api/v1/scans/scan-1/report.sarif');
+    const csvHref = items[3].getAttribute('href')!;
+    expect(csvHref).toContain('/api/v1/scans/scan-1/findings.csv?');
+    expect(csvHref).toContain('severity=high'); // the active filter rides along
+    expect(csvHref).toContain('sort=severity');
+    expect(csvHref).toContain('order=asc');
+    expect(csvHref).not.toContain('limit='); // paging params stay off the export
+    expect(csvHref).not.toContain('offset=');
+    expect(items.every((item) => item.hasAttribute('download'))).toBe(true); // plain GET navigation, no fetch
+
+    await act(async () => { pressKey('Escape'); });
+    expect(host.querySelector('.export-popover')).toBeNull();
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(toggle); // Escape hands focus back to the toggle
+  });
+
+  it('closes on an outside mousedown but stays open for clicks inside the menu', async () => {
+    const host = await render();
+    await click(host.querySelector<HTMLButtonElement>('.export-toggle')!);
+    expect(host.querySelector('.export-popover')).not.toBeNull();
+    await act(async () => { host.querySelector('.export-popover a')!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); });
+    expect(host.querySelector('.export-popover')).not.toBeNull();
+    await act(async () => { document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); });
+    expect(host.querySelector('.export-popover')).toBeNull();
+  });
+});
+
+describe('ReportView finding row copy', () => {
+  it('copies a readable multi-line summary to the clipboard and confirms inline', async () => {
+    const rich = { ...finding, id: 'finding-rich', rule_id: 'F821', start_column: 7, remediation: 'Define the name before use.', status: 'new' };
+    await fetchMock.withImplementation((input: string) => {
+      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, comparison: { new_count: 1, fixed_count: 0, persistent_count: 0 }, warnings: [], findings: [rich] }));
+      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: [rich], total: 1, limit: 25, offset: 0, has_more: false }));
+      return Promise.resolve(json({ items: [] }));
+    }, async () => {
+      const host = await render();
+      const writeText = vi.fn(() => Promise.resolve());
+      Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true }); // jsdom ships no clipboard API
+      try {
+        const copyButton = host.querySelector<HTMLButtonElement>('[aria-label="Copy finding details"]')!;
+        expect(copyButton).not.toBeNull();
+        await click(copyButton);
+        await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+        expect(writeText).toHaveBeenCalledTimes(1);
+        expect(writeText).toHaveBeenCalledWith('[high] F821 — Undefined name\nsrc/main.py:4:7\nanalyzer: ruff\nremediation: Define the name before use.');
+        expect(copyButton.className).toContain('copied'); // brief check-mark swap instead of a toast
+
+        await advance(800);
+        expect(copyButton.className).not.toContain('copied');
+      } finally {
+        delete (navigator as { clipboard?: unknown }).clipboard;
+      }
+    });
+  });
+
+  it('moves focus between row copy buttons with ArrowUp/ArrowDown/Home/End (roving tabindex)', async () => {
+    await fetchMock.withImplementation((input: string) => {
+      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, comparison: { new_count: 1, fixed_count: 0, persistent_count: 0 }, warnings: [], findings: [finding] }));
+      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: [{ ...finding, id: 'finding-1' }, { ...finding, id: 'finding-2' }], total: 2, limit: 25, offset: 0, has_more: false }));
+      return Promise.resolve(json({ items: [] }));
+    }, async () => {
+      const host = await render();
+      const buttons = [...host.querySelectorAll<HTMLButtonElement>('[aria-label="Copy finding details"]')];
+      expect(buttons).toHaveLength(2);
+      expect(buttons.map((button) => button.tabIndex)).toEqual([0, -1]); // exactly one tab stop in the table
+      buttons[0].focus();
+      expect(document.activeElement).toBe(buttons[0]);
+
+      const press = (target: Element, key: string) => act(async () => { target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })); });
+      await press(buttons[0], 'ArrowDown');
+      expect(document.activeElement).toBe(buttons[1]);
+      expect(buttons.map((button) => button.tabIndex)).toEqual([-1, 0]); // the tab stop follows the focus
+      await press(buttons[1], 'ArrowUp');
+      expect(document.activeElement).toBe(buttons[0]);
+      await press(buttons[0], 'End');
+      expect(document.activeElement).toBe(buttons[1]);
+      await press(buttons[1], 'Home');
+      expect(document.activeElement).toBe(buttons[0]);
+    });
+  });
+});
