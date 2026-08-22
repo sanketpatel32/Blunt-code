@@ -200,9 +200,20 @@ func (s *Server) listWorkspaces(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, "DATABASE_ERROR", "Could not list workspaces.")
 		return
 	}
+	// One aggregate query for every workspace's latest scan instead of a
+	// full history load per workspace.
+	latestByWorkspace, err := s.db.LatestScans(r.Context())
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load workspace analysis.")
+		return
+	}
 	views := make([]workspaceView, 0, len(items))
 	for _, item := range items {
-		view, err := s.workspaceView(r.Context(), item)
+		var latest *core.Scan
+		if scan, ok := latestByWorkspace[item.ID]; ok {
+			latest = &scan
+		}
+		view, err := s.workspaceView(r.Context(), item, latest)
 		if err != nil {
 			fail(w, 500, "DATABASE_ERROR", "Could not load workspace analysis.")
 			return
@@ -257,7 +268,16 @@ func (s *Server) getWorkspace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = s.db.TouchWorkspace(r.Context(), workspace.ID)
-	view, err := s.workspaceView(r.Context(), workspace)
+	latestByWorkspace, err := s.db.LatestScans(r.Context())
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load workspace analysis.")
+		return
+	}
+	var latest *core.Scan
+	if scan, ok := latestByWorkspace[workspace.ID]; ok {
+		latest = &scan
+	}
+	view, err := s.workspaceView(r.Context(), workspace, latest)
 	if err != nil {
 		fail(w, 500, "DATABASE_ERROR", "Could not load workspace analysis.")
 		return
@@ -265,21 +285,16 @@ func (s *Server) getWorkspace(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, view)
 }
 
-func (s *Server) workspaceView(ctx context.Context, workspace core.Workspace) (workspaceView, error) {
+func (s *Server) workspaceView(ctx context.Context, workspace core.Workspace, latest *core.Scan) (workspaceView, error) {
 	view := workspaceView{Workspace: workspace}
-	scans, err := s.db.Scans(ctx, workspace.ID)
-	if err != nil {
-		return view, err
-	}
-	if len(scans) > 0 {
-		latest := scans[0]
+	if latest != nil {
 		if latest.Snapshot != nil {
 			view.Languages = languageNames(latest.Snapshot.Languages)
 		}
 		// The dashboard does not need every selected path from the immutable
 		// snapshot; returning it would make the workspace list unnecessarily big.
 		latest.Snapshot = nil
-		view.LatestScan = &latest
+		view.LatestScan = latest
 	}
 	if len(view.Languages) == 0 {
 		patterns, err := s.userExcludes(ctx, workspace.ID)
@@ -854,16 +869,27 @@ const csvBOM = "\xef\xbb\xbf"
 // the row writer below must stay in sync.
 var findingsCSVHeader = []string{"severity", "category", "analyzer", "rule_id", "title", "message", "file", "line", "column", "end_line", "status", "remediation", "documentation_url"}
 
-// csvCell neutralizes CSV formula injection (CWE-1236). Findings text is
-// derived from UNTRUSTED scanned code: a hostile lint message such as
-// =cmd|'/c calc'!A1 would execute as a formula the moment the exported file is
-// opened in Excel or LibreOffice. Excel-family spreadsheets treat a cell whose
-// first character is =, +, -, @, tab, or carriage return as a formula, so those
-// cells are prefixed with a single quote, the standard spreadsheet escape that
-// forces text interpretation. Every analyzer-derived text column routes
-// through csvCell; the numeric columns come from strconv and cannot begin with
-// a formula character.
+// csvCell neutralizes CSV formula injection (CWE-1236) and strips hostile
+// control bytes. Findings text is derived from UNTRUSTED scanned code in two
+// senses:
+//
+//   - A hostile lint message such as =cmd|'/c calc'!A1 would execute as a
+//     formula the moment the exported file is opened in Excel or LibreOffice.
+//     Excel-family spreadsheets treat a cell whose first character is =, +, -,
+//     @, tab, or carriage return as a formula, so those cells are prefixed
+//     with a single quote, the standard spreadsheet escape that forces text
+//     interpretation.
+//   - Non-whitespace C0 controls (NUL, BEL, ANSI escape sequences, ...) and
+//     DEL are replaced with spaces; encoding/csv passes them through raw and
+//     they corrupt terminals and pagers the export is piped into. Tab, LF,
+//     and CR are kept because the CSV writer quotes them and they round-trip
+//     exactly.
+//
+// These are the ONLY transformations csvCell performs. Every analyzer-derived
+// text column routes through csvCell; the numeric columns come from strconv
+// and cannot begin with a formula character.
 func csvCell(value string) string {
+	value = csvScrubControls(value)
 	if value == "" {
 		return value
 	}
@@ -874,10 +900,42 @@ func csvCell(value string) string {
 	return value
 }
 
+// isHostileControl reports whether a rune is a C0 control (other than the
+// trio tab, LF, CR, which encoding/csv quotes and round-trips) or DEL.
+func isHostileControl(r rune) bool {
+	return (r < 0x20 && r != '\t' && r != '\n' && r != '\r') || r == 0x7f
+}
+
+// csvScrubControls replaces non-whitespace C0 controls and DEL with spaces so
+// no raw NUL or terminal escape byte reaches the export, and rewrites invalid
+// UTF-8 bytes as U+FFFD so the file is always valid UTF-8. It is the identity
+// for strings that contain none of these.
+func csvScrubControls(value string) string {
+	if !strings.ContainsFunc(value, isHostileControl) {
+		return value
+	}
+	var b strings.Builder
+	b.Grow(len(value))
+	for _, r := range value {
+		if isHostileControl(r) {
+			r = ' '
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
 // findingsCSV exports the scan's findings as a spreadsheet-friendly CSV
 // attachment. It shares the JSON endpoint's filter parsing so an export always
 // matches what the findings list shows; limit and offset are ignored because
 // every matching row is written, up to the repository safety cap.
+//
+// Record terminators are bare LF, not RFC 4180's CRLF, on purpose:
+// encoding/csv's UseCRLF mode rewrites every CR inside a quoted field as part
+// of a CRLF pair, which deletes lone CR bytes that analyzer output can carry
+// in messages and paths (verified against the standard library). Field bytes
+// stay verbatim in the file with LF terminators, and every CSV consumer
+// (encoding/csv, Excel, LibreOffice, Python) accepts LF-terminated records.
 func (s *Server) findingsCSV(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if !validID(id) {

@@ -69,6 +69,14 @@ type sarifRegion struct {
 // workspace-relative with forward slashes and no leading slash, which is what
 // GitHub code scanning resolves against the repository root; project-level
 // findings carry no location at all.
+//
+// Analyzer-derived strings (rule ids, titles, messages, remediation, help
+// URIs) pass through scrubControls before they are marshaled: encoding/json
+// escapes NUL, BEL, and ESC as \u00XX but writes DEL through raw, so without
+// the scrub a hostile message smuggles terminal escape codes and DEL bytes
+// into every SARIF consumer. The scrub matches the Markdown, HTML, and CSV
+// exports: the hostile C0 controls and DEL become spaces; tab, LF, and CR
+// are kept because JSON quotes them losslessly.
 func SARIF(m Model) sarifLog {
 	rules := make([]sarifRule, 0)
 	indexes := map[string]int{}
@@ -78,16 +86,16 @@ func SARIF(m Model) sarifLog {
 		if !seen {
 			index = len(rules)
 			indexes[f.RuleID] = index
-			rules = append(rules, sarifRule{ID: f.RuleID, ShortDescription: sarifText{Text: ruleName(f)}})
+			rules = append(rules, sarifRule{ID: scrubControls(f.RuleID), ShortDescription: sarifText{Text: ruleName(f)}})
 		}
-		if uri := strings.TrimSpace(f.DocumentationURL); uri != "" && rules[index].HelpURI == "" {
+		if uri := scrubControls(strings.TrimSpace(f.DocumentationURL)); uri != "" && rules[index].HelpURI == "" {
 			rules[index].HelpURI = uri
 		}
-		result := sarifResult{RuleID: f.RuleID, RuleIndex: index, Level: sarifLevel(f.Severity), Message: sarifText{Text: sarifMessage(f)}}
+		result := sarifResult{RuleID: scrubControls(f.RuleID), RuleIndex: index, Level: sarifLevel(f.Severity), Message: sarifText{Text: sarifMessage(f)}}
 		if uri := sarifArtifactURI(f.RelativePath); uri != "" {
 			result.Locations = []sarifLocation{{PhysicalLocation: sarifPhysicalLocation{
 				ArtifactLocation: sarifArtifactLocation{URI: uri},
-				Region:           sarifRegion{StartLine: f.StartLine, StartColumn: f.StartColumn, EndLine: f.EndLine, EndColumn: f.EndColumn},
+				Region:           sarifRegionFor(f),
 			}}}
 		}
 		results = append(results, result)
@@ -96,6 +104,42 @@ func SARIF(m Model) sarifLog {
 		Tool:    sarifTool{Driver: sarifDriver{Name: "Blunt Code", Version: m.BluntCodeVersion, InformationURI: sarifDriverURI, Rules: rules}},
 		Results: results,
 	}}}
+}
+
+// sarifRegion projects a finding's stored positions onto the SARIF 2.1.0
+// region constraints. Analyzer output is untrusted: a hostile or buggy
+// analyzer can emit startColumn without startLine, end positions before their
+// starts, or negative values, any of which produces an invalid log that SARIF
+// consumers reject. Rather than refuse the export, contradictory values are
+// dropped (never invented): startColumn and the end positions only survive
+// when the coordinates they depend on are present and consistent.
+func sarifRegionFor(f analyzers.Finding) sarifRegion {
+	r := sarifRegion{StartLine: f.StartLine, StartColumn: f.StartColumn, EndLine: f.EndLine, EndColumn: f.EndColumn}
+	if r.StartLine <= 0 {
+		// Without a start line no other coordinate is expressible: SARIF
+		// requires startLine whenever startColumn or endLine is present.
+		return sarifRegion{}
+	}
+	if r.StartColumn < 0 {
+		r.StartColumn = 0
+	}
+	if r.EndLine < 0 || r.EndLine < r.StartLine {
+		// An end before the start is invalid per spec (endLine >= startLine);
+		// drop both end coordinates rather than clamp to a position the
+		// analyzer never reported.
+		r.EndLine, r.EndColumn = 0, 0
+	}
+	switch {
+	case r.EndLine == 0:
+		// endColumn is only meaningful together with endLine.
+		r.EndColumn = 0
+	case r.EndColumn < 0:
+		r.EndColumn = 0
+	case r.EndLine == r.StartLine && r.StartColumn > 0 && r.EndColumn < r.StartColumn:
+		// A same-line end column before the start column is invalid per spec.
+		r.EndColumn = 0
+	}
+	return r
 }
 
 // sarifLevel maps the five normalized severities onto the three SARIF levels;
@@ -114,19 +158,22 @@ func sarifLevel(severity analyzers.Severity) string {
 }
 
 // ruleName prefers a human title for the rule descriptor and falls back to the
-// rule id so shortDescription is never empty.
+// rule id so shortDescription is never empty. Both forms are scrubbed so a
+// hostile title cannot carry control bytes into the descriptor.
 func ruleName(f analyzers.Finding) string {
 	if title := strings.TrimSpace(f.Title); title != "" {
-		return title
+		return scrubControls(title)
 	}
-	return f.RuleID
+	return scrubControls(f.RuleID)
 }
 
 // sarifMessage keeps the finding message first and appends remediation as a
-// second sentence when the analyzer supplied one.
+// second sentence when the analyzer supplied one. Both halves are scrubbed of
+// hostile control bytes after trimming; the scrub may leave the interior
+// spaces that replaced them.
 func sarifMessage(f analyzers.Finding) string {
-	text := strings.TrimSpace(f.Message)
-	remediation := strings.TrimSpace(f.Remediation)
+	text := scrubControls(strings.TrimSpace(f.Message))
+	remediation := scrubControls(strings.TrimSpace(f.Remediation))
 	if remediation == "" {
 		return text
 	}

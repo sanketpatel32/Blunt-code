@@ -3,8 +3,11 @@ package reports
 import (
 	"bluntcode/internal/analyzers"
 	"encoding/json"
+	"net/url"
+	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 // sarifDocument marshals a model to SARIF and decodes it back into generic
@@ -255,5 +258,152 @@ func TestSARIFProjectLevelFindingHasNoLocations(t *testing.T) {
 	}
 	if !strings.Contains(results[1]["ruleId"].(string), "project") {
 		t.Fatalf("unexpected project result: %#v", results[1])
+	}
+}
+
+// TestSARIFSurvivesHostileCorpus round-trips the hostile fixture table through
+// the SARIF export. Every finding must survive as a result with its exact rule
+// id and message text, every ruleIndex must resolve to a descriptor whose id
+// matches the result's ruleId, artifact URIs must decode back to the original
+// path, and regions must satisfy the SARIF 2.1.0 constraints no matter what
+// the analyzer stored.
+func TestSARIFSurvivesHostileCorpus(t *testing.T) {
+	corpus := hostileCorpus()
+	log := sarifDocument(t, Input{Findings: corpus})
+	data, err := json.Marshal(SARIF(Build(Input{Findings: corpus})))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Byte level: valid UTF-8, non-ASCII kept raw (JSON escapes only markup
+	// characters and U+2028/U+2029), and no raw control bytes anywhere.
+	if !utf8.Valid(data) {
+		t.Fatal("SARIF output must be valid UTF-8")
+	}
+	for _, raw := range []string{"\x00", "\x07", "\x1b", "\x7f"} {
+		if strings.Contains(string(data), raw) {
+			t.Fatalf("raw control byte %q survived into the SARIF bytes", raw)
+		}
+	}
+	for _, want := range []string{"🚨🚀", "\u202b\u202e", "e\u0301\u0301clat"} {
+		if !strings.Contains(string(data), want) {
+			t.Fatalf("non-ASCII payload %q must stay raw UTF-8 in the JSON: %s", want, data)
+		}
+	}
+
+	if log["$schema"] != SARIFSchemaURI || log["version"] != "2.1.0" {
+		t.Fatalf("unexpected header: %#v", log)
+	}
+	run := sarifFirstRun(t, log)
+	driver := sarifDriverOf(t, run)
+	rules, _ := driver["rules"].([]any)
+	results := sarifAllResults(t, run)
+	if len(results) != len(corpus) {
+		t.Fatalf("every finding stays a result: got %d for %d findings", len(results), len(corpus))
+	}
+
+	uniqueRules := map[string]bool{}
+	for i, result := range results {
+		want := corpus[i]
+		if result["ruleId"] != want.RuleID {
+			t.Fatalf("result %d ruleId %q, want the exact id %q", i, result["ruleId"], want.RuleID)
+		}
+		// ruleIndex must resolve to a descriptor carrying this result's ruleId.
+		index := int(result["ruleIndex"].(float64))
+		if index < 0 || index >= len(rules) {
+			t.Fatalf("result %d ruleIndex %d out of range (%d rules)", i, index, len(rules))
+		}
+		if id := rules[index].(map[string]any)["id"]; id != want.RuleID {
+			t.Fatalf("result %d ruleIndex %d resolves to %v, want %q", i, index, id, want.RuleID)
+		}
+		uniqueRules[want.RuleID] = true
+
+		// Message text must be the exact source composition after the export's
+		// only transformation: hostile control bytes become spaces (the same
+		// scrubbed() contract the HTML corpus test models).
+		expected := scrubbed(strings.TrimSpace(want.Message))
+		if remediation := scrubbed(strings.TrimSpace(want.Remediation)); remediation != "" {
+			if expected == "" {
+				expected = remediation
+			} else if strings.HasSuffix(expected, ".") || strings.HasSuffix(expected, "!") || strings.HasSuffix(expected, "?") {
+				expected = expected + " " + remediation
+			} else {
+				expected = expected + ". " + remediation
+			}
+		}
+		if text := result["message"].(map[string]any)["text"]; text != expected {
+			t.Fatalf("result %d (%s) message %q, want %q", i, want.RuleID, text, expected)
+		}
+
+		// Region validity: SARIF 2.1.0 requires startColumn to accompany
+		// startLine, endLine >= startLine, and endColumn only with endLine.
+		locations, _ := result["locations"].([]any)
+		if len(locations) != 1 {
+			t.Fatalf("result %d must carry exactly one location: %#v", i, result["locations"])
+		}
+		physical := locations[0].(map[string]any)["physicalLocation"].(map[string]any)
+		region, _ := physical["region"].(map[string]any)
+		startLine, hasStartLine := region["startLine"]
+		startColumn, hasStartColumn := region["startColumn"]
+		endLine, hasEndLine := region["endLine"]
+		endColumn, hasEndColumn := region["endColumn"]
+		if hasStartColumn && !hasStartLine {
+			t.Fatalf("result %d region has startColumn without startLine: %#v", i, region)
+		}
+		if hasEndLine {
+			if !hasStartLine || endLine.(float64) < startLine.(float64) {
+				t.Fatalf("result %d region endLine %v precedes startLine %v: %#v", i, endLine, startLine, region)
+			}
+		}
+		if hasEndColumn && !hasEndLine {
+			t.Fatalf("result %d region has endColumn without endLine: %#v", i, region)
+		}
+		if hasEndColumn && hasStartColumn && hasEndLine && endLine.(float64) == startLine.(float64) && endColumn.(float64) < startColumn.(float64) {
+			t.Fatalf("result %d region same-line endColumn %v precedes startColumn %v: %#v", i, endColumn, startColumn, region)
+		}
+
+		// Artifact URI must decode back to the workspace-relative path.
+		uri := physical["artifactLocation"].(map[string]any)["uri"].(string)
+		decoded, err := url.PathUnescape(uri)
+		if err != nil {
+			t.Fatalf("result %d artifact uri %q does not decode: %v", i, uri, err)
+		}
+		expectedPath := strings.TrimPrefix(filepath.ToSlash(strings.TrimSpace(want.RelativePath)), "./")
+		expectedPath = strings.TrimPrefix(expectedPath, "/")
+		if decoded != expectedPath {
+			t.Fatalf("result %d artifact uri %q decodes to %q, want %q", i, uri, decoded, expectedPath)
+		}
+	}
+	if len(rules) != len(uniqueRules) {
+		t.Fatalf("rules must deduplicate by exact id: %d rules for %d unique ids", len(rules), len(uniqueRules))
+	}
+}
+
+// TestSARIFRegionSanitizesInvalidCoordinates pins the region rules for the
+// two malformed-coordinate shapes a hostile or buggy analyzer can produce:
+// a start column without a start line, and end positions before their starts.
+// Contradictory coordinates are dropped, never invented.
+func TestSARIFRegionSanitizesInvalidCoordinates(t *testing.T) {
+	results := sarifAllResults(t, sarifFirstRun(t, sarifDocument(t, Input{Findings: hostileCorpus()})))
+	byRule := map[string]map[string]any{}
+	for _, result := range results {
+		byRule[result["ruleId"].(string)] = result["locations"].([]any)[0].(map[string]any)["physicalLocation"].(map[string]any)["region"].(map[string]any)
+	}
+	if region := byRule["column-without-line"]; len(region) != 0 {
+		t.Fatalf("a start column without a start line must drop every region coordinate: %#v", region)
+	}
+	region := byRule["inverted-region"]
+	if region["startLine"] != float64(10) || region["startColumn"] != float64(8) {
+		t.Fatalf("valid start coordinates must survive: %#v", region)
+	}
+	if _, present := region["endLine"]; present {
+		t.Fatalf("endLine before startLine must be dropped: %#v", region)
+	}
+	if _, present := region["endColumn"]; present {
+		t.Fatalf("endColumn of a dropped end must go with it: %#v", region)
+	}
+	region = byRule["unicode-bmp-astral"]
+	if region["startLine"] != float64(3) || region["startColumn"] != float64(4) || region["endLine"] != float64(3) || region["endColumn"] != float64(9) {
+		t.Fatalf("a fully valid region must survive untouched: %#v", region)
 	}
 }

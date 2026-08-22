@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"bluntcode/internal/analyzers"
 	"bluntcode/internal/config"
@@ -313,6 +314,312 @@ func TestFindingsCSVNeutralizesFormulaInjection(t *testing.T) {
 				t.Fatalf("unneutralized formula cell %q leaked into the export: %#v", cell, record)
 			}
 		}
+	}
+}
+
+// csvHostileCorpus is the CSV export's instance of the hostile fixture table
+// (mirrored from internal/reports, whose test fixtures are not importable).
+// Each finding plants one attack family in the column where it is most
+// dangerous: formula introducers, LF/CRLF/CR in every text field, markup,
+// quote and backslash soup, control bytes, URL-shaped paths, hostile rule
+// ids, empties everywhere, and position shapes that are invalid per SARIF
+// but must stay a faithful dump in CSV.
+func csvHostileCorpus() []analyzers.Finding {
+	return []analyzers.Finding{
+		{ // BMP + astral planes, CJK, RTL with bidi marks, combining characters
+			AnalyzerID: "ruff", RuleID: "unicode-bmp-astral", Severity: analyzers.SeverityHigh, Category: analyzers.CategorySecurity,
+			Title:        "Ünïcode ✨ 中文タイトル مرحبا שלום",
+			Message:      "BMP ✆ CJK 日本語 RTL مرحبا bidi \u202b\u202e emoji 🚨🚀 ZWJ 👨‍👩‍👧‍👦 combining e\u0301\u0301clat",
+			RelativePath: "src/ünïcode/日本語/مرحبا/coffee☕.py", StartLine: 3, StartColumn: 4, EndLine: 3, EndColumn: 9,
+			Remediation: "直す", DocumentationURL: "https://例え.jp/☕",
+		},
+		{ // LF, CRLF, and bare CR in every text field at once
+			AnalyzerID: "ruff", RuleID: "newlines-lf-crlf-cr", Severity: analyzers.SeverityMedium, Category: analyzers.CategoryBug,
+			Title: "title\ntitle2\r\ntitle3\rtitle4", Message: "line1\nline2\r\nline3\rline4\n\rmixed",
+			RelativePath: "dir/new\nline\r\nname.py", Remediation: "fix\r\nme\nplease",
+			DocumentationURL: "https://x.example/a\nb\r\nc\rd",
+		},
+		{ // every formula introducer in a different column
+			AnalyzerID: "ruff", RuleID: "=RULE", Severity: analyzers.SeverityCritical, Category: analyzers.CategorySecurity,
+			Title:       `+HYPERLINK("http://evil.example","click me")`,
+			Message:     "=cmd|'/c calc'!A1", RelativePath: "-leading-dash.py",
+			Remediation: "-2+cmd|'/C calc'!A0", DocumentationURL: "@SUM(1+1)*cmd|'/C calc'!A0",
+		},
+		{AnalyzerID: "ruff", RuleID: "TAB-MSG", Severity: analyzers.SeverityHigh, Category: analyzers.CategorySecurity,
+			Message: "\t=cmd|'/c calc'!A1", RelativePath: "src/tab.py"},
+		{AnalyzerID: "ruff", RuleID: "CR-MSG", Severity: analyzers.SeverityHigh, Category: analyzers.CategorySecurity,
+			Message: "\r=cmd|'/c calc'!A1", RelativePath: "src/cr.py"},
+		{ // markdown structure forgers: pipes, backticks, ATX headings
+			AnalyzerID: "ruff", RuleID: "pipes-backticks-headings", Severity: analyzers.SeverityLow, Category: analyzers.CategoryStyle,
+			Title: "| Title | Forge |", Message: "# H1\n## H2 | a | b || :--- | `code` ``` ticks", RelativePath: "dir|pipe.py",
+		},
+		{ // HTML and script markup stays inert text in a spreadsheet cell
+			AnalyzerID: "semgrep", RuleID: "html-markup", Severity: analyzers.SeverityHigh, Category: analyzers.CategoryVulnerability,
+			Title:        `</tr></td><script>alert("xss")</script>`,
+			Message:      `<script>alert(1)</script> & <img src=x onerror=alert(1)>`,
+			RelativePath: "src/<b>bold</b>.py",
+		},
+		{ // JSON-breaking quotes, backslashes, and brace soup
+			AnalyzerID: "ruff", RuleID: "json-breaking", Severity: analyzers.SeverityMedium, Category: analyzers.CategoryBug,
+			Message: `quotes " backslash \ escaped \" and {"json":"like\"structure"}`, RelativePath: `weird"path\name.py`,
+		},
+		{ // leading/trailing whitespace and tabs
+			AnalyzerID: "ruff", RuleID: "whitespace-edges", Severity: analyzers.SeverityLow, Category: analyzers.CategoryStyle,
+			Title: "\ttabbed title\t", Message: "   leading and trailing   ", RelativePath: "  spaced path  ",
+		},
+		{ // very long single token
+			AnalyzerID: "ruff", RuleID: "long-token", Severity: analyzers.SeverityMedium, Category: analyzers.CategoryMaintainability,
+			Message: strings.Repeat("A", 10_000) + "☕", RelativePath: "long.py",
+		},
+		{ // paths that look like URLs
+			AnalyzerID: "ruff", RuleID: "url-like-path", Severity: analyzers.SeverityLow, Category: analyzers.CategoryStyle,
+			Message: "path looks like a URL", RelativePath: "https://evil.example/payload.py",
+		},
+		{AnalyzerID: "ruff", RuleID: "file-url-path", Severity: analyzers.SeverityLow, Category: analyzers.CategoryStyle,
+			Message: "path looks like a file URL", RelativePath: "file:///C:/Users/x/file.py"},
+		{ // percent, hash, quotes, spaces, plus, unicode in one path
+			AnalyzerID: "ruff", RuleID: "path-zoo", Severity: analyzers.SeverityInfo, Category: analyzers.CategoryStyle,
+			Message: "zoo", RelativePath: `100% #1 'single' "double" +plus ünïcode.py`,
+		},
+		{ // Windows separators
+			AnalyzerID: "biome", RuleID: "windows-path", Severity: analyzers.SeverityLow, Category: analyzers.CategoryStyle,
+			Message: "windows", RelativePath: `dir\sub dir\file name.py`,
+		},
+		{ // rule ids with colons, dashes, spaces, unicode
+			AnalyzerID: "biome", RuleID: "rule:with:colons", Severity: analyzers.SeverityMedium, Category: analyzers.CategoryBug,
+			Message: "colons", RelativePath: "a.py",
+		},
+		{AnalyzerID: "ruff", RuleID: "rule with spaces and ‼️", Severity: analyzers.SeverityInfo, Category: analyzers.CategoryStyle,
+			Message: "spaced rule", RelativePath: "c.py"},
+		{ // empty strings in every optional field
+			AnalyzerID: "ruff", RuleID: "empty-fields", Severity: analyzers.SeverityInfo, Category: analyzers.CategoryOther,
+			Title: "", Message: "", RelativePath: "", Remediation: "", DocumentationURL: "",
+		},
+		{ // NUL, BEL, ANSI escapes, DEL, vertical tab, form feed: stripped everywhere
+			AnalyzerID: "ruff", RuleID: "nul-and-controls", Severity: analyzers.SeverityHigh, Category: analyzers.CategorySecurity,
+			Title: "t\x00i\x07t", Message: "nul\x00bell\x07esc\x1b[31mred\x1b[0m del\x7f vertical\x0btab\x0c",
+			RelativePath: "ctrl.py", Remediation: "r\x1br", DocumentationURL: "https://x.example/\x00",
+		},
+		{ // severity exports normalized; raw analyzer casing is display-only
+			AnalyzerID: "sonarqube", RuleID: "raw-severity-casing", Severity: analyzers.SeverityHigh, RawSeverity: "HIGH!!!",
+			Category: analyzers.CategoryCodeSmell, Message: "raw severity kept for display", RelativePath: "raw.py",
+		},
+		{ // start column without a start line: exported faithfully
+			AnalyzerID: "ruff", RuleID: "column-without-line", Severity: analyzers.SeverityInfo, Category: analyzers.CategoryStyle,
+			Message: "column only", RelativePath: "col.py", StartColumn: 7,
+		},
+		{ // end positions before start positions: CSV is a dump, SARIF clamps
+			AnalyzerID: "ruff", RuleID: "inverted-region", Severity: analyzers.SeverityMedium, Category: analyzers.CategoryBug,
+			Message: "inverted", RelativePath: "inv.py", StartLine: 10, StartColumn: 8, EndLine: 5, EndColumn: 3,
+		},
+	}
+}
+
+// csvWantCell is the test's independent model of csvCell: hostile control
+// bytes become spaces (one for one) and a leading formula introducer gains a
+// single quote. The corpus test proves these are the ONLY changes the export
+// makes to analyzer text.
+func csvWantCell(value string) string {
+	var b strings.Builder
+	for _, r := range value {
+		if (r < 0x20 && r != '\t' && r != '\n' && r != '\r') || r == 0x7f {
+			r = ' '
+		}
+		b.WriteRune(r)
+	}
+	out := b.String()
+	if out == "" {
+		return out
+	}
+	switch out[0] {
+	case '=', '+', '-', '@', '\t', '\r':
+		return "'" + out
+	}
+	return out
+}
+
+// csvParseNormal models encoding/csv's reader behavior: a CRLF inside a
+// quoted field is returned as LF. Lone CR and LF round-trip, and the raw file
+// still carries the original bytes (asserted separately), so this is the
+// documented reader normalization, not export corruption.
+func csvParseNormal(s string) string { return strings.ReplaceAll(s, "\r\n", "\n") }
+
+// csvHasHostileControl matches the export's scrub predicate.
+func csvHasHostileControl(r rune) bool {
+	return (r < 0x20 && r != '\t' && r != '\n' && r != '\r') || r == 0x7f
+}
+
+// TestFindingsCSVSURVIVESHostileCorpus round-trips the hostile fixture table
+// through findings.csv and decodes it with encoding/csv. It pins: the BOM,
+// byte-level UTF-8 validity, no hostile control byte anywhere in the file,
+// non-ASCII kept raw, the header, one 13-column row per finding, field-for-
+// field equality with the exact source strings (modulo the modeled csvCell
+// transform and the reader's in-quote CRLF normalization), verbatim field
+// bytes for embedded newlines, and LF record terminators with byte-exact CR/LF
+// accounting.
+func TestFindingsCSVSURVIVESHostileCorpus(t *testing.T) {
+	s := testServer(t)
+	ctx := context.Background()
+	work, err := s.db.CreateWorkspace(ctx, core.Workspace{RootPath: t.TempDir(), Name: "Example"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scan, err := s.db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: "queued"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	corpus := csvHostileCorpus()
+	if _, err := s.db.SaveAnalyzerResult(ctx, scan.ID, database.AnalyzerRunInput{AnalyzerID: "ruff", Version: "test", State: "succeeded"}, corpus, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.db.CompleteScan(ctx, scan.ID, "completed", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+scan.ID+"/findings.csv", nil)
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("findings.csv: %d %s", response.Code, response.Body.String())
+	}
+	body := response.Body.Bytes()
+
+	// Byte level: UTF-8 BOM for Excel, valid UTF-8, no hostile control byte,
+	// and non-ASCII payloads stay raw (CSV has no escape syntax to hide them).
+	if !bytes.HasPrefix(body, []byte(csvBOM)) {
+		t.Fatalf("CSV must start with the UTF-8 BOM: %q", body[:min(len(body), 40)])
+	}
+	if !utf8.Valid(body) {
+		t.Fatal("CSV must be valid UTF-8")
+	}
+	for _, banned := range []string{"\x00", "\x07", "\x0b", "\x0c", "\x1b", "\x7f"} {
+		if bytes.Contains(body, []byte(banned)) {
+			t.Fatalf("raw control byte %q survived into the CSV bytes", banned)
+		}
+	}
+	for _, want := range []string{"🚨🚀", "日本語", "\u202b\u202e", "e\u0301\u0301clat", strings.Repeat("A", 10_000) + "☕"} {
+		if !bytes.Contains(body, []byte(want)) {
+			t.Fatalf("non-ASCII payload %q must stay raw UTF-8 in the file", want)
+		}
+	}
+
+	// Structure: header intact, one row per finding, 13 columns everywhere.
+	records, err := csv.NewReader(bytes.NewReader(body[len(csvBOM):])).ReadAll()
+	if err != nil {
+		t.Fatalf("invalid CSV: %v: %q", err, body)
+	}
+	if len(records) != 1+len(corpus) {
+		t.Fatalf("expected header plus %d rows, got %d records", len(corpus), len(records))
+	}
+	wantHeader := "severity,category,analyzer,rule_id,title,message,file,line,column,end_line,status,remediation,documentation_url"
+	if strings.Join(records[0], ",") != wantHeader {
+		t.Fatalf("unexpected header: %#v", records[0])
+	}
+	for _, row := range records {
+		if len(row) != 13 {
+			t.Fatalf("every row must carry 13 fields: %#v", row)
+		}
+	}
+
+	// Field-for-field round-trip: each cell decodes to the exact source value
+	// modulo the modeled csvCell transform and the reader's CRLF compression.
+	byRule := map[string][]string{}
+	for _, row := range records[1:] {
+		byRule[row[3]] = row
+	}
+	csvNum := func(v int) string {
+		if v == 0 {
+			return ""
+		}
+		return strconv.Itoa(v)
+	}
+	textColumns := func(f analyzers.Finding) []string {
+		return []string{string(f.Severity), string(f.Category), f.AnalyzerID, f.RuleID, f.Title, f.Message, f.RelativePath, f.Remediation, f.DocumentationURL}
+	}
+	for _, f := range corpus {
+		row := byRule[csvParseNormal(csvWantCell(f.RuleID))]
+		if row == nil {
+			t.Fatalf("finding %q missing from the export (rows keyed by rule_id: %v)", f.RuleID, len(byRule))
+		}
+		want := []string{
+			csvParseNormal(csvWantCell(string(f.Severity))), csvParseNormal(csvWantCell(string(f.Category))),
+			csvParseNormal(csvWantCell(f.AnalyzerID)), csvParseNormal(csvWantCell(f.RuleID)),
+			csvParseNormal(csvWantCell(f.Title)), csvParseNormal(csvWantCell(f.Message)),
+			csvParseNormal(csvWantCell(f.RelativePath)),
+			csvNum(f.StartLine), csvNum(f.StartColumn), csvNum(f.EndLine), "new",
+			csvParseNormal(csvWantCell(f.Remediation)), csvParseNormal(csvWantCell(f.DocumentationURL)),
+		}
+		for i := range want {
+			if row[i] != want[i] {
+				t.Fatalf("%q column %d: got %q, want %q (full row %#v)", f.RuleID, i, row[i], want[i], row)
+			}
+		}
+	}
+
+	// The transform is precisely as modeled and is the ONLY change: benign
+	// cells are identity, formula-first cells gain exactly one leading quote,
+	// and control bytes trade one rune for one space.
+	for _, f := range corpus {
+		for _, v := range textColumns(f) {
+			transformed := csvWantCell(v)
+			if !strings.ContainsFunc(v, csvHasHostileControl) {
+				switch {
+				case v == "":
+				case strings.ContainsRune("=+-@\t\r", rune(v[0])):
+					if transformed != "'"+v {
+						t.Fatalf("formula-first cell %q must gain exactly one leading quote, got %q", v, transformed)
+					}
+				default:
+					if transformed != v {
+						t.Fatalf("benign cell %q must round-trip untouched, got %q", v, transformed)
+					}
+				}
+				continue
+			}
+			// One for one: every hostile rune becomes exactly one space, plus
+			// the optional single quote prefix.
+			quote := 0
+			if strings.HasPrefix(transformed, "'") {
+				quote = 1
+			}
+			if got, wantRunes := len([]rune(transformed)), len([]rune(v))+quote; got != wantRunes {
+				t.Fatalf("scrub must be one rune for one rune: %q (%d) -> %q (%d)", v, len([]rune(v)), transformed, got)
+			}
+		}
+	}
+
+	// Verbatim field bytes: the writer must not rewrite any embedded newline
+	// (UseCRLF mode deletes lone CR bytes, which this export refuses to do).
+	// The mixed-newline message carries no quotes, so it is emitted verbatim
+	// inside its quotes with LF, CRLF, and lone CR all intact.
+	if !bytes.Contains(body, []byte("\"line1\nline2\r\nline3\rline4\n\rmixed\"")) {
+		t.Fatalf("embedded newline bytes must survive verbatim inside the quoted field")
+	}
+
+	// LF record terminators, byte-accounted: every CR in the file belongs to
+	// a field; every LF is either a field byte or one of the 1+len(corpus)
+	// record terminators.
+	wantLF, wantCR := len(records), 0
+	for _, f := range corpus {
+		for _, v := range textColumns(f) {
+			cell := csvWantCell(v)
+			wantLF += strings.Count(cell, "\n")
+			wantCR += strings.Count(cell, "\r")
+		}
+	}
+	if got := bytes.Count(body, []byte("\n")); got != wantLF {
+		t.Fatalf("file carries %d LF bytes, want %d (%d record terminators plus embedded field bytes)", got, wantLF, len(records))
+	}
+	if got := bytes.Count(body, []byte("\r")); got != wantCR {
+		t.Fatalf("file carries %d CR bytes, want %d (only embedded field bytes; terminators are bare LF)", got, wantCR)
+	}
+
+	// Severity exports normalized; the raw analyzer casing never reaches the file.
+	if bytes.Contains(body, []byte("HIGH!!!")) {
+		t.Fatalf("raw analyzer severity casing leaked into the CSV")
+	}
+	if row := byRule["raw-severity-casing"]; row == nil || row[0] != "high" {
+		t.Fatalf("severity column must carry the normalized value: %#v", row)
 	}
 }
 

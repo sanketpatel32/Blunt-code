@@ -164,9 +164,11 @@ type htmlFinding struct {
 // scripts.
 func HTML(m Model) []byte {
 	view := htmlModel{
-		WorkspaceName: m.WorkspaceName, WorkspacePath: m.WorkspacePath, Profile: m.Profile, Version: m.BluntCodeVersion,
+		WorkspaceName: scrubControls(m.WorkspaceName), WorkspacePath: scrubControls(m.WorkspacePath), Profile: scrubControls(m.Profile), Version: m.BluntCodeVersion,
 		Total: len(m.Findings), New: len(m.Comparison.New), Fixed: len(m.Comparison.Fixed), Persistent: len(m.Comparison.Persistent),
-		Warnings: m.Warnings,
+	}
+	for _, warning := range m.Warnings {
+		view.Warnings = append(view.Warnings, scrubControls(warning))
 	}
 	if !m.StartedAt.IsZero() {
 		view.Date = m.StartedAt.UTC().Format("2006-01-02")
@@ -185,7 +187,7 @@ func HTML(m Model) []byte {
 		view.Severities = append(view.Severities, htmlSeverity{Name: s.name, Class: severityClass(s.sev), Count: m.Counts[s.sev]})
 	}
 	for _, r := range m.Runs {
-		view.Runs = append(view.Runs, htmlRun{Name: display(r), State: r.State, Duration: duration(r.Duration), Findings: r.FindingCount})
+		view.Runs = append(view.Runs, htmlRun{Name: scrubControls(display(r)), State: scrubControls(r.State), Duration: duration(r.Duration), Findings: r.FindingCount})
 	}
 	for _, f := range m.Findings {
 		title := strings.TrimSpace(f.Title)
@@ -193,9 +195,9 @@ func HTML(m Model) []byte {
 			title = "" // some analyzers repeat the rule id as title; show it once
 		}
 		view.Findings = append(view.Findings, htmlFinding{
-			Class: severityClass(f.Severity), Severity: string(f.Severity), Title: title,
-			Rule: f.RuleID, Message: f.Message, Remediation: strings.TrimSpace(f.Remediation),
-			Location: htmlLocation(f), Analyzer: f.AnalyzerID, DocsURL: strings.TrimSpace(f.DocumentationURL),
+			Class: severityClass(f.Severity), Severity: string(f.Severity), Title: scrubControls(title),
+			Rule: scrubControls(f.RuleID), Message: scrubControls(f.Message), Remediation: scrubControls(strings.TrimSpace(f.Remediation)),
+			Location: scrubControls(htmlLocation(f)), Analyzer: scrubControls(f.AnalyzerID), DocsURL: scrubControls(strings.TrimSpace(f.DocumentationURL)),
 		})
 	}
 	var b strings.Builder
@@ -237,4 +239,34 @@ func htmlLocation(f analyzers.Finding) string {
 		return fmt.Sprintf("%s:%d", path, f.StartLine)
 	}
 	return path
+}
+
+// isHostileControl reports whether a rune is a C0 control (other than the
+// whitespace trio tab, LF, CR) or DEL.
+func isHostileControl(r rune) bool {
+	return (r < 0x20 && r != '\t' && r != '\n' && r != '\r') || r == 0x7f
+}
+
+// scrubControls replaces NUL, BEL, ANSI escape sequences, and the other
+// non-whitespace C0 controls and DEL with spaces before text reaches
+// html/template. Contextual auto-escaping neutralizes markup characters but
+// passes these raw controls through in text contexts (verified against
+// Go's template package), and analyzer output is untrusted: a NUL smuggled
+// into a finding message must not land as a raw byte in the exported file.
+// Tab, LF, and CR are kept: HTML collapses them to whitespace and keeping
+// them preserves the message text verbatim. Invalid UTF-8 bytes decode to
+// and are rewritten as U+FFFD, so the output is always valid UTF-8.
+func scrubControls(s string) string {
+	if !strings.ContainsFunc(s, isHostileControl) {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if isHostileControl(r) {
+			r = ' '
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }

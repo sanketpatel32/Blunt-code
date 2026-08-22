@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func renderHTML(t *testing.T, in Input) string {
@@ -85,8 +86,8 @@ func TestHTMLNeutralizesHostileURLsAndMarkup(t *testing.T) {
 		},
 		{
 			AnalyzerID: "ruff", RuleID: "ATTR-BREAK", Severity: analyzers.SeverityMedium,
-			Title:       `<img src=x onerror=alert(1)>`,
-			Message:     "attribute breaking path below",
+			Title:        `<img src=x onerror=alert(1)>`,
+			Message:      "attribute breaking path below",
 			RelativePath: "src/\" onmouseover=\"alert(1)\nhidden.py",
 		},
 	}})
@@ -139,6 +140,103 @@ func TestHTMLPrintAndResponsiveStyles(t *testing.T) {
 		if !strings.Contains(doc, want) {
 			t.Fatalf("missing style rule %q:\n%s", want, doc)
 		}
+	}
+}
+
+// htmlTextEscape mirrors html/template's text-context escaping (verified
+// against the standard library: it escapes & < > ' " + — the last one to
+// defeat UTF-7 style attacks — and nothing else) so tests can assert the
+// exact escaped form hostile payloads must take inside the document.
+var htmlTextEscape = strings.NewReplacer(
+	"&", "&amp;",
+	"<", "&lt;",
+	">", "&gt;",
+	`"`, "&#34;",
+	"'", "&#39;",
+	"+", "&#43;",
+)
+
+// scrubbed is the test's independent statement of the control-character
+// contract: every C0 control except tab, LF, and CR, plus DEL, becomes a
+// space before text reaches the template.
+func scrubbed(s string) string {
+	return strings.Map(func(r rune) rune {
+		if (r < 0x20 && r != '\t' && r != '\n' && r != '\r') || r == 0x7f {
+			return ' '
+		}
+		return r
+	}, s)
+}
+
+// TestHTMLSurvivesHostileCorpus round-trips the hostile fixture table through
+// the HTML export: markup payloads must render as inert escaped text, control
+// bytes must never appear raw (html/template passes NUL, BEL, and ANSI
+// escapes through untouched in text contexts), the findings table must keep
+// exactly one row and one severity badge per finding, and every message must
+// remain present and legible.
+func TestHTMLSurvivesHostileCorpus(t *testing.T) {
+	corpus := hostileCorpus()
+	doc := string(HTML(Build(Input{
+		WorkspaceName: "Hostile \"Name\" <script>&'+'", StartedAt: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
+		Findings: corpus, Runs: []Run{hostileRun()},
+	})))
+
+	if !utf8.ValidString(doc) {
+		t.Fatal("HTML output must be valid UTF-8")
+	}
+	// onerror=/onmouseover= appear only as escaped inert text (e.g. inside
+	// &lt;img ...&gt;), which is why the banned set uses the raw markup and
+	// attribute-assignment forms that would indicate a breakout.
+	for _, banned := range []string{"\x00", "\x07", "\x0b", "\x0c", "\x1b", "\x7f", "<script", "<img", `onmouseover="`, `onerror="`, `href="javascript`, `href="data:`} {
+		if strings.Contains(doc, banned) {
+			t.Fatalf("raw %q leaked into the document:\n%s", banned, doc)
+		}
+	}
+
+	// Structure: one badge and one table row per finding, plus the two table
+	// headers and the one analyzer run row.
+	if got := strings.Count(doc, `class="badge badge-`); got != len(corpus) {
+		t.Fatalf("expected %d severity badges, got %d", len(corpus), got)
+	}
+	if got := strings.Count(doc, "<tr>"); got != len(corpus)+3 {
+		t.Fatalf("expected %d table rows (%d findings + 2 headers + 1 run), got %d", len(corpus)+3, len(corpus), got)
+	}
+
+	// Hostile documentation URL must hit the template's URL filter failsafe.
+	if !strings.Contains(doc, `href="#ZgotmplZ"`) {
+		t.Fatalf("unsafe documentation URL must be replaced by the filter failsafe:\n%s", doc)
+	}
+
+	// Escaped forms: the markup payloads render as text, exactly.
+	for _, want := range []string{
+		htmlTextEscape.Replace(`<script>alert(1)</script> & <img src=x onerror=alert(1)> &amp; &#60;b&#62;`),
+		htmlTextEscape.Replace(`100% #1 'single' "double" +plus.py`),
+		htmlTextEscape.Replace(`https://evil.example/payload.py`),
+		htmlTextEscape.Replace(`Wörkspâce <script>`),
+	} {
+		if !strings.Contains(doc, want) {
+			t.Fatalf("missing escaped payload %q:\n%s", want, doc)
+		}
+	}
+
+	// Every non-empty corpus message survives, scrubbed and escaped, in its cell.
+	for _, f := range corpus {
+		if f.Message == "" {
+			continue
+		}
+		want := htmlTextEscape.Replace(scrubbed(f.Message))
+		if !strings.Contains(doc, want) {
+			t.Fatalf("message for %q missing or mangled; want %q:\n%s", f.RuleID, want, doc)
+		}
+	}
+
+	// Severity is exported normalized: the raw analyzer casing is display-only
+	// metadata that must not leak into the badge.
+	if !strings.Contains(doc, ">high</span>") {
+		t.Fatalf("normalized severity must drive the badge text:\n%s", doc)
+	}
+	if strings.Contains(doc, "HIGH!!!") {
+		t.Fatalf("raw analyzer severity casing leaked into the HTML:\n%s", doc)
 	}
 }
 
