@@ -624,6 +624,11 @@ const MaxFindingsExportRows = 50000
 // nullable text is coalesced so row scans never observe SQL NULLs.
 const findingColumns = `findings.id,findings.analyzer_id,COALESCE(findings.rule_id,''),findings.fingerprint,findings.severity,findings.category,COALESCE(findings.title,''),findings.message,COALESCE(findings.relative_path,''),COALESCE(findings.start_line,0),COALESCE(findings.start_column,0),COALESCE(findings.end_line,0),COALESCE(findings.end_column,0),COALESCE(findings.remediation,''),COALESCE(findings.documentation_url,''),COALESCE(findings.raw_severity,''),findings.metadata_json`
 
+// severityRankExpr maps severity names onto a descending sort rank
+// (critical=5 down to info=1). The findings list and the fixed-findings panel
+// share it so both views rank issues identically.
+const severityRankExpr = `CASE findings.severity WHEN 'critical' THEN 5 WHEN 'high' THEN 4 WHEN 'medium' THEN 3 WHEN 'low' THEN 2 ELSE 1 END`
+
 // findingQuery carries the filter, ordering, and comparison-status machinery
 // shared by FindingsPage and FindingsCSV so the paged JSON list and the CSV
 // export always agree on which rows match.
@@ -693,7 +698,7 @@ func (d *DB) buildFindingQuery(ctx context.Context, scan core.Scan, filter Findi
 	}
 	switch filter.Sort {
 	case "severity":
-		order = "CASE findings.severity WHEN 'critical' THEN 5 WHEN 'high' THEN 4 WHEN 'medium' THEN 3 WHEN 'low' THEN 2 ELSE 1 END " + direction + ", findings.relative_path ASC, findings.start_line ASC"
+		order = severityRankExpr + " " + direction + ", findings.relative_path ASC, findings.start_line ASC"
 	case "path":
 		order = "findings.relative_path " + direction + ", findings.start_line " + direction + ", findings.analyzer_id ASC"
 	case "analyzer":
@@ -797,6 +802,71 @@ func (d *DB) FindingsCSV(ctx context.Context, scan core.Scan, filter FindingFilt
 	}
 	return output, rows.Err()
 }
+
+const (
+	// DefaultFixedFindingsLimit and MaxFixedFindingsLimit bound the
+	// fixed-findings panel: it is a "what changed" summary, not a full export.
+	DefaultFixedFindingsLimit = 100
+	MaxFixedFindingsLimit     = 200
+)
+
+// FixedFindingsResult carries the fixed-findings panel payload: the capped
+// rows, the exact fixed total, and the comparison context that produced it.
+type FixedFindingsResult struct {
+	Items               []analyzers.Finding
+	Total               int
+	ComparisonAvailable bool
+	PreviousScanID      string
+}
+
+// FixedFindings lists the findings that existed in the previous completed scan
+// of the same workspace and disappeared from this scan. The coverage rule from
+// scans.Compare is applied in SQL: a disappeared finding only counts as fixed
+// when its analyzer also succeeded in the current scan, because its absence is
+// otherwise unknown, not fixed. Rows reuse the shared finding projection and
+// row scanner of FindingsPage with the status column pinned to "fixed"; limit
+// defaults to DefaultFixedFindingsLimit and is capped at MaxFixedFindingsLimit
+// while Total always reports the uncapped count.
+func (d *DB) FixedFindings(ctx context.Context, scan core.Scan, limit int) (FixedFindingsResult, error) {
+	if limit <= 0 {
+		limit = DefaultFixedFindingsLimit
+	}
+	if limit > MaxFixedFindingsLimit {
+		limit = MaxFixedFindingsLimit
+	}
+	previousID, err := d.PreviousCompletedScanID(ctx, scan.WorkspaceID, scan.ID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return FixedFindingsResult{}, nil
+	}
+	if err != nil {
+		return FixedFindingsResult{}, err
+	}
+	result := FixedFindingsResult{ComparisonAvailable: true, PreviousScanID: previousID}
+	// The fingerprint predicate mirrors the comparison status in
+	// buildFindingQuery pointed the other way: previous findings whose
+	// fingerprint no longer exists in the current scan are gone. The analyzer
+	// subquery is the SQL form of SuccessfulAnalyzerIDs for the coverage rule.
+	where := `findings.scan_id=? AND NOT EXISTS (SELECT 1 FROM findings AS current_scan WHERE current_scan.scan_id=? AND current_scan.fingerprint=findings.fingerprint) AND findings.analyzer_id IN (SELECT analyzer_id FROM analyzer_runs WHERE scan_id=? AND state='succeeded')`
+	args := []any{previousID, scan.ID, scan.ID}
+	if err := d.SQL.QueryRowContext(ctx, `SELECT COUNT(*) FROM findings WHERE `+where, args...).Scan(&result.Total); err != nil {
+		return FixedFindingsResult{}, err
+	}
+	queryArgs := append(append([]any(nil), args...), limit)
+	rows, err := d.SQL.QueryContext(ctx, `SELECT `+findingColumns+`,'fixed' FROM findings WHERE `+where+` ORDER BY `+severityRankExpr+` DESC, findings.relative_path ASC, findings.start_line ASC, findings.analyzer_id ASC, findings.rule_id ASC LIMIT ?`, queryArgs...)
+	if err != nil {
+		return FixedFindingsResult{}, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		f, err := scanFindingRow(rows)
+		if err != nil {
+			return FixedFindingsResult{}, err
+		}
+		result.Items = append(result.Items, f)
+	}
+	return result, rows.Err()
+}
+
 func (d *DB) Metrics(ctx context.Context, scanID string) ([]analyzers.Metric, error) {
 	rows, err := d.SQL.QueryContext(ctx, `SELECT analyzer_id,metric_key,label,COALESCE(value_number,0),COALESCE(unit,'') FROM metrics WHERE scan_id=?`, scanID)
 	if err != nil {

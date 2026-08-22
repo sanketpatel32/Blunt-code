@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -230,5 +231,150 @@ func TestFindingsCSVMatchesPageFiltersAndIgnoresPagination(t *testing.T) {
 	}
 	if _, err := db.FindingsCSV(ctx, current, FindingFilter{Status: "bogus"}); err == nil {
 		t.Fatal("invalid status must be rejected")
+	}
+}
+
+func TestFixedFindingsAppliesCoverageRuleAndSeverityOrder(t *testing.T) {
+	db, err := Open(context.Background(), filepath.Join(t.TempDir(), "bluntcode.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	work, err := db.CreateWorkspace(ctx, core.Workspace{Name: "Sample", RootPath: "C:/sample"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	issue := func(analyzer, rule, path, message string, severity analyzers.Severity) analyzers.Finding {
+		f := analyzers.Finding{AnalyzerID: analyzer, RuleID: rule, RelativePath: path, Message: message, Severity: severity, Category: analyzers.CategoryCorrectness}
+		f.SetFingerprint()
+		return f
+	}
+	// Previous scan: STAY persists, GONE-HIGH and GONE-LOW disappear while ruff
+	// still succeeds, and SEM-UNKNOWN disappears while semgrep fails the
+	// current scan, so its absence is unknown rather than fixed.
+	previous, err := db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: "queued"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ruffItems := []analyzers.Finding{
+		issue("ruff", "STAY", "src/stay.py", "still here", analyzers.SeverityCritical),
+		issue("ruff", "GONE-LOW", "src/gone-low.py", "fixed low", analyzers.SeverityLow),
+		issue("ruff", "GONE-HIGH", "src/gone-high.py", "fixed high", analyzers.SeverityHigh),
+	}
+	if _, err := db.SaveAnalyzerResult(ctx, previous.ID, AnalyzerRunInput{AnalyzerID: "ruff", Version: "test", State: "succeeded"}, ruffItems, nil); err != nil {
+		t.Fatal(err)
+	}
+	semgrepItem := issue("semgrep", "SEM-UNKNOWN", "src/covered.py", "analyzer failed this scan", analyzers.SeverityCritical)
+	if _, err := db.SaveAnalyzerResult(ctx, previous.ID, AnalyzerRunInput{AnalyzerID: "semgrep", Version: "test", State: "succeeded"}, []analyzers.Finding{semgrepItem}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CompleteScan(ctx, previous.ID, "completed", ""); err != nil {
+		t.Fatal(err)
+	}
+	current, err := db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: "queued"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.SaveAnalyzerResult(ctx, current.ID, AnalyzerRunInput{AnalyzerID: "ruff", Version: "test", State: "succeeded"}, []analyzers.Finding{ruffItems[0]}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.SaveAnalyzerResult(ctx, current.ID, AnalyzerRunInput{AnalyzerID: "semgrep", Version: "test", State: "failed", Error: "tool crashed"}, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CompleteScan(ctx, current.ID, "completed_with_warnings", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := db.FixedFindings(ctx, current, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.ComparisonAvailable || result.PreviousScanID != previous.ID {
+		t.Fatalf("comparison context: %#v", result)
+	}
+	if result.Total != 2 || len(result.Items) != 2 {
+		t.Fatalf("only GONE-HIGH and GONE-LOW count as fixed: %#v", result)
+	}
+	if result.Items[0].RuleID != "GONE-HIGH" || result.Items[1].RuleID != "GONE-LOW" {
+		t.Fatalf("severity must rank high before low: %#v", result.Items)
+	}
+	for _, item := range result.Items {
+		if item.Status != "fixed" || item.ID == "" || item.AnalyzerID != "ruff" || item.Fingerprint == "" {
+			t.Fatalf("fixed rows must reuse the finding shape with status fixed: %#v", item)
+		}
+	}
+	// A tighter limit caps the rows while Total keeps the exact count.
+	capped, err := db.FixedFindings(ctx, current, 1)
+	if err != nil || capped.Total != 2 || len(capped.Items) != 1 {
+		t.Fatalf("limit must cap rows without losing the total: %#v (%v)", capped, err)
+	}
+
+	// The first completed scan of a workspace has no comparison basis.
+	solo, err := db.CreateWorkspace(ctx, core.Workspace{Name: "Solo", RootPath: "C:/solo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := db.CreateScan(ctx, core.Scan{WorkspaceID: solo.ID, State: "queued"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.SaveAnalyzerResult(ctx, first.ID, AnalyzerRunInput{AnalyzerID: "ruff", Version: "test", State: "succeeded"}, []analyzers.Finding{issue("ruff", "ONLY", "src/only.py", "no baseline", analyzers.SeverityLow)}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CompleteScan(ctx, first.ID, "completed", ""); err != nil {
+		t.Fatal(err)
+	}
+	result, err = db.FixedFindings(ctx, first, 0)
+	if err != nil || result.ComparisonAvailable || result.Total != 0 || len(result.Items) != 0 || result.PreviousScanID != "" {
+		t.Fatalf("a scan without a previous completed scan has nothing to compare: %#v (%v)", result, err)
+	}
+}
+
+func TestFixedFindingsCapsLimitAndReportsTrueTotal(t *testing.T) {
+	db, err := Open(context.Background(), filepath.Join(t.TempDir(), "bluntcode.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	work, err := db.CreateWorkspace(ctx, core.Workspace{Name: "Sample", RootPath: "C:/sample"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	total := MaxFixedFindingsLimit + 5
+	items := make([]analyzers.Finding, 0, total)
+	for i := 0; i < total; i++ {
+		f := analyzers.Finding{AnalyzerID: "ruff", RuleID: fmt.Sprintf("RULE-%03d", i), RelativePath: fmt.Sprintf("src/file-%03d.py", i), Message: "resolved issue", Severity: analyzers.SeverityMedium, Category: analyzers.CategoryCorrectness}
+		f.SetFingerprint()
+		items = append(items, f)
+	}
+	previous, err := db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: "queued"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.SaveAnalyzerResult(ctx, previous.ID, AnalyzerRunInput{AnalyzerID: "ruff", Version: "test", State: "succeeded"}, items, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CompleteScan(ctx, previous.ID, "completed", ""); err != nil {
+		t.Fatal(err)
+	}
+	current, err := db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: "queued"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.SaveAnalyzerResult(ctx, current.ID, AnalyzerRunInput{AnalyzerID: "ruff", Version: "test", State: "succeeded"}, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CompleteScan(ctx, current.ID, "completed", ""); err != nil {
+		t.Fatal(err)
+	}
+	result, err := db.FixedFindings(ctx, current, 0)
+	if err != nil || result.Total != total || len(result.Items) != DefaultFixedFindingsLimit {
+		t.Fatalf("default limit must apply while the total stays exact: total=%d items=%d err=%v", result.Total, len(result.Items), err)
+	}
+	result, err = db.FixedFindings(ctx, current, total*10)
+	if err != nil || result.Total != total || len(result.Items) != MaxFixedFindingsLimit {
+		t.Fatalf("limit must clamp to %d while the total stays exact: total=%d items=%d err=%v", MaxFixedFindingsLimit, result.Total, len(result.Items), err)
 	}
 }

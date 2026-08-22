@@ -238,6 +238,113 @@ func TestFindingsCSVRejectsUnknownScan(t *testing.T) {
 	}
 }
 
+type fixedFindingsResponse struct {
+	Fixed               []analyzers.Finding `json:"fixed"`
+	TotalFixed          int                 `json:"total_fixed"`
+	ComparisonAvailable bool                `json:"comparison_available"`
+	PreviousScanID      *string             `json:"previous_scan_id"`
+}
+
+func TestFixedFindingsListsCoverageAwareFixedRows(t *testing.T) {
+	s := testServer(t)
+	ctx := context.Background()
+	work, err := s.db.CreateWorkspace(ctx, core.Workspace{RootPath: t.TempDir(), Name: "Example"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// STAY persists, GONE-HIGH and GONE-LOW disappear while ruff still
+	// succeeds, and SEM-UNKNOWN disappears while semgrep fails this scan, so
+	// the coverage rule must keep it out of the fixed list.
+	stay := finding("ruff", "STAY", "src/stay.py", "still here", analyzers.SeverityCritical, analyzers.CategoryCorrectness)
+	goneHigh := finding("ruff", "GONE-HIGH", "src/gone-high.py", "fixed high", analyzers.SeverityHigh, analyzers.CategoryCorrectness)
+	goneLow := finding("ruff", "GONE-LOW", "src/gone-low.py", "fixed low", analyzers.SeverityLow, analyzers.CategoryCorrectness)
+	covered := finding("semgrep", "SEM-UNKNOWN", "src/covered.py", "analyzer failed this scan", analyzers.SeverityCritical, analyzers.CategorySecurity)
+	previous, err := s.db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: "queued"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.SaveAnalyzerResult(ctx, previous.ID, database.AnalyzerRunInput{AnalyzerID: "ruff", Version: "test", State: "succeeded"}, []analyzers.Finding{stay, goneHigh, goneLow}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.SaveAnalyzerResult(ctx, previous.ID, database.AnalyzerRunInput{AnalyzerID: "semgrep", Version: "test", State: "succeeded"}, []analyzers.Finding{covered}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.db.CompleteScan(ctx, previous.ID, "completed", ""); err != nil {
+		t.Fatal(err)
+	}
+	current, err := s.db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: "queued"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.SaveAnalyzerResult(ctx, current.ID, database.AnalyzerRunInput{AnalyzerID: "ruff", Version: "test", State: "succeeded"}, []analyzers.Finding{stay}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.SaveAnalyzerResult(ctx, current.ID, database.AnalyzerRunInput{AnalyzerID: "semgrep", Version: "test", State: "failed", Error: "tool crashed"}, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.db.CompleteScan(ctx, current.ID, "completed_with_warnings", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+current.ID+"/fixed", nil)
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	var body fixedFindingsResponse
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil {
+		t.Fatalf("fixed: %d %s", response.Code, response.Body.String())
+	}
+	if !body.ComparisonAvailable || body.PreviousScanID == nil || *body.PreviousScanID != previous.ID {
+		t.Fatalf("comparison context: %#v", body)
+	}
+	if body.TotalFixed != 2 || len(body.Fixed) != 2 {
+		t.Fatalf("only the two ruff findings are fixed: %#v", body)
+	}
+	if body.Fixed[0].RuleID != "GONE-HIGH" || body.Fixed[0].Status != "fixed" || body.Fixed[1].RuleID != "GONE-LOW" || body.Fixed[1].Status != "fixed" {
+		t.Fatalf("severity order and fixed status: %#v", body.Fixed)
+	}
+
+	// The capped list never changes the reported total.
+	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+current.ID+"/fixed?limit=1", nil)
+	response = httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil || body.TotalFixed != 2 || len(body.Fixed) != 1 {
+		t.Fatalf("capped list: %d %s", response.Code, response.Body.String())
+	}
+	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+current.ID+"/fixed?limit=0", nil)
+	response = httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "INVALID_FINDING_QUERY") {
+		t.Fatalf("invalid limit: %d %s", response.Code, response.Body.String())
+	}
+
+	// First scan of a fresh workspace: no baseline, so nothing can be fixed.
+	solo, err := s.db.CreateWorkspace(ctx, core.Workspace{RootPath: t.TempDir(), Name: "Solo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := completedScan(t, s, solo.ID, "completed", finding("ruff", "ONLY", "src/only.py", "no baseline", analyzers.SeverityLow, analyzers.CategoryCorrectness))
+	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+first.ID+"/fixed", nil)
+	response = httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil || body.ComparisonAvailable || body.TotalFixed != 0 || len(body.Fixed) != 0 || body.PreviousScanID != nil {
+		t.Fatalf("no baseline: %d %s", response.Code, response.Body.String())
+	}
+
+	unknown := "00000000-0000-4000-8000-000000000000"
+	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+unknown+"/fixed", nil)
+	response = httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusNotFound || !strings.Contains(response.Body.String(), "SCAN_NOT_FOUND") {
+		t.Fatalf("unknown scan got %d: %s", response.Code, response.Body.String())
+	}
+	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/not-a-uuid/fixed", nil)
+	response = httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusNotFound || !strings.Contains(response.Body.String(), "SCAN_NOT_FOUND") {
+		t.Fatalf("malformed id got %d: %s", response.Code, response.Body.String())
+	}
+}
+
 func TestFindingPreviewReturnsContainedSourceExcerpt(t *testing.T) {
 	s := testServer(t)
 	root := t.TempDir()

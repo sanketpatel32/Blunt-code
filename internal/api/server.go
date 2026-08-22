@@ -98,6 +98,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/events", s.scanEvents)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings", s.findings)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings.csv", s.findingsCSV)
+	s.mux.HandleFunc("GET /api/v1/scans/{id}/fixed", s.fixedFindings)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings/{findingID}/preview", s.findingPreview)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/report", s.report)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/report.md", s.reportMarkdown)
@@ -892,6 +893,46 @@ func csvNumber(value int) string {
 		return ""
 	}
 	return strconv.Itoa(value)
+}
+
+// fixedFindings lists what the fixed count on the scan report actually refers
+// to: findings present in the previous completed scan and gone from this one,
+// with the same coverage-aware rule the report comparison applies. The list is
+// capped for the panel while total_fixed always reports the exact count.
+func (s *Server) fixedFindings(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !validID(id) {
+		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
+		return
+	}
+	scan, err := s.db.Scan(r.Context(), id)
+	if errors.Is(err, sql.ErrNoRows) {
+		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
+		return
+	}
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load scan.")
+		return
+	}
+	limit := database.DefaultFixedFindingsLimit
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 1 {
+			fail(w, 400, "INVALID_FINDING_QUERY", fmt.Sprintf("limit must be a positive integer of at most %d", database.MaxFixedFindingsLimit))
+			return
+		}
+		limit = value
+	}
+	result, err := s.db.FixedFindings(r.Context(), scan, limit)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load fixed findings.")
+		return
+	}
+	var previousID any
+	if result.PreviousScanID != "" {
+		previousID = result.PreviousScanID
+	}
+	writeJSON(w, 200, map[string]any{"fixed": result.Items, "total_fixed": result.Total, "comparison_available": result.ComparisonAvailable, "previous_scan_id": previousID})
 }
 
 type sourcePreviewLine struct {
