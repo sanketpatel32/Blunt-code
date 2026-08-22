@@ -28,6 +28,10 @@ func NormalizeRoot(path string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("resolve workspace path: %w", err)
 	}
+	// EvalSymlinks leaves NTFS junctions in place (they are not reported as
+	// symlinks), which would register distinct workspace rows for the same
+	// physical directory depending on the path the user typed.
+	resolved = ResolveJunctions(resolved)
 	return filepath.Clean(resolved), nil
 }
 

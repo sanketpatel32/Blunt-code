@@ -25,6 +25,7 @@ import (
 	"bluntcode/internal/events"
 	"bluntcode/internal/instance"
 	"bluntcode/internal/reports"
+	"bluntcode/internal/workspace"
 )
 
 // --- Flag parsing: order, separators, and validation messages -------------
@@ -484,14 +485,14 @@ func makeJunction(t *testing.T, link, target string) {
 
 func TestResolveJunctionsIdentityAndMissing(t *testing.T) {
 	dir := t.TempDir()
-	if got := resolveJunctions(dir); got != dir {
+	if got := workspace.ResolveJunctions(dir); got != dir {
 		t.Fatalf("plain dir changed: %q -> %q", dir, got)
 	}
 	missing := filepath.Join(dir, "does", "not", "exist")
-	if got := resolveJunctions(missing); got != missing {
+	if got := workspace.ResolveJunctions(missing); got != missing {
 		t.Fatalf("missing dir changed: %q -> %q", missing, got)
 	}
-	if got := resolveJunctions(""); got != "" {
+	if got := workspace.ResolveJunctions(""); got != "" {
 		t.Fatalf("empty changed: %q", got)
 	}
 }
@@ -504,11 +505,11 @@ func TestResolveJunctionsResolvesJunction(t *testing.T) {
 	base := t.TempDir()
 	link := filepath.Join(base, "alias")
 	makeJunction(t, link, target)
-	if got := resolveJunctions(link); got != target {
+	if got := workspace.ResolveJunctions(link); got != target {
 		t.Fatalf("junction resolved to %q, want %q", got, target)
 	}
 	nested := filepath.Join(link, "pkg")
-	if got := resolveJunctions(nested); got != filepath.Join(target, "pkg") {
+	if got := workspace.ResolveJunctions(nested); got != filepath.Join(target, "pkg") {
 		t.Fatalf("nested junction resolved to %q", got)
 	}
 }

@@ -232,6 +232,17 @@ func (s *Server) createWorkspace(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, existing)
 		return
 	}
+	// Windows lookup is exact-byte in SQLite; tolerate case and 8.3 spelling
+	// variants of an already-registered root so re-adding never duplicates.
+	key := workspace.CanonicalKey(root)
+	if all, listErr := s.db.Workspaces(r.Context()); listErr == nil {
+		for _, existing := range all {
+			if workspace.CanonicalKey(existing.RootPath) == key {
+				writeJSON(w, 200, existing)
+				return
+			}
+		}
+	}
 	created, err := s.db.CreateWorkspace(r.Context(), core.Workspace{Name: input.Name, RootPath: root})
 	if err != nil {
 		fail(w, 500, "DATABASE_ERROR", "Could not save workspace.")

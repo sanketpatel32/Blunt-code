@@ -7,10 +7,13 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -1409,5 +1412,59 @@ func TestStartScanAllowedAfterInterruptedRecovery(t *testing.T) {
 	s.Handler().ServeHTTP(response, request)
 	if response.Code != http.StatusAccepted {
 		t.Fatalf("scan after recovery: %d %s, want 202", response.Code, response.Body.String())
+	}
+}
+
+// TestCreateWorkspaceReusesJunctionAndCaseVariants pins the normalization
+// contract at the API entry point: a workspace registered through its real
+// path is reused (200, not 201) when re-added via an NTFS junction or a
+// case-variant spelling of the same directory, and only one row is stored.
+func TestCreateWorkspaceReusesJunctionAndCaseVariants(t *testing.T) {
+	s := testServer(t)
+	httpServer := httptest.NewServer(s.Handler())
+	defer httpServer.Close()
+
+	target := t.TempDir()
+	if err := os.WriteFile(filepath.Join(target, "marker.txt"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	post := func(path string) (int, string) {
+		body, err := json.Marshal(map[string]string{"root_path": path})
+		if err != nil {
+			t.Fatal(err)
+		}
+		response, err := http.Post(httpServer.URL+"/api/v1/workspaces", "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer response.Body.Close()
+		raw, _ := io.ReadAll(response.Body)
+		return response.StatusCode, string(raw)
+	}
+
+	if code, body := post(target); code != http.StatusCreated {
+		t.Fatalf("first create = %d, want 201: %s", code, body)
+	}
+	if code, body := post(strings.ToUpper(target)); code != http.StatusOK {
+		t.Fatalf("case-variant create = %d, want 200: %s", code, body)
+	}
+	if runtime.GOOS == "windows" {
+		link := filepath.Join(t.TempDir(), "junction-link")
+		out, err := exec.Command("cmd", "/c", "mklink", "/J", link, target).CombinedOutput()
+		if err != nil {
+			t.Skipf("cannot create junction: %v: %s", err, out)
+		}
+		if code, body := post(link); code != http.StatusOK {
+			t.Fatalf("junction create = %d, want 200: %s", code, body)
+		}
+	}
+
+	list, err := s.db.Workspaces(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("stored %d workspaces, want 1", len(list))
 	}
 }
