@@ -163,3 +163,84 @@ describe('ReportView finding filters', () => {
     expect(findingUrls().at(-1)).not.toContain('severity=');
   });
 });
+
+describe('ReportView findings sorting', () => {
+  function sortButton(host: HTMLElement, label: string) {
+    return [...host.querySelectorAll<HTMLButtonElement>('.findings-table thead .th-sort')].find((button) => button.textContent!.startsWith(label))!;
+  }
+
+  function headerCell(host: HTMLElement, label: string) {
+    return [...host.querySelectorAll('.findings-table thead th')].find((th) => th.textContent!.startsWith(label))!;
+  }
+
+  it('keeps the Finding column non-sortable while the others expose sort buttons', async () => {
+    const host = await render();
+    const headers = [...host.querySelectorAll('.findings-table thead th')];
+    expect(headers.map((th) => th.querySelector('button.th-sort') !== null)).toEqual([true, false, true, true, true]);
+    expect(headers.map((th) => th.textContent!.replace(/[^A-Za-z]/g, ''))).toEqual(['Severitysortedascending', 'Finding', 'File', 'Tool', 'Status']);
+    expect(headers[1].getAttribute('aria-sort')).toBeNull();
+    expect(headers.slice(2).map((th) => th.getAttribute('aria-sort'))).toEqual(['none', 'none', 'none']);
+  });
+
+  it('toggles severity between ascending and descending, updating aria-sort and the request', async () => {
+    const host = await render();
+    expect(findingUrls()[0]).toContain('sort=severity');
+    expect(findingUrls()[0]).toContain('order=asc');
+    expect(headerCell(host, 'Severity').getAttribute('aria-sort')).toBe('ascending');
+
+    await click(sortButton(host, 'Severity'));
+    expect(findingUrls().at(-1)).toContain('sort=severity');
+    expect(findingUrls().at(-1)).toContain('order=desc'); // desc rank puts critical findings on top
+    expect(headerCell(host, 'Severity').getAttribute('aria-sort')).toBe('descending');
+    expect(sortButton(host, 'Severity').textContent).toContain('sorted descending'); // direction is part of the accessible name
+    expect(sortButton(host, 'Severity').textContent).toContain('▼');
+
+    await click(sortButton(host, 'Severity'));
+    expect(findingUrls().at(-1)).toContain('order=asc');
+    expect(headerCell(host, 'Severity').getAttribute('aria-sort')).toBe('ascending');
+  });
+
+  it('switches to another column with an ascending default and clears the previous sort', async () => {
+    const host = await render();
+    await click(sortButton(host, 'File'));
+    expect(findingUrls().at(-1)).toContain('sort=path');
+    expect(findingUrls().at(-1)).toContain('order=asc');
+    expect(headerCell(host, 'File').getAttribute('aria-sort')).toBe('ascending');
+    expect(headerCell(host, 'Severity').getAttribute('aria-sort')).toBe('none');
+
+    await click(sortButton(host, 'Tool'));
+    expect(findingUrls().at(-1)).toContain('sort=analyzer');
+    expect(findingUrls().at(-1)).toContain('order=asc');
+    expect(headerCell(host, 'Tool').getAttribute('aria-sort')).toBe('ascending');
+    expect(headerCell(host, 'File').getAttribute('aria-sort')).toBe('none');
+  });
+
+  it('re-selecting severity from another column applies the descending default so critical comes first', async () => {
+    const host = await render();
+    await click(sortButton(host, 'Status'));
+    expect(findingUrls().at(-1)).toContain('sort=status');
+    expect(findingUrls().at(-1)).toContain('order=asc');
+
+    await click(sortButton(host, 'Severity'));
+    expect(findingUrls().at(-1)).toContain('sort=severity');
+    expect(findingUrls().at(-1)).toContain('order=desc');
+    expect(headerCell(host, 'Severity').getAttribute('aria-sort')).toBe('descending');
+  });
+
+  it('restarts on the first page when the sort changes', async () => {
+    await fetchMock.withImplementation((input: string) => {
+      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, comparison: { new_count: 1, fixed_count: 0, persistent_count: 0 }, warnings: [], findings: [finding] }));
+      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: Array.from({ length: 25 }, (_, index) => ({ ...finding, id: `finding-${index}` })), total: 30, limit: 25, offset: 0, next_offset: 25, has_more: true }));
+      return Promise.resolve(json({ items: [] }));
+    }, async () => {
+      const host = await render();
+      const next = [...host.querySelectorAll('button')].find((button) => button.textContent === 'Next')!;
+      await click(next);
+      expect(findingUrls().at(-1)).toContain('offset=25');
+
+      await click(sortButton(host, 'Tool'));
+      expect(findingUrls().at(-1)).toContain('sort=analyzer');
+      expect(findingUrls().at(-1)).toContain('offset=0');
+    });
+  });
+});
