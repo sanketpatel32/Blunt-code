@@ -38,6 +38,44 @@ export interface AnalyzerRun {
   duration_ms?: number;
 }
 
+export interface RecentScanItem {
+  id: string;
+  workspace_id: string;
+  workspace_name: string;
+  state: string;
+  profile?: string;
+  started_at?: string | null;
+  finished_at?: string | null;
+  candidate_file_count?: number;
+  selected_file_count?: number;
+  total_findings?: number;
+  critical_count?: number;
+  high_count?: number;
+  medium_count?: number;
+  low_count?: number;
+  info_count?: number;
+}
+
+export interface ScanSummary {
+  workspaces_total: number;
+  workspaces_scanned: number;
+  critical_count: number;
+  high_count: number;
+  medium_count: number;
+  low_count: number;
+  info_count: number;
+  total_findings: number;
+  scans_total: number;
+  scans_last_7d: number;
+  active_scans: number;
+}
+
+export interface RecentScansResponse {
+  scans: RecentScanItem[];
+  total: number;
+  summary?: ScanSummary;
+}
+
 export interface Finding {
   id: string;
   analyzer_id: string;

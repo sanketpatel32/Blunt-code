@@ -1,4 +1,4 @@
-import type { FindingPage, PathOverride, Report, Scan, SourcePreview, Tool, TreeNode, Workspace } from './types';
+import type { FindingPage, PathOverride, RecentScansResponse, Report, Scan, SourcePreview, Tool, TreeNode, Workspace } from './types';
 
 const PREFIX = '/api/v1';
 
@@ -50,6 +50,7 @@ export const api = {
   },
   saveRules: (id: string, rules: unknown) => request(`/workspaces/${encodeURIComponent(id)}/rules`, { method: 'PUT', body: JSON.stringify(rules) }),
   scans: async (id: string) => list<Scan>(await request<Scan[] | { scans?: Scan[] }>(`/workspaces/${encodeURIComponent(id)}/scans`)),
+  recentScans: () => request<RecentScansResponse>('/scans'),
   startScan: (id: string, profile?: string) => request<Scan>(`/workspaces/${encodeURIComponent(id)}/scans`, { method: 'POST', body: JSON.stringify(profile ? { profile } : {}) }),
   scan: async (id: string) => {
     const response = await request<Scan | { scan: Scan; analyzer_runs?: Scan['analyzer_runs'] }>(`/scans/${encodeURIComponent(id)}`);
