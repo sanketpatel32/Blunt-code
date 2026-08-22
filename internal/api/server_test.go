@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -749,6 +750,81 @@ func TestStopServerRequestsGracefulShutdown(t *testing.T) {
 	case <-stopped:
 	case <-time.After(time.Second):
 		t.Fatal("shutdown callback was not called")
+	}
+}
+
+func postOpenFolder(t *testing.T, s *Server, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	request := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/v1/system/open-folder", strings.NewReader(body))
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	return response
+}
+
+func TestOpenFolderMapsEachKindToConfiguredPath(t *testing.T) {
+	s := testServer(t)
+	// The reports folder only exists once a scan has written a report; the
+	// scan service creates it on demand in production, so the test does too.
+	if err := os.Mkdir(s.paths.ReportsDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	var opened []string
+	s.openFolder = func(dir string) error { opened = append(opened, dir); return nil }
+	for _, kind := range []string{"data", "reports", "logs", "tools"} {
+		response := postOpenFolder(t, s, `{"kind":"`+kind+`"}`)
+		if response.Code != http.StatusNoContent || response.Body.Len() != 0 {
+			t.Fatalf("%s: got %d %q", kind, response.Code, response.Body.String())
+		}
+	}
+	want := []string{s.paths.DataDir, s.paths.ReportsDir, s.paths.LogsDir, s.paths.ToolsDir}
+	if len(opened) != len(want) {
+		t.Fatalf("launcher ran %d times: %#v", len(opened), opened)
+	}
+	for i := range want {
+		if opened[i] != want[i] {
+			t.Fatalf("kind %d opened %q, want %q", i, opened[i], want[i])
+		}
+	}
+}
+
+func TestOpenFolderRejectsUnknownKind(t *testing.T) {
+	s := testServer(t)
+	launched := false
+	s.openFolder = func(dir string) error { launched = true; return nil }
+	// The raw-path attempt matters most: DisallowUnknownFields must reject any
+	// smuggled path key so only the server-side enum can pick a target.
+	for _, body := range []string{`{"kind":"secrets"}`, `{"kind":""}`, `{}`, ``, `{"kind":"data","path":"C:\\Windows"}`} {
+		response := postOpenFolder(t, s, body)
+		if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "INVALID_FOLDER_KIND") {
+			t.Fatalf("body %q: got %d %s", body, response.Code, response.Body.String())
+		}
+	}
+	if launched {
+		t.Fatal("invalid kinds must never reach the launcher")
+	}
+}
+
+func TestOpenFolderRequiresExistingDirectory(t *testing.T) {
+	s := testServer(t)
+	launched := false
+	s.openFolder = func(dir string) error { launched = true; return nil }
+	// The reports folder is the natural missing case on a fresh install: the
+	// scan service creates it only after the first report is written.
+	response := postOpenFolder(t, s, `{"kind":"reports"}`)
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "FOLDER_NOT_FOUND") {
+		t.Fatalf("got %d %s", response.Code, response.Body.String())
+	}
+	if launched {
+		t.Fatal("missing folders must never reach the launcher")
+	}
+}
+
+func TestOpenFolderReportsLauncherFailure(t *testing.T) {
+	s := testServer(t)
+	s.openFolder = func(dir string) error { return errors.New("explorer exploded") }
+	response := postOpenFolder(t, s, `{"kind":"logs"}`)
+	if response.Code != http.StatusInternalServerError || !strings.Contains(response.Body.String(), "FOLDER_OPEN_FAILED") || !strings.Contains(response.Body.String(), "Windows Explorer could not open this folder.") {
+		t.Fatalf("got %d %s", response.Code, response.Body.String())
 	}
 }
 

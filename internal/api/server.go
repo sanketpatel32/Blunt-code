@@ -26,6 +26,7 @@ import (
 	"bluntcode/internal/database"
 	"bluntcode/internal/discovery"
 	"bluntcode/internal/events"
+	"bluntcode/internal/process"
 	"bluntcode/internal/reports"
 	"bluntcode/internal/scans"
 	"bluntcode/internal/tools"
@@ -36,15 +37,16 @@ import (
 const APIVersion = "v1"
 
 type Server struct {
-	db       *database.DB
-	bus      *events.Bus
-	scans    *scans.Service
-	tools    *tools.Service
-	paths    config.Paths
-	version  string
-	log      *slog.Logger
-	mux      *http.ServeMux
-	shutdown func()
+	db         *database.DB
+	bus        *events.Bus
+	scans      *scans.Service
+	tools      *tools.Service
+	paths      config.Paths
+	version    string
+	log        *slog.Logger
+	mux        *http.ServeMux
+	shutdown   func()
+	openFolder func(dir string) error
 }
 
 // workspaceView keeps the dashboard payload small while including the two
@@ -60,7 +62,7 @@ func New(db *database.DB, bus *events.Bus, scanService *scans.Service, toolServi
 	if logger == nil {
 		logger = slog.Default()
 	}
-	s := &Server{db: db, bus: bus, scans: scanService, tools: toolService, paths: paths, version: version, log: logger, mux: http.NewServeMux()}
+	s := &Server{db: db, bus: bus, scans: scanService, tools: toolService, paths: paths, version: version, log: logger, mux: http.NewServeMux(), openFolder: openFolderInExplorer}
 	s.routes()
 	return s
 }
@@ -77,6 +79,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/workspaces", s.listWorkspaces)
 	s.mux.HandleFunc("POST /api/v1/workspaces", s.createWorkspace)
 	s.mux.HandleFunc("POST /api/v1/system/select-folder", s.selectFolder)
+	s.mux.HandleFunc("POST /api/v1/system/open-folder", s.openSystemFolder)
 	s.mux.HandleFunc("POST /api/v1/system/stop", s.stopServer)
 	s.mux.HandleFunc("GET /api/v1/workspaces/{id}", s.getWorkspace)
 	s.mux.HandleFunc("PATCH /api/v1/workspaces/{id}", s.updateWorkspace)
@@ -345,6 +348,75 @@ func (s *Server) stopServer(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusAccepted, map[string]string{"state": "stopping"})
 	go s.shutdown()
+}
+
+// openFolderTimeout bounds the Explorer launch: explorer.exe hands the folder
+// off to the shell and exits almost immediately, so a launch that has not
+// finished within this window is treated as a failure instead of blocking the
+// request indefinitely.
+const openFolderTimeout = 5 * time.Second
+
+// openSystemFolder opens one of Blunt Code's own data folders in Windows
+// Explorer. The request carries a fixed folder enum, never a path: the server
+// resolves the kind against its configured directories, so a caller can never
+// direct Explorer (or the process launcher) at an arbitrary location.
+func (s *Server) openSystemFolder(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Kind string `json:"kind"`
+	}
+	// decode enforces DisallowUnknownFields, so smuggled extras such as a raw
+	// path key are rejected; every malformed shape here is an invalid kind.
+	if err := decode(r, &input); err != nil {
+		fail(w, 400, "INVALID_FOLDER_KIND", "kind must be data, reports, logs, or tools.")
+		return
+	}
+	dir, ok := folderForKind(s.paths, input.Kind)
+	if !ok {
+		fail(w, 400, "INVALID_FOLDER_KIND", "kind must be data, reports, logs, or tools.")
+		return
+	}
+	info, err := os.Stat(dir)
+	if errors.Is(err, os.ErrNotExist) || err == nil && !info.IsDir() {
+		fail(w, 409, "FOLDER_NOT_FOUND", "This folder has not been created yet.")
+		return
+	}
+	if err != nil {
+		fail(w, 500, "FOLDER_OPEN_FAILED", "This folder could not be opened.")
+		return
+	}
+	if err := s.openFolder(dir); err != nil {
+		s.log.Warn("open folder failed", "kind", input.Kind, "error", err)
+		fail(w, 500, "FOLDER_OPEN_FAILED", "Windows Explorer could not open this folder.")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// folderForKind resolves the fixed folder enum to server-held config paths.
+func folderForKind(paths config.Paths, kind string) (string, bool) {
+	switch kind {
+	case "data":
+		return paths.DataDir, true
+	case "reports":
+		return paths.ReportsDir, true
+	case "logs":
+		return paths.LogsDir, true
+	case "tools":
+		return paths.ToolsDir, true
+	}
+	return "", false
+}
+
+// openFolderInExplorer launches Explorer on dir with a direct argument vector
+// (no shell), so directories containing spaces are safe by construction.
+// explorer.exe routinely exits nonzero (1) even after a successful hand-off to
+// the shell; process.Run reports start and timeout failures as errors and exit
+// codes as successful results, so that nonzero exit is correctly ignored.
+func openFolderInExplorer(dir string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), openFolderTimeout)
+	defer cancel()
+	_, err := process.Run(ctx, process.Request{Command: "explorer.exe", Args: []string{dir}})
+	return err
 }
 func (s *Server) userExcludes(ctx context.Context, id string) ([]string, error) {
 	rules, err := s.db.Rules(ctx, id)

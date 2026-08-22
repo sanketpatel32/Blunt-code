@@ -100,7 +100,7 @@ func openCore() (core *appCore, release func(), err error) {
 	_ = registry.Register(biome.New(filepath.Join(paths.ToolsDir, "biome", "2.5.6", "biome.exe"), "2.5.6"))
 	_ = registry.Register(semgrep.New(semgrepExecutable, semgrepVersion, semgrepRules))
 	_ = registry.Register(managedSonar)
-	scanService := scans.New(db, registry, bus, filepath.Join(paths.DataDir, "reports"), paths.ToolsDir, toolService)
+	scanService := scans.New(db, registry, bus, paths.ReportsDir, paths.ToolsDir, toolService)
 	app := &appCore{
 		paths:       paths,
 		logger:      logger,
