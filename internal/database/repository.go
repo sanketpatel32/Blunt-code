@@ -332,6 +332,33 @@ func (d *DB) Scans(ctx context.Context, workspaceID string) ([]core.Scan, error)
 	}
 	return result, rows.Err()
 }
+// LatestScans resolves each workspace's single most recent scan (same recency
+// rule as Scans: started_at DESC) in one aggregate query. It exists so the
+// workspace list can avoid the per-workspace Scans() loop, which issues one
+// query per workspace and hydrates every snapshot of the entire scan history
+// just to read scans[0] (measured at 50 workspaces: 51 queries loading all
+// rows and snapshots vs 2 queries here).
+func (d *DB) LatestScans(ctx context.Context) (map[string]core.Scan, error) {
+	rows, err := d.SQL.QueryContext(ctx, `SELECT id,workspace_id,state,profile,started_at,finished_at,candidate_file_count,selected_file_count,total_findings,COALESCE(error_summary,''),snapshot_json FROM scans WHERE id IN (SELECT id FROM (SELECT id,ROW_NUMBER() OVER (PARTITION BY workspace_id ORDER BY started_at DESC,id DESC) AS recency FROM scans) ranked WHERE recency=1)`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make(map[string]core.Scan)
+	for rows.Next() {
+		var s core.Scan
+		var st, fin sql.NullString
+		if err := rows.Scan(&s.ID, &s.WorkspaceID, &s.State, &s.Profile, &st, &fin, &s.CandidateFileCount, &s.SelectedFileCount, &s.TotalFindings, &s.ErrorSummary, &s.SnapshotJSON); err != nil {
+			return nil, err
+		}
+		s.StartedAt, _ = parseNullableTime(st)
+		s.FinishedAt, _ = parseNullableTime(fin)
+		hydrateScanSnapshot(&s)
+		result[s.WorkspaceID] = s
+	}
+	return result, rows.Err()
+}
+
 func (d *DB) Scan(ctx context.Context, id string) (core.Scan, error) {
 	var s core.Scan
 	var st, fin sql.NullString

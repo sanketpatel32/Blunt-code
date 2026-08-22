@@ -5,14 +5,17 @@ const MINUTE_MS = 60 * SECOND_MS;
 const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
 const JUST_NOW_WINDOW_MS = 45 * SECOND_MS;
+// Formatter construction is expensive (~0.1-0.3ms each; tables format one timestamp
+// per row), so both instances are hoisted to module level and reused for every call.
 const shortDate = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
+const dateTime = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 
 export function date(value?: string | null) {
   if (!value) return 'Not analyzed yet';
   const time = new Date(value).getTime();
   // Intl.format() throws RangeError on an invalid time value, so hostile timestamps are defused here.
   if (Number.isNaN(time)) return 'Not analyzed yet';
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(time);
+  return dateTime.format(time);
 }
 
 export function relativeTime(value?: string | null, now = Date.now()): string {

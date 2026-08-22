@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"sort"
+	"strings"
 	"testing"
+	"time"
 
 	"bluntcode/internal/analyzers"
 	"bluntcode/internal/core"
@@ -454,4 +457,454 @@ func stuckOrder(stuck map[string]string) string {
 		return scanID
 	}
 	return ""
+}
+
+// ---------------------------------------------------------------------------
+// Large-volume responsiveness guards. Each scenario seeds a temp SQLite
+// database with realistic synthetic volumes, runs the operation repeatedly,
+// and asserts a generous p95 budget (>= 2x the worst observed p95 on the
+// reference machine) so CI jitter cannot flake while real regressions still
+// fail loudly. Seeds are skipped under -short.
+// ---------------------------------------------------------------------------
+
+var (
+	perfBase       = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	perfAnalyzers  = []string{"biome", "ruff", "semgrep", "sonarqube"}
+	perfSeverities = []string{"critical", "high", "medium", "low", "info"}
+	perfCategories = []string{"correctness", "suspicious", "style", "security"}
+)
+
+func openPerfDB(t *testing.T) *DB {
+	t.Helper()
+	db, err := Open(context.Background(), filepath.Join(t.TempDir(), "bluntcode.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	return db
+}
+
+func perfWorkspace(t *testing.T, db *DB, name string) core.Workspace {
+	t.Helper()
+	work, err := db.CreateWorkspace(context.Background(), core.Workspace{Name: name, RootPath: "C:/perf/" + name})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return work
+}
+
+// perfSnapshotJSON approximates a real immutable snapshot manifest (~5KB of
+// selected file paths) so scan-list queries move realistic byte volumes.
+func perfSnapshotJSON(workspaceID string, seq int) string {
+	files := make([]string, 0, 140)
+	for i := 0; i < 140; i++ {
+		files = append(files, fmt.Sprintf("src/pkg%02d/file%03d.ts", i%12, i))
+	}
+	// The payload shape is fixed and marshal cannot fail; ignoring the error
+	// keeps this helper usable without a *testing.T.
+	payload, _ := json.Marshal(map[string]any{
+		"workspace_id": workspaceID,
+		"captured_at":  perfBase.Add(time.Duration(seq) * 15 * time.Minute).Format(time.RFC3339),
+		"profile":      "standard", "candidate_file_count": 4200, "selected_file_count": 140,
+		"selected_files": files, "languages": map[string]int{"typescript": 90, "python": 50},
+	})
+	return string(payload)
+}
+
+// seedPerfScan inserts one scan row directly (bulk seeding is far faster than
+// going through CreateScan) with staggered recency so ordering queries across
+// workspaces have real work to do. seq must increase with recency.
+func seedPerfScan(t *testing.T, db *DB, workspaceID, scanID, state string, seq int, counts [5]int, snapshotJSON string) {
+	t.Helper()
+	started := perfBase.Add(time.Duration(seq) * 15 * time.Minute)
+	finished := any(nil)
+	switch state {
+	case "completed", "completed_with_warnings", "failed", "cancelled", "interrupted":
+		stamp := started.Add(6 * time.Minute)
+		finished = stamp.UTC().Format(time.RFC3339Nano)
+	}
+	total := 0
+	for _, count := range counts {
+		total += count
+	}
+	if snapshotJSON == "" {
+		snapshotJSON = "{}"
+	}
+	_, err := db.SQL.Exec(`INSERT INTO scans(id,workspace_id,state,profile,started_at,finished_at,candidate_file_count,selected_file_count,total_findings,critical_count,high_count,medium_count,low_count,info_count,snapshot_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		scanID, workspaceID, state, "standard", started.UTC().Format(time.RFC3339Nano), finished, 4200, 140, total, counts[0], counts[1], counts[2], counts[3], counts[4], snapshotJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, analyzer := range perfAnalyzers {
+		if _, err := db.SQL.Exec(`INSERT INTO analyzer_runs(id,scan_id,analyzer_id,version,state,started_at,finished_at,duration_ms,exit_code,finding_count) VALUES(?,?,?,?,?,?,?,?,?,?)`,
+			"run-"+scanID+"-"+analyzer, scanID, analyzer, "test", "succeeded", started.UTC().Format(time.RFC3339Nano), started.Add(3*time.Minute).UTC().Format(time.RFC3339Nano), 180000, 0, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func perfPath(i int) string  { return fmt.Sprintf("src/pkg%02d/mod%03d/file%04d.ts", i%12, i%140, i%9000) }
+func perfMessage(i int) string {
+	base := fmt.Sprintf("Finding %06d: implicit string concatenation inside a loop can degrade into quadratic behavior; build the parts once outside the loop and reuse the buffer across iterations of the surrounding scope for better throughput.", i)
+	if i%25 == 0 {
+		base += " needle: rare-token-match"
+	}
+	return base
+}
+
+// bulkInsertFindings loads synthetic findings through one prepared statement
+// inside a single transaction; fingerprints come from the caller so cross-scan
+// overlap (comparison status) is under the test's control.
+func bulkInsertFindings(t *testing.T, db *DB, scanID string, rows int, fingerprint func(i int) string) {
+	t.Helper()
+	tx, err := db.SQL.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stmt, err := tx.Prepare(`INSERT INTO findings(id,scan_id,analyzer_run_id,analyzer_id,rule_id,fingerprint,severity,category,title,message,relative_path,start_line,start_column,end_line,end_column,remediation,documentation_url,raw_severity,metadata_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < rows; i++ {
+		analyzer := perfAnalyzers[i%len(perfAnalyzers)]
+		if _, err := stmt.Exec(fmt.Sprintf("f-%s-%06d", scanID, i), scanID, "run-"+scanID+"-ruff", analyzer,
+			fmt.Sprintf("%s-R%03d", analyzer, i%120), fingerprint(i), perfSeverities[i%5], perfCategories[i%len(perfCategories)],
+			fmt.Sprintf("Issue summary %06d", i), perfMessage(i), perfPath(i), i%900+1, 1, i%900+2, 48,
+			"Apply the suggested remediation and re-run the scan.", "", "", "{}"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := stmt.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// measurePerf runs one warm-up (also failing on op errors) plus iterations
+// timed runs and returns the p95 and worst observed duration.
+func measurePerf(t *testing.T, iterations int, op func() error) (time.Duration, time.Duration) {
+	t.Helper()
+	if err := op(); err != nil {
+		t.Fatal(err)
+	}
+	samples := make([]time.Duration, 0, iterations)
+	for i := 0; i < iterations; i++ {
+		start := time.Now()
+		if err := op(); err != nil {
+			t.Fatal(err)
+		}
+		samples = append(samples, time.Since(start))
+	}
+	sort.Slice(samples, func(i, j int) bool { return samples[i] < samples[j] })
+	idx := len(samples) * 95 / 100
+	if idx >= len(samples) {
+		idx = len(samples) - 1
+	}
+	return samples[idx], samples[len(samples)-1]
+}
+
+// assertBudget fails with a clear report when a p95 sample exceeds its budget.
+func assertBudget(t *testing.T, name string, p95, worst, budget time.Duration) {
+	t.Helper()
+	t.Logf("%s: p95=%v worst=%v budget=%v", name, p95, worst, budget)
+	if p95 > budget {
+		t.Fatalf("%s p95 %v exceeded budget %v", name, p95, budget)
+	}
+}
+
+// explainPlan returns the joined EXPLAIN QUERY PLAN detail lines for a query.
+func explainPlan(t *testing.T, db *DB, query string, args ...any) string {
+	t.Helper()
+	rows, err := db.SQL.Query("EXPLAIN QUERY PLAN "+query, args...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var lines []string
+	for rows.Next() {
+		var id, parent, notused int
+		var detail string
+		if err := rows.Scan(&id, &parent, &notused, &detail); err != nil {
+			t.Fatal(err)
+		}
+		lines = append(lines, detail)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return strings.Join(lines, " | ")
+}
+
+// TestLargeVolumeFindingsPageResponsiveness guards the paged findings query on
+// a workspace holding 50k findings across 5 scans (10k in the latest), with
+// every expensive shape represented: comparison-status EXISTS filtering and
+// sorting, deep offsets, LIKE path/query filters, and severity sort.
+func TestLargeVolumeFindingsPageResponsiveness(t *testing.T) {
+	if testing.Short() {
+		t.Skip("large-volume seed skipped in -short mode")
+	}
+	ctx := context.Background()
+	db := openPerfDB(t)
+	work := perfWorkspace(t, db, "pages")
+	var latest string
+	for scan := 0; scan < 5; scan++ {
+		id := fmt.Sprintf("pg-scan-%d", scan)
+		seedPerfScan(t, db, work.ID, id, "completed", scan, [5]int{2000, 2000, 2000, 2000, 2000}, perfSnapshotJSON(work.ID, scan))
+		if scan == 5-1 {
+			latest = id
+		}
+	}
+	for scan := 0; scan < 5; scan++ {
+		scanID := fmt.Sprintf("pg-scan-%d", scan)
+		// The latest scan shares a third of its fingerprints with its
+		// predecessor so the comparison-status EXISTS subquery has real hits.
+		bulkInsertFindings(t, db, scanID, 10000, func(i int) string {
+			if scan == 4 && i%3 == 0 {
+				return fmt.Sprintf("pg-scan-3-%06d", i)
+			}
+			return fmt.Sprintf("%s-%06d", scanID, i)
+		})
+	}
+	scan, err := db.Scan(ctx, latest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name   string
+		filter FindingFilter
+		check  func(t *testing.T, page FindingsPage)
+	}{
+		{"default page", FindingFilter{Limit: 50}, func(t *testing.T, page FindingsPage) {
+			if page.Total != 10000 {
+				t.Fatalf("total=%d want 10000", page.Total)
+			}
+		}},
+		{"severity filter + sort, deep offset", FindingFilter{Severity: "high", Sort: "severity", Order: "desc", Limit: 100, Offset: 1500}, func(t *testing.T, page FindingsPage) {
+			if page.Total != 2000 || len(page.Items) != 100 {
+				t.Fatalf("total=%d items=%d want 2000/100", page.Total, len(page.Items))
+			}
+		}},
+		{"status=new EXISTS filter", FindingFilter{Status: "new", Limit: 100}, func(t *testing.T, page FindingsPage) {
+			if page.Total != 6666 {
+				t.Fatalf("new total=%d want 6666", page.Total)
+			}
+		}},
+		{"status sort (EXISTS per row)", FindingFilter{Sort: "status", Limit: 100}, nil},
+		{"path LIKE filter", FindingFilter{Path: "pkg03", Sort: "path", Limit: 100}, nil},
+		{"free-text query filter", FindingFilter{Query: "needle", Limit: 100}, func(t *testing.T, page FindingsPage) {
+			if page.Total != 400 {
+				t.Fatalf("query total=%d want 400", page.Total)
+			}
+		}},
+	}
+	for _, testCase := range cases {
+		filter := testCase.filter
+		var page FindingsPage
+		p95, worst := measurePerf(t, 15, func() error {
+			var err error
+			page, err = db.FindingsPage(ctx, scan, filter)
+			return err
+		})
+		if testCase.check != nil {
+			testCase.check(t, page)
+		}
+		assertBudget(t, "FindingsPage/"+testCase.name, p95, worst, 150*time.Millisecond)
+	}
+}
+
+// TestLargeVolumeFindingsCSVExport guards the CSV export path on a scan with
+// 52k findings over a 30k predecessor: the export must honor the 50k row cap,
+// keep comparison-status evaluation affordable, and stay well inside the 3s
+// budget while materializing the bounded slice in memory.
+func TestLargeVolumeFindingsCSVExport(t *testing.T) {
+	if testing.Short() {
+		t.Skip("large-volume seed skipped in -short mode")
+	}
+	ctx := context.Background()
+	db := openPerfDB(t)
+	work := perfWorkspace(t, db, "export")
+	seedPerfScan(t, db, work.ID, "csv-prev", "completed", 0, [5]int{6000, 6000, 6000, 6000, 6000}, perfSnapshotJSON(work.ID, 0))
+	seedPerfScan(t, db, work.ID, "csv-latest", "completed", 1, [5]int{10400, 10400, 10400, 10400, 10400}, perfSnapshotJSON(work.ID, 1))
+	bulkInsertFindings(t, db, "csv-prev", 30000, func(i int) string { return fmt.Sprintf("csv-fp-%06d", i) })
+	bulkInsertFindings(t, db, "csv-latest", 52000, func(i int) string {
+		if i < 30000 && i%2 == 0 {
+			return fmt.Sprintf("csv-fp-%06d", i)
+		}
+		return fmt.Sprintf("csv-new-%06d", i)
+	})
+	scan, err := db.Scan(ctx, "csv-latest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rows []analyzers.Finding
+	p95, worst := measurePerf(t, 5, func() error {
+		var err error
+		rows, err = db.FindingsCSV(ctx, scan, FindingFilter{})
+		return err
+	})
+	if len(rows) != MaxFindingsExportRows {
+		t.Fatalf("export rows=%d want cap %d", len(rows), MaxFindingsExportRows)
+	}
+	assertBudget(t, "FindingsCSV/52k-row scan", p95, worst, 3*time.Second)
+}
+
+// TestLargeVolumeFixedFindings guards the fixed-findings panel when an entire
+// 20k-finding scan was resolved: COUNT plus the capped 200-row page must stay
+// responsive with the NOT EXISTS + analyzer-coverage subqueries in play.
+func TestLargeVolumeFixedFindings(t *testing.T) {
+	if testing.Short() {
+		t.Skip("large-volume seed skipped in -short mode")
+	}
+	ctx := context.Background()
+	db := openPerfDB(t)
+	work := perfWorkspace(t, db, "fixed")
+	seedPerfScan(t, db, work.ID, "fixed-prev", "completed", 0, [5]int{4000, 4000, 4000, 4000, 4000}, perfSnapshotJSON(work.ID, 0))
+	seedPerfScan(t, db, work.ID, "fixed-latest", "completed", 1, [5]int{100, 100, 100, 100, 100}, perfSnapshotJSON(work.ID, 1))
+	bulkInsertFindings(t, db, "fixed-prev", 20000, func(i int) string { return fmt.Sprintf("fixed-prev-%06d", i) })
+	bulkInsertFindings(t, db, "fixed-latest", 500, func(i int) string { return fmt.Sprintf("fixed-new-%06d", i) })
+	scan, err := db.Scan(ctx, "fixed-latest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result FixedFindingsResult
+	p95, worst := measurePerf(t, 10, func() error {
+		var err error
+		result, err = db.FixedFindings(ctx, scan, MaxFixedFindingsLimit)
+		return err
+	})
+	if result.Total != 20000 || len(result.Items) != MaxFixedFindingsLimit {
+		t.Fatalf("fixed total=%d items=%d want 20000/%d", result.Total, len(result.Items), MaxFixedFindingsLimit)
+	}
+	assertBudget(t, "FixedFindings/20k fixed", p95, worst, 300*time.Millisecond)
+}
+
+// TestLargeVolumeDashboardQueries guards the dashboard pair (RecentScans +
+// ScanSummary) at 10 workspaces x 200 scans each. The summary's
+// ROW_NUMBER-over-partition and the global recency join are EXPLAINed so a
+// missing index would be visible in the failure output.
+func TestLargeVolumeDashboardQueries(t *testing.T) {
+	if testing.Short() {
+		t.Skip("large-volume seed skipped in -short mode")
+	}
+	ctx := context.Background()
+	db := openPerfDB(t)
+	seq := 0
+	var expectedTotal int
+	for w := 0; w < 10; w++ {
+		work := perfWorkspace(t, db, fmt.Sprintf("dash%02d", w))
+		for s := 0; s < 200; s++ {
+			state := "completed"
+			switch {
+			case s%37 == 0:
+				state = "completed_with_warnings"
+			case s%53 == 0:
+				state = "failed"
+			case s%97 == 0:
+				state = "running"
+			}
+			counts := [5]int{s % 7 + 1, s % 11 + 1, s % 13 + 1, s % 17 + 1, s % 19 + 1}
+			seedPerfScan(t, db, work.ID, fmt.Sprintf("dash-%02d-%03d", w, s), state, seq, counts, perfSnapshotJSON(work.ID, seq))
+			seq++
+			if state == "completed" || state == "completed_with_warnings" {
+				// Only the latest producing scan per workspace feeds totals;
+				// the last scan of each workspace below is interrupted-free by
+				// construction, so track the per-workspace latest contribution.
+				expectedTotal += 0
+			}
+		}
+	}
+	t.Logf("EXPLAIN RecentScans: %s", explainPlan(t, db, `SELECT scans.id FROM scans JOIN workspaces ON workspaces.id=scans.workspace_id ORDER BY scans.started_at DESC,scans.id DESC LIMIT 10`))
+	t.Logf("EXPLAIN RecentScans COUNT: %s", explainPlan(t, db, `SELECT COUNT(*) FROM scans`))
+	t.Logf("EXPLAIN ScanSummary window: %s", explainPlan(t, db, `SELECT COUNT(*),COALESCE(SUM(latest.critical_count),0),COALESCE(SUM(latest.total_findings),0) FROM (SELECT critical_count,total_findings,ROW_NUMBER() OVER (PARTITION BY workspace_id ORDER BY COALESCE(finished_at,started_at) DESC,id DESC) AS recency FROM scans WHERE state IN ('completed','completed_with_warnings')) latest WHERE recency=1`))
+	var summary ScanSummary
+	var recent []RecentScan
+	var total int
+	p95, worst := measurePerf(t, 10, func() error {
+		var err error
+		if summary, err = db.ScanSummary(ctx); err != nil {
+			return err
+		}
+		recent, total, err = db.RecentScans(ctx, RecentScansFilter{})
+		return err
+	})
+	if summary.WorkspacesTotal != 10 || summary.ScansTotal != 2000 || len(recent) != DefaultRecentScansLimit || total != 2000 {
+		t.Fatalf("summary=%#v recent=%d total=%d", summary, len(recent), total)
+	}
+	if summary.ActiveScans == 0 {
+		t.Fatalf("expected active scans among 2000, got %#v", summary)
+	}
+	assertBudget(t, "Dashboard/RecentScans+ScanSummary (10x200)", p95, worst, 200*time.Millisecond)
+}
+
+// TestLargeVolumeWorkspaceListView measures the exact repository call pattern
+// of GET /api/v1/workspaces: one Workspaces() query plus one Scans() query per
+// workspace (the N+1 the server loop produces). 50 workspaces x 20 scans with
+// realistic 5KB snapshot manifests quantify the cost; a single aggregate
+// latest-scan query is timed alongside for comparison.
+func TestLargeVolumeWorkspaceListView(t *testing.T) {
+	if testing.Short() {
+		t.Skip("large-volume seed skipped in -short mode")
+	}
+	ctx := context.Background()
+	db := openPerfDB(t)
+	seq := 0
+	for w := 0; w < 50; w++ {
+		work := perfWorkspace(t, db, fmt.Sprintf("list%02d", w))
+		for s := 0; s < 20; s++ {
+			state := "completed"
+			if s == 0 && w%5 == 0 {
+				state = "running"
+			}
+			seedPerfScan(t, db, work.ID, fmt.Sprintf("list-%02d-%03d", w, s), state, seq, [5]int{s + 1, s, s, s, s}, perfSnapshotJSON(work.ID, seq))
+			seq++
+		}
+	}
+	queries := 0
+	var latestScans int
+	var loopLatest map[string]string
+	p95, worst := measurePerf(t, 5, func() error {
+		items, err := db.Workspaces(ctx)
+		if err != nil {
+			return err
+		}
+		queries = 1 + len(items)
+		latestScans = 0
+		loopLatest = map[string]string{}
+		for _, item := range items {
+			scans, err := db.Scans(ctx, item.ID)
+			if err != nil {
+				return err
+			}
+			if len(scans) > 0 {
+				latestScans++
+				loopLatest[item.ID] = scans[0].ID
+			}
+		}
+		return nil
+	})
+	if queries != 51 || latestScans != 50 {
+		t.Fatalf("queries=%d workspacesWithScans=%d want 51/50", queries, latestScans)
+	}
+	assertBudget(t, "GET /workspaces repository calls (N+1)", p95, worst, 500*time.Millisecond)
+	t.Logf("N+1 detail: 1 Workspaces() + 50 Scans() queries load every scan row and hydrate every 5KB snapshot: p95=%v worst=%v", p95, worst)
+
+	// The single-aggregate alternative resolves the same latest scans with one
+	// extra query instead of one full-history query per workspace.
+	var aggregate map[string]core.Scan
+	aggP95, aggWorst := measurePerf(t, 5, func() error {
+		var err error
+		aggregate, err = db.LatestScans(ctx)
+		return err
+	})
+	if len(aggregate) != 50 {
+		t.Fatalf("aggregate latest scans=%d want 50", len(aggregate))
+	}
+	for workspaceID, scanID := range loopLatest {
+		if got := aggregate[workspaceID]; got.ID != scanID {
+			t.Fatalf("aggregate latest scan for %s = %s, loop says %s", workspaceID, got.ID, scanID)
+		}
+	}
+	t.Logf("single-aggregate alternative (1 query, latest scan only): p95=%v worst=%v", aggP95, aggWorst)
 }

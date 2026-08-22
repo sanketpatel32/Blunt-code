@@ -409,3 +409,29 @@ describe('ReportView finding row copy', () => {
     });
   });
 });
+
+describe('ReportView render guards', () => {
+  it('renders a full page of hostile rows (10k-char messages, huge paths) without blowing up', async () => {
+    // Render guard: analyzers can emit enormous messages and paths. The table
+    // must render every row to completion (CSS clamps the visual height); this
+    // catches per-row O(n^2) string building regressions as exceptions/timeouts.
+    const hostile = Array.from({ length: 100 }, (_, index) => ({
+      ...finding,
+      id: `hostile-${index}`,
+      message: 'x'.repeat(10_000) + ` tail ${index}`,
+      relative_path: `src/${'deep/'.repeat(200)}file${index}.py`,
+      remediation: 'y'.repeat(5_000),
+    }));
+    await fetchMock.withImplementation((input: string) => {
+      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, comparison: { new_count: 1, fixed_count: 0, persistent_count: 0 }, warnings: [], findings: hostile }));
+      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: hostile, total: 100, limit: 100, offset: 0, has_more: false }));
+      return Promise.resolve(json({ items: [] }));
+    }, async () => {
+      const host = await render();
+      const rows = host.querySelectorAll('.findings-table tbody tr');
+      expect(rows).toHaveLength(100);
+      const message = host.querySelector('.finding-message');
+      expect(message?.textContent).toContain(`tail 0`);
+    });
+  });
+});

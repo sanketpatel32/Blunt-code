@@ -59,6 +59,9 @@ export function ScanPage({ id, go, notify }: { id: string; go: (r: Route) => voi
 /** Compact rows shown before the "<details>" overflow; the endpoint itself caps the list at 100. */
 const FIXED_VISIBLE_LIMIT = 10;
 
+/** Hoisted so the event list formats timestamps without rebuilding the formatter per entry. */
+const mediumTime = new Intl.DateTimeFormat(undefined, { timeStyle: 'medium' });
+
 /**
  * "What changed" panel for terminal scans with fixes: a success-tone summary of the findings
  * fixed since the previous completed scan. Supplementary data only — comparison gaps and fetch
@@ -86,5 +89,5 @@ function ScanStageList({ scan, events }: { scan: Scan; events: ScanEvent[] }) {
   const entries = journey.length ? journey : [{ type: 'scan.stage', stage: fallback, at: Date.now() }];
   const active = !isTerminalScanState(scan.state) ? entries.at(-1) : undefined;
   const status = active?.type === 'analyzer.started' ? `${active.name ?? active.analyzer_id ?? 'Analyzer'} is checking your code` : active ? eventCopy(active) : scan.state === 'interrupted' ? 'Scan interrupted — completed checks are still available.' : scan.state.replaceAll('_', ' ');
-  return <section className="stage-list"><header><div><p className="eyebrow">Analysis flow</p><h2>What is happening now</h2></div><span>{entries.length} update{entries.length === 1 ? '' : 's'}</span></header><p className={`flow-now ${active ? 'active' : ''}`} role="status" aria-live="polite"><i aria-hidden="true" />{status}</p><ol className="scan-flow">{entries.map((event, index) => { const state = event.type.includes('failed') ? 'failed' : event.type.includes('completed') ? 'done' : event.type.includes('cancelled') ? 'interrupted' : index === entries.length - 1 && !isTerminalScanState(scan.state) ? 'current' : ''; return <li className={state} key={`${event.type}-${event.at}-${index}`}><i className="flow-marker" aria-hidden="true" /><div><strong>{eventCopy(event)}</strong><small>{new Intl.DateTimeFormat(undefined, { timeStyle: 'medium' }).format(event.at)}</small></div></li>; })}</ol></section>;
+  return <section className="stage-list"><header><div><p className="eyebrow">Analysis flow</p><h2>What is happening now</h2></div><span>{entries.length} update{entries.length === 1 ? '' : 's'}</span></header><p className={`flow-now ${active ? 'active' : ''}`} role="status" aria-live="polite"><i aria-hidden="true" />{status}</p><ol className="scan-flow">{entries.map((event, index) => { const state = event.type.includes('failed') ? 'failed' : event.type.includes('completed') ? 'done' : event.type.includes('cancelled') ? 'interrupted' : index === entries.length - 1 && !isTerminalScanState(scan.state) ? 'current' : ''; return <li className={state} key={`${event.type}-${event.at}-${index}`}><i className="flow-marker" aria-hidden="true" /><div><strong>{eventCopy(event)}</strong><small>{mediumTime.format(event.at)}</small></div></li>; })}</ol></section>;
 }
