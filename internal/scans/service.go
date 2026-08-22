@@ -172,7 +172,17 @@ func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, 
 		if !analyzers.HasLanguage(languages, adapter.SupportedLanguages()...) {
 			continue
 		}
-		if scan.Profile == "quick" && adapter.ID() != "ruff" && adapter.ID() != "biome" {
+		// Profile tiers:
+		//   quick    - ruff and biome only: a fast language-specific pass that
+		//              skips semgrep and sonarqube entirely.
+		//   standard - every analyzer with its default rules, including ruff's
+		//              built-in default rule set (E4, E7, E9, F).
+		//   deep     - every analyzer, with ruff's rule selection widened via
+		//              --select for a broader correctness and maintainability
+		//              sweep. Biome, semgrep, and sonarqube already run their
+		//              full configuration in every non-quick tier, so ruff is
+		//              the only analyzer that changes behavior here.
+		if scan.Profile == analyzers.ProfileQuick && adapter.ID() != "ruff" && adapter.ID() != "biome" {
 			s.emit(scan.ID, "analyzer.skipped", map[string]any{"analyzer_id": adapter.ID(), "reason": "Quick profile runs language-specific analyzers only."})
 			continue
 		}
@@ -198,7 +208,7 @@ func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, 
 			s.emit(scan.ID, "analyzer.failed", map[string]any{"analyzer_id": adapter.ID(), "error": errorText})
 			continue
 		}
-		plan, err := adapter.Plan(ctx, analyzers.ScanRequest{WorkspaceID: work.ID, ScanID: scan.ID, WorkspaceRoot: work.RootPath, Files: absoluteFiles, Languages: languages})
+		plan, err := adapter.Plan(ctx, analyzers.ScanRequest{WorkspaceID: work.ID, ScanID: scan.ID, WorkspaceRoot: work.RootPath, Files: absoluteFiles, Languages: languages, Profile: scan.Profile})
 		if err != nil {
 			_, _ = s.db.SaveAnalyzerResult(context.Background(), scan.ID, database.AnalyzerRunInput{AnalyzerID: adapter.ID(), Version: status.Version, State: "failed", StartedAt: started, FinishedAt: time.Now(), Error: err.Error()}, nil, nil)
 			failed++
@@ -266,12 +276,27 @@ func (s *Service) writeDiagnosticLog(scanID, analyzerID string, result analyzers
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return
 	}
-	content := "stdout:\n" + redactDiagnosticOutput(string(result.Stdout)) + "\n\nstderr:\n" + redactDiagnosticOutput(string(result.Stderr)) + "\n"
+	content := ""
+	if command := planCommandLine(result.Plan); command != "" {
+		content += "command:\n" + command + "\n\n"
+	}
+	content += "stdout:\n" + redactDiagnosticOutput(string(result.Stdout)) + "\n\nstderr:\n" + redactDiagnosticOutput(string(result.Stderr)) + "\n"
 	if result.OutputTruncated {
 		content += "\n[output truncated at the managed safety limit]\n"
 	}
 	_ = os.WriteFile(filepath.Join(dir, scanID+"-"+analyzerID+".log"), []byte(content), 0o600)
 	pruneDiagnosticLogs(dir)
+}
+
+// planCommandLine renders the first planned command so each diagnostic log is
+// self-describing: for deep scans it shows the extended ruff --select set, and
+// for every other scan it shows exactly what was executed. Multi-command plans
+// share the same flags, so the first command is representative.
+func planCommandLine(p analyzers.AnalyzerPlan) string {
+	if len(p.Commands) == 0 || p.Commands[0].Executable == "" {
+		return ""
+	}
+	return redactDiagnosticOutput(strings.Join(append([]string{p.Commands[0].Executable}, p.Commands[0].Args...), " "))
 }
 
 func redactDiagnosticOutput(output string) string {

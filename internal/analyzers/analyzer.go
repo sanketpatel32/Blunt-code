@@ -101,6 +101,14 @@ type ToolEnvironment struct {
 	Offline  bool
 }
 
+// Scan tiers shared by orchestration and adapters. An empty profile string is
+// treated as standard everywhere.
+const (
+	ProfileQuick    = "quick"
+	ProfileStandard = "standard"
+	ProfileDeep     = "deep"
+)
+
 type ScanRequest struct {
 	WorkspaceRoot string
 	Files         []string // absolute selected paths; adapter must never shell-concatenate them
@@ -108,6 +116,10 @@ type ScanRequest struct {
 	Exclusions    []string
 	WorkspaceID   string
 	ScanID        string
+	// Profile tells adapters which scan tier requested this analysis.
+	// Adapters without tier-specific behavior may ignore it, and the empty
+	// value must behave exactly like standard.
+	Profile string
 }
 
 type ProcessSpec struct {
