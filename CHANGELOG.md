@@ -5,6 +5,32 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-08-22
+
+A batch of 10 QA loops: fuzzing, hostile-payload round-trips, a live-browser
+audit, a security pass, lifecycle/concurrency stress tests, and scale
+benchmarks. Every fix below ships with a regression test.
+
+### Security
+
+- **CSV formula injection (High):** findings text is untrusted (it derives from scanned code). Cells starting with `=`, `+`, `-`, `@`, tab, or CR are now prefixed with `'` in `findings.csv`, neutralizing spreadsheet formula execution on export-open.
+- **SARIF control-byte leak:** DEL (0x7f) was written raw and terminal escape sequences could smuggle into rule ids, messages, and help URIs; all analyzer-derived SARIF strings now pass the same control scrubber as the other formats.
+- **Markdown and terminal hardening:** C0/DEL control characters are stripped from report tables and from CLI stdout/stderr output (ANSI poisoning, forged log lines).
+
+### Fixed
+
+- Eight list endpoints returned `null` instead of `[]` when empty (scans, findings, rules, path-overrides, fixed, report findings/metrics/warnings) — fixed at the repository source.
+- Frontend crashes on hostile data: invalid date strings crashed every date-rendering page (RangeError); dashboard summaries rendered `NaN`; findings pagination showed "0–NaN of undefined"; `null` tool/tree/rules bodies threw; report payloads without a `scan` object crashed the report view.
+- Scan lifecycle: an analyzer panic killed the whole app instead of failing the scan; a database failure during completion left the workspace permanently 409-locked; cancelling during the final analyzer reported `completed` instead of `cancelled`; orphaned Windows process trees could hang a scan forever (now killed with `taskkill /T` plus a wait deadline); concurrent tool installs raced on file locks; cancelling one scan killed the shared SonarQube server out from under another.
+- CLI: flags now parse in any position relative to the path argument; the second Ctrl+C always exits with cleanup; NTFS junction and case-variant paths no longer create duplicate workspace rows (fixed at the normalization root for both the CLI and the API); the instance-lock failure path no longer leaks the log-file handle.
+- Live-browser audit: wide tables no longer pan the whole page sideways on mobile; the skip-to-content link now actually moves focus; four color tokens were below WCAG AA contrast and were adjusted in both themes.
+
+### Performance
+
+- New `findings(scan_id, fingerprint)` index: the findings page at 50k findings went from 215ms to 2ms; the CSV export of 52k rows went from an effective hang to 868ms; the fixed-findings listing at 20k rows went from 9.1s to 125ms.
+- Workspace lists no longer run a full-history query per workspace (51 queries → 2 at 50 workspaces).
+- Frontend: `Intl.DateTimeFormat` instances hoisted to module level (~45× faster date rendering); hostile finding messages and long paths are line-clamped instead of stretching the table.
+
 ## [0.2.0] - 2026-08-22
 
 A batch of 25 improvement loops focused on automation, exports, and UI polish.
