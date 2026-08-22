@@ -60,6 +60,56 @@ func TestHTMLEmptyStateWhenNoFindings(t *testing.T) {
 	}
 }
 
+// TestHTMLNeutralizesHostileURLsAndMarkup pins html/template contextual
+// escaping against payloads a hostile scanned repository could plant in
+// analyzer output: scheme-abusing documentation URLs, attribute-breaking
+// quotes and newlines in file paths, and event-handler markup in titles.
+// Every interpolation must stay inert; unsafe hrefs must be replaced by the
+// html/template URL filter failsafe (#ZgotunZSet).
+func TestHTMLNeutralizesHostileURLsAndMarkup(t *testing.T) {
+	doc := renderHTML(t, Input{WorkspaceName: "Demo", Findings: []analyzers.Finding{
+		{
+			AnalyzerID: "ruff", RuleID: `a"href="javascript:alert(1)`, Severity: analyzers.SeverityHigh,
+			Message: `</td></tr><script>alert(1)</script>`, RelativePath: "src/plain.py",
+			DocumentationURL: "javascript:alert(1)",
+		},
+		{
+			AnalyzerID: "ruff", RuleID: "DATA-URI", Severity: analyzers.SeverityHigh,
+			Message: "data uri in docs link", RelativePath: "src/plain2.py",
+			DocumentationURL: "data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==",
+		},
+		{
+			AnalyzerID: "ruff", RuleID: "CONTROL-SCHEME", Severity: analyzers.SeverityHigh,
+			Message: "scheme smuggled behind control bytes", RelativePath: "src/plain3.py",
+			DocumentationURL: " \x01jav\tascript:alert(1)",
+		},
+		{
+			AnalyzerID: "ruff", RuleID: "ATTR-BREAK", Severity: analyzers.SeverityMedium,
+			Title:       `<img src=x onerror=alert(1)>`,
+			Message:     "attribute breaking path below",
+			RelativePath: "src/\" onmouseover=\"alert(1)\nhidden.py",
+		},
+	}})
+	if strings.Contains(doc, `href="javascript`) || strings.Contains(doc, `href="data:`) {
+		t.Fatalf("an executable URL scheme survived the href context:\n%s", doc)
+	}
+	if !strings.Contains(doc, `href="#ZgotmplZ"`) {
+		t.Fatalf("unsafe documentation URLs must be replaced by the html/template filter failsafe:\n%s", doc)
+	}
+	for _, banned := range []string{"<script", "<img", `onmouseover="`, `href="a"`} {
+		if strings.Contains(doc, banned) {
+			t.Fatalf("raw markup %q leaked into the document:\n%s", banned, doc)
+		}
+	}
+	// Quotes and newlines in the path must render as inert escaped text.
+	if !strings.Contains(doc, "src/&#34; onmouseover=&#34;alert(1)") {
+		t.Fatalf("attribute-breaking path must render escaped inside its cell:\n%s", doc)
+	}
+	if !strings.Contains(doc, "&lt;img src=x onerror=alert(1)&gt;") {
+		t.Fatalf("event-handler title must render as escaped text:\n%s", doc)
+	}
+}
+
 func TestHTMLSeverityBadgePerSeverity(t *testing.T) {
 	findings := []analyzers.Finding{
 		{AnalyzerID: "ruff", RuleID: "C1", Severity: analyzers.SeverityCritical, Message: "m", RelativePath: "a.py"},

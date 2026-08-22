@@ -41,3 +41,46 @@ func TestMarkdownUsesQualityAndFindingsTables(t *testing.T) {
 		}
 	}
 }
+
+// TestMarkdownStripsControlCharacters is the regression test for control
+// character injection into report.md. Analyzer-derived text must never carry
+// raw C0 controls (ESC/ANSI sequences, BEL, NUL) or DEL into the export, and
+// CRLF must never forge new markdown rows. Markdown link and HTML syntax in
+// messages are accepted by design for the local single-user report; the test
+// pins that such content stays inert inside a single table cell.
+func TestMarkdownStripsControlCharacters(t *testing.T) {
+	m := Build(Input{
+		WorkspaceName: "Demo", StartedAt: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
+		Findings: []analyzers.Finding{{
+			AnalyzerID: "ruff", RuleID: "F401", Severity: analyzers.SeverityHigh, Category: analyzers.CategorySecurity,
+			Message:      "\x1b[31malarm\x1b[0m bell\x07 nul\x00\r\n| forged | row | [click](https://evil.example)",
+			RelativePath: "src/a.py", StartLine: 3,
+		}},
+	})
+	s := Markdown(m)
+	for _, banned := range []string{"\x1b", "\x07", "\x00", "\x7f", "\r"} {
+		if strings.Contains(s, banned) {
+			t.Fatalf("control character %q survived into the markdown:\n%q", banned, s)
+		}
+	}
+	if strings.Contains(s, "| forged |") {
+		t.Fatalf("unescaped pipe forged markdown structure:\n%s", s)
+	}
+	if !strings.Contains(s, "[click](https://evil.example)") {
+		t.Fatalf("benign link syntax must stay visible as inert text inside its cell:\n%s", s)
+	}
+	// The CRLF-forged content must stay on the same rendered row as the rest of
+	// the message instead of becoming an attacker-controlled table row.
+	sameLine := false
+	for _, line := range strings.Split(s, "\n") {
+		if strings.Contains(line, "forged") {
+			if !strings.Contains(line, "alarm") || !strings.Contains(line, "[click]") {
+				t.Fatalf("forged fragment escaped its row:\n%q", line)
+			}
+			sameLine = true
+		}
+	}
+	if !sameLine {
+		t.Fatalf("message content missing from markdown:\n%s", s)
+	}
+}

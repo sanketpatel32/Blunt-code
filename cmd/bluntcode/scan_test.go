@@ -308,6 +308,59 @@ func TestPrintScanEvent(t *testing.T) {
 	}
 }
 
+// TestPrintScanEventStripsTerminalControlCharacters is the regression test for
+// terminal output poisoning: analyzer failure text embeds untrusted tool stderr
+// from the scanned workspace, so ESC sequences and forged newlines must never
+// reach the terminal raw.
+func TestPrintScanEventStripsTerminalControlCharacters(t *testing.T) {
+	var out bytes.Buffer
+	printScanEvent(&out, events.Event{Type: "analyzer.failed", Data: map[string]any{
+		"analyzer_id": "ruff",
+		"error":       "ruff exited 1: \x1b[31mbad config\x1b[0m\nforged summary line\x07",
+	}})
+	text := out.String()
+	if text != "[ruff] FAILED: ruff exited 1:  [31mbad config [0m forged summary line \n" {
+		t.Fatalf("sanitized event line = %q", text)
+	}
+	for _, banned := range []string{"\x1b", "\n", "\x07"} {
+		if strings.Contains(strings.TrimSuffix(text, "\n"), banned) {
+			t.Fatalf("control character %q reached the terminal output: %q", banned, text)
+		}
+	}
+}
+
+// TestWriteScanHumanStripsTerminalControlCharacters pins the same rule for the
+// end-of-scan summary on stdout: analyzer error summaries stay one sanitized
+// line each.
+func TestWriteScanHumanStripsTerminalControlCharacters(t *testing.T) {
+	s := sampleScanSummary()
+	s.state = "completed_with_warnings"
+	s.runs = []reports.Run{{
+		AnalyzerID: "ruff", State: "failed", Duration: time.Second,
+		ErrorSummary: "ruff exited 1: \x1b]0;pwned\x07 injected title\nsecond line",
+	}}
+	var out bytes.Buffer
+	writeScanHuman(&out, s)
+	text := out.String()
+	for _, banned := range []string{"\x1b", "\x07"} {
+		if strings.Contains(text, banned) {
+			t.Fatalf("control character %q reached stdout: %q", banned, text)
+		}
+	}
+	// The forged newline must collapse onto a real summary line; a line
+	// carrying "second line" must also carry a genuine run prefix (the
+	// ErrorSummary text intentionally appears on both the analyzer line and
+	// the Warnings line).
+	for _, line := range strings.Split(text, "\n") {
+		if strings.Contains(line, "second line") && !strings.Contains(line, "Ruff") {
+			t.Fatalf("forged newline produced a standalone summary line: %q", line)
+		}
+	}
+	if !strings.Contains(text, "injected title second line") {
+		t.Fatalf("sanitized error text missing from summary: %q", text)
+	}
+}
+
 func TestFormatScanDuration(t *testing.T) {
 	cases := []struct {
 		in   time.Duration

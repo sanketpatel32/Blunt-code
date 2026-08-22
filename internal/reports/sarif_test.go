@@ -153,6 +153,39 @@ func TestSARIFDeduplicatesRulesAndKeepsRuleIndexesCorrect(t *testing.T) {
 	}
 }
 
+// TestSARIFDuplicateRuleIDKeepsFirstHelpURI pins the dedup behavior when the
+// same rule id arrives with different documentation URLs (possible when two
+// analyzers, or a hostile scanned repo's custom rules, reuse one id). The first
+// non-empty helpUri wins deterministically and every result's ruleIndex stays
+// bound to that single descriptor, so later findings can never swap the link a
+// user clicks.
+func TestSARIFDuplicateRuleIDKeepsFirstHelpURI(t *testing.T) {
+	findings := []analyzers.Finding{
+		{AnalyzerID: "ruff", RuleID: "DUP", Severity: analyzers.SeverityHigh, Message: "no url yet", RelativePath: "a.py"},
+		{AnalyzerID: "biome", RuleID: "DUP", Severity: analyzers.SeverityLow, Message: "first url", RelativePath: "b.ts", DocumentationURL: "https://first.example/DUP"},
+		{AnalyzerID: "semgrep", RuleID: "DUP", Severity: analyzers.SeverityInfo, Message: "later conflicting url", RelativePath: "c.js", DocumentationURL: "https://evil.example/DUP"},
+	}
+	log := sarifDocument(t, Input{Findings: findings})
+	driver := sarifDriverOf(t, sarifFirstRun(t, log))
+	rules, ok := driver["rules"].([]any)
+	if !ok || len(rules) != 1 {
+		t.Fatalf("one rule id must stay one descriptor: %#v", driver["rules"])
+	}
+	rule := rules[0].(map[string]any)
+	if rule["helpUri"] != "https://first.example/DUP" {
+		t.Fatalf("first non-empty helpUri must win: %#v", rule)
+	}
+	results := sarifAllResults(t, sarifFirstRun(t, log))
+	if len(results) != 3 {
+		t.Fatalf("every finding stays a result: %#v", results)
+	}
+	for i, result := range results {
+		if result["ruleIndex"] != float64(0) {
+			t.Fatalf("result %d must point at the single descriptor: %#v", i, result)
+		}
+	}
+}
+
 func TestSARIFRegionOmitsUnsetPositionedFields(t *testing.T) {
 	results := sarifAllResults(t, sarifFirstRun(t, sarifDocument(t, Input{Findings: []analyzers.Finding{{
 		AnalyzerID: "ruff", RuleID: "F401", Severity: analyzers.SeverityMedium, Message: "m", RelativePath: "src/a.py", StartLine: 7,

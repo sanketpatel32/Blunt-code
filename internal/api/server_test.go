@@ -238,6 +238,79 @@ func TestFindingsCSVRejectsUnknownScan(t *testing.T) {
 	}
 }
 
+// TestFindingsCSVNeutralizesFormulaInjection is the regression test for CSV
+// formula injection (CWE-1236). Every analyzer-derived text column must be
+// prefixed with a quote when it starts with a character Excel treats as a
+// formula introducer, so a hostile scanned repository cannot achieve code
+// execution through the export. Benign cells must round-trip untouched.
+func TestFindingsCSVNeutralizesFormulaInjection(t *testing.T) {
+	s := testServer(t)
+	ctx := context.Background()
+	work, err := s.db.CreateWorkspace(ctx, core.Workspace{RootPath: t.TempDir(), Name: "Example"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scan, err := s.db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: "queued"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hostile := finding("ruff", "=RULE-EVIL", "=weird\\path.py", "=cmd|'/c calc'!A1", analyzers.SeverityHigh, analyzers.CategorySecurity)
+	hostile.Title = "+HYPERLINK(\"http://evil.example\",\"click me\")"
+	hostile.Remediation = "-2+cmd|'/C calc'!A0"
+	hostile.DocumentationURL = "@SUM(1+1)*cmd|'/C calc'!A0"
+	tab := finding("ruff", "TAB", "src/tab.py", "\t=cmd|'/c calc'!A1", analyzers.SeverityMedium, analyzers.CategoryStyle)
+	carriage := finding("ruff", "CR", "src/cr.py", "\r=cmd|'/c calc'!A1", analyzers.SeverityLow, analyzers.CategoryStyle)
+	benign := finding("ruff", "PLAIN", "src/plain.py", "plain, \"quoted\" text", analyzers.SeverityInfo, analyzers.CategoryCorrectness)
+	if _, err := s.db.SaveAnalyzerResult(ctx, scan.ID, database.AnalyzerRunInput{AnalyzerID: "ruff", Version: "test", State: "succeeded"}, []analyzers.Finding{hostile, tab, carriage, benign}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.db.CompleteScan(ctx, scan.ID, "completed", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	records := csvRows(t, s, scan.ID, "")
+	if len(records) != 5 {
+		t.Fatalf("header plus every finding: %#v", records)
+	}
+	row := csvRowByRule(records, "'=RULE-EVIL")
+	if row == nil {
+		t.Fatalf("hostile rule id must be neutralized and findable: %#v", records)
+	}
+	wantNeutralized := map[int]string{
+		3:  "'=RULE-EVIL",
+		4:  "'+HYPERLINK(\"http://evil.example\",\"click me\")",
+		5:  "'=cmd|'/c calc'!A1",
+		6:  "'=weird\\path.py",
+		11: "'-2+cmd|'/C calc'!A0",
+		12: "'@SUM(1+1)*cmd|'/C calc'!A0",
+	}
+	for index, want := range wantNeutralized {
+		if row[index] != want {
+			t.Fatalf("column %d: got %q, want %q (full row %#v)", index, row[index], want, row)
+		}
+	}
+	if tabbed := csvRowByRule(records, "TAB"); tabbed == nil || tabbed[5] != "'\t=cmd|'/c calc'!A1" {
+		t.Fatalf("tab-prefixed message must be neutralized: %#v", tabbed)
+	}
+	if returned := csvRowByRule(records, "CR"); returned == nil || returned[5] != "'\r=cmd|'/c calc'!A1" {
+		t.Fatalf("carriage-return-prefixed message must be neutralized: %#v", returned)
+	}
+	if plain := csvRowByRule(records, "PLAIN"); plain == nil || plain[5] != "plain, \"quoted\" text" || plain[3] != "PLAIN" {
+		t.Fatalf("benign cells must round-trip untouched: %#v", plain)
+	}
+	for _, record := range records[1:] {
+		for _, cell := range record {
+			if cell == "" {
+				continue
+			}
+			switch cell[0] {
+			case '=', '+', '@':
+				t.Fatalf("unneutralized formula cell %q leaked into the export: %#v", cell, record)
+			}
+		}
+	}
+}
+
 type fixedFindingsResponse struct {
 	Fixed               []analyzers.Finding `json:"fixed"`
 	TotalFixed          int                 `json:"total_fixed"`
@@ -376,6 +449,51 @@ func TestFindingPreviewReturnsContainedSourceExcerpt(t *testing.T) {
 	s.Handler().ServeHTTP(response, request)
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"number":2`) || !strings.Contains(response.Body.String(), "second issue") || !strings.Contains(response.Body.String(), `"highlight_start_line":2`) {
 		t.Fatalf("preview: %d %s", response.Code, response.Body.String())
+	}
+}
+
+// TestFindingPreviewHandlesDeletedAndMissingPaths locks the behavior for rows
+// whose source no longer exists (the fixed-findings panel can surface paths
+// from a previous scan): a missing or deleted file must return a 4xx error,
+// never a 500 or a read outside the workspace.
+func TestFindingPreviewHandlesDeletedAndMissingPaths(t *testing.T) {
+	s := testServer(t)
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "gone.py"), []byte("x = 1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	work, err := s.db.CreateWorkspace(context.Background(), core.Workspace{RootPath: root, Name: "Example"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scan, err := s.db.CreateScan(context.Background(), core.Scan{WorkspaceID: work.ID, State: "queued"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := []analyzers.Finding{
+		finding("ruff", "DELETED", "gone.py", "was here", analyzers.SeverityMedium, analyzers.CategoryCorrectness),
+		finding("ruff", "NEVER", "never-existed.py", "never here", analyzers.SeverityMedium, analyzers.CategoryCorrectness),
+	}
+	if _, err := s.db.SaveAnalyzerResult(context.Background(), scan.ID, database.AnalyzerRunInput{AnalyzerID: "ruff", Version: "test", State: "succeeded"}, items, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(root, "gone.py")); err != nil {
+		t.Fatal(err)
+	}
+	page, err := s.db.FindingsPage(context.Background(), scan, database.FindingFilter{Limit: 25})
+	if err != nil || len(page.Items) != 2 {
+		t.Fatalf("saved findings: %#v, err %v", page, err)
+	}
+	for _, item := range page.Items {
+		request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+scan.ID+"/findings/"+item.ID+"/preview", nil)
+		response := httptest.NewRecorder()
+		s.Handler().ServeHTTP(response, request)
+		if response.Code != http.StatusUnprocessableEntity && response.Code != http.StatusNotFound {
+			t.Fatalf("missing file %s: got %d (want 4xx, never 500): %s", item.RelativePath, response.Code, response.Body.String())
+		}
+		if strings.Contains(response.Body.String(), "DATABASE_ERROR") {
+			t.Fatalf("missing file %s must not surface a database error: %s", item.RelativePath, response.Body.String())
+		}
 	}
 }
 

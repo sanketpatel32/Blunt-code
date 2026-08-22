@@ -220,8 +220,30 @@ func escapeAll(xs []string) []string {
 
 func cell(s string) string { return strings.ReplaceAll(escape(s), "|", "\\|") }
 
+// escape neutralizes report text before it lands in the Markdown export.
+// Analyzer output is untrusted: backslashes, backticks, and pipes would break
+// table structure, and CRLF could forge additional rows or list entries.
+//
+// Threat-model decision: the remaining C0 control characters (NUL, BEL, ESC
+// sequences, ...) and DEL are replaced with spaces because they corrupt
+// Markdown rendering and can smuggle terminal escape codes into pagers and
+// terminal-based previewers. Markdown link syntax like [x](https://evil) and
+// inline HTML like <script> in messages are deliberately NOT rewritten: this
+// is a local, single-user report of the user's own scan, read in the user's
+// own viewer, and the values are data, not markup. If these reports are ever
+// rendered in a shared or multi-user context, an HTML sanitization pass must
+// be added first.
 func escape(s string) string {
-	return strings.NewReplacer("\\", "\\\\", "`", "\\`", "\r", " ", "\n", " ").Replace(s)
+	s = strings.NewReplacer("\\", "\\\\", "`", "\\`", "\r", " ", "\n", " ").Replace(s)
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if r < 0x20 && r != '\t' || r == 0x7f {
+			r = ' '
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 func safe(s string) string {

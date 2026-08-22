@@ -367,6 +367,24 @@ func scanEventData(event events.Event) map[string]any {
 	return data
 }
 
+// terminalSafe strips control characters from analyzer-derived text before it
+// is written to the terminal. Analyzer error summaries embed untrusted tool
+// output from the scanned workspace (for example `ruff exited 1: <stderr>`),
+// and raw ESC sequences, BEL, or embedded newlines could otherwise manipulate
+// the hosting terminal or forge additional log lines. The JSON output path is
+// unaffected: encoding/json always escapes control characters itself.
+func terminalSafe(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if r < 0x20 || r == 0x7f {
+			r = ' '
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
 // printScanEvent renders one progress line per scan event to stderr.
 func printScanEvent(w io.Writer, event events.Event) {
 	data := scanEventData(event)
@@ -376,29 +394,29 @@ func printScanEvent(w io.Writer, event events.Event) {
 		// lifecycle noise; stage and result lines carry the same information
 	case "scan.stage":
 		if stage, _ := data["stage"].(string); stage != "" {
-			fmt.Fprintf(w, "==> %s\n", stage)
+			fmt.Fprintf(w, "==> %s\n", terminalSafe(stage))
 		}
 	case "analyzer.started":
 		if name, _ := data["name"].(string); name != "" {
-			fmt.Fprintf(w, "[%s] started\n", name)
+			fmt.Fprintf(w, "[%s] started\n", terminalSafe(name))
 		} else {
-			fmt.Fprintf(w, "[%s] started\n", id)
+			fmt.Fprintf(w, "[%s] started\n", terminalSafe(id))
 		}
 	case "analyzer.completed":
 		count, _ := data["findings"].(int)
-		fmt.Fprintf(w, "[%s] completed: %d findings\n", id, count)
+		fmt.Fprintf(w, "[%s] completed: %d findings\n", terminalSafe(id), count)
 	case "analyzer.failed":
 		message, _ := data["error"].(string)
 		if message == "" {
 			message = "unknown error"
 		}
-		fmt.Fprintf(w, "[%s] FAILED: %s\n", id, message)
+		fmt.Fprintf(w, "[%s] FAILED: %s\n", terminalSafe(id), terminalSafe(message))
 	case "analyzer.skipped":
 		reason, _ := data["reason"].(string)
-		fmt.Fprintf(w, "[%s] skipped: %s\n", id, reason)
+		fmt.Fprintf(w, "[%s] skipped: %s\n", terminalSafe(id), terminalSafe(reason))
 	case "scan.warning":
 		if message, _ := data["message"].(string); message != "" {
-			fmt.Fprintf(w, "warning: %s\n", message)
+			fmt.Fprintf(w, "warning: %s\n", terminalSafe(message))
 		}
 	}
 }
@@ -435,7 +453,7 @@ func writeScanHuman(w io.Writer, s scanSummary) {
 	for _, run := range s.runs {
 		line := fmt.Sprintf("  %s", scanAnalyzerDisplayName(run.AnalyzerID))
 		if run.Version != "" {
-			line += " " + run.Version
+			line += " " + terminalSafe(run.Version)
 		}
 		switch run.State {
 		case "succeeded":
@@ -443,7 +461,7 @@ func writeScanHuman(w io.Writer, s scanSummary) {
 		default:
 			line += fmt.Sprintf(": FAILED (%s)", formatScanDuration(run.Duration))
 			if run.ErrorSummary != "" {
-				line += " - " + run.ErrorSummary
+				line += " - " + terminalSafe(run.ErrorSummary)
 			}
 		}
 		fmt.Fprintln(w, line)
@@ -458,7 +476,7 @@ func writeScanHuman(w io.Writer, s scanSummary) {
 			warned = true
 			line := fmt.Sprintf("  - %s did not complete", scanAnalyzerDisplayName(run.AnalyzerID))
 			if run.ErrorSummary != "" {
-				line += ": " + run.ErrorSummary
+				line += ": " + terminalSafe(run.ErrorSummary)
 			}
 			fmt.Fprintln(w, line)
 		}
@@ -467,7 +485,7 @@ func writeScanHuman(w io.Writer, s scanSummary) {
 		}
 	}
 	if s.errorSummary != "" && s.state != "completed" && s.state != "completed_with_warnings" {
-		fmt.Fprintf(w, "Error: %s\n", s.errorSummary)
+		fmt.Fprintf(w, "Error: %s\n", terminalSafe(s.errorSummary))
 	}
 	if s.reportPath != "" {
 		fmt.Fprintf(w, "Report: %s\n", s.reportPath)

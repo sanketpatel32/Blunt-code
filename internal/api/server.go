@@ -843,6 +843,26 @@ const csvBOM = "\xef\xbb\xbf"
 // the row writer below must stay in sync.
 var findingsCSVHeader = []string{"severity", "category", "analyzer", "rule_id", "title", "message", "file", "line", "column", "end_line", "status", "remediation", "documentation_url"}
 
+// csvCell neutralizes CSV formula injection (CWE-1236). Findings text is
+// derived from UNTRUSTED scanned code: a hostile lint message such as
+// =cmd|'/c calc'!A1 would execute as a formula the moment the exported file is
+// opened in Excel or LibreOffice. Excel-family spreadsheets treat a cell whose
+// first character is =, +, -, @, tab, or carriage return as a formula, so those
+// cells are prefixed with a single quote, the standard spreadsheet escape that
+// forces text interpretation. Every analyzer-derived text column routes
+// through csvCell; the numeric columns come from strconv and cannot begin with
+// a formula character.
+func csvCell(value string) string {
+	if value == "" {
+		return value
+	}
+	switch value[0] {
+	case '=', '+', '-', '@', '\t', '\r':
+		return "'" + value
+	}
+	return value
+}
+
 // findingsCSV exports the scan's findings as a spreadsheet-friendly CSV
 // attachment. It shares the JSON endpoint's filter parsing so an export always
 // matches what the findings list shows; limit and offset are ignored because
@@ -879,8 +899,8 @@ func (s *Server) findingsCSV(w http.ResponseWriter, r *http.Request) {
 	_ = writer.Write(findingsCSVHeader)
 	for _, f := range findings {
 		_ = writer.Write([]string{
-			string(f.Severity), string(f.Category), f.AnalyzerID, f.RuleID, f.Title, f.Message, f.RelativePath,
-			csvNumber(f.StartLine), csvNumber(f.StartColumn), csvNumber(f.EndLine), f.Status, f.Remediation, f.DocumentationURL,
+			csvCell(string(f.Severity)), csvCell(string(f.Category)), csvCell(f.AnalyzerID), csvCell(f.RuleID), csvCell(f.Title), csvCell(f.Message), csvCell(f.RelativePath),
+			csvNumber(f.StartLine), csvNumber(f.StartColumn), csvNumber(f.EndLine), csvCell(f.Status), csvCell(f.Remediation), csvCell(f.DocumentationURL),
 		})
 	}
 	writer.Flush()
