@@ -1,25 +1,61 @@
 import { useMemo, useState } from 'react';
 import { api } from '../../api';
-import type { AnalyzerRun, Finding } from '../../types';
+import type { AnalyzerRun, Finding, Scan, Severity } from '../../types';
 import { analyzerName, findingLocation } from '../../lib/format';
 import { useLoad } from '../../hooks/useLoad';
+import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { Empty, ErrorPanel, SummaryCard } from '../../components/ui';
 import { SkeletonCards, SkeletonLines, SkeletonTable } from '../../components/skeletons';
 import { FindingPreviewDialog } from '../../components/dialogs';
 
 export type FindingFilter = { severity: string; category: string; analyzer: string; path: string; status: string; q: string };
 
+const EMPTY_FILTER: FindingFilter = { severity: '', category: '', analyzer: '', path: '', status: '', q: '' };
+const SEVERITY_ORDER: Severity[] = ['critical', 'high', 'medium', 'low', 'info'];
+/** Text filters wait for typing to pause before hitting the API; empty values flush instantly. */
+const TEXT_FILTER_DELAY_MS = 300;
+
 export function ReportView({ scanId }: { scanId: string }) {
-  const report = useLoad(() => api.report(scanId), [scanId]); const [filters, setFilters] = useState<FindingFilter>({ severity: '', category: '', analyzer: '', path: '', status: '', q: '' }); const [filtersOpen, setFiltersOpen] = useState(false); const [offset, setOffset] = useState(0); const [limit, setLimit] = useState(25); const [previewFinding, setPreviewFinding] = useState<Finding>(); const params = useMemo(() => ({ ...filters, limit: String(limit), offset: String(offset), sort: 'severity' }), [filters, limit, offset]); const findings = useLoad(() => api.findings(scanId, params), [scanId, ...Object.values(params)]);
+  const report = useLoad(() => api.report(scanId), [scanId]);
+  const [filters, setFilters] = useState<FindingFilter>(EMPTY_FILTER);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const [limit, setLimit] = useState(25);
+  const [previewFinding, setPreviewFinding] = useState<Finding>();
+  const debouncedCategory = useDebouncedValue(filters.category, filters.category ? TEXT_FILTER_DELAY_MS : 0);
+  const debouncedPath = useDebouncedValue(filters.path, filters.path ? TEXT_FILTER_DELAY_MS : 0);
+  const debouncedQ = useDebouncedValue(filters.q, filters.q ? TEXT_FILTER_DELAY_MS : 0);
+  const params = useMemo(() => ({ ...filters, category: debouncedCategory, path: debouncedPath, q: debouncedQ, limit: String(limit), offset: String(offset), sort: 'severity' }), [filters, debouncedCategory, debouncedPath, debouncedQ, limit, offset]);
+  const findings = useLoad(() => api.findings(scanId, params), [scanId, ...Object.values(params)]);
   const list = findings.data?.items ?? [];
   const updateFilters = (next: FindingFilter) => { setFilters(next); setOffset(0); };
-  if (report.loading) return <section className="report"><SkeletonCards count={4} /><SkeletonLines lines={3} /></section>; if (report.error) return <ErrorPanel error={report.error} retry={report.reload} />;
+  const removeFilter = (key: keyof FindingFilter) => updateFilters({ ...filters, [key]: '' });
+  const toggleSeverity = (severity: string) => updateFilters({ ...filters, severity: filters.severity === severity ? '' : severity });
+  if (report.loading) return <section className="report"><SkeletonCards count={4} /><SkeletonLines lines={3} /></section>;
+  if (report.error) return <ErrorPanel error={report.error} retry={report.reload} />;
   const data = report.data!;
   const activeFilterCount = Object.values(filters).filter(Boolean).length;
-  const clearFilters = () => updateFilters({ severity: '', category: '', analyzer: '', path: '', status: '', q: '' });
+  const clearFilters = () => updateFilters(EMPTY_FILTER);
   const noFindingsTitle = filters.analyzer ? `${analyzerName(filters.analyzer)} reported no findings` : 'No findings match these filters';
   const noFindingsCopy = filters.analyzer ? 'This analyzer completed without reportable issues for the selected files.' : 'Try clearing one or more filters.';
-  return <section className="report"><header className="report-header"><div><p className="eyebrow">Report</p><h2>Analysis overview</h2><p>{data.warnings?.length ? 'Analysis completed with limitations.' : 'Analysis completed.'}</p></div><a className="button secondary" href={api.markdownUrl(scanId)}>Export Markdown</a></header>{data.warnings?.length ? <div className="inline-warning"><strong>Incomplete analysis</strong>{data.warnings.map((warning) => <span key={warning}>{warning}</span>)}</div> : null}<section className="summary-grid"><SummaryCard label="Total findings" value={data.scan.total_findings ?? 0} /><SummaryCard label="New" value={data.comparison?.new_count ?? data.scan.new_count ?? 0} /><SummaryCard label="Fixed" value={data.comparison?.fixed_count ?? 0} /><SummaryCard label="Persistent" value={data.comparison?.persistent_count ?? 0} /></section><AnalyzerResults runs={data.scan.analyzer_runs} findings={data.findings} selectedAnalyzer={filters.analyzer} onSelect={(analyzer) => updateFilters({ ...filters, analyzer: filters.analyzer === analyzer ? '' : analyzer })} /><section className="findings-section"><div className="section-head"><div><h2>Findings</h2><p>Filter results without leaving the report.</p></div><div className="findings-toolbar"><button className="button secondary" aria-expanded={filtersOpen} aria-controls="finding-filters" onClick={() => setFiltersOpen((open) => !open)}>Filters{activeFilterCount ? ` (${activeFilterCount})` : ''}</button>{activeFilterCount ? <button className="text-button" onClick={clearFilters}>Clear</button> : null}</div></div>{filtersOpen && <FindingFilters filters={filters} setFilters={updateFilters} analyzers={data.scan.analyzer_runs} />}<div className="finding-list">{findings.loading ? <SkeletonTable rows={5} cols={5} className="findings-table" /> : findings.error ? <ErrorPanel error={findings.error} retry={findings.reload} /> : list.length ? <FindingsTable findings={list} onPreview={setPreviewFinding} /> : <Empty title={noFindingsTitle}>{noFindingsCopy}</Empty>}</div>{findings.data && <FindingsPagination total={findings.data.total} offset={findings.data.offset} limit={findings.data.limit} hasMore={findings.data.has_more} onLimit={(next) => { setLimit(next); setOffset(0); }} onPrevious={() => setOffset(Math.max(0, offset - limit))} onNext={() => findings.data?.next_offset !== undefined && setOffset(findings.data.next_offset)} />}</section>{previewFinding && <FindingPreviewDialog scanId={scanId} finding={previewFinding} onClose={() => setPreviewFinding(undefined)} />}</section>;
+  return <section className="report"><header className="report-header"><div><p className="eyebrow">Report</p><h2>Analysis overview</h2><p>{data.warnings?.length ? 'Analysis completed with limitations.' : 'Analysis completed.'}</p></div><a className="button secondary" href={api.markdownUrl(scanId)}>Export Markdown</a></header>{data.warnings?.length ? <div className="inline-warning"><strong>Incomplete analysis</strong>{data.warnings.map((warning) => <span key={warning}>{warning}</span>)}</div> : null}<section className="summary-grid"><SummaryCard label="Total findings" value={data.scan.total_findings ?? 0} /><SummaryCard label="New" value={data.comparison?.new_count ?? data.scan.new_count ?? 0} /><SummaryCard label="Fixed" value={data.comparison?.fixed_count ?? 0} /><SummaryCard label="Persistent" value={data.comparison?.persistent_count ?? 0} /></section><AnalyzerResults runs={data.scan.analyzer_runs} findings={data.findings} selectedAnalyzer={filters.analyzer} onSelect={(analyzer) => updateFilters({ ...filters, analyzer: filters.analyzer === analyzer ? '' : analyzer })} /><section className="findings-section"><div className="section-head"><div><h2>Findings</h2><p>Filter results without leaving the report.</p></div><div className="findings-toolbar"><button className="button secondary" aria-expanded={filtersOpen} aria-controls="finding-filters" onClick={() => setFiltersOpen((open) => !open)}>Filters{activeFilterCount ? ` (${activeFilterCount})` : ''}</button>{activeFilterCount ? <button className="text-button" onClick={clearFilters}>Clear</button> : null}</div></div><FilterChips filters={filters} onRemove={removeFilter} />{filtersOpen && <FindingFilters filters={filters} setFilters={updateFilters} analyzers={data.scan.analyzer_runs} />}<SeverityPills scan={data.scan} selected={filters.severity} onToggle={toggleSeverity} /><div className="finding-list">{findings.loading ? <SkeletonTable rows={5} cols={5} className="findings-table" /> : findings.error ? <ErrorPanel error={findings.error} retry={findings.reload} /> : list.length ? <FindingsTable findings={list} onPreview={setPreviewFinding} /> : <Empty title={noFindingsTitle}>{noFindingsCopy}</Empty>}</div>{findings.data && <FindingsPagination total={findings.data.total} offset={findings.data.offset} limit={findings.data.limit} hasMore={findings.data.has_more} onLimit={(next) => { setLimit(next); setOffset(0); }} onPrevious={() => setOffset(Math.max(0, offset - limit))} onNext={() => findings.data?.next_offset !== undefined && setOffset(findings.data.next_offset)} />}</section>{previewFinding && <FindingPreviewDialog scanId={scanId} finding={previewFinding} onClose={() => setPreviewFinding(undefined)} />}</section>;
+}
+
+function FilterChips({ filters, onRemove }: { filters: FindingFilter; onRemove: (key: keyof FindingFilter) => void }) {
+  const chips: Array<{ key: keyof FindingFilter; text: string; removeLabel: string }> = [];
+  if (filters.severity) chips.push({ key: 'severity', text: `severity: ${filters.severity}`, removeLabel: 'Remove severity filter' });
+  if (filters.category) chips.push({ key: 'category', text: `category: ${filters.category}`, removeLabel: 'Remove category filter' });
+  if (filters.analyzer) chips.push({ key: 'analyzer', text: `tool: ${analyzerName(filters.analyzer)}`, removeLabel: 'Remove tool filter' });
+  if (filters.path) chips.push({ key: 'path', text: `file: ${filters.path}`, removeLabel: 'Remove file filter' });
+  if (filters.status) chips.push({ key: 'status', text: `status: ${filters.status}`, removeLabel: 'Remove status filter' });
+  if (filters.q) chips.push({ key: 'q', text: `search: "${filters.q}"`, removeLabel: 'Remove search filter' });
+  if (!chips.length) return null;
+  return <div className="filter-chips" aria-label="Active filters">{chips.map((chip) => <span className="filter-chip" key={chip.key}>{chip.text}<button type="button" className="filter-chip-remove" aria-label={chip.removeLabel} title={chip.removeLabel} onClick={() => onRemove(chip.key)}>×</button></span>)}</div>;
+}
+
+function SeverityPills({ scan, selected, onToggle }: { scan: Scan; selected: string; onToggle: (severity: string) => void }) {
+  const counts: Record<Severity, number> = { critical: scan.critical_count ?? 0, high: scan.high_count ?? 0, medium: scan.medium_count ?? 0, low: scan.low_count ?? 0, info: scan.info_count ?? 0 };
+  return <div className="severity-pills" role="group" aria-label="Filter findings by severity">{SEVERITY_ORDER.map((severity) => { const count = counts[severity]; const active = selected === severity; return <button type="button" key={severity} className={`severity-pill ${severity}${active ? ' selected' : ''}`} aria-pressed={active} disabled={count === 0 && !active} onClick={() => onToggle(severity)}>{severity}<span className="count">{count}</span></button>; })}</div>;
 }
 
 function AnalyzerResults({ runs, findings, selectedAnalyzer, onSelect }: { runs?: AnalyzerRun[]; findings?: Finding[]; selectedAnalyzer: string; onSelect: (analyzer: string) => void }) {
