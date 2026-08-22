@@ -5,16 +5,16 @@
   --color-surface-muted: oklch(96.4% 0.007 250);
   --color-ink: oklch(24% 0.02 258);
   --color-ink-soft: oklch(42% 0.018 257);
-  --color-ink-faint: oklch(56% 0.015 257);
+  --color-ink-faint: oklch(53% 0.015 257);
   --color-rule: oklch(88% 0.009 250);
   --color-rule-strong: oklch(78% 0.014 252);
-  --color-accent: oklch(58% 0.2 256);
+  --color-accent: oklch(56% 0.2 256);
   --color-accent-strong: oklch(49% 0.21 256);
   --color-accent-ink: oklch(99% 0.002 250);
   --color-graphite: oklch(22% 0.016 260);
   --color-graphite-soft: oklch(29% 0.018 260);
   --color-graphite-ink: oklch(92% 0.008 250);
-  --color-success: oklch(56% 0.14 150);
+  --color-success: oklch(52% 0.14 150);
   --color-warning: oklch(67% 0.15 76);
   --color-danger: oklch(54% 0.19 25);
   --color-danger-soft: oklch(95% 0.025 25);
@@ -61,7 +61,7 @@
   --color-surface-muted: oklch(28% 0.016 258);
   --color-ink: oklch(93% 0.006 250);
   --color-ink-soft: oklch(78% 0.012 252);
-  --color-ink-faint: oklch(63% 0.014 252);
+  --color-ink-faint: oklch(67% 0.014 252);
   --color-rule: oklch(33% 0.014 257);
   --color-rule-strong: oklch(43% 0.017 257);
   --color-accent: oklch(68% 0.16 256);

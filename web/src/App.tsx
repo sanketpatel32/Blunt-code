@@ -71,7 +71,7 @@ export function App() {
   return <div className="app-frame">
     <a href="#main-content" className="skip-link">Skip to main content</a>
     <AppShell route={route} onNavigate={go} onAdd={() => setAddOpen(true)} onClose={() => setCloseOpen(true)} theme={theme} onToggleTheme={toggleTheme} onShowShortcuts={() => setShortcutsOpen(true)} seqArmed={seqArmed} />
-    <main className="main" id="main-content">
+    <main className="main" id="main-content" tabIndex={-1}>
       <ErrorBoundary resetKey={href(route)}>
         <Page route={route} go={go} notify={notify} onAdd={() => setAddOpen(true)} />
       </ErrorBoundary>
