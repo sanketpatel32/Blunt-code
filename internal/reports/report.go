@@ -21,7 +21,7 @@ type Comparison struct {
 }
 type Input struct {
 	WorkspaceName, WorkspacePath, ScanID, Profile, BluntCodeVersion string
-	StartedAt                                                       time.Time
+	StartedAt, FinishedAt                                           time.Time
 	Files                                                           []string
 	SkippedFiles                                                    []string
 	Findings                                                        []analyzers.Finding

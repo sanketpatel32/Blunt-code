@@ -532,6 +532,58 @@ func TestSARIFReportRejectsUnknownScan(t *testing.T) {
 	}
 }
 
+func TestHTMLReportDownloadsAsAttachment(t *testing.T) {
+	s := testServer(t)
+	ctx := context.Background()
+	work, err := s.db.CreateWorkspace(ctx, core.Workspace{RootPath: t.TempDir(), Name: "Example"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scan, err := s.db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: "completed", Profile: "standard",
+		Snapshot: &core.ScanSnapshot{BluntCodeVersion: "9.9.9", CapturedAt: time.Now()}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := finding("ruff", "F401", "src/main.py", "unused import", analyzers.SeverityHigh, analyzers.CategoryCorrectness)
+	if _, err := s.db.SaveAnalyzerResult(ctx, scan.ID, database.AnalyzerRunInput{AnalyzerID: "ruff", Version: "test", State: "succeeded"}, []analyzers.Finding{f}, nil); err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+scan.ID+"/report.html", nil)
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	disposition := response.Header().Get("Content-Disposition")
+	if response.Code != http.StatusOK || disposition != `attachment; filename="bluntcode-scan-`+scan.ID[:8]+`.html"` {
+		t.Fatalf("got %d disposition %q: %s", response.Code, disposition, response.Body.String())
+	}
+	if contentType := response.Header().Get("Content-Type"); contentType != "text/html; charset=utf-8" {
+		t.Fatalf("content type %q: %s", contentType, response.Body.String())
+	}
+	body := response.Body.String()
+	if !strings.HasPrefix(body, "<!DOCTYPE html>") || !strings.Contains(body, "</html>") {
+		t.Fatalf("body must be a complete HTML document: %s", body)
+	}
+	if !strings.Contains(body, "unused import") || !strings.Contains(body, "Example") {
+		t.Fatalf("body must carry the regenerated scan data: %s", body)
+	}
+}
+
+func TestHTMLReportRejectsUnknownScan(t *testing.T) {
+	s := testServer(t)
+	unknown := "00000000-0000-4000-8000-000000000000"
+	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+unknown+"/report.html", nil)
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusNotFound || !strings.Contains(response.Body.String(), "SCAN_NOT_FOUND") {
+		t.Fatalf("got %d: %s", response.Code, response.Body.String())
+	}
+	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/not-a-uuid/report.html", nil)
+	response = httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusNotFound || !strings.Contains(response.Body.String(), "SCAN_NOT_FOUND") {
+		t.Fatalf("malformed id got %d: %s", response.Code, response.Body.String())
+	}
+}
+
 func TestSettingsPersistOfflineMode(t *testing.T) {
 	s := testServer(t)
 	request := httptest.NewRequest(http.MethodPatch, "http://127.0.0.1/api/v1/settings", strings.NewReader(`{"offline":true,"open_browser":false}`))

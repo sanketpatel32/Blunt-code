@@ -97,6 +97,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/report", s.report)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/report.md", s.reportMarkdown)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/report.sarif", s.reportSARIF)
+	s.mux.HandleFunc("GET /api/v1/scans/{id}/report.html", s.reportHTML)
 	s.mux.HandleFunc("GET /api/v1/tools", s.listTools)
 	s.mux.HandleFunc("POST /api/v1/tools/{id}/install", s.installTool)
 	s.mux.HandleFunc("POST /api/v1/tools/{id}/repair", s.installTool)
@@ -957,12 +958,19 @@ func (s *Server) reportModel(ctx context.Context, scan core.Scan, work core.Work
 	}
 	return reports.Build(reports.Input{
 		WorkspaceName: work.Name, WorkspacePath: work.RootPath, ScanID: scan.ID, Profile: scan.Profile, BluntCodeVersion: bluntCodeVersion,
-		StartedAt: startedAtValue(startedAt), Files: files, SkippedFiles: make([]string, skippedCount), Findings: findings, Metrics: metrics, Runs: runs,
+		StartedAt: startedAtValue(startedAt), FinishedAt: finishedAtValue(scan.FinishedAt), Files: files, SkippedFiles: make([]string, skippedCount), Findings: findings, Metrics: metrics, Runs: runs,
 		Comparison: reports.Comparison{New: comparison.New, Fixed: comparison.Fixed, Persistent: comparison.Persistent, UnknownAnalyzerIDs: comparison.UnknownAnalyzerIDs},
 	}), nil
 }
 
 func startedAtValue(value *time.Time) time.Time {
+	if value == nil {
+		return time.Time{}
+	}
+	return *value
+}
+
+func finishedAtValue(value *time.Time) time.Time {
 	if value == nil {
 		return time.Time{}
 	}
@@ -1079,6 +1087,40 @@ func (s *Server) reportSARIF(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="bluntcode-scan-%s.sarif"`, shortID(scan.ID)))
 	_ = json.NewEncoder(w).Encode(reports.SARIF(model))
+}
+
+// reportHTML exports the scan as a standalone HTML document: one
+// self-contained file with no external assets or scripts that can be shared,
+// archived, or printed as-is. Like the other exporters it is regenerated from
+// stored scan data, not from a persisted artifact.
+func (s *Server) reportHTML(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !validID(id) {
+		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
+		return
+	}
+	scan, err := s.db.Scan(r.Context(), id)
+	if errors.Is(err, sql.ErrNoRows) {
+		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
+		return
+	}
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load report.")
+		return
+	}
+	work, err := s.db.Workspace(r.Context(), scan.WorkspaceID)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load report.")
+		return
+	}
+	model, err := s.reportModel(r.Context(), scan, work)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load report.")
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="bluntcode-scan-%s.html"`, shortID(scan.ID)))
+	_, _ = w.Write(reports.HTML(model))
 }
 
 // shortID keeps attachment filenames readable while staying scan-unique.
