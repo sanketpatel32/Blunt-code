@@ -4,7 +4,7 @@ import { href, parseRoute, type Route } from './lib/router';
 import type { Notice } from './lib/notice';
 import { message } from './lib/notice';
 import { AppShell, AppFooter } from './components/AppShell';
-import { NoticeBox } from './components/ui';
+import { ToastStack, useToasts } from './components/toasts';
 import { AddWorkspaceDialog, ConfirmationDialog } from './components/dialogs';
 import { useTheme } from './hooks/useTheme';
 import { HomePage } from './pages/HomePage';
@@ -19,23 +19,23 @@ import { AboutPage } from './pages/AboutPage';
 
 export function App() {
   const [route, setRoute] = useState(parseRoute);
-  const [notice, setNotice] = useState<Notice>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
   const [closing, setClosing] = useState(false);
+  const { toasts, notify, dismiss } = useToasts();
   const { theme, toggleTheme } = useTheme();
   const go = useCallback((next: Route) => { window.history.pushState({}, '', href(next)); setRoute(next); }, []);
-  const closeApp = async () => { setClosing(true); try { await api.stopServer(); setCloseOpen(false); setNotice({ kind: 'info', text: 'Blunt Code is closing. You can close this tab.' }); } catch (error) { setNotice({ kind: 'error', text: message(error) }); setClosing(false); } };
+  const closeApp = async () => { setClosing(true); try { await api.stopServer(); setCloseOpen(false); notify({ kind: 'info', text: 'Blunt Code is closing. You can close this tab.' }); } catch (error) { notify({ kind: 'error', text: message(error) }); setClosing(false); } };
   useEffect(() => { const handler = () => setRoute(parseRoute()); window.addEventListener('popstate', handler); return () => window.removeEventListener('popstate', handler); }, []);
   return <div className="app-frame">
     <AppShell route={route} onNavigate={go} onAdd={() => setAddOpen(true)} onClose={() => setCloseOpen(true)} theme={theme} onToggleTheme={toggleTheme} />
     <main className="main" id="main-content">
-      {notice && <NoticeBox notice={notice} onDismiss={() => setNotice(null)} />}
-      <Page route={route} go={go} notify={setNotice} onAdd={() => setAddOpen(true)} />
+      <Page route={route} go={go} notify={notify} onAdd={() => setAddOpen(true)} />
     </main>
-    {addOpen && <AddWorkspaceDialog onClose={() => setAddOpen(false)} onCreated={(workspace) => { setAddOpen(false); go({ page: 'workspace', id: workspace.id }); }} notify={setNotice} />}
+    {addOpen && <AddWorkspaceDialog onClose={() => setAddOpen(false)} onCreated={(workspace) => { setAddOpen(false); go({ page: 'workspace', id: workspace.id }); }} notify={notify} />}
     {closeOpen && <ConfirmationDialog title="Close Blunt Code?" description="This ends the local app. Any active scan will be cancelled; your workspaces and reports stay saved on this computer." confirmLabel="Close app" busy={closing} onCancel={() => setCloseOpen(false)} onConfirm={() => void closeApp()} />}
     <AppFooter />
+    <ToastStack toasts={toasts} onDismiss={dismiss} />
   </div>;
 }
 

@@ -1,11 +1,6 @@
 import type { ReactNode } from 'react';
 import type { Scan, Severity, Tool } from '../types';
-import type { Notice } from '../lib/notice';
 import { languageNames } from '../lib/format';
-
-export function NoticeBox({ notice, onDismiss }: { notice: Exclude<Notice, null>; onDismiss: () => void }) {
-  return <div className={`notice ${notice.kind}`} role={notice.kind === 'error' ? 'alert' : 'status'}>{notice.text}<button onClick={onDismiss} aria-label="Dismiss">×</button></div>;
-}
 
 export function ErrorPanel({ error, retry }: { error: string; retry?: () => void }) {
   return <section className="error-panel" role="alert"><h2>Could not load this view</h2><p>{error}</p>{retry && <button className="button secondary" onClick={retry}>Try again</button>}</section>;
