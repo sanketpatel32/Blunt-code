@@ -19,21 +19,10 @@ import (
 	"sync"
 	"time"
 
-	"bluntcode/internal/analyzers"
-	"bluntcode/internal/analyzers/biome"
-	"bluntcode/internal/analyzers/ruff"
-	"bluntcode/internal/analyzers/semgrep"
-	"bluntcode/internal/analyzers/sonarqube"
 	"bluntcode/internal/api"
 	"bluntcode/internal/config"
-	"bluntcode/internal/core"
-	"bluntcode/internal/database"
 	"bluntcode/internal/doctor"
-	"bluntcode/internal/events"
-	"bluntcode/internal/instance"
-	"bluntcode/internal/scans"
 	"bluntcode/internal/tools"
-	"bluntcode/internal/workspace"
 )
 
 const version = "0.1.0-dev"
@@ -42,9 +31,15 @@ const version = "0.1.0-dev"
 var staticFiles embed.FS
 
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "doctor" {
-		runDoctor(os.Args[2:])
-		return
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "doctor":
+			runDoctor(os.Args[2:])
+			return
+		case "scan":
+			runScan(os.Args[2:])
+			return
+		}
 	}
 	runServer(os.Args[1:])
 }
@@ -66,39 +61,20 @@ func runServer(args []string) {
 	}
 	if flags.NArg() > 1 {
 		fmt.Fprintln(os.Stderr, "usage: bluntcode [path] [--no-browser] [--port N]")
+		fmt.Fprintln(os.Stderr, "       bluntcode doctor [--json]")
+		fmt.Fprintln(os.Stderr, "       bluntcode scan <path> [--profile quick|standard|deep] [--json] [--timeout 30m] [--quiet]")
 		os.Exit(2)
 	}
-	paths, err := config.DefaultPaths()
+	// Shared bootstrap (single-instance lock, database, tool service, analyzer
+	// registry, scan service) lives in bootstrap.go and is reused by `scan`.
+	app, release, err := openCore()
 	if err != nil {
 		fatal(err)
 	}
-	logFile, err := os.OpenFile(filepath.Join(paths.LogsDir, "bluntcode.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
-	if err == nil {
-		defer logFile.Close()
-	}
-	logger := slog.New(slog.NewTextHandler(logFile, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	guard, err := instance.Acquire(paths.DataDir)
-	if err != nil {
-		fatal(err)
-	}
-	defer guard.Close()
-	db, err := database.Open(context.Background(), paths.DBPath)
-	if err != nil {
-		fatal(err)
-	}
-	defer db.Close()
-	if err := db.MarkInterruptedScans(context.Background()); err != nil {
-		fatal(err)
-	}
+	defer release()
 	if flags.NArg() == 1 {
-		root, normalizeErr := workspace.NormalizeRoot(flags.Arg(0))
-		if normalizeErr != nil {
-			fatal(normalizeErr)
-		}
-		if _, lookupErr := db.WorkspaceByRoot(context.Background(), root); lookupErr != nil {
-			if _, createErr := db.CreateWorkspace(context.Background(), core.Workspace{Name: filepath.Base(root), RootPath: root}); createErr != nil {
-				fatal(createErr)
-			}
+		if _, err := ensureWorkspace(context.Background(), app.db, flags.Arg(0)); err != nil {
+			fatal(err)
 		}
 	}
 	listener, err := net.Listen("tcp4", fmt.Sprintf("127.0.0.1:%d", port))
@@ -106,60 +82,25 @@ func runServer(args []string) {
 		fatal(fmt.Errorf("listen on loopback: %w", err))
 	}
 	defer listener.Close()
-	bus := events.New()
-	manifest, err := tools.DefaultManifest()
-	if err != nil {
-		fatal(fmt.Errorf("load embedded tool manifest: %w", err))
-	}
-	toolService := tools.NewService(paths.ToolsDir, manifest, false)
-	appSettings, err := db.AppSettings(context.Background())
-	if err != nil {
-		fatal(fmt.Errorf("load application settings: %w", err))
-	}
-	toolService.SetOffline(appSettings.Offline)
-	semgrepExecutable, semgrepRules, semgrepVersion := "", "", ""
-	if semgrepPaths, ok := toolService.SemgrepPaths(); ok {
-		semgrepExecutable, semgrepRules = semgrepPaths.Executable, semgrepPaths.RulesDir
-	}
-	semgrepVersion = toolService.Status("semgrep").Version
-	managedSonar, err := sonarqube.NewManaged(paths.DataDir, toolService.Manager, manifest)
-	if err != nil {
-		fatal(fmt.Errorf("configure managed SonarQube: %w", err))
-	}
-	defer func() {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-		defer cancel()
-		if err := managedSonar.Shutdown(shutdownCtx); err != nil {
-			logger.Warn("managed SonarQube shutdown failed", "error", err)
-		}
-	}()
-	registry := analyzers.NewRegistry()
-	// Analyzer adapters only execute Blunt Code-managed paths; no PATH lookup is used.
-	_ = registry.Register(ruff.New(filepath.Join(paths.ToolsDir, "ruff", "0.16.0", "ruff.exe"), "0.16.0"))
-	_ = registry.Register(biome.New(filepath.Join(paths.ToolsDir, "biome", "2.5.6", "biome.exe"), "2.5.6"))
-	_ = registry.Register(semgrep.New(semgrepExecutable, semgrepVersion, semgrepRules))
-	_ = registry.Register(managedSonar)
-	scanService := scans.New(db, registry, bus, filepath.Join(paths.DataDir, "reports"), paths.ToolsDir, toolService)
-	defer scanService.Shutdown()
-	server := api.New(db, bus, scanService, toolService, paths, version, logger)
+	server := api.New(app.db, app.bus, app.scans, app.toolService, app.paths, version, app.logger)
 	root := http.NewServeMux()
 	root.Handle("/api/", server.Handler())
 	root.Handle("/", staticHandler())
 	url := "http://" + listener.Addr().String() + "/"
 	fmt.Println("Blunt Code listening on " + url)
-	logger.Info("server started", "url", url)
-	if !noBrowser && appSettings.OpenBrowser {
-		openBrowser(url, logger)
+	app.logger.Info("server started", "url", url)
+	if !noBrowser && app.settings.OpenBrowser {
+		openBrowser(url, app.logger)
 	}
 	httpServer := &http.Server{Handler: root, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second}
 	var shutdownOnce sync.Once
 	shutdown := func() {
 		shutdownOnce.Do(func() {
-			logger.Info("shutdown requested")
+			app.logger.Info("shutdown requested")
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 			defer cancel()
 			if err := httpServer.Shutdown(shutdownCtx); err != nil {
-				logger.Warn("HTTP shutdown failed", "error", err)
+				app.logger.Warn("HTTP shutdown failed", "error", err)
 			}
 		})
 	}

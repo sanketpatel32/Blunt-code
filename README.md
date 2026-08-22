@@ -162,6 +162,12 @@ Blunt Code isolates and manages analyzer binaries in `%LOCALAPPDATA%\BluntCode\t
 
 # Output diagnostic results in structured JSON (useful for troubleshooting)
 .\bluntcode.exe doctor --json
+
+# Run one headless scan (no browser, no server) and print a summary
+.\bluntcode.exe scan "C:\Projects\my-python-app" --profile quick
+
+# Machine-readable JSON summary for CI pipelines (progress still goes to stderr)
+.\bluntcode.exe scan "C:\Projects\my-python-app" --json --quiet --timeout 10m
 ```
 
 ---
