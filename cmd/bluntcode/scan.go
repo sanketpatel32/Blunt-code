@@ -48,7 +48,12 @@ type scanConfig struct {
 }
 
 // parseScanFlags parses and validates the scan command line. Parse and
-// validation failures print the usage block to errOut.
+// validation failures print the reason followed by the usage block to errOut.
+//
+// Flags may appear before or after the workspace path so the documented
+// `bluntcode scan <path> --json` order works even though flag.FlagSet stops
+// at the first positional argument: parsing restarts after each collected
+// positional until the command line is exhausted.
 func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	flags := flag.NewFlagSet("scan", flag.ContinueOnError)
 	flags.SetOutput(errOut)
@@ -66,19 +71,30 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 		fmt.Fprintln(errOut, "130 when stopped with Ctrl+C.")
 		flags.PrintDefaults()
 	}
-	if err := flags.Parse(args); err != nil {
-		return scanConfig{}, err
+	var positional []string
+	remaining := args
+	for {
+		if err := flags.Parse(remaining); err != nil {
+			return scanConfig{}, err
+		}
+		if flags.NArg() == 0 {
+			break
+		}
+		positional = append(positional, flags.Arg(0))
+		remaining = flags.Args()[1:]
 	}
-	// Every non-usage error below prints the usage block first so a mistyped
-	// invocation is immediately correctable.
+	// Every non-usage error below prints the reason followed by the usage
+	// block (the same shape the flag package uses) so a mistyped invocation
+	// says what was wrong and is immediately correctable.
 	usageError := func(message string) (scanConfig, error) {
+		fmt.Fprintf(errOut, "bluntcode scan: %s\n", message)
 		flags.Usage()
 		return scanConfig{}, errors.New(message)
 	}
-	if flags.NArg() != 1 {
+	if len(positional) != 1 {
 		return usageError("exactly one workspace path is required")
 	}
-	cfg := scanConfig{path: flags.Arg(0), profile: *profile, json: *jsonOut, timeout: *timeout, quiet: *quiet}
+	cfg := scanConfig{path: positional[0], profile: *profile, json: *jsonOut, timeout: *timeout, quiet: *quiet}
 	if cfg.profile != analyzers.ProfileQuick && cfg.profile != analyzers.ProfileStandard && cfg.profile != analyzers.ProfileDeep {
 		return usageError("profile must be quick, standard, or deep")
 	}
@@ -235,75 +251,42 @@ func runScanCommand(args []string, stdout, stderr io.Writer) int {
 	eventCh, unsubscribe := app.bus.Subscribe(scan.ID)
 	defer unsubscribe()
 
-	interrupt := make(chan os.Signal, 1)
+	// The interrupt channel buffers two signals so a rapid Ctrl+C double-tap
+	// cannot drop the second press while the first is still being handled.
+	interrupt := make(chan os.Signal, 2)
 	signal.Notify(interrupt, os.Interrupt)
 	defer signal.Stop(interrupt)
 
-	timeout := time.After(cfg.timeout)
-	ticker := time.NewTicker(scanStatePollInterval)
-	defer ticker.Stop()
-	var (
-		finalState      string
-		cancelRequested bool
-		cancelDeadline  <-chan time.Time
-		interruptSeen   bool
-		timedOut        bool
-	)
-	for finalState == "" {
-		select {
-		case event := <-eventCh:
-			if !cfg.quiet {
-				printScanEvent(stderr, event)
-			}
-			switch event.Type {
-			case "scan.completed":
-				finalState = "completed"
-				if state, ok := scanEventData(event)["state"].(string); ok && state != "" {
-					finalState = state
-				}
-			case "scan.cancelled":
-				finalState = "cancelled"
-			}
-		case <-ticker.C:
-			// Fallback: subscribers can drop events under load, so the scan
-			// row is polled as the authoritative state.
+	outcome := awaitScanTerminal(scanWaitInput{
+		events:     eventCh,
+		interrupts: interrupt,
+		timeout:    time.After(cfg.timeout),
+		poll: func() (string, bool) {
 			current, err := app.db.Scan(ctx, scan.ID)
-			if err == nil && terminalScanState(current.State) {
-				finalState = current.State
+			if err != nil {
+				return "", false
 			}
-		case <-timeout:
-			if !cancelRequested {
-				cancelRequested = true
-				timedOut = true
-				_ = app.scans.Cancel(ctx, scan.ID)
-				cancelDeadline = time.After(scanCancelGrace)
-				if !cfg.quiet {
-					fmt.Fprintf(stderr, "timeout after %s: cancelling scan\n", cfg.timeout)
-				}
-			}
-		case <-cancelDeadline:
-			finalState = "cancelled"
-		case <-interrupt:
-			if !cfg.quiet {
-				fmt.Fprintln(stderr, "interrupt received: cancelling scan")
-			}
-			if cancelRequested {
-				// A second Ctrl+C exits immediately; the deferred release
-				// still cancels running analyzers.
-				return 130
-			}
-			cancelRequested = true
-			interruptSeen = true
-			_ = app.scans.Cancel(ctx, scan.ID)
-			cancelDeadline = time.After(scanCancelGrace)
-		}
+			return current.State, terminalScanState(current.State)
+		},
+		cancel:       func() { _ = app.scans.Cancel(ctx, scan.ID) },
+		timeoutLimit: cfg.timeout,
+		quiet:        cfg.quiet,
+		errOut:       stderr,
+		pollEvery:    scanStatePollInterval,
+		cancelGrace:  scanCancelGrace,
+	})
+	if outcome.exitNow {
+		// Second Ctrl+C: exit immediately. The deferred unsubscribe and
+		// release above still run, cancelling analyzers and closing the
+		// database cleanly on the way out.
+		return 130
 	}
-	summary, err := buildScanSummary(ctx, app.db, work, scan.ID, timedOut)
+	summary, err := buildScanSummary(ctx, app.db, work, scan.ID, outcome.timedOut)
 	if err != nil {
 		fmt.Fprintf(stderr, "bluntcode scan: could not load scan result: %v\n", err)
 		return 1
 	}
-	summary.state = finalState
+	summary.state = outcome.finalState
 	if cfg.json {
 		if err := writeScanJSON(stdout, summary); err != nil {
 			fmt.Fprintf(stderr, "bluntcode scan: could not write summary: %v\n", err)
@@ -312,10 +295,103 @@ func runScanCommand(args []string, stdout, stderr io.Writer) int {
 	} else {
 		writeScanHuman(stdout, summary)
 	}
-	if interruptSeen {
+	if outcome.interruptSeen {
 		return 130
 	}
 	return scanExitCode(summary.state, summary.timedOut)
+}
+
+// scanWaitInput bundles the injectable inputs of the scan event loop so the
+// terminal-state decision (double-interrupt fast exit, timeout cancellation,
+// and the database polling fallback) can be exercised in tests without OS
+// signals, production tick cadences, or a live database.
+type scanWaitInput struct {
+	events     <-chan events.Event
+	interrupts <-chan os.Signal
+	timeout    <-chan time.Time
+	// poll reports the authoritative scan row state between events.
+	poll func() (state string, terminal bool)
+	// cancel asks the scan service to cancel the running scan.
+	cancel       func()
+	timeoutLimit time.Duration // only used for the progress message
+	quiet        bool
+	errOut       io.Writer
+	pollEvery    time.Duration
+	cancelGrace  time.Duration
+}
+
+// scanWaitOutcome is the event loop's decision.
+type scanWaitOutcome struct {
+	finalState    string
+	interruptSeen bool
+	timedOut      bool
+	// exitNow means a second Ctrl+C arrived: return 130 immediately, without
+	// waiting for the service or printing a summary. Deferred cleanup still
+	// runs in the caller.
+	exitNow bool
+}
+
+// awaitScanTerminal waits until the scan reaches a terminal state, the timeout
+// grace expires, or the user double-taps Ctrl+C.
+func awaitScanTerminal(in scanWaitInput) scanWaitOutcome {
+	ticker := time.NewTicker(in.pollEvery)
+	defer ticker.Stop()
+	var (
+		outcome         scanWaitOutcome
+		cancelRequested bool
+		cancelDeadline  <-chan time.Time
+	)
+	for outcome.finalState == "" && !outcome.exitNow {
+		select {
+		case event := <-in.events:
+			if !in.quiet {
+				printScanEvent(in.errOut, event)
+			}
+			switch event.Type {
+			case "scan.completed":
+				outcome.finalState = "completed"
+				if state, ok := scanEventData(event)["state"].(string); ok && state != "" {
+					outcome.finalState = state
+				}
+			case "scan.cancelled":
+				outcome.finalState = "cancelled"
+			}
+		case <-ticker.C:
+			// Fallback: subscribers can drop events under load, so the scan
+			// row is polled as the authoritative state.
+			if state, terminal := in.poll(); terminal {
+				outcome.finalState = state
+			}
+		case <-in.timeout:
+			if !cancelRequested {
+				cancelRequested = true
+				outcome.timedOut = true
+				in.cancel()
+				cancelDeadline = time.After(in.cancelGrace)
+				if !in.quiet {
+					fmt.Fprintf(in.errOut, "timeout after %s: cancelling scan\n", in.timeoutLimit)
+				}
+			}
+		case <-cancelDeadline:
+			outcome.finalState = "cancelled"
+		case <-in.interrupts:
+			if !in.quiet {
+				fmt.Fprintln(in.errOut, "interrupt received: cancelling scan")
+			}
+			if cancelRequested {
+				// A second Ctrl+C exits immediately; the caller's deferred
+				// release still cancels running analyzers and closes the
+				// database cleanly.
+				outcome.exitNow = true
+				break
+			}
+			cancelRequested = true
+			outcome.interruptSeen = true
+			in.cancel()
+			cancelDeadline = time.After(in.cancelGrace)
+		}
+	}
+	return outcome
 }
 
 // scanExitCode maps a terminal scan state to the CLI exit code. completed and

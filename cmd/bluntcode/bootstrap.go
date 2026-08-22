@@ -8,9 +8,11 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"bluntcode/internal/analyzers"
@@ -52,35 +54,45 @@ func openCore() (core *appCore, release func(), err error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	logFile, _ := os.OpenFile(filepath.Join(paths.LogsDir, "bluntcode.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
-	logger := slog.New(slog.NewTextHandler(logFile, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	logSink := io.WriteCloser(nopWriteCloser{})
+	if file, openErr := os.OpenFile(filepath.Join(paths.LogsDir, "bluntcode.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600); openErr == nil {
+		logSink = file
+	}
+	logger := slog.New(slog.NewTextHandler(logSink, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	// Every early return below must release what it owns so far — including
+	// the log file, whose open handle otherwise outlives the failed start and
+	// (on Windows) keeps the data directory locked.
+	abort := func(err error) (*appCore, func(), error) {
+		_ = logSink.Close()
+		return nil, nil, err
+	}
 	guard, err := instance.Acquire(paths.DataDir)
 	if err != nil {
-		return nil, nil, err
+		return abort(err)
 	}
 	db, err := database.Open(context.Background(), paths.DBPath)
 	if err != nil {
 		_ = guard.Close()
-		return nil, nil, err
+		return abort(err)
 	}
 	if err := db.MarkInterruptedScans(context.Background()); err != nil {
 		_ = db.Close()
 		_ = guard.Close()
-		return nil, nil, err
+		return abort(err)
 	}
 	bus := events.New()
 	manifest, err := tools.DefaultManifest()
 	if err != nil {
 		_ = db.Close()
 		_ = guard.Close()
-		return nil, nil, fmt.Errorf("load embedded tool manifest: %w", err)
+		return abort(fmt.Errorf("load embedded tool manifest: %w", err))
 	}
 	toolService := tools.NewService(paths.ToolsDir, manifest, false)
 	appSettings, err := db.AppSettings(context.Background())
 	if err != nil {
 		_ = db.Close()
 		_ = guard.Close()
-		return nil, nil, fmt.Errorf("load application settings: %w", err)
+		return abort(fmt.Errorf("load application settings: %w", err))
 	}
 	toolService.SetOffline(appSettings.Offline)
 	semgrepExecutable, semgrepRules, semgrepVersion := "", "", ""
@@ -92,7 +104,7 @@ func openCore() (core *appCore, release func(), err error) {
 	if err != nil {
 		_ = db.Close()
 		_ = guard.Close()
-		return nil, nil, fmt.Errorf("configure managed SonarQube: %w", err)
+		return abort(fmt.Errorf("configure managed SonarQube: %w", err))
 	}
 	registry := analyzers.NewRegistry()
 	// Analyzer adapters only execute Blunt Code-managed paths; no PATH lookup is used.
@@ -120,21 +132,86 @@ func openCore() (core *appCore, release func(), err error) {
 		}
 		_ = db.Close()
 		_ = guard.Close()
-		_ = logFile.Close()
+		_ = logSink.Close()
 	}
 	return app, release, nil
 }
 
+// nopWriteCloser keeps openCore logging-safe when the log file cannot be
+// opened: slog must never panic on a nil writer.
+type nopWriteCloser struct{}
+
+func (nopWriteCloser) Write(p []byte) (int, error) { return len(p), nil }
+func (nopWriteCloser) Close() error                { return nil }
+
 // ensureWorkspace registers pathArg as a workspace when it is new and returns
 // the workspace record. Normalization is identical to the positional-arg path
-// of `bluntcode <path>`: resolve to an absolute, symlink-free directory.
+// of `bluntcode <path>`: resolve to an absolute, symlink-free directory —
+// including NTFS junctions, which filepath.EvalSymlinks leaves in place and
+// which would otherwise register a second workspace row for the same physical
+// directory. The lookup also tolerates case differences (and 8.3 short-name
+// spellings) so re-scanning a path never duplicates a workspace on Windows.
 func ensureWorkspace(ctx context.Context, db *database.DB, pathArg string) (core.Workspace, error) {
 	root, err := workspace.NormalizeRoot(pathArg)
 	if err != nil {
 		return core.Workspace{}, err
 	}
+	root = resolveJunctions(root)
 	if existing, lookupErr := db.WorkspaceByRoot(ctx, root); lookupErr == nil {
 		return existing, nil
 	}
+	key := workspace.CanonicalKey(root)
+	if all, listErr := db.Workspaces(ctx); listErr == nil {
+		for _, existing := range all {
+			if workspace.CanonicalKey(existing.RootPath) == key {
+				return existing, nil
+			}
+		}
+	}
 	return db.CreateWorkspace(ctx, core.Workspace{Name: filepath.Base(root), RootPath: root})
+}
+
+// junctionHopLimit bounds how many reparse points (junctions or symlinks) one
+// path component may resolve through, so cyclic links cannot loop forever.
+const junctionHopLimit = 16
+
+// resolveJunctions canonicalizes abs by resolving directory junctions that
+// filepath.EvalSymlinks skips: on Windows a junction is not reported as a
+// symlink, yet os.Readlink still returns its target. Every component is
+// checked, so a junction anywhere in the path is resolved. Resolution is
+// best effort: any component that cannot be resolved is kept as-is, and if
+// the fully resolved path is no longer an existing directory the original
+// path is returned unchanged.
+func resolveJunctions(abs string) string {
+	if abs == "" {
+		return abs
+	}
+	volume := filepath.VolumeName(abs)
+	separator := string(filepath.Separator)
+	rest := strings.TrimPrefix(filepath.Clean(abs), volume+separator)
+	current := volume + separator
+	for _, part := range strings.Split(rest, separator) {
+		if part == "" {
+			continue
+		}
+		next := current + part
+		for hop := 0; hop < junctionHopLimit; hop++ {
+			target, err := os.Readlink(next)
+			if err != nil {
+				break
+			}
+			// Junction targets are reported with an NT object-manager prefix.
+			target = strings.TrimPrefix(target, `\??\`)
+			if !filepath.IsAbs(target) {
+				target = filepath.Join(current, target)
+			}
+			next = filepath.Clean(target)
+		}
+		current = next + separator
+	}
+	resolved := filepath.Clean(current)
+	if info, err := os.Stat(resolved); err != nil || !info.IsDir() {
+		return abs
+	}
+	return resolved
 }
