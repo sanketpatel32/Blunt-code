@@ -244,3 +244,68 @@ describe('ReportView findings sorting', () => {
     });
   });
 });
+
+describe('ReportView severity distribution', () => {
+  it('renders the stacked severity bar with proportional segment widths and an accessible summary', async () => {
+    const host = await render();
+    const bar = host.querySelector<HTMLElement>('.severity-stack')!;
+    expect(bar.getAttribute('role')).toBe('img');
+    expect(bar.getAttribute('aria-label')).toBe('Findings by severity: 2 high, 1 medium'); // zero counts are left out of the label
+    const segments = [...bar.children] as HTMLElement[];
+    expect(segments.map((segment) => segment.className)).toEqual(['seg-high', 'seg-medium']); // 0-count severities get no segment
+    expect(segments.map((segment) => segment.style.width)).toEqual(['66.7%', '33.3%']); // 2/3 and 1/3 of the 3 findings
+  });
+
+  it('pairs the bar with a legend carrying every severity count', async () => {
+    const host = await render();
+    const legend = [...host.querySelectorAll('.severity-legend li')];
+    expect(legend.map((item) => item.textContent)).toEqual(['critical0', 'high2', 'medium1', 'low0', 'info0']);
+    expect(legend[0].className).toBe('zero'); // zero-count entries are muted, not hidden
+    expect(legend[1].className).toBe('high');
+  });
+
+  it('hides the distribution for zero-finding scans where the all-clear panel speaks instead', async () => {
+    await fetchMock.withImplementation((input: string) => {
+      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan: { ...scan, total_findings: 0, high_count: 0, medium_count: 0 }, warnings: [], findings: [] }));
+      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: [], total: 0, limit: 25, offset: 0, has_more: false }));
+      return Promise.resolve(json({ items: [] }));
+    }, async () => {
+      const host = await render();
+      expect(host.querySelector('.severity-distribution')).toBeNull();
+      expect(host.querySelector('.severity-stack')).toBeNull();
+    });
+  });
+});
+
+describe('ReportView analyzer mini-bars', () => {
+  const multiAnalyzerFindings = [
+    { ...finding, id: 'f1', analyzer_id: 'ruff', severity: 'high' },
+    { ...finding, id: 'f2', analyzer_id: 'ruff', severity: 'high' },
+    { ...finding, id: 'f3', analyzer_id: 'ruff', severity: 'medium' },
+    { ...finding, id: 'f4', analyzer_id: 'biome', severity: 'critical' },
+  ];
+  const multiAnalyzerRuns = [{ analyzer_id: 'semgrep', status: 'succeeded' }, { analyzer_id: 'biome', status: 'succeeded' }, { analyzer_id: 'ruff', status: 'succeeded' }];
+
+  it('sorts analyzer rows by finding count and splits each mini-bar by severity', async () => {
+    await fetchMock.withImplementation((input: string) => {
+      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan: { ...scan, analyzer_runs: multiAnalyzerRuns }, warnings: [], findings: multiAnalyzerFindings }));
+      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: multiAnalyzerFindings, total: 4, limit: 25, offset: 0, has_more: false }));
+      return Promise.resolve(json({ items: [] }));
+    }, async () => {
+      const host = await render();
+      const rows = [...host.querySelectorAll('.analyzer-result')];
+      expect(rows.map((row) => row.querySelector('strong')!.textContent)).toEqual(['Ruff', 'Biome', 'Semgrep']); // busiest first
+      expect(rows.map((row) => row.querySelector('.state')!.textContent)).toEqual(['3 findings', '1 finding', '0 findings']);
+
+      const ruffBar = rows[0].querySelector<HTMLElement>('.analyzer-bar')!;
+      expect(ruffBar.getAttribute('role')).toBe('img');
+      expect(ruffBar.getAttribute('aria-label')).toBe('Ruff findings by severity: 2 high, 1 medium');
+      expect([...ruffBar.children].map((segment) => segment.className)).toEqual(['seg-high', 'seg-medium']);
+      expect([...ruffBar.children].map((segment) => (segment as HTMLElement).style.width)).toEqual(['66.7%', '33.3%']);
+
+      const biomeBar = rows[1].querySelector<HTMLElement>('.analyzer-bar')!;
+      expect([...biomeBar.children].map((segment) => segment.className)).toEqual(['seg-critical']);
+      expect(rows[2].querySelector('.analyzer-bar')).toBeNull(); // zero-finding analyzers get no bar
+    });
+  });
+});

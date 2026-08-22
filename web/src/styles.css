@@ -260,3 +260,89 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 /* dialogs a11y */
 .dialog-backdrop { cursor: default; }
 .dialog-backdrop dialog { cursor: auto; }
+
+/* what changed · Loop 14: success-tone panel on terminal scans listing the
+   findings fixed since the previous scan. Severity pills reuse the shared
+   .severity classes; only theme tokens appear below, so the panel keeps its
+   success accent and inverts cleanly in dark mode. */
+.what-changed { margin-top: var(--space-xl); padding: var(--space-lg); border: var(--rule) solid color-mix(in oklch, var(--color-success) 45%, var(--color-rule)); border-left: .18rem solid var(--color-success); border-radius: var(--radius-md); background: color-mix(in oklch, var(--color-success) 7%, var(--color-surface)); }
+.what-changed-header { display: flex; align-items: end; justify-content: space-between; gap: var(--space-lg); padding-bottom: var(--space-md); border-bottom: var(--rule) solid color-mix(in oklch, var(--color-success) 30%, var(--color-rule)); }
+.what-changed-header h2 { margin: 0; font-family: var(--font-display); font-size: var(--text-xl); letter-spacing: -.035em; }
+.what-changed-header > div > p { margin: var(--space-2xs) 0 0; color: var(--color-ink-soft); font-size: var(--text-sm); }
+.what-changed-headline { margin: 0; color: var(--color-ink-soft); font-size: var(--text-sm); white-space: nowrap; }
+.what-changed-headline strong { margin-right: var(--space-2xs); color: var(--color-success); font-family: var(--font-display); font-size: var(--text-2xl); letter-spacing: -.04em; }
+.what-changed-list { display: grid; gap: var(--space-2xs); margin: var(--space-md) 0 0; padding: 0; list-style: none; }
+.what-changed-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2xs) var(--space-sm); padding: var(--space-2xs) var(--space-xs); border-radius: var(--radius-sm); background: color-mix(in oklch, var(--color-surface) 86%, transparent); }
+.what-changed-row .severity, .what-changed-row .badge { flex: none; }
+.what-changed-rule { flex: 1 1 12rem; min-width: 0; overflow: hidden; color: var(--color-ink); font-size: var(--text-sm); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.what-changed-row code { flex: none; color: var(--color-ink-faint); font-size: var(--text-xs); }
+.what-changed-more { margin-top: var(--space-sm); }
+.what-changed-more summary { color: var(--color-accent-strong); font: 600 var(--text-xs) var(--font-mono); }
+.what-changed-more summary:hover { text-decoration: underline; text-underline-offset: .2rem; }
+.what-changed-more[open] summary { margin-bottom: var(--space-2xs); }
+.what-changed-more .what-changed-list { margin-top: var(--space-2xs); }
+.what-changed-note { margin: var(--space-xs) 0 0; color: var(--color-ink-faint); font-size: var(--text-xs); }
+.what-changed-loading .skeleton-lines { margin: var(--space-md) 0 0; }
+
+/* report visualizations + print */
+/* Loop 13 · Report severity distribution: one stacked bar under the summary
+   cards plus per-analyzer mini-bars inside the analyzer result cards. Segment
+   colors mirror the HistoryPage severity-bar language — critical is danger,
+   high lightens danger, medium is warning, low is accent-strong and info
+   lightens accent — and every pair inverts with the theme tokens. */
+.severity-distribution { margin: calc(-1 * var(--space-lg)) 0 var(--space-xl); }
+.severity-stack { width: 100%; height: .75rem; }
+.severity-legend { display: flex; flex-wrap: wrap; gap: var(--space-2xs) var(--space-md); margin: var(--space-xs) 0 0; padding: 0; list-style: none; }
+.severity-legend li { display: inline-flex; align-items: center; gap: var(--space-2xs); color: var(--color-ink-soft); font: 600 var(--text-xs) var(--font-mono); }
+.severity-legend li i { width: .55rem; height: .55rem; border-radius: var(--space-3xs); }
+.severity-legend li.zero { color: var(--color-ink-faint); }
+.severity-legend li.zero i { opacity: .4; }
+.severity-legend .legend-count { color: var(--color-ink); font-variant-numeric: tabular-nums; }
+.severity-bar .seg-critical { background: var(--color-danger); }
+.severity-bar .seg-high { background: color-mix(in oklch, var(--color-danger) 62%, var(--color-paper)); }
+.severity-bar .seg-medium { background: var(--color-warning); }
+.severity-bar .seg-low { background: var(--color-accent-strong); }
+.severity-bar .seg-info { background: color-mix(in oklch, var(--color-accent-strong) 55%, var(--color-paper)); }
+.severity-legend .seg-critical { background: var(--color-danger); }
+.severity-legend .seg-high { background: color-mix(in oklch, var(--color-danger) 62%, var(--color-paper)); }
+.severity-legend .seg-medium { background: var(--color-warning); }
+.severity-legend .seg-low { background: var(--color-accent-strong); }
+.severity-legend .seg-info { background: color-mix(in oklch, var(--color-accent-strong) 55%, var(--color-paper)); }
+.analyzer-result { flex-wrap: wrap; }
+.analyzer-result .analyzer-bar { flex-basis: 100%; width: 100%; height: .45rem; margin-top: var(--space-2xs); }
+
+/* Loop 19 · Print: paper-first report. Interactive chrome (nav, filters,
+   pills, pagination, toolbar, export) disappears; page-level tokens are pinned
+   to light values inside print so a dark-theme session still prints ink on
+   white. Bars carry print-color-adjust: exact so severity colors survive the
+   print pipeline; shadows drop to nothing and rules stay hairline. */
+@media print {
+  :root, :root[data-theme='dark'] { color-scheme: light; --color-paper: #ffffff; --color-surface: #ffffff; --color-surface-muted: #f2f3f5; --color-ink: #1b1b1f; --color-ink-soft: #3d3d46; --color-ink-faint: #6d6d76; --color-rule: #d6d7da; --color-rule-strong: #a8aaaf; --color-accent: oklch(58% 0.2 256); --color-accent-strong: oklch(49% 0.21 256); --color-accent-ink: oklch(99% 0.002 250); --color-graphite: oklch(22% 0.016 260); --color-graphite-soft: oklch(29% 0.018 260); --color-graphite-ink: oklch(92% 0.008 250); --color-success: oklch(56% 0.14 150); --color-warning: oklch(67% 0.15 76); --color-danger: oklch(54% 0.19 25); --color-danger-soft: oklch(95% 0.025 25); --color-focus: oklch(58% 0.2 256); }
+  .app-nav, .app-footer, .nav-actions, .theme-toggle, .skip-link, .toast-stack, .filters, .filter-chips, .severity-pills, .findings-toolbar, .findings-pagination, .report-header .button { display: none; }
+  .page { width: 100%; padding: 0; }
+  .report { margin-top: 0; padding-top: 0; }
+  .report * { box-shadow: none !important; }
+  .severity-stack, .severity-stack i, .analyzer-bar, .analyzer-bar i, .severity-legend i { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .summary-card, .analyzer-result, .severity-distribution, .inline-warning { break-inside: avoid; }
+  .findings-section .section-head { break-after: avoid; break-inside: avoid; }
+  .findings-table { overflow: visible; }
+  .findings-table table { width: 100%; min-width: 0; font-size: var(--text-xs); }
+  .findings-table th, .findings-table td { padding: var(--space-2xs) var(--space-xs); }
+  .findings-table tr { break-inside: avoid; }
+  .findings-table td:nth-child(3), .finding-summary { min-width: 0; }
+  .th-sort .sort-arrow { display: none; }
+}
+
+/* keyboard shortcuts */
+.seq-hint { padding: 0 var(--space-3xs); border: var(--rule) solid var(--color-accent); border-radius: var(--space-3xs); color: var(--color-accent-strong); font: 600 var(--text-xs)/1.4 var(--font-mono); }
+.nav-shortcuts { font-family: var(--font-mono); }
+.dialog-backdrop dialog.shortcuts-dialog { width: min(38rem, 100%); }
+.shortcuts-dialog p .kbd-hint { margin: 0 var(--space-3xs); }
+.shortcut-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: var(--space-lg); margin-top: var(--space-md); }
+.shortcut-group h3 { margin: 0 0 var(--space-xs); color: var(--color-ink-faint); font: 700 var(--text-xs)/1.4 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; }
+.shortcut-group dl { display: grid; gap: var(--space-2xs); margin: 0; }
+.shortcut-row { display: grid; grid-template-columns: minmax(4.5rem, auto) minmax(0, 1fr); align-items: center; gap: var(--space-sm); }
+.shortcut-row dt { display: flex; align-items: center; gap: var(--space-3xs); }
+.shortcut-row dt .kbd-hint { margin: 0; }
+.shortcut-row dd { margin: 0; color: var(--color-ink-soft); font-size: var(--text-sm); }
+@media (max-width: 38rem) { .shortcut-groups { grid-template-columns: 1fr; } }
