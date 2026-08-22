@@ -20,6 +20,8 @@ const ID = "ruff"
 //	E, W - full pycodestyle errors and warnings (the default covers only
 //	       E4/E7/E9, so deep adds the remaining style checks)
 //	F    - pyflakes correctness rules (carried over from the default)
+//	I    - isort import ordering; ruff 0.16 enables it by default, so deep
+//	       must keep it or --select would silently narrow the rule set
 //	B    - flake8-bugbear, likely-bug detection
 //	SIM  - flake8-simplify, simplifiable-code patterns
 //	C4   - flake8-comprehensions, needless comprehension workarounds
@@ -31,7 +33,7 @@ const ID = "ruff"
 // offline, so deep is slower than standard but introduces no new failure
 // modes. Noisy opinion-only families (like PL or PEP 8 naming rules) are left
 // out on purpose.
-const deepSelect = "E,W,F,B,SIM,C4,RET,ARG,PLR"
+const deepSelect = "E,W,F,I,B,SIM,C4,RET,ARG,PLR"
 
 type Adapter struct {
 	Executable string
