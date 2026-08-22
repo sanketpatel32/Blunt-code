@@ -6,6 +6,7 @@ import { message } from './lib/notice';
 import { AppShell, AppFooter } from './components/AppShell';
 import { NoticeBox } from './components/ui';
 import { AddWorkspaceDialog, ConfirmationDialog } from './components/dialogs';
+import { useTheme } from './hooks/useTheme';
 import { HomePage } from './pages/HomePage';
 import { WorkspacesPage } from './pages/WorkspacesPage';
 import { WorkspacePage } from './pages/WorkspaceDetailPage';
@@ -22,11 +23,12 @@ export function App() {
   const [addOpen, setAddOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
   const [closing, setClosing] = useState(false);
+  const { theme, toggleTheme } = useTheme();
   const go = useCallback((next: Route) => { window.history.pushState({}, '', href(next)); setRoute(next); }, []);
   const closeApp = async () => { setClosing(true); try { await api.stopServer(); setCloseOpen(false); setNotice({ kind: 'info', text: 'Blunt Code is closing. You can close this tab.' }); } catch (error) { setNotice({ kind: 'error', text: message(error) }); setClosing(false); } };
   useEffect(() => { const handler = () => setRoute(parseRoute()); window.addEventListener('popstate', handler); return () => window.removeEventListener('popstate', handler); }, []);
   return <div className="app-frame">
-    <AppShell route={route} onNavigate={go} onAdd={() => setAddOpen(true)} onClose={() => setCloseOpen(true)} />
+    <AppShell route={route} onNavigate={go} onAdd={() => setAddOpen(true)} onClose={() => setCloseOpen(true)} theme={theme} onToggleTheme={toggleTheme} />
     <main className="main" id="main-content">
       {notice && <NoticeBox notice={notice} onDismiss={() => setNotice(null)} />}
       <Page route={route} go={go} notify={setNotice} onAdd={() => setAddOpen(true)} />

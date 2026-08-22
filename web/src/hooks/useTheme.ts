@@ -1,0 +1,60 @@
+import { useCallback, useEffect, useState } from 'react';
+
+export type Theme = 'light' | 'dark';
+
+export const THEME_STORAGE_KEY = 'bluntcode-theme';
+
+/** Rough sRGB equivalents of the --color-paper token per theme; keeps the browser chrome (theme-color meta) in sync with the app canvas. */
+export const THEME_COLORS: Record<Theme, string> = { light: '#f8fafd', dark: '#14171d' };
+
+function readStoredTheme(): Theme | null {
+  try {
+    const value = window.localStorage.getItem(THEME_STORAGE_KEY);
+    return value === 'light' || value === 'dark' ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function systemTheme(): Theme {
+  return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+/** Stored choice wins; otherwise fall back to the OS preference. */
+export function resolveTheme(): Theme {
+  return readStoredTheme() ?? systemTheme();
+}
+
+function applyTheme(theme: Theme) {
+  document.documentElement.dataset.theme = theme;
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', THEME_COLORS[theme]);
+}
+
+export function useTheme() {
+  const [theme, setThemeState] = useState<Theme>(() => {
+    const applied = document.documentElement.dataset.theme;
+    return applied === 'light' || applied === 'dark' ? applied : resolveTheme();
+  });
+
+  useEffect(() => { applyTheme(theme); }, [theme]);
+
+  // While the user has not made an explicit choice, follow OS preference changes.
+  useEffect(() => {
+    if (readStoredTheme() !== null) return;
+    if (typeof window.matchMedia !== 'function') return;
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    if (typeof media.addEventListener !== 'function') return;
+    const onChange = () => setThemeState(systemTheme());
+    media.addEventListener('change', onChange);
+    return () => media.removeEventListener('change', onChange);
+  }, [theme]);
+
+  const setTheme = useCallback((next: Theme) => {
+    try { window.localStorage.setItem(THEME_STORAGE_KEY, next); } catch { /* storage unavailable; theme still applies for this session */ }
+    setThemeState(next);
+  }, []);
+
+  const toggleTheme = useCallback(() => { setTheme(theme === 'dark' ? 'light' : 'dark'); }, [theme, setTheme]);
+
+  return { theme, setTheme, toggleTheme };
+}

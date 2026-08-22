@@ -3,8 +3,27 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#191919" />
+    <meta name="theme-color" content="#f8fafd" />
     <title>Blunt Code</title>
+    <script>
+      // Resolve the theme before first paint to avoid a flash of the wrong theme.
+      // Mirrors src/hooks/useTheme.ts (storage key, media query, paper hex values).
+      (function () {
+        try {
+          var stored = localStorage.getItem('bluntcode-theme');
+          var theme = stored === 'light' || stored === 'dark'
+            ? stored
+            : window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+              ? 'dark'
+              : 'light';
+          document.documentElement.dataset.theme = theme;
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute('content', theme === 'dark' ? '#14171d' : '#f8fafd');
+        } catch (error) {
+          document.documentElement.dataset.theme = 'light';
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

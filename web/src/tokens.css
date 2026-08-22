@@ -1,4 +1,5 @@
 :root {
+  color-scheme: light;
   --color-paper: oklch(98.5% 0.004 250);
   --color-surface: oklch(100% 0.002 250);
   --color-surface-muted: oklch(96.4% 0.007 250);
@@ -49,4 +50,31 @@
   --dur-fast: 120ms;
   --dur-base: 180ms;
   --dur-slow: 320ms;
+}
+
+/* Dark theme: same token names, near-black paper with a cool cast, lifted ink,
+   slightly brightened chroma hues, and deepened (softer) shadows. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --color-paper: oklch(20.5% 0.012 258);
+  --color-surface: oklch(24% 0.014 258);
+  --color-surface-muted: oklch(28% 0.016 258);
+  --color-ink: oklch(93% 0.006 250);
+  --color-ink-soft: oklch(78% 0.012 252);
+  --color-ink-faint: oklch(63% 0.014 252);
+  --color-rule: oklch(33% 0.014 257);
+  --color-rule-strong: oklch(43% 0.017 257);
+  --color-accent: oklch(68% 0.16 256);
+  --color-accent-strong: oklch(77% 0.13 256);
+  --color-accent-ink: oklch(17% 0.02 258);
+  --color-graphite: oklch(14% 0.012 260);
+  --color-graphite-soft: oklch(10% 0.01 260);
+  --color-graphite-ink: oklch(88% 0.01 250);
+  --color-success: oklch(72% 0.15 152);
+  --color-warning: oklch(80% 0.14 85);
+  --color-danger: oklch(68% 0.17 25);
+  --color-danger-soft: oklch(30% 0.06 25);
+  --color-focus: oklch(68% 0.16 256);
+  --shadow-nav: 0 12px 32px oklch(0% 0 0 / 0.45);
+  --shadow-dialog: 0 24px 72px oklch(0% 0 0 / 0.6);
 }
