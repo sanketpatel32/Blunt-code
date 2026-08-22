@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api';
 import type { PathOverride, TreeNode } from '../types';
 import type { Notice } from '../lib/notice';
@@ -20,23 +20,111 @@ export function FilesPage({ id, notify }: { id: string; notify: (n: Notice) => v
   const [rules, setRules] = useState<{ rules: Array<{ rule_type: 'include' | 'exclude'; pattern: string; enabled?: boolean }> }>({ rules: [] });
   const [overrides, setOverrides] = useState<PathOverride[]>([]);
   const [treeKey, setTreeKey] = useState(0);
+  const searchRef = useRef<HTMLInputElement>(null);
   const loadTree = useCallback(async () => { setLoadingTree(true); try { setNodes(await api.tree(id)); setTreeError(undefined); } catch (e) { setTreeError(message(e)); } finally { setLoadingTree(false); } }, [id]);
   useEffect(() => { void loadTree(); void Promise.all([api.rules(id), api.pathOverrides(id)]).then(([savedRules, savedOverrides]) => { setRules(savedRules as typeof rules); setOverrides(savedOverrides); }).catch((e) => notify({ kind: 'error', text: message(e) })); }, [id, loadTree]);
   const save = async () => { try { await api.saveRules(id, rules); await api.savePathOverrides(id, overrides); await loadTree(); setTreeKey((value) => value + 1); notify({ kind: 'info', text: 'File selection saved for this workspace.' }); } catch (e) { notify({ kind: 'error', text: message(e) }); } };
-  const filtered = debouncedQuery ? nodes.filter((node) => node.path.toLowerCase().includes(debouncedQuery.toLowerCase())) : nodes;
+  /** "/" jumps to the search box from anywhere on this page — unless the user is already typing in a field. */
+  useEffect(() => {
+    function jumpToSearch(event: KeyboardEvent) {
+      if (event.key !== '/' || event.ctrlKey || event.metaKey || event.altKey) return;
+      const active = document.activeElement;
+      const tag = active?.tagName.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || (active instanceof HTMLElement && active.isContentEditable)) return;
+      event.preventDefault();
+      searchRef.current?.focus();
+    }
+    window.addEventListener('keydown', jumpToSearch);
+    return () => window.removeEventListener('keydown', jumpToSearch);
+  }, []);
   return <div className="page"><header className="page-heading"><div><p className="eyebrow">File selection</p><h1>{workspace.data?.name ?? 'Workspace files'}</h1><p>Choose source paths to analyze. Default exclusions protect dependencies and build output.</p></div><div className="action-row"><button className="button secondary" onClick={() => { setRules({ rules: [] }); setOverrides([]); }}>Reset to defaults</button><button className="button primary" onClick={save}>Save selection</button></div></header>
-    <section className="file-layout"><div className="tree-panel"><label className="search"><span>Search paths</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="src or package.json" /></label>{loadingTree ? <SkeletonLines lines={6} /> : treeError ? <ErrorPanel error={treeError} retry={loadTree} /> : filtered.length ? <FileTree key={treeKey} nodes={filtered} workspaceId={id} overrides={overrides} onOverrides={setOverrides} /> : <Empty title="No matching paths" icon={<MagnifierIcon />}>Try a shorter search.</Empty>}</div><RuleEditor rules={rules.rules} setRules={(items) => setRules({ rules: items })} /></section>
+    <section className="file-layout"><div className="tree-panel"><label className="search"><span>Search paths<kbd className="kbd-hint" aria-hidden="true">/</kbd></span><input ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') { setQuery(''); event.currentTarget.blur(); } }} placeholder="src or package.json" /></label>{loadingTree ? <SkeletonLines lines={6} /> : treeError ? <ErrorPanel error={treeError} retry={loadTree} /> : <FileTree key={treeKey} nodes={nodes} query={debouncedQuery} workspaceId={id} overrides={overrides} onOverrides={setOverrides} />}</div><RuleEditor rules={rules.rules} setRules={(items) => setRules({ rules: items })} /></section>
   </div>;
 }
 
-function FileTree({ nodes, workspaceId, overrides, onOverrides }: { nodes: TreeNode[]; workspaceId: string; overrides: PathOverride[]; onOverrides: (items: PathOverride[]) => void }) {
+/** Per-row slice of tree state. The top-level FileTree owns all of it so search can walk every loaded level. */
+interface TreeState {
+  overrides: PathOverride[];
+  onOverrides: (items: PathOverride[]) => void;
+  children: Record<string, TreeNode[]>;
+  expanded: Set<string>;
+  loading: Set<string>;
+  failed: Set<string>;
+  needle: string;
+  matches: Set<string>;
+  ancestors: Set<string>;
+  toggle: (node: TreeNode) => void;
+  retry: (node: TreeNode) => void;
+}
+
+function FileTree({ nodes, query, workspaceId, overrides, onOverrides }: { nodes: TreeNode[]; query: string; workspaceId: string; overrides: PathOverride[]; onOverrides: (items: PathOverride[]) => void }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [children, setChildren] = useState<Record<string, TreeNode[]>>({});
-  async function expand(node: TreeNode) { if (node.type !== 'directory') return; const next = new Set(expanded); if (next.has(node.path)) { next.delete(node.path); setExpanded(next); return; } next.add(node.path); setExpanded(next); if (!children[node.path]) { try { const loaded = await api.tree(workspaceId, node.path); setChildren((old) => ({ ...old, [node.path]: loaded })); } catch { /* Root remains usable; API errors are surfaced on subsequent retry. */ } } }
-  function included(node: TreeNode) { const matching = overrides.filter((item) => node.path === item.relative_path || node.path.startsWith(`${item.relative_path}/`)).sort((a, b) => b.relative_path.length - a.relative_path.length)[0]; return matching ? matching.mode === 'include' : node.included ?? !node.excluded_reason; }
-  function toggle(node: TreeNode) { const next = !included(node); onOverrides([...overrides.filter((item) => item.relative_path !== node.path), { relative_path: node.path, mode: next ? 'include' : 'exclude' }]); }
-  return <ul className="file-tree" aria-label="Workspace file tree">{nodes.map((node) => <li key={node.path}><div className="tree-row"><button className="tree-toggle" aria-label={expanded.has(node.path) ? `Collapse ${node.name}` : `Expand ${node.name}`} disabled={node.type !== 'directory'} onClick={() => void expand(node)}>{node.type === 'directory' ? (expanded.has(node.path) ? '−' : '+') : '·'}</button><input type="checkbox" checked={included(node)} ref={(input) => { if (input) input.indeterminate = Boolean(node.partial && !overrides.some((item) => node.path === item.relative_path)); }} onChange={() => toggle(node)} aria-label={`Include ${node.path}`} /><span className="tree-name">{node.name}</span>{node.excluded_reason && <small>Excluded: {node.excluded_reason}</small>}</div>{expanded.has(node.path) && <div className="tree-children"><FileTree nodes={children[node.path] ?? []} workspaceId={workspaceId} overrides={overrides} onOverrides={onOverrides} /></div>}</li>)}</ul>;
+  const [loading, setLoading] = useState<Set<string>>(new Set());
+  const [failed, setFailed] = useState<Set<string>>(new Set());
+  const needle = query.trim().toLowerCase();
+  const loadChildren = useCallback(async (path: string) => {
+    setLoading((old) => new Set(old).add(path));
+    setFailed((old) => { const next = new Set(old); next.delete(path); return next; });
+    try {
+      const loaded = await api.tree(workspaceId, path);
+      setChildren((old) => ({ ...old, [path]: loaded }));
+    } catch {
+      setFailed((old) => new Set(old).add(path)); // Surfaced inline on the row with a retry instead of silently dropping the folder.
+    } finally {
+      setLoading((old) => { const next = new Set(old); next.delete(path); return next; });
+    }
+  }, [workspaceId]);
+  function toggle(node: TreeNode) {
+    if (node.type !== 'directory') return;
+    setExpanded((old) => { const next = new Set(old); if (next.has(node.path)) next.delete(node.path); else next.add(node.path); return next; });
+    if (!expanded.has(node.path) && children[node.path] === undefined) void loadChildren(node.path);
+  }
+  const retry = useCallback((node: TreeNode) => { setExpanded((old) => new Set(old).add(node.path)); void loadChildren(node.path); }, [loadChildren]);
+  /** One recursive walk over every loaded node: `matches` hits the query, `ancestors` lead to a hit. */
+  const { matches, ancestors } = useMemo(() => {
+    const result = { matches: new Set<string>(), ancestors: new Set<string>() };
+    if (!needle) return result;
+    const walk = (level: TreeNode[]): boolean => {
+      let hit = false;
+      for (const node of level) {
+        const descendant = walk(children[node.path] ?? []);
+        if (node.path.toLowerCase().includes(needle)) { result.matches.add(node.path); hit = true; }
+        if (descendant) { result.ancestors.add(node.path); hit = true; }
+      }
+      return hit;
+    };
+    walk(nodes);
+    return result;
+  }, [needle, nodes, children]);
+  const anyVisible = needle ? nodes.some((node) => matches.has(node.path) || ancestors.has(node.path)) : nodes.length > 0;
+  const state: TreeState = { overrides, onOverrides, children, expanded, loading, failed, needle, matches, ancestors, toggle, retry };
+  return <>
+    {needle && <div className="tree-search-meta" aria-live="polite"><p><strong>{matches.size}</strong> {matches.size === 1 ? 'matching path' : 'matching paths'}</p><p>Searching loaded folders — expand more to include their contents</p></div>}
+    {anyVisible ? <TreeLevel nodes={nodes} state={state} root /> : <Empty title="No matching paths" icon={<MagnifierIcon />}>Try a shorter search.</Empty>}
+  </>;
 }
+
+function TreeLevel({ nodes, state, root = false }: { nodes: TreeNode[]; state: TreeState; root?: boolean }) {
+  const visible = state.needle ? nodes.filter((node) => state.matches.has(node.path) || state.ancestors.has(node.path)) : nodes;
+  return <ul className="file-tree" aria-label={root ? 'Workspace file tree' : undefined}>{visible.map((node) => {
+    // While a query is active, folders leading to a match render expanded; clearing the query falls back to the manual set.
+    const open = state.expanded.has(node.path) || (state.needle !== '' && state.ancestors.has(node.path));
+    return <li key={node.path}><div className="tree-row"><button className="tree-toggle" aria-label={open ? `Collapse ${node.name}` : `Expand ${node.name}`} disabled={node.type !== 'directory'} onClick={() => state.toggle(node)}>{state.loading.has(node.path) ? <span className="spinner" aria-hidden="true" /> : node.type === 'directory' ? (open ? '−' : '+') : '·'}</button><input type="checkbox" checked={nodeIncluded(node, state.overrides)} ref={(input) => { if (input) input.indeterminate = Boolean(node.partial && !state.overrides.some((item) => node.path === item.relative_path)); }} onChange={() => toggleNode(node, state.overrides, state.onOverrides)} aria-label={`Include ${node.path}`} /><span className="tree-name"><HighlightedName name={node.name} needle={state.needle} /></span>{node.excluded_reason && <small>Excluded: {node.excluded_reason}</small>}{state.failed.has(node.path) && <span className="tree-load-error">Could not load<button className="text-button" onClick={() => state.retry(node)}>Retry</button></span>}</div>{open && <div className="tree-children"><TreeLevel nodes={state.children[node.path] ?? []} state={state} /></div>}</li>;
+  })}</ul>;
+}
+
+/** Wraps the first case-insensitive hit in the visible name so it is obvious why a row matched. */
+function HighlightedName({ name, needle }: { name: string; needle: string }) {
+  if (!needle) return <>{name}</>;
+  const index = name.toLowerCase().indexOf(needle);
+  if (index < 0) return <>{name}</>;
+  return <>{name.slice(0, index)}<mark className="tree-hit">{name.slice(index, index + needle.length)}</mark>{name.slice(index + needle.length)}</>;
+}
+
+function nodeIncluded(node: TreeNode, overrides: PathOverride[]) { const matching = overrides.filter((item) => node.path === item.relative_path || node.path.startsWith(`${item.relative_path}/`)).sort((a, b) => b.relative_path.length - a.relative_path.length)[0]; return matching ? matching.mode === 'include' : node.included ?? !node.excluded_reason; }
+
+function toggleNode(node: TreeNode, overrides: PathOverride[], onOverrides: (items: PathOverride[]) => void) { const next = !nodeIncluded(node, overrides); onOverrides([...overrides.filter((item) => item.relative_path !== node.path), { relative_path: node.path, mode: next ? 'include' : 'exclude' }]); }
 
 function RuleEditor({ rules, setRules }: { rules: Array<{ rule_type: 'include' | 'exclude'; pattern: string; enabled?: boolean }>; setRules: (next: Array<{ rule_type: 'include' | 'exclude'; pattern: string; enabled?: boolean }>) => void }) {
   function edit(index: number, patch: Partial<(typeof rules)[number]>) { setRules(rules.map((rule, i) => i === index ? { ...rule, ...patch } : rule)); }
