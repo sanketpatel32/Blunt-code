@@ -4,6 +4,7 @@ import { href, parseRoute, type Route } from './lib/router';
 import type { Notice } from './lib/notice';
 import { message } from './lib/notice';
 import { AppShell, AppFooter } from './components/AppShell';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { ToastStack, useToasts } from './components/toasts';
 import { AddWorkspaceDialog, ConfirmationDialog } from './components/dialogs';
 import { useTheme } from './hooks/useTheme';
@@ -16,6 +17,7 @@ import { ScanPage } from './pages/ScanPage';
 import { ToolsPage } from './pages/ToolsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AboutPage } from './pages/AboutPage';
+import { NotFoundPage } from './pages/NotFoundPage';
 
 export function App() {
   const [route, setRoute] = useState(parseRoute);
@@ -28,9 +30,12 @@ export function App() {
   const closeApp = async () => { setClosing(true); try { await api.stopServer(); setCloseOpen(false); notify({ kind: 'info', text: 'Blunt Code is closing. You can close this tab.' }); } catch (error) { notify({ kind: 'error', text: message(error) }); setClosing(false); } };
   useEffect(() => { const handler = () => setRoute(parseRoute()); window.addEventListener('popstate', handler); return () => window.removeEventListener('popstate', handler); }, []);
   return <div className="app-frame">
+    <a href="#main-content" className="skip-link">Skip to main content</a>
     <AppShell route={route} onNavigate={go} onAdd={() => setAddOpen(true)} onClose={() => setCloseOpen(true)} theme={theme} onToggleTheme={toggleTheme} />
     <main className="main" id="main-content">
-      <Page route={route} go={go} notify={notify} onAdd={() => setAddOpen(true)} />
+      <ErrorBoundary resetKey={href(route)}>
+        <Page route={route} go={go} notify={notify} onAdd={() => setAddOpen(true)} />
+      </ErrorBoundary>
     </main>
     {addOpen && <AddWorkspaceDialog onClose={() => setAddOpen(false)} onCreated={(workspace) => { setAddOpen(false); go({ page: 'workspace', id: workspace.id }); }} notify={notify} />}
     {closeOpen && <ConfirmationDialog title="Close Blunt Code?" description="This ends the local app. Any active scan will be cancelled; your workspaces and reports stay saved on this computer." confirmLabel="Close app" busy={closing} onCancel={() => setCloseOpen(false)} onConfirm={() => void closeApp()} />}
@@ -50,5 +55,6 @@ function Page({ route, go, notify, onAdd }: { route: Route; go: (r: Route) => vo
     case 'tools': return <ToolsPage notify={notify} />;
     case 'settings': return <SettingsPage notify={notify} />;
     case 'about': return <AboutPage />;
+    case 'not-found': return <NotFoundPage go={go} />;
   }
 }

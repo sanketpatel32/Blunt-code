@@ -2,7 +2,7 @@ import { href, type Route } from '../lib/router';
 import type { Theme } from '../hooks/useTheme';
 
 export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleTheme }: { route: Route; onNavigate: (route: Route) => void; onAdd: () => void; onClose: () => void; theme: Theme; onToggleTheme: () => void }) {
-  const items: Array<[Route, string]> = [[{ page: 'home' }, 'Home'], [{ page: 'workspaces' }, 'Workspaces'], [{ page: 'tools' }, 'Tools'], [{ page: 'settings' }, 'Settings']];
+  const items: Array<[Route, string]> = [[{ page: 'home' }, 'Home'], [{ page: 'workspaces' }, 'Workspaces'], [{ page: 'tools' }, 'Tools'], [{ page: 'settings' }, 'Settings'], [{ page: 'about' }, 'About']];
   return <header className="app-nav">
     <a className="brand" href="/" onClick={(event) => { event.preventDefault(); onNavigate({ page: 'home' }); }}><span aria-hidden="true">BC</span><b>Blunt Code</b></a>
     <nav aria-label="Main navigation">{items.map(([next, label]) => <a key={label} href={href(next)} className={route.page === next.page ? 'active' : ''} onClick={(event) => { event.preventDefault(); onNavigate(next); }}>{label}</a>)}</nav>

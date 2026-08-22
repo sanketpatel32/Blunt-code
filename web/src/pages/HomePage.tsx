@@ -22,7 +22,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
 }
 
 function WorkspaceTable({ workspaces, go, notify, onRemoved }: { workspaces: Workspace[]; go: (r: Route) => void; notify: (n: Notice) => void; onRemoved: () => void }) {
-  return <div className="workspace-table table-wrap"><table><thead><tr><th>Project</th><th>Languages</th><th>Last scan</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr></thead><tbody>{workspaces.map((workspace) => <WorkspaceTableRow key={workspace.id} workspace={workspace} go={go} notify={notify} onRemoved={onRemoved} />)}</tbody></table></div>;
+  return <div className="workspace-table table-wrap"><table><thead><tr><th scope="col">Project</th><th scope="col">Languages</th><th scope="col">Last scan</th><th scope="col">Status</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead><tbody>{workspaces.map((workspace) => <WorkspaceTableRow key={workspace.id} workspace={workspace} go={go} notify={notify} onRemoved={onRemoved} />)}</tbody></table></div>;
 }
 
 function WorkspaceTableRow({ workspace, go, notify, onRemoved }: { workspace: Workspace; go: (r: Route) => void; notify: (n: Notice) => void; onRemoved: () => void }) {
