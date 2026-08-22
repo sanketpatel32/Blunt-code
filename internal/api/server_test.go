@@ -208,6 +208,168 @@ type findingsResponse struct {
 	NextOffset *int                `json:"next_offset"`
 }
 
+type recentScansResponse struct {
+	Scans   []database.RecentScan `json:"scans"`
+	Total   int                   `json:"total"`
+	Summary database.ScanSummary  `json:"summary"`
+}
+
+func TestRecentScansListsAcrossWorkspacesNewestFirst(t *testing.T) {
+	s := testServer(t)
+	ctx := context.Background()
+	alpha, err := s.db.CreateWorkspace(ctx, core.Workspace{RootPath: t.TempDir(), Name: "Alpha"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	beta, err := s.db.CreateWorkspace(ctx, core.Workspace{RootPath: t.TempDir(), Name: "Beta"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := completedScan(t, s, alpha.ID, "completed", finding("ruff", "A1", "src/a1.py", "old issue", analyzers.SeverityHigh, analyzers.CategoryCorrectness))
+	second := completedScan(t, s, beta.ID, "completed", finding("ruff", "B1", "src/b1.py", "beta issue", analyzers.SeverityLow, analyzers.CategoryCorrectness))
+	third, err := s.db.CreateScan(ctx, core.Scan{WorkspaceID: alpha.ID, State: "running"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans", nil)
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	var body recentScansResponse
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil {
+		t.Fatalf("recent scans: %d %s", response.Code, response.Body.String())
+	}
+	if body.Total != 3 || len(body.Scans) != 3 {
+		t.Fatalf("unexpected feed size: total=%d items=%d", body.Total, len(body.Scans))
+	}
+	if body.Scans[0].ID != third.ID || body.Scans[0].WorkspaceID != alpha.ID || body.Scans[0].WorkspaceName != "Alpha" || body.Scans[0].State != "running" {
+		t.Fatalf("newest scan is not first: %#v", body.Scans[0])
+	}
+	if body.Scans[1].ID != second.ID || body.Scans[1].WorkspaceName != "Beta" || body.Scans[2].ID != first.ID {
+		t.Fatalf("unexpected ordering or workspace join: %#v", body.Scans)
+	}
+	if body.Summary.WorkspacesTotal != 2 || body.Summary.ActiveScans != 1 || body.Summary.ScansTotal != 3 {
+		t.Fatalf("unexpected summary alongside feed: %#v", body.Summary)
+	}
+
+	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans?limit=2", nil)
+	response = httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil || len(body.Scans) != 2 || body.Total != 3 {
+		t.Fatalf("limited feed: %d %s", response.Code, response.Body.String())
+	}
+
+	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans?limit=500", nil)
+	response = httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil || len(body.Scans) != 3 {
+		t.Fatalf("oversized limit must clamp to 50, not fail: %d %s", response.Code, response.Body.String())
+	}
+
+	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans?state=completed", nil)
+	response = httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil || body.Total != 2 || len(body.Scans) != 2 {
+		t.Fatalf("state filter: %d %s", response.Code, response.Body.String())
+	}
+	for _, scan := range body.Scans {
+		if scan.State != "completed" {
+			t.Fatalf("state filter leaked other states: %#v", body.Scans)
+		}
+	}
+
+	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans?state=bogus", nil)
+	response = httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("unknown state was accepted: %d %s", response.Code, response.Body.String())
+	}
+	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans?limit=0", nil)
+	response = httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("zero limit was accepted: %d %s", response.Code, response.Body.String())
+	}
+}
+
+func TestScansSummarySumsLatestCompletedScanPerWorkspace(t *testing.T) {
+	s := testServer(t)
+	ctx := context.Background()
+	alpha, err := s.db.CreateWorkspace(ctx, core.Workspace{RootPath: t.TempDir(), Name: "Alpha"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	beta, err := s.db.CreateWorkspace(ctx, core.Workspace{RootPath: t.TempDir(), Name: "Beta"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.CreateWorkspace(ctx, core.Workspace{RootPath: t.TempDir(), Name: "Gamma"}); err != nil {
+		t.Fatal(err)
+	}
+	// Alpha's history: only the newest completed scan may feed the totals.
+	completedScan(t, s, alpha.ID, "completed_with_warnings",
+		finding("ruff", "OLD-C", "src/old-c.py", "old critical", analyzers.SeverityCritical, analyzers.CategorySecurity),
+		finding("ruff", "OLD-L", "src/old-l.py", "old low", analyzers.SeverityLow, analyzers.CategoryCorrectness))
+	completedScan(t, s, alpha.ID, "completed",
+		finding("ruff", "MID-H", "src/mid-h.py", "mid high", analyzers.SeverityHigh, analyzers.CategoryCorrectness),
+		finding("ruff", "MID-H2", "src/mid-h2.py", "mid high 2", analyzers.SeverityHigh, analyzers.CategoryCorrectness),
+		finding("ruff", "MID-H3", "src/mid-h3.py", "mid high 3", analyzers.SeverityHigh, analyzers.CategoryCorrectness),
+		finding("ruff", "MID-H4", "src/mid-h4.py", "mid high 4", analyzers.SeverityHigh, analyzers.CategoryCorrectness),
+		finding("ruff", "MID-H5", "src/mid-h5.py", "mid high 5", analyzers.SeverityHigh, analyzers.CategoryCorrectness),
+		finding("ruff", "MID-I", "src/mid-i.py", "mid info", analyzers.SeverityInfo, analyzers.CategoryCorrectness),
+		finding("ruff", "MID-I2", "src/mid-i2.py", "mid info 2", analyzers.SeverityInfo, analyzers.CategoryCorrectness),
+		finding("ruff", "MID-I3", "src/mid-i3.py", "mid info 3", analyzers.SeverityInfo, analyzers.CategoryCorrectness),
+		finding("ruff", "MID-I4", "src/mid-i4.py", "mid info 4", analyzers.SeverityInfo, analyzers.CategoryCorrectness),
+		finding("ruff", "MID-I5", "src/mid-i5.py", "mid info 5", analyzers.SeverityInfo, analyzers.CategoryCorrectness))
+	completedScan(t, s, alpha.ID, "completed_with_warnings",
+		finding("ruff", "NEW-C", "src/new-c.py", "new critical", analyzers.SeverityCritical, analyzers.CategorySecurity),
+		finding("ruff", "NEW-C2", "src/new-c2.py", "new critical 2", analyzers.SeverityCritical, analyzers.CategorySecurity),
+		finding("ruff", "NEW-M", "src/new-m.py", "new medium", analyzers.SeverityMedium, analyzers.CategoryCorrectness))
+	// Beta never produced a completed result: a failed scan keeps its counts
+	// but must stay out of the dashboard sums, and a running scan is active.
+	completedScan(t, s, beta.ID, "failed",
+		finding("ruff", "FAIL-H", "src/fail-h.py", "failed high", analyzers.SeverityHigh, analyzers.CategoryCorrectness),
+		finding("ruff", "FAIL-H2", "src/fail-h2.py", "failed high 2", analyzers.SeverityHigh, analyzers.CategoryCorrectness),
+		finding("ruff", "FAIL-H3", "src/fail-h3.py", "failed high 3", analyzers.SeverityHigh, analyzers.CategoryCorrectness),
+		finding("ruff", "FAIL-H4", "src/fail-h4.py", "failed high 4", analyzers.SeverityHigh, analyzers.CategoryCorrectness))
+	if _, err := s.db.CreateScan(ctx, core.Scan{WorkspaceID: beta.ID, State: "running"}); err != nil {
+		t.Fatal(err)
+	}
+
+	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans", nil)
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	var body recentScansResponse
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil {
+		t.Fatalf("recent scans: %d %s", response.Code, response.Body.String())
+	}
+	summary := body.Summary
+	if summary.WorkspacesTotal != 3 || summary.WorkspacesScanned != 1 {
+		t.Fatalf("workspace counts: %#v", summary)
+	}
+	if summary.CriticalCount != 2 || summary.HighCount != 0 || summary.MediumCount != 1 || summary.LowCount != 0 || summary.InfoCount != 0 || summary.TotalFindings != 3 {
+		t.Fatalf("severity sums must come from each workspace's latest completed scan only: %#v", summary)
+	}
+	if summary.ScansTotal != 5 || summary.ScansLast7d != 5 || summary.ActiveScans != 1 {
+		t.Fatalf("scan counters: %#v", summary)
+	}
+}
+
+func completedScan(t *testing.T, s *Server, workspaceID, state string, findings ...analyzers.Finding) core.Scan {
+	t.Helper()
+	scan, err := s.db.CreateScan(context.Background(), core.Scan{WorkspaceID: workspaceID, State: "queued"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.SaveAnalyzerResult(context.Background(), scan.ID, database.AnalyzerRunInput{AnalyzerID: "ruff", Version: "test", State: "succeeded"}, findings, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.db.CompleteScan(context.Background(), scan.ID, state, ""); err != nil {
+		t.Fatal(err)
+	}
+	return scan
+}
+
 func finding(analyzer, rule, path, message string, severity analyzers.Severity, category analyzers.Category) analyzers.Finding {
 	f := analyzers.Finding{AnalyzerID: analyzer, RuleID: rule, RelativePath: path, Message: message, Severity: severity, Category: category}
 	f.SetFingerprint()

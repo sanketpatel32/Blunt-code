@@ -362,6 +362,109 @@ func (d *DB) MarkInterruptedScans(ctx context.Context) error {
 	return err
 }
 
+// RecentScan is a scan row joined with its workspace name for the global
+// dashboard activity feed. The immutable snapshot manifest is deliberately not
+// hydrated; GET /api/v1/scans/{id} serves the full scan detail.
+type RecentScan struct {
+	core.Scan
+	WorkspaceName string `json:"workspace_name"`
+}
+
+// RecentScansFilter bounds the global recent-scans query. State must be a
+// known lifecycle state; it is always bound as a SQL parameter, never
+// interpolated.
+type RecentScansFilter struct {
+	Limit int
+	State string
+}
+
+const (
+	// DefaultRecentScansLimit and MaxRecentScansLimit bound the global scan
+	// feed so one request can never drag the whole scan history into memory.
+	DefaultRecentScansLimit = 10
+	MaxRecentScansLimit     = 50
+)
+
+// RecentScans returns the newest scans across every workspace joined with the
+// workspace name, plus the total number of scans matching the filter. Limit is
+// clamped to 1..MaxRecentScansLimit with DefaultRecentScansLimit as default.
+func (d *DB) RecentScans(ctx context.Context, filter RecentScansFilter) ([]RecentScan, int, error) {
+	if filter.Limit <= 0 {
+		filter.Limit = DefaultRecentScansLimit
+	}
+	if filter.Limit > MaxRecentScansLimit {
+		filter.Limit = MaxRecentScansLimit
+	}
+	where, args := "", []any(nil)
+	if filter.State != "" {
+		where = " WHERE scans.state=?"
+		args = append(args, filter.State)
+	}
+	var total int
+	if err := d.SQL.QueryRowContext(ctx, `SELECT COUNT(*) FROM scans`+where, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	queryArgs := append(append([]any(nil), args...), filter.Limit)
+	rows, err := d.SQL.QueryContext(ctx, `SELECT scans.id,scans.workspace_id,scans.state,scans.profile,scans.started_at,scans.finished_at,scans.candidate_file_count,scans.selected_file_count,scans.total_findings,COALESCE(scans.error_summary,''),scans.snapshot_json,COALESCE(workspaces.name,'') FROM scans JOIN workspaces ON workspaces.id=scans.workspace_id`+where+` ORDER BY scans.started_at DESC,scans.id DESC LIMIT ?`, queryArgs...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	var result []RecentScan
+	for rows.Next() {
+		var item RecentScan
+		var started, finished sql.NullString
+		if err := rows.Scan(&item.ID, &item.WorkspaceID, &item.State, &item.Profile, &started, &finished, &item.CandidateFileCount, &item.SelectedFileCount, &item.TotalFindings, &item.ErrorSummary, &item.SnapshotJSON, &item.WorkspaceName); err != nil {
+			return nil, 0, err
+		}
+		item.StartedAt, _ = parseNullableTime(started)
+		item.FinishedAt, _ = parseNullableTime(finished)
+		result = append(result, item)
+	}
+	return result, total, rows.Err()
+}
+
+// ScanSummary holds the cross-workspace aggregates rendered by the dashboard.
+// Severity totals are summed over each workspace's latest completed scan only,
+// so rescanning one project never double-counts its findings.
+type ScanSummary struct {
+	WorkspacesTotal   int `json:"workspaces_total"`
+	WorkspacesScanned int `json:"workspaces_scanned"`
+	CriticalCount     int `json:"critical_count"`
+	HighCount         int `json:"high_count"`
+	MediumCount       int `json:"medium_count"`
+	LowCount          int `json:"low_count"`
+	InfoCount         int `json:"info_count"`
+	TotalFindings     int `json:"total_findings"`
+	ScansTotal        int `json:"scans_total"`
+	ScansLast7d       int `json:"scans_last_7d"`
+	ActiveScans       int `json:"active_scans"`
+}
+
+// ScanSummary computes the dashboard aggregates in two queries: scalar
+// counters first, then severity sums over the single latest completed scan of
+// each workspace. Only the producing terminal states ('completed',
+// 'completed_with_warnings') count as completed; failed, cancelled, and
+// interrupted scans never feed the totals, and active scans are any scan in a
+// non-terminal state.
+func (d *DB) ScanSummary(ctx context.Context) (ScanSummary, error) {
+	var summary ScanSummary
+	if err := d.SQL.QueryRowContext(ctx, `SELECT
+		(SELECT COUNT(*) FROM workspaces),
+		(SELECT COUNT(*) FROM scans),
+		(SELECT COUNT(*) FROM scans WHERE started_at>=?),
+		(SELECT COUNT(*) FROM scans WHERE state NOT IN ('completed','completed_with_warnings','failed','cancelled','interrupted'))`,
+		dbTime(time.Now().Add(-7*24*time.Hour))).Scan(&summary.WorkspacesTotal, &summary.ScansTotal, &summary.ScansLast7d, &summary.ActiveScans); err != nil {
+		return ScanSummary{}, err
+	}
+	if err := d.SQL.QueryRowContext(ctx, `SELECT COUNT(*),COALESCE(SUM(latest.critical_count),0),COALESCE(SUM(latest.high_count),0),COALESCE(SUM(latest.medium_count),0),COALESCE(SUM(latest.low_count),0),COALESCE(SUM(latest.info_count),0),COALESCE(SUM(latest.total_findings),0) FROM (
+		SELECT critical_count,high_count,medium_count,low_count,info_count,total_findings,ROW_NUMBER() OVER (PARTITION BY workspace_id ORDER BY COALESCE(finished_at,started_at) DESC,id DESC) AS recency FROM scans WHERE state IN ('completed','completed_with_warnings')
+	) latest WHERE recency=1`).Scan(&summary.WorkspacesScanned, &summary.CriticalCount, &summary.HighCount, &summary.MediumCount, &summary.LowCount, &summary.InfoCount, &summary.TotalFindings); err != nil {
+		return ScanSummary{}, err
+	}
+	return summary, nil
+}
+
 type AnalyzerRunInput struct {
 	AnalyzerID string
 	Version    string

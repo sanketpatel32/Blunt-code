@@ -88,6 +88,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("PUT /api/v1/workspaces/{id}/rules", s.putRules)
 	s.mux.HandleFunc("GET /api/v1/workspaces/{id}/scans", s.listScans)
 	s.mux.HandleFunc("POST /api/v1/workspaces/{id}/scans", s.startScan)
+	s.mux.HandleFunc("GET /api/v1/scans", s.recentScans)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}", s.getScan)
 	s.mux.HandleFunc("POST /api/v1/scans/{id}/cancel", s.cancelScan)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/events", s.scanEvents)
@@ -565,6 +566,62 @@ func (s *Server) listScans(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, 200, map[string]any{"items": items})
 }
+
+// recentScans serves the dashboard's cross-workspace activity feed: the most
+// recent scans across all workspaces plus a global summary object. The summary
+// is folded into this response instead of living at /api/v1/scans/summary so
+// the dashboard loads its feed and aggregates in a single request; it stays
+// global regardless of the list filters.
+func (s *Server) recentScans(w http.ResponseWriter, r *http.Request) {
+	filter, err := recentScanFilter(r)
+	if err != nil {
+		fail(w, 400, "INVALID_SCAN_QUERY", err.Error())
+		return
+	}
+	items, total, err := s.db.RecentScans(r.Context(), filter)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not list scans.")
+		return
+	}
+	summary, err := s.db.ScanSummary(r.Context())
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not summarize scans.")
+		return
+	}
+	writeJSON(w, 200, map[string]any{"scans": items, "total": total, "summary": summary})
+}
+
+// recentScanFilter parses the global scan list controls: limit defaults to 10,
+// is rejected below 1, and is clamped to 50; state optionally filters by a
+// single lifecycle state.
+func recentScanFilter(r *http.Request) (database.RecentScansFilter, error) {
+	query := r.URL.Query()
+	filter := database.RecentScansFilter{Limit: database.DefaultRecentScansLimit, State: strings.ToLower(strings.TrimSpace(query.Get("state")))}
+	if filter.State != "" && !knownScanState(filter.State) {
+		return filter, fmt.Errorf("state must be a known scan state such as completed or running")
+	}
+	if raw := strings.TrimSpace(query.Get("limit")); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 1 {
+			return filter, fmt.Errorf("limit must be a positive integer of at most 50")
+		}
+		filter.Limit = value
+	}
+	return filter, nil
+}
+
+// knownScanState reports whether state belongs to the scan lifecycle: the
+// progression states a scan moves through plus the terminal states covered by
+// terminalScanState.
+func knownScanState(state string) bool {
+	switch state {
+	case "queued", "preparing", "installing_tools", "discovering", "running", "normalizing", "generating_report",
+		"completed", "completed_with_warnings", "failed", "cancelled", "interrupted":
+		return true
+	}
+	return false
+}
+
 func (s *Server) startScan(w http.ResponseWriter, r *http.Request) {
 	work, ok := s.workspace(r)
 	if !ok {

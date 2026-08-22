@@ -116,3 +116,47 @@ func TestAppSettingsDefaultBrowserAndLegacyCompatibility(t *testing.T) {
 		t.Fatalf("legacy settings=%#v err=%v", settings, err)
 	}
 }
+
+func TestRecentScansJoinsWorkspaceAndClampsLimit(t *testing.T) {
+	db, err := Open(context.Background(), filepath.Join(t.TempDir(), "bluntcode.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	work, err := db.CreateWorkspace(context.Background(), core.Workspace{Name: "Sample", RootPath: "C:/sample"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < MaxRecentScansLimit+5; i++ {
+		if _, err := db.CreateScan(context.Background(), core.Scan{WorkspaceID: work.ID, State: "completed"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	items, total, err := db.RecentScans(context.Background(), RecentScansFilter{Limit: MaxRecentScansLimit + 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != MaxRecentScansLimit+5 || len(items) != MaxRecentScansLimit {
+		t.Fatalf("limit must clamp to %d: total=%d items=%d", MaxRecentScansLimit, total, len(items))
+	}
+	for _, item := range items {
+		if item.WorkspaceID != work.ID || item.WorkspaceName != "Sample" {
+			t.Fatalf("workspace join is wrong: %#v", item)
+		}
+	}
+	items, total, err = db.RecentScans(context.Background(), RecentScansFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != MaxRecentScansLimit+5 || len(items) != DefaultRecentScansLimit {
+		t.Fatalf("default limit must apply: total=%d items=%d", total, len(items))
+	}
+	items, total, err = db.RecentScans(context.Background(), RecentScansFilter{State: "running"})
+	if err != nil || total != 0 || len(items) != 0 {
+		t.Fatalf("state filter: items=%#v total=%d err=%v", items, total, err)
+	}
+	summary, err := db.ScanSummary(context.Background())
+	if err != nil || summary.WorkspacesTotal != 1 || summary.WorkspacesScanned != 1 || summary.ScansTotal != MaxRecentScansLimit+5 || summary.ActiveScans != 0 {
+		t.Fatalf("summary=%#v err=%v", summary, err)
+	}
+}
