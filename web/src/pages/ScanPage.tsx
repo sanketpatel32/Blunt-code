@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
-import type { Scan } from '../types';
+import type { Finding, Scan } from '../types';
 import type { Route } from '../lib/router';
 import type { Notice } from '../lib/notice';
 import { message } from '../lib/notice';
-import { date, elapsed } from '../lib/format';
+import { analyzerName, date, elapsed, findingLocation } from '../lib/format';
 import { eventCopy, isTerminalScanState, liveHeadline, stageLabels, type ScanEvent } from '../lib/scanEvents';
 import { useLoad } from '../hooks/useLoad';
 import { ErrorPanel, Loading, SeverityCounts } from '../components/ui';
+import { SkeletonLines } from '../components/skeletons';
 import { AnalyzerStatuses } from './WorkspaceDetailPage';
 import { ReportView } from './report/ReportView';
 
@@ -52,7 +53,31 @@ export function ScanPage({ id, go, notify }: { id: string; go: (r: Route) => voi
   const headline = terminal ? current.state.replaceAll('_', ' ') : liveHeadline(events, current.state);
   const reportedFindings = events.reduce((total, event) => total + (event.type === 'analyzer.completed' ? event.findings ?? 0 : 0), 0);
   const findingsSoFar = Math.max(current.total_findings ?? 0, reportedFindings);
-  return <div className="page scan-page"><header className="scan-header"><div><p className="eyebrow">Analysis story</p><h1>{headline}</h1><p>Started {date(current.started_at)} · elapsed {elapsed(current.started_at, current.finished_at)}</p></div><div className="scan-header-actions"><span className={`stream-state ${streamState}`} aria-live="polite"><i />{terminal ? 'Saved report' : streamState === 'live' ? 'Live updates' : streamState === 'reconnecting' ? 'Reconnecting' : 'Connecting'}</span>{!terminal && <button className="button danger" onClick={cancel}>Cancel scan</button>}</div></header><section className="progress-layout"><ScanStageList scan={current} events={events} /><aside className="scan-side"><p className="eyebrow">Results so far</p><h2>{findingsSoFar} findings {terminal ? 'collected' : 'reported so far'}</h2><SeverityCounts scan={current} />{current.error_summary && <div className="inline-warning">{current.error_summary}</div>}<AnalyzerStatuses runs={current.analyzer_runs} /></aside></section>{terminal && <ReportView scanId={id} />}</div>;
+  return <div className="page scan-page"><header className="scan-header"><div><p className="eyebrow">Analysis story</p><h1>{headline}</h1><p>Started {date(current.started_at)} · elapsed {elapsed(current.started_at, current.finished_at)}</p></div><div className="scan-header-actions"><span className={`stream-state ${streamState}`} aria-live="polite"><i />{terminal ? 'Saved report' : streamState === 'live' ? 'Live updates' : streamState === 'reconnecting' ? 'Reconnecting' : 'Connecting'}</span>{!terminal && <button className="button danger" onClick={cancel}>Cancel scan</button>}</div></header><section className="progress-layout"><ScanStageList scan={current} events={events} /><aside className="scan-side"><p className="eyebrow">Results so far</p><h2>{findingsSoFar} findings {terminal ? 'collected' : 'reported so far'}</h2><SeverityCounts scan={current} />{current.error_summary && <div className="inline-warning">{current.error_summary}</div>}<AnalyzerStatuses runs={current.analyzer_runs} /></aside></section>{terminal && (current.fixed_count ?? 0) > 0 && <WhatChanged scanId={id} fixedCount={current.fixed_count ?? 0} />}{terminal && <ReportView scanId={id} />}</div>;
+}
+
+/** Compact rows shown before the "<details>" overflow; the endpoint itself caps the list at 100. */
+const FIXED_VISIBLE_LIMIT = 10;
+
+/**
+ * "What changed" panel for terminal scans with fixes: a success-tone summary of the findings
+ * fixed since the previous completed scan. Supplementary data only — comparison gaps and fetch
+ * errors stay silent here so the full report below is never blocked.
+ */
+function WhatChanged({ scanId, fixedCount }: { scanId: string; fixedCount: number }) {
+  const fixed = useLoad(() => api.fixedFindings(scanId), [scanId]);
+  const header = <header className="what-changed-header"><div><h2>What changed</h2><p>Fixed since the previous scan</p></div></header>;
+  if (fixed.loading) return <section className="what-changed what-changed-loading" aria-busy="true">{header}<SkeletonLines lines={2} /></section>;
+  if (fixed.error || !fixed.data?.comparison_available) return null;
+  const list = fixed.data.fixed ?? [];
+  const total = fixed.data.total_fixed ?? fixedCount;
+  const visible = list.slice(0, FIXED_VISIBLE_LIMIT);
+  const rest = list.slice(FIXED_VISIBLE_LIMIT);
+  return <section className="what-changed"><header className="what-changed-header"><div><h2>What changed</h2><p>Fixed since the previous scan</p></div><p className="what-changed-headline"><strong>{total}</strong> {total === 1 ? 'finding' : 'findings'} fixed</p></header><ul className="what-changed-list">{visible.map((finding) => <FixedRow finding={finding} key={finding.id || finding.fingerprint} />)}</ul>{rest.length > 0 && <details className="what-changed-more"><summary>+{rest.length} more fixed</summary><ul className="what-changed-list">{rest.map((finding) => <FixedRow finding={finding} key={finding.id || finding.fingerprint} />)}</ul>{total > list.length && <p className="what-changed-note">Showing the top {list.length} of {total} fixed findings.</p>}</details>}</section>;
+}
+
+function FixedRow({ finding }: { finding: Finding }) {
+  return <li className="what-changed-row"><span className={`severity ${finding.severity}`}>{finding.severity}</span><span className="what-changed-rule">{finding.title ?? finding.rule_id ?? 'Finding'}</span><code>{findingLocation(finding)}</code><span className="badge">{analyzerName(finding.analyzer_id)}</span></li>;
 }
 
 function ScanStageList({ scan, events }: { scan: Scan; events: ScanEvent[] }) {

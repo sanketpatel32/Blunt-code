@@ -1,4 +1,4 @@
-import type { FindingPage, PathOverride, RecentScansResponse, Report, Scan, SourcePreview, Tool, TreeNode, Workspace } from './types';
+import type { FindingPage, FixedFindingsResponse, PathOverride, RecentScansResponse, Report, Scan, SourcePreview, Tool, TreeNode, Workspace } from './types';
 
 const PREFIX = '/api/v1';
 
@@ -63,6 +63,7 @@ export const api = {
   },
   findingPreview: (scanId: string, findingId: string) => request<SourcePreview>(`/scans/${encodeURIComponent(scanId)}/findings/${encodeURIComponent(findingId)}/preview`),
   report: (id: string) => request<Report>(`/scans/${encodeURIComponent(id)}/report`),
+  fixedFindings: (scanId: string) => request<FixedFindingsResponse>(`/scans/${encodeURIComponent(scanId)}/fixed`),
   tools: async () => list<Tool>(await request<Tool[] | { tools?: Tool[] }>('/tools')),
   toolAction: (id: string, action: 'install' | 'repair' | 'update') => request<Tool>(`/tools/${encodeURIComponent(id)}/${action}`, { method: 'POST' }),
   stopServer: () => request<{ state: string }>('/system/stop', { method: 'POST' }),

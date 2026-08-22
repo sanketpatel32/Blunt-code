@@ -102,6 +102,14 @@ export interface FindingPage {
   has_more: boolean;
 }
 
+/** Findings fixed versus the previous completed scan; `fixed` is severity-ordered and capped at 100 while `total_fixed` is exact. */
+export interface FixedFindingsResponse {
+  fixed: Finding[];
+  total_fixed: number;
+  comparison_available: boolean;
+  previous_scan_id: string | null;
+}
+
 export interface SourcePreview {
   path: string;
   lines: Array<{ number: number; text: string }>;
