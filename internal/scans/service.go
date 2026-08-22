@@ -155,6 +155,15 @@ func (s *Service) emit(scanID, event string, data map[string]any) {
 }
 func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, files []core.FileEntry) {
 	defer func() { s.mu.Lock(); delete(s.cancels, scan.ID); s.mu.Unlock() }()
+	// A panic inside an adapter must not take the whole application down with
+	// it or leave the scan row non-terminal: contain it, fail the scan, and
+	// still publish a terminal event so streams and the UI resolve.
+	defer func() {
+		if r := recover(); r != nil {
+			_ = s.db.UpdateScanState(context.Background(), scan.ID, "failed", fmt.Sprintf("Internal scan error: %v", r))
+			s.emit(scan.ID, "scan.completed", map[string]any{"state": "failed"})
+		}
+	}()
 	s.emit(scan.ID, "scan.started", map[string]any{"state": "queued"})
 	s.transition(scan.ID, "preparing", map[string]any{"stage": "Preparing workspace"})
 	languages, absoluteFiles := scanInputs(work.RootPath, files)
@@ -249,14 +258,28 @@ func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, 
 	if successful > 0 && failed > 0 {
 		state = "completed_with_warnings"
 	}
+	// Cancellation that lands while the final analyzer normalizes or persists
+	// its results (after the post-Run context check) must still cancel the
+	// scan rather than completing it.
+	if ctx.Err() != nil {
+		s.finishCancelled(scan.ID)
+		return
+	}
 	s.emit(scan.ID, "scan.stage", map[string]any{"stage": "Generating report"})
 	reportPath, err := s.writeReport(scan, work, files)
 	if err != nil {
-		state = "completed_with_warnings"
+		// A missing report downgrades an otherwise successful scan, but it
+		// must never mask an all-analyzers-failed scan as merely warned.
+		if state == "completed" {
+			state = "completed_with_warnings"
+		}
 		s.emit(scan.ID, "scan.warning", map[string]any{"message": "Could not write Markdown report."})
 	}
 	if err := s.db.CompleteScan(context.Background(), scan.ID, state, reportPath); err != nil {
-		return
+		// CompleteScan also finalizes counts; fall back to a plain state write
+		// so the scan still reaches a terminal state when only the summary
+		// write fails.
+		_ = s.db.UpdateScanState(context.Background(), scan.ID, state, "Scan finished, but persisting its final summary failed.")
 	}
 	s.emit(scan.ID, "scan.completed", map[string]any{"state": state})
 }

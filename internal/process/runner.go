@@ -5,12 +5,22 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"runtime"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
 
 const DefaultOutputLimit = 8 << 20
+
+// cancelGrace bounds how long cmd.Wait keeps waiting after the context is
+// cancelled: a killed analyzer child may leave grandchildren (JVMs, Python
+// wrappers) holding the inherited output pipes open, and without this bound a
+// "10 minute" analyzer timeout would block the scan far beyond it.
+const cancelGrace = 5 * time.Second
 
 type Request struct {
 	Command     string
@@ -41,6 +51,16 @@ func Run(ctx context.Context, req Request) (Result, error) {
 	if req.Env != nil {
 		cmd.Env = req.Env
 	}
+	// Killing only the direct child orphans its descendants on Windows, so
+	// cancellation terminates the whole process tree. Best effort: errors are
+	// swallowed so a race with natural process exit never fails a successful run.
+	cmd.Cancel = func() error {
+		if cmd.Process != nil {
+			_ = terminateTree(cmd.Process.Pid)
+		}
+		return nil
+	}
+	cmd.WaitDelay = cancelGrace
 	out := &limitedBuffer{limit: limit, onWrite: func(p []byte) {
 		if req.OnOutput != nil {
 			req.OnOutput("stdout", string(p))
@@ -64,6 +84,34 @@ func Run(ctx context.Context, req Request) (Result, error) {
 		return result, err
 	}
 	return result, nil
+}
+
+// terminateTree ends a child process and its descendants. On Windows,
+// Process.Kill terminates only the direct process, so taskkill /T /F is used
+// to take spawned analyzers (uv, Java) with it; elsewhere the plain kill is
+// the available contract.
+func terminateTree(pid int) error {
+	if pid <= 0 {
+		return fmt.Errorf("invalid process id %d", pid)
+	}
+	if runtime.GOOS != "windows" {
+		process, err := os.FindProcess(pid)
+		if err != nil {
+			return err
+		}
+		return process.Kill()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	output, err := exec.CommandContext(ctx, "taskkill", "/PID", strconv.Itoa(pid), "/T", "/F").CombinedOutput()
+	if err != nil {
+		text := strings.ToLower(string(output))
+		if strings.Contains(text, "not found") || strings.Contains(text, "no running instance") {
+			return nil
+		}
+		return fmt.Errorf("taskkill /T /F: %w: %s", err, strings.TrimSpace(string(output)))
+	}
+	return nil
 }
 
 type limitedBuffer struct {

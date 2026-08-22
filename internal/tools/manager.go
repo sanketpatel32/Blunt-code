@@ -211,6 +211,9 @@ func (m Manager) runCommand(ctx context.Context, executable string, args []strin
 	cmd := exec.CommandContext(ctx, executable, args...)
 	cmd.Dir = dir
 	cmd.Env = env
+	// A cancelled installer child (uv, Python) can leave pipe-holding
+	// grandchildren behind; bound the wait so install cancellation returns.
+	cmd.WaitDelay = 5 * time.Second
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(output)))

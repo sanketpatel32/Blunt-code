@@ -133,7 +133,12 @@ func (s *ManagedServer) Start(ctx context.Context, env map[string]string) error 
 	if s.Executable == "" {
 		return fmt.Errorf("managed SonarQube server executable is not configured")
 	}
-	cmd := exec.CommandContext(ctx, s.Executable, s.Args...)
+	// The server is application-owned and shared by every scan, so it is
+	// deliberately NOT bound to the starting scan's context: cancelling that
+	// scan (or its timeout expiring) must not kill the server out from under
+	// other in-flight scans or force a multi-minute re-bootstrap. Only
+	// Shutdown ends it.
+	cmd := exec.Command(s.Executable, s.Args...)
 	cmd.Dir = s.Dir
 	cmd.Env = append([]string(nil), os.Environ()...)
 	for _, values := range []map[string]string{env, s.Environment} {

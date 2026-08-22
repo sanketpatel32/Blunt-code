@@ -196,6 +196,40 @@ func TestTerminateProcessTreeStopsManagedChildOnWindows(t *testing.T) {
 	}
 }
 
+func TestManagedServerSurvivesStarterContextCancellation(t *testing.T) {
+	var command string
+	var args []string
+	if runtime.GOOS == "windows" {
+		// ping, unlike timeout, does not need console input, so the child keeps
+		// running when spawned from a test binary without a console.
+		command, args = "cmd.exe", []string{"/c", "ping -n 31 127.0.0.1 >NUL"}
+	} else {
+		command, args = "sh", []string{"-c", "sleep 30"}
+	}
+	server := &ManagedServer{Executable: command, Args: args, ShutdownGracePeriod: time.Millisecond}
+	starter, cancelStarter := context.WithCancel(context.Background())
+	defer cancelStarter()
+	if err := server.Start(starter, nil); err != nil {
+		t.Fatal(err)
+	}
+	cancelStarter()
+	time.Sleep(300 * time.Millisecond)
+	if _, exited := server.ExitStatus(); exited {
+		t.Fatal("cancelling the scan that started the managed server must not kill the shared server")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := server.Shutdown(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, exited := server.ExitStatus(); !exited {
+		time.Sleep(300 * time.Millisecond)
+		if _, exited := server.ExitStatus(); !exited {
+			t.Fatal("managed server must stop on explicit shutdown")
+		}
+	}
+}
+
 func TestManagedServerCommandUsesPinnedJavaInsteadOfBatchWrapper(t *testing.T) {
 	installer := ManagedInstaller{
 		Root:               `C:\tools\sonarqube`,

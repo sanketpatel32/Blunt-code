@@ -378,3 +378,80 @@ func TestFixedFindingsCapsLimitAndReportsTrueTotal(t *testing.T) {
 		t.Fatalf("limit must clamp to %d while the total stays exact: total=%d items=%d err=%v", MaxFixedFindingsLimit, result.Total, len(result.Items), err)
 	}
 }
+
+// TestMarkInterruptedScansRecoversEveryNonTerminalState simulates a kill -9
+// mid-run: scan rows exist in every non-terminal state. Startup recovery must
+// move each of them to a terminal interrupted state with a finish time, leave
+// already-terminal scans untouched, and keep interrupted scans out of
+// completed-scan comparison resolution so the next scan starts cleanly.
+func TestMarkInterruptedScansRecoversEveryNonTerminalState(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "bluntcode.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	work, err := db.CreateWorkspace(ctx, core.Workspace{Name: "Crashed", RootPath: "C:/crashed"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	nonTerminal := []string{"queued", "preparing", "installing_tools", "discovering", "running", "normalizing", "generating_report"}
+	stuck := map[string]string{}
+	for _, state := range nonTerminal {
+		scan, err := db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: state})
+		if err != nil {
+			t.Fatal(err)
+		}
+		stuck[scan.ID] = state
+	}
+	completed, err := db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: "running"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.SaveAnalyzerResult(ctx, completed.ID, AnalyzerRunInput{AnalyzerID: "ruff", Version: "test", State: "succeeded"}, []analyzers.Finding{{
+		AnalyzerID: "ruff", RuleID: "F821", Severity: analyzers.SeverityHigh, Message: "undefined", RelativePath: "main.py",
+	}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CompleteScan(ctx, completed.ID, "completed", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := db.MarkInterruptedScans(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for scanID := range stuck {
+		scan, err := db.Scan(ctx, scanID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if scan.State != "interrupted" {
+			t.Fatalf("scan left in %q after recovery, want interrupted", scan.State)
+		}
+		if scan.FinishedAt == nil {
+			t.Fatalf("interrupted scan %s has no finish time", scanID)
+		}
+	}
+	survivor, err := db.Scan(ctx, completed.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if survivor.State != "completed" || survivor.FinishedAt == nil {
+		t.Fatalf("recovery must not touch terminal scans: %#v", survivor)
+	}
+	// The latest scan by recency is interrupted; comparison resolution must
+	// still resolve to the older completed scan, and interrupted scans must
+	// never be selected as a previous completed scan.
+	latest := stuckOrder(stuck)
+	if previous, err := db.PreviousCompletedScanID(ctx, work.ID, latest); err != nil || previous != completed.ID {
+		t.Fatalf("previous completed scan = %q, %v; want %q", previous, err, completed.ID)
+	}
+}
+
+// stuckOrder returns one of the interrupted scan IDs to compare against.
+func stuckOrder(stuck map[string]string) string {
+	for scanID := range stuck {
+		return scanID
+	}
+	return ""
+}

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/csv"
@@ -20,6 +21,7 @@ import (
 	"bluntcode/internal/core"
 	"bluntcode/internal/database"
 	"bluntcode/internal/events"
+	"bluntcode/internal/scans"
 )
 
 func testServer(t *testing.T) *Server {
@@ -1176,5 +1178,236 @@ func TestFindingsAndCSVRejectIdenticalEnumInputs(t *testing.T) {
 				t.Fatalf("%s%s: got %d %s", suffix, q, response.Code, response.Body.String())
 			}
 		}
+	}
+}
+
+// scanLifecycleAnalyzer is a controllable analyzer for API-level lifecycle
+// tests: Run blocks until the test releases it, so a scan stays active while
+// the test exercises the cancel endpoint.
+type scanLifecycleAnalyzer struct {
+	id         string
+	runEntered chan struct{}
+	runGate    chan struct{}
+}
+
+func (a *scanLifecycleAnalyzer) ID() string          { return a.id }
+func (a *scanLifecycleAnalyzer) DisplayName() string { return a.id }
+func (a *scanLifecycleAnalyzer) SupportedLanguages() []analyzers.Language {
+	return []analyzers.Language{analyzers.LanguagePython}
+}
+func (a *scanLifecycleAnalyzer) Check(context.Context, analyzers.ToolEnvironment) analyzers.ToolStatus {
+	return analyzers.ToolStatus{Ready: true, Version: "test"}
+}
+func (a *scanLifecycleAnalyzer) EnsureInstalled(context.Context, analyzers.ToolEnvironment) error {
+	return nil
+}
+func (a *scanLifecycleAnalyzer) Plan(context.Context, analyzers.ScanRequest) (analyzers.AnalyzerPlan, error) {
+	return analyzers.AnalyzerPlan{AnalyzerID: a.id, Version: "test"}, nil
+}
+func (a *scanLifecycleAnalyzer) Run(context.Context, analyzers.AnalyzerPlan, analyzers.EventEmitter) (analyzers.AnalyzerResult, error) {
+	if a.runEntered != nil {
+		close(a.runEntered)
+	}
+	if a.runGate != nil {
+		<-a.runGate
+	}
+	return analyzers.AnalyzerResult{}, nil
+}
+func (a *scanLifecycleAnalyzer) Normalize(context.Context, analyzers.AnalyzerResult) ([]analyzers.Finding, []analyzers.Metric, error) {
+	return nil, nil, nil
+}
+
+func scanLifecycleServer(t *testing.T, adapters ...analyzers.Analyzer) (*Server, *scanLifecycleAnalyzer) {
+	t.Helper()
+	paths, err := config.NewPaths(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := database.Open(context.Background(), paths.DBPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	registry := analyzers.NewRegistry()
+	blocking := &scanLifecycleAnalyzer{id: "fake", runEntered: make(chan struct{}), runGate: make(chan struct{})}
+	if len(adapters) > 0 {
+		for _, adapter := range adapters {
+			if err := registry.Register(adapter); err != nil {
+				t.Fatal(err)
+			}
+		}
+	} else if err := registry.Register(blocking); err != nil {
+		t.Fatal(err)
+	}
+	bus := events.New()
+	service := scans.New(db, registry, bus, filepath.Join(paths.DataDir, "reports"), paths.ToolsDir, nil)
+	return New(db, bus, service, nil, paths, "test", nil), blocking
+}
+
+func scanLifecycleWorkspace(t *testing.T, s *Server) core.Workspace {
+	t.Helper()
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "main.py"), []byte("x=1"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	work, err := s.db.CreateWorkspace(context.Background(), core.Workspace{Name: "Lifecycle", RootPath: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return work
+}
+
+// TestScanEventsReplaysHistoryThenStreamsLiveInOrder pins the SSE contract:
+// a client connecting mid-scan receives the bus replay first, then every live
+// event, with no loss or duplication across the handoff.
+func TestScanEventsReplaysHistoryThenStreamsLiveInOrder(t *testing.T) {
+	s := testServer(t)
+	ctx := context.Background()
+	work, err := s.db.CreateWorkspace(ctx, core.Workspace{RootPath: t.TempDir(), Name: "SSE"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scan, err := s.db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: "running"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.bus.Publish(events.Event{Type: "scan.started", ScanID: scan.ID})
+	s.bus.Publish(events.Event{Type: "analyzer.started", ScanID: scan.ID})
+	httpServer := httptest.NewServer(s.Handler())
+	defer httpServer.Close()
+	requestCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	request, err := http.NewRequestWithContext(requestCtx, http.MethodGet, httpServer.URL+"/api/v1/scans/"+scan.ID+"/events", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if contentType := response.Header.Get("Content-Type"); contentType != "text/event-stream" {
+		t.Fatalf("content type %q", contentType)
+	}
+	streamed := make(chan string, 32)
+	go func() {
+		scanner := bufio.NewScanner(response.Body)
+		for scanner.Scan() {
+			if line := scanner.Text(); strings.HasPrefix(line, "event: ") {
+				streamed <- strings.TrimPrefix(line, "event: ")
+			}
+		}
+		close(streamed)
+	}()
+	expectStreamed := func(want string) {
+		t.Helper()
+		select {
+		case got := <-streamed:
+			if got != want {
+				t.Fatalf("streamed event = %q, want %q", got, want)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("timed out waiting for %q", want)
+		}
+	}
+	expectStreamed("connected")
+	expectStreamed("scan.started")
+	expectStreamed("analyzer.started")
+	s.bus.Publish(events.Event{Type: "analyzer.completed", ScanID: scan.ID})
+	expectStreamed("analyzer.completed")
+	s.bus.Publish(events.Event{Type: "scan.completed", ScanID: scan.ID})
+	expectStreamed("scan.completed")
+	cancel()
+}
+
+// TestCancelScanEndpointRejectsDoubleAndFinishedCancels checks cancel-of-cancel
+// semantics through the HTTP surface: cancelling an active scan twice is a safe
+// no-op, a second workspace scan is rejected with 409 while it runs, and after
+// the scan reaches a terminal state further cancels get 409.
+func TestCancelScanEndpointRejectsDoubleAndFinishedCancels(t *testing.T) {
+	s, blocking := scanLifecycleServer(t)
+	work := scanLifecycleWorkspace(t, s)
+	request := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/v1/workspaces/"+work.ID+"/scans", nil)
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("start scan: %d %s", response.Code, response.Body.String())
+	}
+	var started struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &started); err != nil {
+		t.Fatal(err)
+	}
+	<-blocking.runEntered
+
+	second := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/v1/workspaces/"+work.ID+"/scans", nil)
+	secondResponse := httptest.NewRecorder()
+	s.Handler().ServeHTTP(secondResponse, second)
+	if secondResponse.Code != http.StatusConflict {
+		t.Fatalf("second scan on the same workspace: %d, want 409", secondResponse.Code)
+	}
+
+	cancelRequest := func() int {
+		request := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/v1/scans/"+started.ID+"/cancel", nil)
+		response := httptest.NewRecorder()
+		s.Handler().ServeHTTP(response, request)
+		return response.Code
+	}
+	if code := cancelRequest(); code != http.StatusAccepted {
+		t.Fatalf("first cancel: %d, want 202", code)
+	}
+	if code := cancelRequest(); code != http.StatusAccepted {
+		t.Fatalf("double cancel must be a safe no-op: %d, want 202", code)
+	}
+	close(blocking.runGate)
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		scan, err := s.db.Scan(context.Background(), started.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if scan.State == "cancelled" {
+			if code := cancelRequest(); code != http.StatusConflict {
+				t.Fatalf("cancel after finish: %d, want 409", code)
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("scan did not cancel")
+}
+
+// TestStartScanAllowedAfterInterruptedRecovery covers the kill -9 path: a
+// stale running scan row blocks new scans with 409 until startup recovery
+// marks it interrupted, after which a new scan starts normally.
+func TestStartScanAllowedAfterInterruptedRecovery(t *testing.T) {
+	s, _ := scanLifecycleServer(t, &scanLifecycleAnalyzer{id: "fake"})
+	work := scanLifecycleWorkspace(t, s)
+	stale, err := s.db.CreateScan(context.Background(), core.Scan{WorkspaceID: work.ID, State: "running"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/v1/workspaces/"+work.ID+"/scans", nil)
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusConflict {
+		t.Fatalf("scan during stale running row: %d, want 409", response.Code)
+	}
+	if err := s.db.MarkInterruptedScans(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	recovered, err := s.db.Scan(context.Background(), stale.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if recovered.State != "interrupted" || recovered.FinishedAt == nil {
+		t.Fatalf("recovered stale scan: %#v", recovered)
+	}
+	request = httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/v1/workspaces/"+work.ID+"/scans", nil)
+	response = httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("scan after recovery: %d %s, want 202", response.Code, response.Body.String())
 	}
 }

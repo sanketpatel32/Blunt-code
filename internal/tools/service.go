@@ -22,6 +22,11 @@ type Service struct {
 	Manager Manager
 	mu      sync.RWMutex
 	offline bool
+	// installMu serializes installs into the shared tools directory: two
+	// workspaces scanning concurrently (or a scan racing the tools page) may
+	// request the same missing tool, and unserialized installs interleave
+	// staging renames and rules extraction on the same files.
+	installMu sync.Mutex
 }
 
 func NewService(root string, manifest Manifest, offline bool) *Service {
@@ -73,6 +78,8 @@ func (s *Service) All() []Status {
 	return out
 }
 func (s *Service) Ensure(ctx context.Context, id string) error {
+	s.installMu.Lock()
+	defer s.installMu.Unlock()
 	if id == "sonarqube" {
 		return s.ensureSonarQube(ctx)
 	}
