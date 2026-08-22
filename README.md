@@ -30,7 +30,9 @@
 - **100% Local & Private:** Runs entirely on loopback (`127.0.0.1`). Your code, findings, reports, and logs never leave your device.
 - **Zero-Config Managed Tools:** Automatically installs and sandboxes code analyzers in isolated application directories. No manual `PATH` configuring or Python/Java/Node dependency hassle.
 - **Multi-Tool Coverage:** Runs **Ruff**, **Biome**, **Semgrep**, and **SonarQube** concurrently to check for lint issues, security SAST vulnerabilities, formatting errors, and code smells.
-- **Interactive UI Dashboard:** Built-in web app with real-time scan logs, file-level previews, filtering by tool/severity, and one-click **Markdown Export**.
+- **Interactive UI Dashboard:** Built-in web app with a home dashboard, real-time scan logs, file-level previews, severity visualizations, and rich filtering by tool/severity.
+- **Reports in Every Format:** One-click export to **Markdown**, standalone **HTML**, **SARIF 2.1.0** (VS Code / GitHub code scanning), and **CSV** — plus a headless `scan` CLI for CI pipelines.
+- **Dark Mode & Keyboard Shortcuts:** Light/dark theme that follows your OS preference, and keyboard-first navigation (`g`+`h/w/t/s` to jump between pages, `/` to search, `?` for the shortcut cheat sheet).
 - **Offline Capable:** Once analyzers are downloaded on initial setup, full scans can run 100% offline without internet access.
 
 ---
@@ -129,7 +131,7 @@ Using Blunt Code takes less than two minutes:
 4. **Run Scan:** Click **Run scan**.
    > *Note: On the first scan, Blunt Code will download managed analyzers. Subsequent scans run locally and instantly.*
 5. **Inspect & Preview:** View issues grouped by analyzer. Click any finding to inspect line numbers and source code snippets.
-6. **Export Report:** Click **Export Markdown** to generate a single-file summary report saved inside your project workspace.
+6. **Export Report:** Click **Export** and pick a format — **Markdown** (saved to your local reports folder), or **HTML** / **SARIF** / **CSV** (downloaded instantly, CSV honors your active filters).
 
 ---
 
@@ -143,6 +145,16 @@ Blunt Code isolates and manages analyzer binaries in `%LOCALAPPDATA%\BluntCode\t
 | **Biome** | JavaScript, TypeScript | Code formatting, correctness, performance, and modern syntax checks. |
 | **Semgrep** | Python, JavaScript, TypeScript | Local security SAST rules, vulnerability patterns, and security risks. |
 | **SonarQube** | Polyglot (Project-wide) | Deep code quality, security hotspots, code smells, and structural metrics. |
+
+### Scan Profiles
+
+Every scan runs in one of three profiles:
+
+| Profile | Analyzers | Best For |
+| :--- | :--- | :--- |
+| **Quick** | Ruff + Biome only | Fast feedback between edits. |
+| **Standard** | All four analyzers | The everyday default. |
+| **Deep** | All four analyzers, with Ruff widened to an extended rule set (`E,W,F,B,SIM,C4,RET,ARG,PLR`) | Thorough pre-release or nightly audits — catches style, bugbear, simplification, comprehension, and refactoring issues on top of the standard checks. |
 
 ---
 
@@ -169,6 +181,8 @@ Blunt Code isolates and manages analyzer binaries in `%LOCALAPPDATA%\BluntCode\t
 # Machine-readable JSON summary for CI pipelines (progress still goes to stderr)
 .\bluntcode.exe scan "C:\Projects\my-python-app" --json --quiet --timeout 10m
 ```
+
+`bluntcode scan` exits with code `0` when the scan completes (warnings included), `1` when it fails or is cancelled, `2` for usage errors, and `130` after Ctrl+C — so CI pipelines can gate on it directly.
 
 ---
 
@@ -226,6 +240,13 @@ Blunt Code locks its SQLite database to prevent data corruption. If another inst
 .\bluntcode.exe doctor
 ```
 to inspect active local processes.
+</details>
+
+<details>
+<summary><b>5. Where are my reports, logs, and analyzer tools stored?</b></summary>
+<br>
+
+All Blunt Code data lives under `%LOCALAPPDATA%\BluntCode` (see the layout in [📁 Data Storage & Privacy](#-data-storage--privacy)). The easiest way to get there: open **Settings** in the Blunt Code web interface and use the **Data folders** buttons to launch the data, reports, logs, or tools folder directly in Windows Explorer.
 </details>
 
 ---
