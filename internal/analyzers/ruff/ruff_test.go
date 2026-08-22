@@ -3,9 +3,11 @@ package ruff
 import (
 	"bluntcode/internal/analyzers"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -113,5 +115,40 @@ func TestClassificationCoversDeepRulePrefixes(t *testing.T) {
 		if got := category(c.code); got != c.category {
 			t.Fatalf("category(%s) = %s, want %s", c.code, got, c.category)
 		}
+	}
+}
+
+func TestPlanBatchesLargeWorkspaceFileLists(t *testing.T) {
+	// 692 real-world Python paths overflowed Windows' 32,767-character
+	// process command line ("filename or extension is too long"), so Plan
+	// must split file arguments exactly like the biome and semgrep adapters.
+	files := make([]string, 692)
+	for i := range files {
+		files[i] = `C:\Users\sanpa\OneDrive\Desktop\Claire\claire-backend\src\some\deeply\nested\package\module_file_with_a_long_name_` + strings.Repeat("x", 4) + fmt.Sprint(i) + ".py"
+	}
+	adapter := New("ruff.exe", "test")
+	plan, err := adapter.Plan(context.Background(), analyzers.ScanRequest{WorkspaceRoot: `C:\ws`, Files: files, Languages: []analyzers.Language{analyzers.LanguagePython}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Commands) < 2 {
+		t.Fatalf("expected multiple batches for a large file list, got %d command(s)", len(plan.Commands))
+	}
+	seen := map[string]bool{}
+	total := 0
+	for _, command := range plan.Commands {
+		for _, arg := range command.Args[4:] { // skip check --output-format json --no-fix
+			if !strings.HasSuffix(arg, ".py") {
+				t.Fatalf("non-Python argument reached ruff: %s", arg)
+			}
+			if seen[arg] {
+				t.Fatalf("file assigned to more than one batch: %s", arg)
+			}
+			seen[arg] = true
+			total++
+		}
+	}
+	if total != len(files) {
+		t.Fatalf("batched %d files, want all %d", total, len(files))
 	}
 }

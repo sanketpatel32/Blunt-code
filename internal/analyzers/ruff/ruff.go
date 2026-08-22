@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"bluntcode/internal/analyzers"
 )
@@ -71,11 +72,42 @@ func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.
 	if req.Profile == analyzers.ProfileDeep {
 		args = append(args, "--select="+deepSelect)
 	}
-	args = append(args, pyFiles...)
-	return analyzers.AnalyzerPlan{AnalyzerID: ID, Version: a.Version, Commands: []analyzers.ProcessSpec{{Executable: a.Executable, Args: args, Dir: req.WorkspaceRoot}}}, nil
+	// Windows caps a process command line at 32,767 characters, so large
+	// workspaces are split into batches the same way biome and semgrep do;
+	// Run merges the per-batch JSON outputs back into one result.
+	commands := make([]analyzers.ProcessSpec, 0)
+	for _, batch := range analyzers.FileArgumentBatches(args, pyFiles) {
+		commands = append(commands, analyzers.ProcessSpec{Executable: a.Executable, Args: batch, Dir: req.WorkspaceRoot})
+	}
+	return analyzers.AnalyzerPlan{AnalyzerID: ID, Version: a.Version, Commands: commands}, nil
 }
 func (a *Adapter) Run(ctx context.Context, p analyzers.AnalyzerPlan, emit analyzers.EventEmitter) (analyzers.AnalyzerResult, error) {
-	return analyzers.RunDirect(ctx, p, emit)
+	if len(p.Commands) <= 1 {
+		return analyzers.RunDirect(ctx, p, emit)
+	}
+	started := time.Now()
+	merged := make([]rawDiagnostic, 0)
+	for _, command := range p.Commands {
+		partPlan := p
+		partPlan.Commands = []analyzers.ProcessSpec{command}
+		part, err := analyzers.RunDirect(ctx, partPlan, emit)
+		if err != nil || (part.ExitCode != 0 && part.ExitCode != 1) {
+			return part, err
+		}
+		if len(part.Stdout) == 0 {
+			continue
+		}
+		var parsed []rawDiagnostic
+		if err := json.Unmarshal(part.Stdout, &parsed); err != nil {
+			return part, nil
+		}
+		merged = append(merged, parsed...)
+	}
+	stdout, err := json.Marshal(merged)
+	if err != nil {
+		return analyzers.AnalyzerResult{Plan: p}, err
+	}
+	return analyzers.AnalyzerResult{Plan: p, Stdout: stdout, ExitCode: 1, StartedAt: started, FinishedAt: time.Now()}, nil
 }
 
 type rawDiagnostic struct {
