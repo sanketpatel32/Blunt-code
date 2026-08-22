@@ -8,7 +8,11 @@ const JUST_NOW_WINDOW_MS = 45 * SECOND_MS;
 const shortDate = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
 
 export function date(value?: string | null) {
-  return value ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : 'Not analyzed yet';
+  if (!value) return 'Not analyzed yet';
+  const time = new Date(value).getTime();
+  // Intl.format() throws RangeError on an invalid time value, so hostile timestamps are defused here.
+  if (Number.isNaN(time)) return 'Not analyzed yet';
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(time);
 }
 
 export function relativeTime(value?: string | null, now = Date.now()): string {
@@ -30,7 +34,8 @@ export function relativeTime(value?: string | null, now = Date.now()): string {
 }
 
 export function compactDuration(ms?: number): string {
-  if (ms === undefined || Number.isNaN(ms)) return '—';
+  // `ms == null` also covers nulls from the API, which mean "unknown", not zero.
+  if (ms == null || Number.isNaN(ms)) return '—';
   const total = Math.max(0, ms);
   if (total < SECOND_MS) return `${total}ms`;
   if (total < MINUTE_MS) return `${(total / SECOND_MS).toFixed(1)}s`;

@@ -21,8 +21,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-function list<T>(value: T[] | { items?: T[]; workspaces?: T[]; scans?: T[]; findings?: T[]; tools?: T[] }): T[] {
+/** List endpoints wrap their array in an envelope; a null body (or null envelope field) reads as "nothing yet". */
+function list<T>(value: T[] | { items?: T[]; workspaces?: T[]; scans?: T[]; findings?: T[]; tools?: T[] } | null | undefined): T[] {
   if (Array.isArray(value)) return value;
+  if (!value) return [];
   return value.items ?? value.workspaces ?? value.scans ?? value.findings ?? value.tools ?? [];
 }
 
@@ -39,22 +41,22 @@ export const api = {
   discover: (id: string) => request<Workspace>(`/workspaces/${encodeURIComponent(id)}/discover`, { method: 'POST' }),
   tree: async (id: string, path?: string) => {
     const query = path ? `?path=${encodeURIComponent(path)}` : '';
-    const value = await request<TreeNode[] | { items?: TreeNode[]; children?: TreeNode[] }>(`/workspaces/${encodeURIComponent(id)}/tree${query}`);
-    return Array.isArray(value) ? value : value.items ?? value.children ?? [];
+    const value = await request<TreeNode[] | { items?: TreeNode[]; children?: TreeNode[] } | null>(`/workspaces/${encodeURIComponent(id)}/tree${query}`);
+    return Array.isArray(value) ? value : value?.items ?? value?.children ?? [];
   },
   pathOverrides: async (id: string) => list<PathOverride>(await request<PathOverride[] | { items?: PathOverride[] }>(`/workspaces/${encodeURIComponent(id)}/path-overrides`)),
   savePathOverrides: (id: string, overrides: PathOverride[]) => request<{ items: PathOverride[] }>(`/workspaces/${encodeURIComponent(id)}/path-overrides`, { method: 'PUT', body: JSON.stringify({ overrides }) }),
   rules: async (id: string) => {
-    const value = await request<{ items?: unknown[]; rules?: unknown[] }>(`/workspaces/${encodeURIComponent(id)}/rules`);
-    return { rules: value.rules ?? value.items ?? [] };
+    const value = await request<{ items?: unknown[]; rules?: unknown[] } | null>(`/workspaces/${encodeURIComponent(id)}/rules`);
+    return { rules: value?.rules ?? value?.items ?? [] };
   },
   saveRules: (id: string, rules: unknown) => request(`/workspaces/${encodeURIComponent(id)}/rules`, { method: 'PUT', body: JSON.stringify(rules) }),
   scans: async (id: string) => list<Scan>(await request<Scan[] | { scans?: Scan[] }>(`/workspaces/${encodeURIComponent(id)}/scans`)),
   recentScans: () => request<RecentScansResponse>('/scans'),
   startScan: (id: string, profile?: string) => request<Scan>(`/workspaces/${encodeURIComponent(id)}/scans`, { method: 'POST', body: JSON.stringify(profile ? { profile } : {}) }),
   scan: async (id: string) => {
-    const response = await request<Scan | { scan: Scan; analyzer_runs?: Scan['analyzer_runs'] }>(`/scans/${encodeURIComponent(id)}`);
-    return 'scan' in response ? { ...response.scan, analyzer_runs: response.analyzer_runs ?? [] } : response;
+    const response = await request<Scan | { scan: Scan; analyzer_runs?: Scan['analyzer_runs'] } | null>(`/scans/${encodeURIComponent(id)}`);
+    return response && typeof response === 'object' && 'scan' in response ? { ...response.scan, analyzer_runs: response.analyzer_runs ?? [] } : response;
   },
   cancelScan: (id: string) => request<Scan>(`/scans/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
   findings: (id: string, params: Record<string, string>) => {

@@ -30,11 +30,11 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
   }
   return <div className="page dashboard-page"><header className="dashboard-heading"><div><h1>Workspaces</h1><p>Run a local scan, then follow every result in one place.</p></div><div className="dashboard-actions"><button className="button secondary" onClick={() => void quickScan()} disabled={!latestWorkspaceId || quickScanning} title={latestWorkspaceId ? 'Run a scan on the most recently scanned workspace' : undefined}>{quickScanning ? 'Starting scan…' : 'Scan latest workspace'}</button><button className="button primary" onClick={onAdd}>+ Add workspace</button></div></header>
     {recent.loading ? <div className="dashboard-summary-loading"><SkeletonCards count={5} /></div> : summary && <section className="summary-grid dashboard-summary" aria-label="Scan activity summary">
-      <article className={`summary-card${summary.active_scans > 0 ? ' live' : ''}`}><strong>{summary.active_scans}{summary.active_scans > 0 && <i className="pulse-dot" aria-hidden="true" />}</strong><span>Active scans</span></article>
-      <SummaryCard label="Critical + high" value={summary.critical_count + summary.high_count} tone="high" />
-      <SummaryCard label="Total findings" value={summary.total_findings} />
-      <SummaryCard label="Scans this week" value={summary.scans_last_7d} />
-      <article className="summary-card"><strong>{summary.workspaces_scanned}<span className="summary-of"> of {summary.workspaces_total}</span></strong><span>Workspaces scanned</span></article>
+      <article className={`summary-card${(summary.active_scans ?? 0) > 0 ? ' live' : ''}`}><strong>{summary.active_scans ?? 0}{(summary.active_scans ?? 0) > 0 && <i className="pulse-dot" aria-hidden="true" />}</strong><span>Active scans</span></article>
+      <SummaryCard label="Critical + high" value={(summary.critical_count ?? 0) + (summary.high_count ?? 0)} tone="high" />
+      <SummaryCard label="Total findings" value={summary.total_findings ?? 0} />
+      <SummaryCard label="Scans this week" value={summary.scans_last_7d ?? 0} />
+      <article className="summary-card"><strong>{summary.workspaces_scanned ?? 0}<span className="summary-of"> of {summary.workspaces_total ?? 0}</span></strong><span>Workspaces scanned</span></article>
     </section>}
     <section className="dashboard-activity" aria-labelledby="recent-scans"><header><div><h2 id="recent-scans">Recent activity</h2><p>{scans.length ? `Last ${Math.min(scans.length, ACTIVITY_FEED_LIMIT)} scans across your projects.` : 'Every scan across your projects lands here.'}</p></div></header>
       {recent.loading ? <SkeletonTable rows={4} cols={4} className="activity-table" /> : recent.error ? <p className="muted activity-unavailable">Recent activity is unavailable right now. Your workspaces are unaffected.</p> : !scans.length ? <Empty title="No scans yet" icon={<ScanIcon />}>Run a scan to follow what changed across your projects.</Empty> : <ol className="activity-feed">{scans.slice(0, ACTIVITY_FEED_LIMIT).map((scan) => <ActivityRow key={scan.id} scan={scan} go={go} />)}</ol>}
