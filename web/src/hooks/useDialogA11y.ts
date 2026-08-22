@@ -47,10 +47,10 @@ export function useDialogA11y({ onClose, busy = false, autoFocusRef }: UseDialog
     const remembered = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const initial = autoFocusRef?.current ?? (dialogRef.current ? focusableElements(dialogRef.current)[0] : undefined);
     initial?.focus();
-    return () => { if (remembered && remembered.isConnected) remembered.focus(); };
-    // Mount-only by design; current onClose/busy values are read through the ref above.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    return () => { if (remembered?.isConnected) remembered.focus(); };
+    // autoFocusRef is a stable useRef from every caller; onClose/busy values
+    // are read through the `latest` ref so this stays a mount-only effect.
+  }, [autoFocusRef]);
 
   // Escape closes (unless busy); Tab/Shift+Tab stay inside the dialog subtree.
   useEffect(() => {

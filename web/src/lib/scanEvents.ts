@@ -1,4 +1,4 @@
-export type ScanEvent = { type: string; stage?: string; status?: string; message?: string; analyzer_id?: string; name?: string; findings?: number; error?: string; state?: string; at: number };
+export type ScanEvent = { type: string; stage?: string; status?: string; message?: string; analyzer_id?: string; name?: string; findings?: number; error?: string; state?: string; at: number; /** Receive-order sequence assigned by the live stream; a stable React key even when two events share a millisecond. */ seq?: number };
 
 export const stageLabels: Record<string, string> = { preparing: 'Preparing workspace', discovering: 'Detecting languages', checking_tools: 'Checking analyzers', running: 'Running analyzers', normalizing: 'Normalizing findings', generating_report: 'Generating report', completed: 'Complete' };
 

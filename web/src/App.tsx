@@ -56,7 +56,8 @@ export function App() {
       const key = parseShortcut(event);
       if (!key) return;
       if (key === 'g') { event.preventDefault(); armSequence(); return; }
-      if (wasArmed && key in SEQUENCE_TARGETS) { event.preventDefault(); go({ page: SEQUENCE_TARGETS[key]! }); return; }
+      const target = wasArmed ? SEQUENCE_TARGETS[key] : undefined;
+      if (target) { event.preventDefault(); go({ page: target }); return; }
       if (key === 'n') { event.preventDefault(); setAddOpen(true); return; }
       if (key === '/') {
         const search = document.querySelector<HTMLInputElement>('.filter-search input') ?? document.querySelector<HTMLInputElement>('.tree-panel .search input');
@@ -85,13 +86,16 @@ export function App() {
 }
 
 function Page({ route, go, notify, onAdd }: { route: Route; go: (r: Route) => void; notify: (n: Notice) => void; onAdd: () => void }) {
+  // parseRoute guarantees these routes always carry an id; the fallback keeps
+  // the type honest if a malformed URL ever slips through.
+  const id = 'id' in route ? route.id : undefined;
   switch (route.page) {
     case 'home': return <HomePage go={go} onAdd={onAdd} notify={notify} />;
     case 'workspaces': return <WorkspacesPage go={go} onAdd={onAdd} notify={notify} />;
-    case 'workspace': return <WorkspacePage id={route.id!} go={go} notify={notify} />;
-    case 'files': return <FilesPage id={route.id!} notify={notify} />;
-    case 'history': return <HistoryPage workspaceId={route.id!} go={go} />;
-    case 'scan': return <ScanPage id={route.id!} go={go} notify={notify} />;
+    case 'workspace': return id ? <WorkspacePage id={id} go={go} notify={notify} /> : <NotFoundPage go={go} />;
+    case 'files': return id ? <FilesPage id={id} notify={notify} /> : <NotFoundPage go={go} />;
+    case 'history': return id ? <HistoryPage workspaceId={id} go={go} /> : <NotFoundPage go={go} />;
+    case 'scan': return id ? <ScanPage id={id} notify={notify} /> : <NotFoundPage go={go} />;
     case 'tools': return <ToolsPage notify={notify} />;
     case 'settings': return <SettingsPage notify={notify} />;
     case 'about': return <AboutPage />;

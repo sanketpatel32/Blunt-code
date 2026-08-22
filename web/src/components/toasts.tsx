@@ -93,7 +93,9 @@ function ToastItem({ toast, closing, onClose }: { toast: Toast; closing: boolean
   }, [toast.id, toast.kind]);
 
   const coded = splitCode(toast.text);
-  return <div
+  return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: pointer/focus handlers only pause auto-dismiss; the toast itself is not operable (dismissal is a real button).
+    <div
     className={`toast ${toast.kind}`}
     data-state={entered && !closing ? 'open' : 'closed'}
     role={toast.kind === 'error' ? 'alert' : undefined}
@@ -109,11 +111,11 @@ function ToastItem({ toast, closing, onClose }: { toast: Toast; closing: boolean
         : <p className="toast-text">{toast.text}</p>}
     </div>
     <button type="button" className="toast-dismiss" aria-label="Dismiss notification" onClick={() => onClose(toast.id)}>×</button>
-  </div>;
+  </div>);
 }
 
 const ICONS: Record<ToastKind, ReactNode> = {
-  info: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="6.5" /><path d="M8 7.4v3.6" /><path d="M8 4.6v.05" /></svg>,
-  success: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="6.5" /><path d="M5.1 8.4l2 2 3.8-4.2" /></svg>,
-  error: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2.4 14.6 13.6H1.4Z" /><path d="M8 6.4v3.1" /><path d="M8 11.7v.05" /></svg>,
+  info: <svg role="img" aria-label="Information" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="6.5" /><path d="M8 7.4v3.6" /><path d="M8 4.6v.05" /></svg>,
+  success: <svg role="img" aria-label="Success" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="6.5" /><path d="M5.1 8.4l2 2 3.8-4.2" /></svg>,
+  error: <svg role="img" aria-label="Error" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2.4 14.6 13.6H1.4Z" /><path d="M8 6.4v3.1" /><path d="M8 11.7v.05" /></svg>,
 };

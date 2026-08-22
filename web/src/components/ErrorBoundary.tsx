@@ -32,7 +32,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     return <section className="error-panel" role="alert">
       <h2>Something went wrong</h2>
       <p>This view stopped unexpectedly. Your workspaces and analysis data are safe on disk — use the navigation above to continue, or reload the view.</p>
-      <button className="button secondary" onClick={this.props.reload ?? (() => window.location.reload())}>Reload view</button>
+      <button type="button" className="button secondary" onClick={this.props.reload ?? (() => window.location.reload())}>Reload view</button>
       <details>
         <summary>Error details</summary>
         <pre>{error.stack ?? `${error.name}: ${error.message}`}</pre>

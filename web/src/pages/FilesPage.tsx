@@ -9,6 +9,12 @@ import { Empty, ErrorPanel } from '../components/ui';
 import { MagnifierIcon } from '../components/icons';
 import { SkeletonLines } from '../components/skeletons';
 
+interface RuleDraft { uid: number; rule_type: 'include' | 'exclude'; pattern: string; enabled?: boolean }
+
+/** Session-wide identity for rule rows, so keys and edits survive reordering and duplicate patterns. */
+let ruleUid = 0;
+function nextRuleUid() { ruleUid += 1; return ruleUid; }
+
 export function FilesPage({ id, notify }: { id: string; notify: (n: Notice) => void }) {
   const workspace = useLoad(() => api.workspace(id), [id]);
   const [query, setQuery] = useState('');
@@ -17,13 +23,13 @@ export function FilesPage({ id, notify }: { id: string; notify: (n: Notice) => v
   const [nodes, setNodes] = useState<TreeNode[]>([]);
   const [treeError, setTreeError] = useState<string>();
   const [loadingTree, setLoadingTree] = useState(true);
-  const [rules, setRules] = useState<{ rules: Array<{ rule_type: 'include' | 'exclude'; pattern: string; enabled?: boolean }> }>({ rules: [] });
+  const [rules, setRules] = useState<{ rules: RuleDraft[] }>({ rules: [] });
   const [overrides, setOverrides] = useState<PathOverride[]>([]);
   const [treeKey, setTreeKey] = useState(0);
   const searchRef = useRef<HTMLInputElement>(null);
   const loadTree = useCallback(async () => { setLoadingTree(true); try { setNodes(await api.tree(id)); setTreeError(undefined); } catch (e) { setTreeError(message(e)); } finally { setLoadingTree(false); } }, [id]);
-  useEffect(() => { void loadTree(); void Promise.all([api.rules(id), api.pathOverrides(id)]).then(([savedRules, savedOverrides]) => { setRules(savedRules as typeof rules); setOverrides(savedOverrides); }).catch((e) => notify({ kind: 'error', text: message(e) })); }, [id, loadTree]);
-  const save = async () => { try { await api.saveRules(id, rules); await api.savePathOverrides(id, overrides); await loadTree(); setTreeKey((value) => value + 1); notify({ kind: 'info', text: 'File selection saved for this workspace.' }); } catch (e) { notify({ kind: 'error', text: message(e) }); } };
+  useEffect(() => { void loadTree(); void Promise.all([api.rules(id), api.pathOverrides(id)]).then(([savedRules, savedOverrides]) => { setRules({ rules: (savedRules as { rules: Array<Omit<RuleDraft, 'uid'>> }).rules.map((rule) => ({ ...rule, uid: nextRuleUid() })) }); setOverrides(savedOverrides); }).catch((e) => notify({ kind: 'error', text: message(e) })); }, [id, loadTree, notify]);
+  const save = async () => { try { await api.saveRules(id, rules.rules.map(({ uid: _uid, ...rule }) => rule)); await api.savePathOverrides(id, overrides); await loadTree(); setTreeKey((value) => value + 1); notify({ kind: 'info', text: 'File selection saved for this workspace.' }); } catch (e) { notify({ kind: 'error', text: message(e) }); } };
   /** "/" jumps to the search box from anywhere on this page — unless the user is already typing in a field. */
   useEffect(() => {
     function jumpToSearch(event: KeyboardEvent) {
@@ -37,8 +43,8 @@ export function FilesPage({ id, notify }: { id: string; notify: (n: Notice) => v
     window.addEventListener('keydown', jumpToSearch);
     return () => window.removeEventListener('keydown', jumpToSearch);
   }, []);
-  return <div className="page"><header className="page-heading"><div><p className="eyebrow">File selection</p><h1>{workspace.data?.name ?? 'Workspace files'}</h1><p>Choose source paths to analyze. Default exclusions protect dependencies and build output.</p></div><div className="action-row"><button className="button secondary" onClick={() => { setRules({ rules: [] }); setOverrides([]); }}>Reset to defaults</button><button className="button primary" onClick={save}>Save selection</button></div></header>
-    <section className="file-layout"><div className="tree-panel"><label className="search"><span>Search paths<kbd className="kbd-hint" aria-hidden="true">/</kbd></span><input ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') { setQuery(''); event.currentTarget.blur(); } }} placeholder="src or package.json" /></label>{loadingTree ? <SkeletonLines lines={6} /> : treeError ? <ErrorPanel error={treeError} retry={loadTree} /> : <FileTree key={treeKey} nodes={nodes} query={debouncedQuery} workspaceId={id} overrides={overrides} onOverrides={setOverrides} />}</div><RuleEditor rules={rules.rules} setRules={(items) => setRules({ rules: items })} /></section>
+  return <div className="page"><header className="page-heading"><div><p className="eyebrow">File selection</p><h1>{workspace.data?.name ?? 'Workspace files'}</h1><p>Choose source paths to analyze. Default exclusions protect dependencies and build output.</p></div><div className="action-row"><button type="button" className="button secondary" onClick={() => { setRules({ rules: [] }); setOverrides([]); }}>Reset to defaults</button><button type="button" className="button primary" onClick={save}>Save selection</button></div></header>
+    <section className="file-layout"><div className="tree-panel"><label className="search"><span>Search paths<kbd className="kbd-hint">/</kbd></span><input ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') { setQuery(''); event.currentTarget.blur(); } }} placeholder="src or package.json" /></label>{loadingTree ? <SkeletonLines lines={6} /> : treeError ? <ErrorPanel error={treeError} retry={loadTree} /> : <FileTree key={treeKey} nodes={nodes} query={debouncedQuery} workspaceId={id} overrides={overrides} onOverrides={setOverrides} />}</div><RuleEditor rules={rules.rules} setRules={(items) => setRules({ rules: items })} /></section>
   </div>;
 }
 
@@ -110,7 +116,7 @@ function TreeLevel({ nodes, state, root = false }: { nodes: TreeNode[]; state: T
   return <ul className="file-tree" aria-label={root ? 'Workspace file tree' : undefined}>{visible.map((node) => {
     // While a query is active, folders leading to a match render expanded; clearing the query falls back to the manual set.
     const open = state.expanded.has(node.path) || (state.needle !== '' && state.ancestors.has(node.path));
-    return <li key={node.path}><div className="tree-row"><button className="tree-toggle" aria-label={open ? `Collapse ${node.name}` : `Expand ${node.name}`} disabled={node.type !== 'directory'} onClick={() => state.toggle(node)}>{state.loading.has(node.path) ? <span className="spinner" aria-hidden="true" /> : node.type === 'directory' ? (open ? '−' : '+') : '·'}</button><input type="checkbox" checked={nodeIncluded(node, state.overrides)} ref={(input) => { if (input) input.indeterminate = Boolean(node.partial && !state.overrides.some((item) => node.path === item.relative_path)); }} onChange={() => toggleNode(node, state.overrides, state.onOverrides)} aria-label={`Include ${node.path}`} /><span className="tree-name"><HighlightedName name={node.name} needle={state.needle} /></span>{node.excluded_reason && <small>Excluded: {node.excluded_reason}</small>}{state.failed.has(node.path) && <span className="tree-load-error">Could not load<button className="text-button" onClick={() => state.retry(node)}>Retry</button></span>}</div>{open && <div className="tree-children"><TreeLevel nodes={state.children[node.path] ?? []} state={state} /></div>}</li>;
+    return <li key={node.path}><div className="tree-row"><button type="button" className="tree-toggle" aria-label={open ? `Collapse ${node.name}` : `Expand ${node.name}`} disabled={node.type !== 'directory'} onClick={() => state.toggle(node)}>{state.loading.has(node.path) ? <span className="spinner" aria-hidden="true" /> : node.type === 'directory' ? (open ? '−' : '+') : '·'}</button><input type="checkbox" checked={nodeIncluded(node, state.overrides)} ref={(input) => { if (input) input.indeterminate = Boolean(node.partial && !state.overrides.some((item) => node.path === item.relative_path)); }} onChange={() => toggleNode(node, state.overrides, state.onOverrides)} aria-label={`Include ${node.path}`} /><span className="tree-name"><HighlightedName name={node.name} needle={state.needle} /></span>{node.excluded_reason && <small>Excluded: {node.excluded_reason}</small>}{state.failed.has(node.path) && <span className="tree-load-error">Could not load<button type="button" className="text-button" onClick={() => state.retry(node)}>Retry</button></span>}</div>{open && <div className="tree-children"><TreeLevel nodes={state.children[node.path] ?? []} state={state} /></div>}</li>;
   })}</ul>;
 }
 
@@ -126,7 +132,7 @@ function nodeIncluded(node: TreeNode, overrides: PathOverride[]) { const matchin
 
 function toggleNode(node: TreeNode, overrides: PathOverride[], onOverrides: (items: PathOverride[]) => void) { const next = !nodeIncluded(node, overrides); onOverrides([...overrides.filter((item) => item.relative_path !== node.path), { relative_path: node.path, mode: next ? 'include' : 'exclude' }]); }
 
-function RuleEditor({ rules, setRules }: { rules: Array<{ rule_type: 'include' | 'exclude'; pattern: string; enabled?: boolean }>; setRules: (next: Array<{ rule_type: 'include' | 'exclude'; pattern: string; enabled?: boolean }>) => void }) {
-  function edit(index: number, patch: Partial<(typeof rules)[number]>) { setRules(rules.map((rule, i) => i === index ? { ...rule, ...patch } : rule)); }
-  return <aside className="rule-editor"><h2>Rules</h2><p className="muted">Rules apply to new files too.</p>{rules.map((rule, index) => <div className="rule" key={`${rule.pattern}-${index}`}><select value={rule.rule_type} onChange={(event) => edit(index, { rule_type: event.target.value as 'include' | 'exclude' })}><option value="include">Include</option><option value="exclude">Exclude</option></select><input value={rule.pattern} onChange={(event) => edit(index, { pattern: event.target.value })} aria-label="Rule pattern" /><button className="icon-button" onClick={() => setRules(rules.filter((_, i) => i !== index))} aria-label="Remove rule">×</button></div>)}<button className="text-button" onClick={() => setRules([...rules, { rule_type: 'exclude', pattern: '' }])}>+ Add rule</button></aside>;
+function RuleEditor({ rules, setRules }: { rules: RuleDraft[]; setRules: (next: RuleDraft[]) => void }) {
+  function edit(uid: number, patch: Partial<RuleDraft>) { setRules(rules.map((rule) => rule.uid === uid ? { ...rule, ...patch } : rule)); }
+  return <aside className="rule-editor"><h2>Rules</h2><p className="muted">Rules apply to new files too.</p>{rules.map((rule) => <div className="rule" key={rule.uid}><select value={rule.rule_type} onChange={(event) => edit(rule.uid, { rule_type: event.target.value as 'include' | 'exclude' })}><option value="include">Include</option><option value="exclude">Exclude</option></select><input value={rule.pattern} onChange={(event) => edit(rule.uid, { pattern: event.target.value })} aria-label="Rule pattern" /><button type="button" className="icon-button" onClick={() => setRules(rules.filter((item) => item.uid !== rule.uid))} aria-label="Remove rule">×</button></div>)}<button type="button" className="text-button" onClick={() => setRules([...rules, { uid: nextRuleUid(), rule_type: 'exclude', pattern: '' }])}>+ Add rule</button></aside>;
 }

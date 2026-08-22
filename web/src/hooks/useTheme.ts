@@ -38,16 +38,19 @@ export function useTheme() {
 
   useEffect(() => { applyTheme(theme); }, [theme]);
 
-  // While the user has not made an explicit choice, follow OS preference changes.
+  // While the user has not made an explicit choice, follow OS preference
+  // changes. The stored-choice check lives inside the handler (not the effect
+  // body), so the effect can stay mount-only and still stop overriding an
+  // explicit choice the moment one is saved.
   useEffect(() => {
     if (readStoredTheme() !== null) return;
     if (typeof window.matchMedia !== 'function') return;
     const media = window.matchMedia('(prefers-color-scheme: dark)');
     if (typeof media.addEventListener !== 'function') return;
-    const onChange = () => setThemeState(systemTheme());
+    const onChange = () => { if (readStoredTheme() === null) setThemeState(systemTheme()); };
     media.addEventListener('change', onChange);
     return () => media.removeEventListener('change', onChange);
-  }, [theme]);
+  }, []);
 
   const setTheme = useCallback((next: Theme) => {
     try { window.localStorage.setItem(THEME_STORAGE_KEY, next); } catch { /* storage unavailable; theme still applies for this session */ }

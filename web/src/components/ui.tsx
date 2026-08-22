@@ -3,7 +3,7 @@ import type { Scan, Severity, Tool } from '../types';
 import { languageNames } from '../lib/format';
 
 export function ErrorPanel({ error, retry }: { error: string; retry?: () => void }) {
-  return <section className="error-panel" role="alert"><h2>Could not load this view</h2><p>{error}</p>{retry && <button className="button secondary" onClick={retry}>Try again</button>}</section>;
+  return <section className="error-panel" role="alert"><h2>Could not load this view</h2><p>{error}</p>{retry && <button type="button" className="button secondary" onClick={retry}>Try again</button>}</section>;
 }
 
 export function Loading() {
@@ -21,7 +21,7 @@ export function PrivacyNotice() {
 
 export function LanguageBadges({ languages }: { languages?: string[] }) {
   return languages?.length
-    ? <div className="badges" aria-label="Detected languages">{languages.map((language) => <span className="badge" key={language}>{languageNames[language] ?? language}</span>)}</div>
+    ? <ul className="badges" aria-label="Detected languages">{languages.map((language) => <li className="badge" key={language}>{languageNames[language] ?? language}</li>)}</ul>
     : <span className="muted">No supported source languages found</span>;
 }
 

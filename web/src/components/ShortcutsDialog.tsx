@@ -42,7 +42,9 @@ const SHORTCUT_GROUPS: Array<{ title: string; entries: ShortcutEntry[] }> = [
 export function ShortcutsDialog({ onClose }: { onClose: () => void }) {
   const gotItRef = useRef<HTMLButtonElement>(null);
   const { dialogRef, onBackdropMouseDown } = useDialogA11y({ onClose, autoFocusRef: gotItRef });
-  return <div className="dialog-backdrop" role="presentation" onMouseDown={onBackdropMouseDown}>
+  return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: backdrop-only dismissal is pointer convenience; keyboard users close via Escape and the Got it button.
+    <div className="dialog-backdrop" role="presentation" onMouseDown={onBackdropMouseDown}>
     <dialog ref={dialogRef} open aria-modal="true" aria-labelledby="shortcuts-title" data-shortcuts-dialog className="shortcuts-dialog"><div className="confirmation-dialog">
       <header><h2 id="shortcuts-title">Keyboard shortcuts</h2><button type="button" className="icon-button" onClick={onClose} aria-label="Close shortcuts help">×</button></header>
       <p>Sequences start with <kbd className="kbd-hint">g</kbd> then the next key within a moment. Shortcuts pause while you are typing in a field or a dialog is open.</p>
@@ -57,5 +59,5 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }) {
       </div>
       <footer><button ref={gotItRef} type="button" className="button primary" onClick={onClose}>Got it</button></footer>
     </div></dialog>
-  </div>;
+  </div>);
 }
