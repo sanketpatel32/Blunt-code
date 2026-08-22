@@ -110,6 +110,40 @@ describe('Blunt Code home', () => {
     expect(host.textContent).not.toContain('undefined');
   });
 
+  it('shows layout skeletons with a screen-reader loading label while data is pending', async () => {
+    const pending = new Promise<Response>(() => {});
+    const fetchMock = vi.fn(() => pending);
+    const host = await render(fetchMock);
+    const statuses = [...host.querySelectorAll('[role="status"][aria-busy="true"]')];
+    expect(statuses.length).toBeGreaterThan(0);
+    for (const status of statuses) expect(status.textContent).toContain('Loading…');
+    expect(host.querySelector('.skeleton-table.workspace-table table')).not.toBeNull();
+    expect(host.querySelectorAll('.skeleton-table.workspace-table tbody tr')).toHaveLength(6);
+    expect(host.querySelector('.skeleton-lines')).not.toBeNull();
+  });
+
+  it('marks a tool row busy while an install is in flight and leaves other rows usable', async () => {
+    window.history.replaceState({}, '', '/tools');
+    const pending = new Promise<Response>(() => {});
+    const fetchMock = vi.fn((input: string) => {
+      if (input.endsWith('/tools/ruff/install')) return pending;
+      if (input.endsWith('/tools')) return Promise.resolve(json({ items: [{ id: 'ruff', ready: false, can_install: true }, { id: 'semgrep', ready: true, can_install: true }] }));
+      return Promise.resolve(json({ items: [] }));
+    });
+
+    const host = await render(fetchMock);
+    const rows = [...host.querySelectorAll('.tool-table tbody tr')];
+    expect(rows).toHaveLength(2);
+    const ruffButtons = [...rows[0].querySelectorAll('button')];
+    const semgrepButtons = [...rows[1].querySelectorAll('button')];
+    expect(ruffButtons.map((button) => button.textContent)).toEqual(['Install', 'Repair', 'Update']);
+    await act(async () => { ruffButtons[0].click(); });
+    expect(ruffButtons[0].textContent).toContain('Installing…');
+    expect(rows[0].querySelector('.table-actions')?.getAttribute('aria-busy')).toBe('true');
+    for (const button of ruffButtons) expect(button.disabled).toBe(true);
+    for (const button of semgrepButtons) expect(button.disabled).toBe(false);
+  });
+
   it('paginates scan history in the workspace view', async () => {
     window.history.replaceState({}, '', '/workspaces/ws-1');
     const scans = Array.from({ length: 7 }, (_, index) => ({

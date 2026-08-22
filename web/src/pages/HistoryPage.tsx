@@ -4,11 +4,12 @@ import type { Scan } from '../types';
 import type { Route } from '../lib/router';
 import { date, duration } from '../lib/format';
 import { useLoad } from '../hooks/useLoad';
-import { Empty, ErrorPanel, Loading } from '../components/ui';
+import { Empty, ErrorPanel } from '../components/ui';
+import { SkeletonTable } from '../components/skeletons';
 
 export function HistoryPage({ workspaceId, go }: { workspaceId: string; go: (r: Route) => void }) {
   const state = useLoad(() => api.scans(workspaceId), [workspaceId]);
-  return <div className="page"><header className="page-heading"><div><p className="eyebrow">Scan history</p><h1>Previous analyses</h1><p>Reports and findings are stored only on this computer.</p></div></header>{state.loading ? <Loading /> : state.error ? <ErrorPanel error={state.error} retry={state.reload} /> : <HistoryTable scans={state.data ?? []} go={go} />}</div>;
+  return <div className="page"><header className="page-heading"><div><p className="eyebrow">Scan history</p><h1>Previous analyses</h1><p>Reports and findings are stored only on this computer.</p></div></header>{state.loading ? <SkeletonTable rows={6} cols={10} /> : state.error ? <ErrorPanel error={state.error} retry={state.reload} /> : <HistoryTable scans={state.data ?? []} go={go} />}</div>;
 }
 
 const historyPageSize = 6;
