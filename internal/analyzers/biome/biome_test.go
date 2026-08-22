@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -73,5 +74,34 @@ func TestNormalizeUsesBiomeLineLocation(t *testing.T) {
 	}
 	if got[0].Message != "Avoid redundant Boolean call" || got[0].StartLine != 14 || got[0].StartColumn != 7 || got[0].EndLine != 14 || got[0].EndColumn != 29 {
 		t.Fatalf("unexpected normalized finding: %#v", got[0])
+	}
+}
+
+func TestPlanFiltersToJavaScriptAndTypeScriptFiles(t *testing.T) {
+	adapter := New("biome.exe", "test")
+	req := analyzers.ScanRequest{
+		WorkspaceRoot: `C:\ws`,
+		Languages:     []analyzers.Language{analyzers.LanguagePython, analyzers.LanguageTypeScript},
+		Files:         []string{`C:\ws\app.tsx`, `C:\ws\script.py`, `C:\ws\main.py`},
+	}
+	plan, err := adapter.Plan(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"lint", "--reporter=json", "--no-errors-on-unmatched", `C:\ws\app.tsx`}
+	if len(plan.Commands) != 1 || !reflect.DeepEqual(plan.Commands[0].Args, want) {
+		t.Fatalf("commands = %#v, want single command with args %#v", plan.Commands, want)
+	}
+}
+
+func TestPlanRejectsSelectionWithoutWebFiles(t *testing.T) {
+	adapter := New("biome.exe", "test")
+	req := analyzers.ScanRequest{
+		WorkspaceRoot: `C:\ws`,
+		Languages:     []analyzers.Language{analyzers.LanguageTypeScript},
+		Files:         []string{`C:\ws\only.py`},
+	}
+	if _, err := adapter.Plan(context.Background(), req); err == nil {
+		t.Fatal("expected error when no JavaScript/TypeScript files are in the selection")
 	}
 }

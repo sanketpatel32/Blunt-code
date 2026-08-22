@@ -32,12 +32,17 @@ func (a *Adapter) EnsureInstalled(context.Context, analyzers.ToolEnvironment) er
 	return nil
 }
 func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.AnalyzerPlan, error) {
-	if !analyzers.HasLanguage(req.Languages, analyzers.LanguageJavaScript, analyzers.LanguageTypeScript) {
+	// The orchestrator already narrows req.Files to JavaScript/TypeScript,
+	// but the adapter filters again so no caller can hand biome files it
+	// cannot lint: explicit non-web paths would otherwise depend on
+	// --no-errors-on-unmatched to be silently ignored.
+	webFiles := analyzers.FilesForLanguages(req.Files, analyzers.LanguageJavaScript, analyzers.LanguageTypeScript)
+	if len(webFiles) == 0 {
 		return analyzers.AnalyzerPlan{}, fmt.Errorf("biome does not apply")
 	}
 	prefix := []string{"lint", "--reporter=json", "--no-errors-on-unmatched"}
 	commands := make([]analyzers.ProcessSpec, 0)
-	for _, args := range analyzers.FileArgumentBatches(prefix, req.Files) {
+	for _, args := range analyzers.FileArgumentBatches(prefix, webFiles) {
 		commands = append(commands, analyzers.ProcessSpec{Executable: a.Executable, Args: args, Dir: req.WorkspaceRoot})
 	}
 	return analyzers.AnalyzerPlan{AnalyzerID: ID, Version: a.Version, Commands: commands}, nil

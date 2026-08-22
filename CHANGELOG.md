@@ -5,6 +5,12 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Per-language file routing for analyzers:** scan orchestration now hands every analyzer only the selected files whose language it actually supports (ruff receives `.py`/`.pyi`, Biome receives `.js`/`.jsx`/`.mjs`/`.cjs`/`.ts`/`.tsx`/`.mts`/`.cts`). Previously a mixed-language workspace passed the entire file list to every analyzer, which dogfooding on this repository exposed dramatically: ruff parsed a committed minified JavaScript bundle as Python and failed the scan after generating 8 MB of syntax-error JSON. The ruff and Biome adapters additionally filter defensively, so no caller can hand them files they cannot lint, and an empty post-filter selection skips the analyzer instead of invoking a bare `ruff check` that would scan its working directory.
+
 ## [0.2.1] - 2026-08-22
 
 A batch of 10 QA loops: fuzzing, hostile-payload round-trips, a live-browser

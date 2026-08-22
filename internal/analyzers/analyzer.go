@@ -209,6 +209,35 @@ func HasLanguage(have []Language, wanted ...Language) bool {
 	return false
 }
 
+// languageExtensions mirrors the discovery classifier's extension map. It is
+// duplicated here so the analyzers package stays importable without discovery;
+// both must classify the same extensions or per-language file filtering would
+// disagree with how files were discovered.
+var languageExtensions = map[string]Language{
+	".py": LanguagePython, ".pyi": LanguagePython,
+	".ts": LanguageTypeScript, ".tsx": LanguageTypeScript, ".mts": LanguageTypeScript, ".cts": LanguageTypeScript,
+	".js": LanguageJavaScript, ".jsx": LanguageJavaScript, ".mjs": LanguageJavaScript, ".cjs": LanguageJavaScript,
+}
+
+// FilesForLanguages filters file paths down to the extensions that belong to
+// the given languages. Scan orchestration passes each adapter only the files
+// it can actually lint, so a Python linter is never handed a minified
+// JavaScript bundle to parse (found while dogfooding Blunt Code on itself:
+// ruff produced 8 MB of syntax errors for cmd/bluntcode/static assets).
+func FilesForLanguages(files []string, langs ...Language) []string {
+	wanted := make(map[Language]bool, len(langs))
+	for _, lang := range langs {
+		wanted[lang] = true
+	}
+	out := make([]string, 0, len(files))
+	for _, file := range files {
+		if wanted[languageExtensions[strings.ToLower(filepath.Ext(file))]] {
+			out = append(out, file)
+		}
+	}
+	return out
+}
+
 func SortedFindings(in []Finding) []Finding {
 	out := append([]Finding(nil), in...)
 	sort.SliceStable(out, func(i, j int) bool {

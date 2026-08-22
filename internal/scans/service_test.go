@@ -116,16 +116,21 @@ func TestAnalyzerTimeouts(t *testing.T) {
 }
 
 // recordingAnalyzer captures the ScanRequest each Plan call receives so tests
-// can assert what the orchestrator handed to an adapter, including the profile.
+// can assert what the orchestrator handed to an adapter, including the profile
+// and the per-language file list.
 type recordingAnalyzer struct {
-	id       string
-	mu       sync.Mutex
-	requests []analyzers.ScanRequest
+	id        string
+	languages []analyzers.Language
+	mu        sync.Mutex
+	requests  []analyzers.ScanRequest
 }
 
 func (r *recordingAnalyzer) ID() string          { return r.id }
 func (r *recordingAnalyzer) DisplayName() string { return r.id }
 func (r *recordingAnalyzer) SupportedLanguages() []analyzers.Language {
+	if len(r.languages) > 0 {
+		return r.languages
+	}
 	return []analyzers.Language{analyzers.LanguagePython}
 }
 func (r *recordingAnalyzer) Check(context.Context, analyzers.ToolEnvironment) analyzers.ToolStatus {
@@ -160,6 +165,84 @@ func (r *recordingAnalyzer) requestCount() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return len(r.requests)
+}
+
+func (r *recordingAnalyzer) lastFiles() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(r.requests) == 0 {
+		return nil
+	}
+	return r.requests[len(r.requests)-1].Files
+}
+
+// TestAdaptersReceiveOnlyFilesForTheirLanguages guards the orchestrator's
+// per-language file routing. Dogfooding on Blunt Code's own repo found ruff
+// being handed the full mixed-language file list, including a committed
+// minified JavaScript bundle that ruff then parsed as Python.
+func TestAdaptersReceiveOnlyFilesForTheirLanguages(t *testing.T) {
+	root := t.TempDir()
+	for _, name := range []string{"main.py", "app.tsx", `static\index-ABC123.js`} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(root, name)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, name), []byte("x = 1"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	paths, err := config.NewPaths(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := database.Open(context.Background(), paths.DBPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	work, err := db.CreateWorkspace(context.Background(), core.Workspace{Name: "Mixed", RootPath: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := analyzers.NewRegistry()
+	pythonOnly := &recordingAnalyzer{id: "python-only"}
+	webOnly := &recordingAnalyzer{id: "web-only", languages: []analyzers.Language{analyzers.LanguageJavaScript, analyzers.LanguageTypeScript}}
+	for _, adapter := range []analyzers.Analyzer{pythonOnly, webOnly} {
+		if err := registry.Register(adapter); err != nil {
+			t.Fatal(err)
+		}
+	}
+	service := New(db, registry, events.New(), filepath.Join(paths.DataDir, "reports"), paths.ToolsDir, nil)
+	scan, err := service.DiscoverAndStart(context.Background(), work, "standard", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		current, scanErr := db.Scan(context.Background(), scan.ID)
+		if scanErr != nil {
+			t.Fatal(scanErr)
+		}
+		if terminal(current.State) {
+			if current.State != "completed" {
+				t.Fatalf("scan state %q (error: %s)", current.State, current.ErrorSummary)
+			}
+			if got := pythonOnly.lastFiles(); len(got) != 1 || !strings.HasSuffix(got[0], "main.py") {
+				t.Fatalf("python-only adapter files = %#v, want only main.py", got)
+			}
+			webFiles := webOnly.lastFiles()
+			if len(webFiles) != 2 {
+				t.Fatalf("web-only adapter files = %#v, want app.tsx and the bundle", webFiles)
+			}
+			for _, file := range webFiles {
+				if strings.HasSuffix(file, ".py") {
+					t.Fatalf("web-only adapter received Python file %q", file)
+				}
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("scan did not finish")
 }
 
 func TestProfileTiersReachAnalyzersAndQuickSkipsHeavyAnalyzers(t *testing.T) {

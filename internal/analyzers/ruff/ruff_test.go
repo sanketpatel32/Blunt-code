@@ -49,6 +49,44 @@ func TestPlanAddsExtendedSelectOnlyForDeepProfile(t *testing.T) {
 	}
 }
 
+func TestPlanFiltersToPythonFilesOnly(t *testing.T) {
+	adapter := New("ruff.exe", "test")
+	req := analyzers.ScanRequest{
+		WorkspaceRoot: `C:\ws`,
+		Languages:     []analyzers.Language{analyzers.LanguagePython, analyzers.LanguageJavaScript, analyzers.LanguageTypeScript},
+		Files: []string{
+			`C:\ws\main.py`,
+			`C:\ws\app.tsx`,
+			`C:\ws\static\assets\index-ABC123.js`,
+			`C:\ws\typed.pyi`,
+			`C:\ws\bundle.min.js`,
+		},
+	}
+	plan, err := adapter.Plan(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"check", "--output-format", "json", "--no-fix", `C:\ws\main.py`, `C:\ws\typed.pyi`}
+	if !reflect.DeepEqual(plan.Commands[0].Args, want) {
+		t.Fatalf("args = %#v, want %#v (non-Python files must never reach ruff)", plan.Commands[0].Args, want)
+	}
+}
+
+func TestPlanRejectsSelectionWithoutPythonFiles(t *testing.T) {
+	adapter := New("ruff.exe", "test")
+	req := analyzers.ScanRequest{
+		WorkspaceRoot: `C:\ws`,
+		// A stale caller may claim Python is present while listing only web
+		// files; the file list is authoritative, so Plan must refuse rather
+		// than invoke a bare `ruff check` that would scan its working dir.
+		Languages: []analyzers.Language{analyzers.LanguagePython},
+		Files:     []string{`C:\ws\app.ts`, `C:\ws\app.js`},
+	}
+	if _, err := adapter.Plan(context.Background(), req); err == nil {
+		t.Fatal("expected error when no Python files are in the selection")
+	}
+}
+
 func TestClassificationCoversDeepRulePrefixes(t *testing.T) {
 	cases := []struct {
 		code     string

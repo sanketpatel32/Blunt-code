@@ -57,14 +57,19 @@ func (a *Adapter) EnsureInstalled(context.Context, analyzers.ToolEnvironment) er
 	return nil
 }
 func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.AnalyzerPlan, error) {
-	if !analyzers.HasLanguage(req.Languages, analyzers.LanguagePython) {
+	// The orchestrator already narrows req.Files to Python, but the adapter
+	// filters again so no caller can hand ruff a JavaScript or TypeScript
+	// file: ruff parses whatever it is given as Python, and a minified web
+	// bundle then produces megabytes of syntax-error JSON.
+	pyFiles := analyzers.FilesForLanguages(req.Files, analyzers.LanguagePython)
+	if len(pyFiles) == 0 {
 		return analyzers.AnalyzerPlan{}, fmt.Errorf("ruff does not apply")
 	}
 	args := []string{"check", "--output-format", "json", "--no-fix"}
 	if req.Profile == analyzers.ProfileDeep {
 		args = append(args, "--select="+deepSelect)
 	}
-	args = append(args, req.Files...)
+	args = append(args, pyFiles...)
 	return analyzers.AnalyzerPlan{AnalyzerID: ID, Version: a.Version, Commands: []analyzers.ProcessSpec{{Executable: a.Executable, Args: args, Dir: req.WorkspaceRoot}}}, nil
 }
 func (a *Adapter) Run(ctx context.Context, p analyzers.AnalyzerPlan, emit analyzers.EventEmitter) (analyzers.AnalyzerResult, error) {

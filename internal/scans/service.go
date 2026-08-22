@@ -166,7 +166,7 @@ func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, 
 	}()
 	s.emit(scan.ID, "scan.started", map[string]any{"state": "queued"})
 	s.transition(scan.ID, "preparing", map[string]any{"stage": "Preparing workspace"})
-	languages, absoluteFiles := scanInputs(work.RootPath, files)
+	languages, absoluteFiles, filesByLanguage := scanInputs(work.RootPath, files)
 	if len(absoluteFiles) == 0 {
 		_ = s.db.UpdateScanState(context.Background(), scan.ID, "failed", "No supported source files were selected.")
 		s.emit(scan.ID, "scan.completed", map[string]any{"state": "failed"})
@@ -178,7 +178,13 @@ func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, 
 			s.finishCancelled(scan.ID)
 			return
 		}
-		if !analyzers.HasLanguage(languages, adapter.SupportedLanguages()...) {
+		// Each adapter is handed only the selected files whose language it
+		// supports. Gating on the workspace language list alone was not
+		// enough: a mixed-language workspace used to pass every file to
+		// every analyzer, so ruff received minified JavaScript and failed
+		// parsing it as Python.
+		adapterFiles := filesForLanguages(filesByLanguage, adapter.SupportedLanguages()...)
+		if len(adapterFiles) == 0 {
 			continue
 		}
 		// Profile tiers:
@@ -217,7 +223,7 @@ func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, 
 			s.emit(scan.ID, "analyzer.failed", map[string]any{"analyzer_id": adapter.ID(), "error": errorText})
 			continue
 		}
-		plan, err := adapter.Plan(ctx, analyzers.ScanRequest{WorkspaceID: work.ID, ScanID: scan.ID, WorkspaceRoot: work.RootPath, Files: absoluteFiles, Languages: languages, Profile: scan.Profile})
+		plan, err := adapter.Plan(ctx, analyzers.ScanRequest{WorkspaceID: work.ID, ScanID: scan.ID, WorkspaceRoot: work.RootPath, Files: adapterFiles, Languages: languages, Profile: scan.Profile})
 		if err != nil {
 			_, _ = s.db.SaveAnalyzerResult(context.Background(), scan.ID, database.AnalyzerRunInput{AnalyzerID: adapter.ID(), Version: status.Version, State: "failed", StartedAt: started, FinishedAt: time.Now(), Error: err.Error()}, nil, nil)
 			failed++
@@ -375,15 +381,24 @@ func (s *Service) finishCancelled(scanID string) {
 	_ = s.db.UpdateScanState(context.Background(), scanID, "cancelled", "Cancelled by user.")
 	s.emit(scanID, "scan.cancelled", nil)
 }
-func scanInputs(root string, files []core.FileEntry) ([]analyzers.Language, []string) {
+
+// scanInputs derives the scan's language list, the flat absolute file list,
+// and the same files grouped by language. The per-language map lets the run
+// loop hand every adapter only the files it can actually lint, so a Python
+// linter never receives JavaScript sources (and vice versa).
+func scanInputs(root string, files []core.FileEntry) ([]analyzers.Language, []string, map[analyzers.Language][]string) {
 	languageSet := map[analyzers.Language]bool{}
-	var absolute []string
+	absolute := make([]string, 0, len(files))
+	byLanguage := map[analyzers.Language][]string{}
 	for _, file := range files {
 		if !file.Selected || file.Language == "" {
 			continue
 		}
-		languageSet[analyzers.Language(file.Language)] = true
-		absolute = append(absolute, filepath.Join(root, file.RelativePath))
+		lang := analyzers.Language(file.Language)
+		path := filepath.Join(root, file.RelativePath)
+		languageSet[lang] = true
+		absolute = append(absolute, path)
+		byLanguage[lang] = append(byLanguage[lang], path)
 	}
 	var languages []analyzers.Language
 	for _, lang := range []analyzers.Language{analyzers.LanguagePython, analyzers.LanguageJavaScript, analyzers.LanguageTypeScript} {
@@ -391,7 +406,17 @@ func scanInputs(root string, files []core.FileEntry) ([]analyzers.Language, []st
 			languages = append(languages, lang)
 		}
 	}
-	return languages, absolute
+	return languages, absolute, byLanguage
+}
+
+// filesForLanguages flattens the per-language map into the file list one
+// adapter should receive, preserving discovery order within each language.
+func filesForLanguages(byLanguage map[analyzers.Language][]string, langs ...analyzers.Language) []string {
+	out := make([]string, 0)
+	for _, lang := range langs {
+		out = append(out, byLanguage[lang]...)
+	}
+	return out
 }
 
 type eventEmitter struct {
