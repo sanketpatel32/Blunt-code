@@ -96,6 +96,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings/{findingID}/preview", s.findingPreview)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/report", s.report)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/report.md", s.reportMarkdown)
+	s.mux.HandleFunc("GET /api/v1/scans/{id}/report.sarif", s.reportSARIF)
 	s.mux.HandleFunc("GET /api/v1/tools", s.listTools)
 	s.mux.HandleFunc("POST /api/v1/tools/{id}/install", s.installTool)
 	s.mux.HandleFunc("POST /api/v1/tools/{id}/repair", s.installTool)
@@ -942,8 +943,10 @@ func (s *Server) reportModel(ctx context.Context, scan core.Scan, work core.Work
 		startedAt = &scan.Snapshot.CapturedAt
 	}
 	files := []string(nil)
+	bluntCodeVersion := ""
 	if scan.Snapshot != nil {
 		files = append(files, scan.Snapshot.SelectedFiles...)
+		bluntCodeVersion = scan.Snapshot.BluntCodeVersion
 	}
 	if len(files) == 0 && scan.SelectedFileCount > 0 {
 		files = make([]string, scan.SelectedFileCount)
@@ -953,7 +956,7 @@ func (s *Server) reportModel(ctx context.Context, scan core.Scan, work core.Work
 		skippedCount = 0
 	}
 	return reports.Build(reports.Input{
-		WorkspaceName: work.Name, WorkspacePath: work.RootPath, ScanID: scan.ID, Profile: scan.Profile,
+		WorkspaceName: work.Name, WorkspacePath: work.RootPath, ScanID: scan.ID, Profile: scan.Profile, BluntCodeVersion: bluntCodeVersion,
 		StartedAt: startedAtValue(startedAt), Files: files, SkippedFiles: make([]string, skippedCount), Findings: findings, Metrics: metrics, Runs: runs,
 		Comparison: reports.Comparison{New: comparison.New, Fixed: comparison.Fixed, Persistent: comparison.Persistent, UnknownAnalyzerIDs: comparison.UnknownAnalyzerIDs},
 	}), nil
@@ -1042,6 +1045,48 @@ func (s *Server) reportMarkdown(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 	w.Header().Set("Content-Disposition", `attachment; filename="blunt-code-report.md"`)
 	_, _ = w.Write([]byte(reports.Markdown(model)))
+}
+
+// reportSARIF exports the scan as a SARIF 2.1.0 attachment, the interchange
+// format understood by VS Code, GitHub code scanning, and other standard
+// tooling. Like the JSON report it is regenerated from stored scan data, not
+// from a persisted artifact.
+func (s *Server) reportSARIF(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !validID(id) {
+		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
+		return
+	}
+	scan, err := s.db.Scan(r.Context(), id)
+	if errors.Is(err, sql.ErrNoRows) {
+		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
+		return
+	}
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load report.")
+		return
+	}
+	work, err := s.db.Workspace(r.Context(), scan.WorkspaceID)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load report.")
+		return
+	}
+	model, err := s.reportModel(r.Context(), scan, work)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load report.")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="bluntcode-scan-%s.sarif"`, shortID(scan.ID)))
+	_ = json.NewEncoder(w).Encode(reports.SARIF(model))
+}
+
+// shortID keeps attachment filenames readable while staying scan-unique.
+func shortID(id string) string {
+	if len(id) >= 8 {
+		return id[:8]
+	}
+	return id
 }
 
 func (s *Server) listTools(w http.ResponseWriter, r *http.Request) {

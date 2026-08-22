@@ -20,14 +20,14 @@ type Comparison struct {
 	UnknownAnalyzerIDs     []string
 }
 type Input struct {
-	WorkspaceName, WorkspacePath, ScanID, Profile string
-	StartedAt                                     time.Time
-	Files                                         []string
-	SkippedFiles                                  []string
-	Findings                                      []analyzers.Finding
-	Metrics                                       []analyzers.Metric
-	Runs                                          []Run
-	Comparison                                    Comparison
+	WorkspaceName, WorkspacePath, ScanID, Profile, BluntCodeVersion string
+	StartedAt                                                       time.Time
+	Files                                                           []string
+	SkippedFiles                                                    []string
+	Findings                                                        []analyzers.Finding
+	Metrics                                                         []analyzers.Metric
+	Runs                                                            []Run
+	Comparison                                                      Comparison
 }
 type Model struct {
 	Input

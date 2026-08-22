@@ -457,6 +457,81 @@ func TestMarkdownReportIsRegeneratedFromScanData(t *testing.T) {
 	}
 }
 
+func TestSARIFReportDownloadsAsAttachment(t *testing.T) {
+	s := testServer(t)
+	ctx := context.Background()
+	work, err := s.db.CreateWorkspace(ctx, core.Workspace{RootPath: t.TempDir(), Name: "Example"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scan, err := s.db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: "completed", Profile: "standard",
+		Snapshot: &core.ScanSnapshot{BluntCodeVersion: "9.9.9", CapturedAt: time.Now()}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := finding("ruff", "F401", "src/main.py", "unused import", analyzers.SeverityHigh, analyzers.CategoryCorrectness)
+	f.StartLine, f.StartColumn, f.EndLine, f.EndColumn = 3, 1, 3, 20
+	if _, err := s.db.SaveAnalyzerResult(ctx, scan.ID, database.AnalyzerRunInput{AnalyzerID: "ruff", Version: "test", State: "succeeded"}, []analyzers.Finding{f}, nil); err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+scan.ID+"/report.sarif", nil)
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	disposition := response.Header().Get("Content-Disposition")
+	if response.Code != http.StatusOK || disposition != `attachment; filename="bluntcode-scan-`+scan.ID[:8]+`.sarif"` {
+		t.Fatalf("got %d disposition %q: %s", response.Code, disposition, response.Body.String())
+	}
+	var body struct {
+		Schema  string `json:"$schema"`
+		Version string `json:"version"`
+		Runs    []struct {
+			Tool struct {
+				Driver struct {
+					Name    string `json:"name"`
+					Version string `json:"version"`
+					Rules   []struct {
+						ID string `json:"id"`
+					} `json:"rules"`
+				} `json:"driver"`
+			} `json:"tool"`
+			Results []struct {
+				RuleID string `json:"ruleId"`
+				Level  string `json:"level"`
+			} `json:"results"`
+		} `json:"runs"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("invalid SARIF: %v: %s", err, response.Body.String())
+	}
+	if body.Schema != "https://json.schemastore.org/sarif-2.1.0.json" || body.Version != "2.1.0" || len(body.Runs) != 1 {
+		t.Fatalf("unexpected SARIF header: %#v", body)
+	}
+	run := body.Runs[0]
+	if run.Tool.Driver.Name != "Blunt Code" || run.Tool.Driver.Version != "9.9.9" || len(run.Tool.Driver.Rules) != 1 || run.Tool.Driver.Rules[0].ID != "F401" {
+		t.Fatalf("unexpected driver: %#v", run.Tool.Driver)
+	}
+	if len(run.Results) != 1 || run.Results[0].RuleID != "F401" || run.Results[0].Level != "error" {
+		t.Fatalf("unexpected results: %#v", run.Results)
+	}
+}
+
+func TestSARIFReportRejectsUnknownScan(t *testing.T) {
+	s := testServer(t)
+	unknown := "00000000-0000-4000-8000-000000000000"
+	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+unknown+"/report.sarif", nil)
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusNotFound || !strings.Contains(response.Body.String(), "SCAN_NOT_FOUND") {
+		t.Fatalf("got %d: %s", response.Code, response.Body.String())
+	}
+	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/not-a-uuid/report.sarif", nil)
+	response = httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusNotFound || !strings.Contains(response.Body.String(), "SCAN_NOT_FOUND") {
+		t.Fatalf("malformed id got %d: %s", response.Code, response.Body.String())
+	}
+}
+
 func TestSettingsPersistOfflineMode(t *testing.T) {
 	s := testServer(t)
 	request := httptest.NewRequest(http.MethodPatch, "http://127.0.0.1/api/v1/settings", strings.NewReader(`{"offline":true,"open_browser":false}`))
