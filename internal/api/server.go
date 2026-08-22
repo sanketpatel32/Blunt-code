@@ -4,6 +4,7 @@ package api
 import (
 	"context"
 	"database/sql"
+	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -93,6 +94,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/v1/scans/{id}/cancel", s.cancelScan)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/events", s.scanEvents)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings", s.findings)
+	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings.csv", s.findingsCSV)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings/{findingID}/preview", s.findingPreview)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/report", s.report)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/report.md", s.reportMarkdown)
@@ -760,6 +762,66 @@ func (s *Server) findings(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"items": page.Items, "total": page.Total, "limit": page.Limit, "offset": page.Offset, "next_offset": page.NextOffset, "has_more": page.HasMore})
 }
 
+// csvBOM prefixes CSV exports so Excel on Windows detects UTF-8 and renders
+// non-ASCII finding text correctly instead of mangling it.
+const csvBOM = "\xef\xbb\xbf"
+
+// findingsCSVHeader is the fixed export column order; findingsCSVHeader and
+// the row writer below must stay in sync.
+var findingsCSVHeader = []string{"severity", "category", "analyzer", "rule_id", "title", "message", "file", "line", "column", "end_line", "status", "remediation", "documentation_url"}
+
+// findingsCSV exports the scan's findings as a spreadsheet-friendly CSV
+// attachment. It shares the JSON endpoint's filter parsing so an export always
+// matches what the findings list shows; limit and offset are ignored because
+// every matching row is written, up to the repository safety cap.
+func (s *Server) findingsCSV(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !validID(id) {
+		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
+		return
+	}
+	scan, err := s.db.Scan(r.Context(), id)
+	if errors.Is(err, sql.ErrNoRows) {
+		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
+		return
+	}
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load scan.")
+		return
+	}
+	filter, err := findingQueryFilter(r)
+	if err != nil {
+		fail(w, 400, "INVALID_FINDING_QUERY", err.Error())
+		return
+	}
+	findings, err := s.db.FindingsCSV(r.Context(), scan, filter)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load findings.")
+		return
+	}
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="bluntcode-scan-%s-findings.csv"`, shortID(scan.ID)))
+	_, _ = w.Write([]byte(csvBOM))
+	writer := csv.NewWriter(w)
+	_ = writer.Write(findingsCSVHeader)
+	for _, f := range findings {
+		_ = writer.Write([]string{
+			string(f.Severity), string(f.Category), f.AnalyzerID, f.RuleID, f.Title, f.Message, f.RelativePath,
+			csvNumber(f.StartLine), csvNumber(f.StartColumn), csvNumber(f.EndLine), f.Status, f.Remediation, f.DocumentationURL,
+		})
+	}
+	writer.Flush()
+}
+
+// csvNumber renders optional finding positions; zero means "not stored" and
+// exports as an empty cell.
+func csvNumber(value int) string {
+	if value == 0 {
+		return ""
+	}
+	return strconv.Itoa(value)
+}
+
 type sourcePreviewLine struct {
 	Number int    `json:"number"`
 	Text   string `json:"text"`
@@ -863,7 +925,11 @@ func (s *Server) findingPreview(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, preview)
 }
 
-func findingFilter(r *http.Request) (database.FindingFilter, error) {
+// findingQueryFilter parses the finding controls shared by the JSON list and
+// the CSV export: severity, category, analyzer, path, status, q, sort, and
+// order. Both endpoints reject the same bad input because they parse through
+// this one function.
+func findingQueryFilter(r *http.Request) (database.FindingFilter, error) {
 	query := r.URL.Query()
 	read := func(name string) string { return strings.TrimSpace(query.Get(name)) }
 	filter := database.FindingFilter{
@@ -875,21 +941,6 @@ func findingFilter(r *http.Request) (database.FindingFilter, error) {
 		Query:    read("q"),
 		Sort:     strings.ToLower(read("sort")),
 		Order:    strings.ToLower(read("order")),
-		Limit:    50,
-	}
-	if raw := read("limit"); raw != "" {
-		value, err := strconv.Atoi(raw)
-		if err != nil {
-			return filter, fmt.Errorf("limit must be 25, 50, or 100")
-		}
-		filter.Limit = value
-	}
-	if raw := read("offset"); raw != "" {
-		value, err := strconv.Atoi(raw)
-		if err != nil || value < 0 {
-			return filter, fmt.Errorf("offset must be a non-negative integer")
-		}
-		filter.Offset = value
 	}
 	if filter.Severity != "" && !oneOf(filter.Severity, "critical", "high", "medium", "low", "info") {
 		return filter, fmt.Errorf("severity must be critical, high, medium, low, or info")
@@ -902,6 +953,31 @@ func findingFilter(r *http.Request) (database.FindingFilter, error) {
 	}
 	if filter.Order != "" && !oneOf(filter.Order, "asc", "desc") {
 		return filter, fmt.Errorf("order must be asc or desc")
+	}
+	return filter, nil
+}
+
+// findingFilter extends the shared controls with the JSON list's pagination.
+func findingFilter(r *http.Request) (database.FindingFilter, error) {
+	filter, err := findingQueryFilter(r)
+	if err != nil {
+		return filter, err
+	}
+	filter.Limit = 50
+	query := r.URL.Query()
+	if raw := strings.TrimSpace(query.Get("limit")); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil {
+			return filter, fmt.Errorf("limit must be 25, 50, or 100")
+		}
+		filter.Limit = value
+	}
+	if raw := strings.TrimSpace(query.Get("offset")); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 0 {
+			return filter, fmt.Errorf("offset must be a non-negative integer")
+		}
+		filter.Offset = value
 	}
 	if !oneOf(strconv.Itoa(filter.Limit), "25", "50", "100") {
 		return filter, fmt.Errorf("limit must be 25, 50, or 100")

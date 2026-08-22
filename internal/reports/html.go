@@ -139,11 +139,11 @@ var htmlTemplate = template.Must(template.New("report").Parse(htmlDocument))
 
 type htmlModel struct {
 	WorkspaceName, WorkspacePath, Profile, Date, Started, Finished, Version string
-	Total, New, Fixed, Persistent                                          int
-	Severities                                                             []htmlSeverity
-	Warnings                                                               []string
-	Runs                                                                   []htmlRun
-	Findings                                                               []htmlFinding
+	Total, New, Fixed, Persistent                                           int
+	Severities                                                              []htmlSeverity
+	Warnings                                                                []string
+	Runs                                                                    []htmlRun
+	Findings                                                                []htmlFinding
 }
 type htmlSeverity struct {
 	Name, Class string

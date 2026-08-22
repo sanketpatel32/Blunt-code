@@ -1,7 +1,9 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -99,6 +101,139 @@ func TestFindingsFiltersPaginationAndComparisonStatus(t *testing.T) {
 	s.Handler().ServeHTTP(response, request)
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("invalid pagination was accepted: %d %s", response.Code, response.Body.String())
+	}
+}
+
+// csvRows fetches findings.csv and decodes it with encoding/csv so hostile
+// field content is asserted per CSV rules, never by string matching.
+func csvRows(t *testing.T, s *Server, scanID, query string) [][]string {
+	t.Helper()
+	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+scanID+"/findings.csv"+query, nil)
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("findings.csv%s: %d %s", query, response.Code, response.Body.String())
+	}
+	if contentType := response.Header().Get("Content-Type"); contentType != "text/csv; charset=utf-8" {
+		t.Fatalf("content type %q: %s", contentType, response.Body.String())
+	}
+	disposition := response.Header().Get("Content-Disposition")
+	if disposition != `attachment; filename="bluntcode-scan-`+scanID[:8]+`-findings.csv"` {
+		t.Fatalf("disposition %q", disposition)
+	}
+	body := response.Body.Bytes()
+	if !bytes.HasPrefix(body, []byte(csvBOM)) {
+		t.Fatalf("CSV must start with a UTF-8 BOM for Excel: %q", body)
+	}
+	records, err := csv.NewReader(bytes.NewReader(body[len(csvBOM):])).ReadAll()
+	if err != nil {
+		t.Fatalf("invalid CSV: %v: %q", err, body)
+	}
+	wantHeader := "severity,category,analyzer,rule_id,title,message,file,line,column,end_line,status,remediation,documentation_url"
+	if len(records) == 0 || strings.Join(records[0], ",") != wantHeader {
+		t.Fatalf("unexpected header: %#v", records)
+	}
+	for _, row := range records {
+		if len(row) != 13 {
+			t.Fatalf("every row must carry 13 fields: %#v", row)
+		}
+	}
+	return records
+}
+
+func csvRowByRule(records [][]string, rule string) []string {
+	for _, row := range records[1:] {
+		if row[3] == rule {
+			return row
+		}
+	}
+	return nil
+}
+
+func TestFindingsCSVDownloadsAttachmentWithFiltersAndEscaping(t *testing.T) {
+	s := testServer(t)
+	ctx := context.Background()
+	work, err := s.db.CreateWorkspace(ctx, core.Workspace{RootPath: t.TempDir(), Name: "Example"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hostileMessage := "comma, quote \" and\nnewline with ünicode ✓"
+	persistent := finding("ruff", "PERSIST", "src/persistent.py", hostileMessage, analyzers.SeverityHigh, analyzers.CategorySecurity)
+	persistent.StartLine, persistent.StartColumn, persistent.EndLine = 12, 3, 14
+	previous, err := s.db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: "queued"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.SaveAnalyzerResult(ctx, previous.ID, database.AnalyzerRunInput{AnalyzerID: "ruff", Version: "test", State: "succeeded"}, []analyzers.Finding{persistent}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.db.CompleteScan(ctx, previous.ID, "completed", ""); err != nil {
+		t.Fatal(err)
+	}
+	current, err := s.db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: "queued"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := []analyzers.Finding{persistent,
+		finding("biome", "lint/a", "src/a.ts", "alpha issue", analyzers.SeverityHigh, analyzers.CategoryCorrectness),
+		finding("biome", "lint/b", "src/b.ts", "beta issue", analyzers.SeverityMedium, analyzers.CategoryStyle),
+		finding("biome", "lint/c", "src/c.ts", "gamma issue", analyzers.SeverityMedium, analyzers.CategoryStyle)}
+	if _, err := s.db.SaveAnalyzerResult(ctx, current.ID, database.AnalyzerRunInput{AnalyzerID: "biome", Version: "test", State: "succeeded"}, items, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.db.CompleteScan(ctx, current.ID, "completed", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	records := csvRows(t, s, current.ID, "")
+	if len(records) != 5 {
+		t.Fatalf("header plus every matching finding: %#v", records)
+	}
+	if row := csvRowByRule(records, "lint/a"); row == nil || row[0] != "high" || row[2] != "biome" || row[6] != "src/a.ts" || row[7] != "" || row[8] != "" || row[9] != "" || row[10] != "new" {
+		t.Fatalf("finding without a location must export empty position cells and status new: %#v", row)
+	}
+	hostile := csvRowByRule(records, "PERSIST")
+	if hostile == nil || hostile[5] != hostileMessage || hostile[0] != "high" || hostile[1] != "security" || hostile[2] != "ruff" || hostile[6] != "src/persistent.py" || hostile[7] != "12" || hostile[8] != "3" || hostile[9] != "14" || hostile[10] != "persistent" || hostile[11] != "" || hostile[12] != "" {
+		t.Fatalf("hostile content must round-trip per CSV rules: %#v", hostile)
+	}
+
+	filtered := csvRows(t, s, current.ID, "?severity=high")
+	if len(filtered) != 3 || csvRowByRule(filtered, "lint/b") != nil || csvRowByRule(filtered, "lint/c") != nil {
+		t.Fatalf("severity filter must keep only high rows: %#v", filtered)
+	}
+	for _, row := range filtered[1:] {
+		if row[0] != "high" {
+			t.Fatalf("severity filter leaked other severities: %#v", row)
+		}
+	}
+
+	ignored := csvRows(t, s, current.ID, "?severity=high&limit=9999&offset=9999")
+	if len(ignored) != len(filtered) {
+		t.Fatalf("limit and offset must be ignored by the export: %d vs %d rows", len(ignored)-1, len(filtered)-1)
+	}
+
+	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+current.ID+"/findings.csv?severity=bogus", nil)
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "INVALID_FINDING_QUERY") {
+		t.Fatalf("shared filter validation must reject bad input: %d %s", response.Code, response.Body.String())
+	}
+}
+
+func TestFindingsCSVRejectsUnknownScan(t *testing.T) {
+	s := testServer(t)
+	unknown := "00000000-0000-4000-8000-000000000000"
+	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+unknown+"/findings.csv", nil)
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusNotFound || !strings.Contains(response.Body.String(), "SCAN_NOT_FOUND") {
+		t.Fatalf("got %d: %s", response.Code, response.Body.String())
+	}
+	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/not-a-uuid/findings.csv", nil)
+	response = httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusNotFound || !strings.Contains(response.Body.String(), "SCAN_NOT_FOUND") {
+		t.Fatalf("malformed id got %d: %s", response.Code, response.Body.String())
 	}
 }
 

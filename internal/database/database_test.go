@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"bluntcode/internal/analyzers"
 	"bluntcode/internal/core"
 )
 
@@ -158,5 +159,76 @@ func TestRecentScansJoinsWorkspaceAndClampsLimit(t *testing.T) {
 	summary, err := db.ScanSummary(context.Background())
 	if err != nil || summary.WorkspacesTotal != 1 || summary.WorkspacesScanned != 1 || summary.ScansTotal != MaxRecentScansLimit+5 || summary.ActiveScans != 0 {
 		t.Fatalf("summary=%#v err=%v", summary, err)
+	}
+}
+
+func TestFindingsCSVMatchesPageFiltersAndIgnoresPagination(t *testing.T) {
+	db, err := Open(context.Background(), filepath.Join(t.TempDir(), "bluntcode.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	work, err := db.CreateWorkspace(ctx, core.Workspace{Name: "Sample", RootPath: "C:/sample"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	makeFinding := func(rule, path, message string, severity analyzers.Severity) analyzers.Finding {
+		f := analyzers.Finding{AnalyzerID: "ruff", RuleID: rule, RelativePath: path, Message: message, Severity: severity, Category: analyzers.CategoryCorrectness}
+		f.SetFingerprint()
+		return f
+	}
+	persist := makeFinding("PERSIST", "src/persist.py", "same issue", analyzers.SeverityHigh)
+	previous, err := db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: "queued"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.SaveAnalyzerResult(ctx, previous.ID, AnalyzerRunInput{AnalyzerID: "ruff", Version: "test", State: "succeeded"}, []analyzers.Finding{persist}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CompleteScan(ctx, previous.ID, "completed", ""); err != nil {
+		t.Fatal(err)
+	}
+	current, err := db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: "queued"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := []analyzers.Finding{persist,
+		makeFinding("H2", "src/h2.py", "high two", analyzers.SeverityHigh),
+		makeFinding("M1", "src/m1.py", "medium one", analyzers.SeverityMedium),
+		makeFinding("M2", "src/m2.py", "medium two", analyzers.SeverityMedium)}
+	if _, err := db.SaveAnalyzerResult(ctx, current.ID, AnalyzerRunInput{AnalyzerID: "ruff", Version: "test", State: "succeeded"}, items, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CompleteScan(ctx, current.ID, "completed", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	page, err := db.FindingsPage(ctx, current, FindingFilter{Limit: 25})
+	if err != nil || page.Total != 4 {
+		t.Fatalf("page must agree on the matching set: %#v (%v)", page, err)
+	}
+	all, err := db.FindingsCSV(ctx, current, FindingFilter{})
+	if err != nil || len(all) != 4 {
+		t.Fatalf("export must return every matching row: %#v (%v)", all, err)
+	}
+	// Shared ordering: default sort is relative_path ascending.
+	if all[0].RuleID != "H2" || all[3].RuleID != "PERSIST" || all[3].Status != "persistent" || all[0].Status != "new" {
+		t.Fatalf("export must reuse the page ordering and comparison status: %#v", all)
+	}
+	high, err := db.FindingsCSV(ctx, current, FindingFilter{Severity: "high"})
+	if err != nil || len(high) != 2 {
+		t.Fatalf("severity filter: %#v (%v)", high, err)
+	}
+	unpaged, err := db.FindingsCSV(ctx, current, FindingFilter{Severity: "high", Limit: 1, Offset: 1})
+	if err != nil || len(unpaged) != 2 {
+		t.Fatalf("limit and offset must be ignored by the export: %#v (%v)", unpaged, err)
+	}
+	persistent, err := db.FindingsCSV(ctx, current, FindingFilter{Status: "persistent"})
+	if err != nil || len(persistent) != 1 || persistent[0].RuleID != "PERSIST" {
+		t.Fatalf("status filter: %#v (%v)", persistent, err)
+	}
+	if _, err := db.FindingsCSV(ctx, current, FindingFilter{Status: "bogus"}); err == nil {
+		t.Fatal("invalid status must be rejected")
 	}
 }

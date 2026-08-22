@@ -615,32 +615,46 @@ type FindingsPage struct {
 	HasMore    bool
 }
 
-// FindingsPage returns a bounded page and applies comparison status relative
-// to the previous completed scan in the same workspace.
-func (d *DB) FindingsPage(ctx context.Context, scan core.Scan, filter FindingFilter) (FindingsPage, error) {
-	if filter.Limit == 0 {
-		filter.Limit = 50
-	}
-	if filter.Limit < 1 || filter.Limit > 100 || (filter.Limit != 25 && filter.Limit != 50 && filter.Limit != 100) {
-		return FindingsPage{}, fmt.Errorf("limit must be 25, 50, or 100")
-	}
-	if filter.Offset < 0 {
-		return FindingsPage{}, fmt.Errorf("offset must not be negative")
-	}
+// MaxFindingsExportRows bounds the CSV export: every matching row is written,
+// but a pathological scan can never drag more than this many findings into
+// memory or the HTTP response at once.
+const MaxFindingsExportRows = 50000
+
+// findingColumns is the projection shared by every filtered findings query;
+// nullable text is coalesced so row scans never observe SQL NULLs.
+const findingColumns = `findings.id,findings.analyzer_id,COALESCE(findings.rule_id,''),findings.fingerprint,findings.severity,findings.category,COALESCE(findings.title,''),findings.message,COALESCE(findings.relative_path,''),COALESCE(findings.start_line,0),COALESCE(findings.start_column,0),COALESCE(findings.end_line,0),COALESCE(findings.end_column,0),COALESCE(findings.remediation,''),COALESCE(findings.documentation_url,''),COALESCE(findings.raw_severity,''),findings.metadata_json`
+
+// findingQuery carries the filter, ordering, and comparison-status machinery
+// shared by FindingsPage and FindingsCSV so the paged JSON list and the CSV
+// export always agree on which rows match.
+type findingQuery struct {
+	previousID string
+	statusExpr string
+	whereSQL   string
+	args       []any
+	order      string
+	orderArgs  []any
+}
+
+// buildFindingQuery validates the controls shared by both findings endpoints,
+// resolves the previous completed scan for comparison status, and assembles
+// the WHERE and ORDER BY clauses. Limit and offset stay the paged caller's
+// responsibility.
+func (d *DB) buildFindingQuery(ctx context.Context, scan core.Scan, filter FindingFilter) (findingQuery, error) {
 	if filter.Status != "" && filter.Status != "new" && filter.Status != "persistent" {
-		return FindingsPage{}, fmt.Errorf("status must be new or persistent")
+		return findingQuery{}, fmt.Errorf("status must be new or persistent")
 	}
 	if filter.Sort != "" && filter.Sort != "severity" && filter.Sort != "path" && filter.Sort != "analyzer" && filter.Sort != "status" {
-		return FindingsPage{}, fmt.Errorf("sort must be severity, path, analyzer, or status")
+		return findingQuery{}, fmt.Errorf("sort must be severity, path, analyzer, or status")
 	}
 	if filter.Order != "" && filter.Order != "asc" && filter.Order != "desc" {
-		return FindingsPage{}, fmt.Errorf("order must be asc or desc")
+		return findingQuery{}, fmt.Errorf("order must be asc or desc")
 	}
 	previousID, err := d.PreviousCompletedScanID(ctx, scan.WorkspaceID, scan.ID)
 	if errors.Is(err, sql.ErrNoRows) {
 		previousID = ""
 	} else if err != nil {
-		return FindingsPage{}, err
+		return findingQuery{}, err
 	}
 
 	// statusExpr is deliberately repeated in the SELECT/WHERE/ORDER clauses so
@@ -669,14 +683,7 @@ func (d *DB) FindingsPage(ctx context.Context, scan core.Scan, filter FindingFil
 		where = append(where, statusExpr+"=?")
 		args = append(args, previousID, filter.Status)
 	}
-	whereSQL := strings.Join(where, " AND ")
-
-	countArgs := append([]any(nil), args...)
-	var total int
-	if err := d.SQL.QueryRowContext(ctx, "SELECT COUNT(*) FROM findings WHERE "+whereSQL, countArgs...).Scan(&total); err != nil {
-		return FindingsPage{}, err
-	}
-	order := "findings.relative_path ASC, findings.start_line ASC, findings.analyzer_id ASC, findings.rule_id ASC"
+	order, orderArgs := "findings.relative_path ASC, findings.start_line ASC, findings.analyzer_id ASC, findings.rule_id ASC", []any(nil)
 	direction := "ASC"
 	if filter.Order == "desc" {
 		direction = "DESC"
@@ -693,27 +700,66 @@ func (d *DB) FindingsPage(ctx context.Context, scan core.Scan, filter FindingFil
 		order = "findings.analyzer_id " + direction + ", findings.relative_path ASC, findings.start_line ASC"
 	case "status":
 		order = statusExpr + " " + direction + ", findings.relative_path ASC, findings.start_line ASC"
+		orderArgs = []any{previousID}
 	}
-	queryArgs := append([]any{previousID}, args...)
-	if filter.Sort == "status" {
-		queryArgs = append([]any{previousID}, queryArgs...)
+	return findingQuery{previousID: previousID, statusExpr: statusExpr, whereSQL: strings.Join(where, " AND "), args: args, order: order, orderArgs: orderArgs}, nil
+}
+
+// selectArgs orders bind parameters the way the shared SELECT mentions them:
+// the computed status column first, then the WHERE placeholders, then any
+// ORDER BY placeholders. Callers append their own LIMIT/OFFSET values.
+func (q findingQuery) selectArgs() []any {
+	args := append([]any{q.previousID}, q.args...)
+	return append(args, q.orderArgs...)
+}
+
+// scanFindingRow decodes one row of the shared filtered-findings SELECT,
+// including the computed comparison status.
+func scanFindingRow(rows *sql.Rows) (analyzers.Finding, error) {
+	var f analyzers.Finding
+	var severity, category, metadata string
+	if err := rows.Scan(&f.ID, &f.AnalyzerID, &f.RuleID, &f.Fingerprint, &severity, &category, &f.Title, &f.Message, &f.RelativePath, &f.StartLine, &f.StartColumn, &f.EndLine, &f.EndColumn, &f.Remediation, &f.DocumentationURL, &f.RawSeverity, &metadata, &f.Status); err != nil {
+		return analyzers.Finding{}, err
 	}
-	queryArgs = append(queryArgs, filter.Limit, filter.Offset)
-	rows, err := d.SQL.QueryContext(ctx, `SELECT findings.id,findings.analyzer_id,COALESCE(findings.rule_id,''),findings.fingerprint,findings.severity,findings.category,COALESCE(findings.title,''),findings.message,COALESCE(findings.relative_path,''),COALESCE(findings.start_line,0),COALESCE(findings.start_column,0),COALESCE(findings.end_line,0),COALESCE(findings.end_column,0),COALESCE(findings.remediation,''),COALESCE(findings.documentation_url,''),COALESCE(findings.raw_severity,''),findings.metadata_json,`+statusExpr+` FROM findings WHERE `+whereSQL+` ORDER BY `+order+` LIMIT ? OFFSET ?`, queryArgs...)
+	f.Severity = analyzers.Severity(severity)
+	f.Category = analyzers.Category(category)
+	_ = json.Unmarshal([]byte(metadata), &f.Metadata)
+	return f, nil
+}
+
+// FindingsPage returns a bounded page and applies comparison status relative
+// to the previous completed scan in the same workspace.
+func (d *DB) FindingsPage(ctx context.Context, scan core.Scan, filter FindingFilter) (FindingsPage, error) {
+	if filter.Limit == 0 {
+		filter.Limit = 50
+	}
+	if filter.Limit < 1 || filter.Limit > 100 || (filter.Limit != 25 && filter.Limit != 50 && filter.Limit != 100) {
+		return FindingsPage{}, fmt.Errorf("limit must be 25, 50, or 100")
+	}
+	if filter.Offset < 0 {
+		return FindingsPage{}, fmt.Errorf("offset must not be negative")
+	}
+	query, err := d.buildFindingQuery(ctx, scan, filter)
+	if err != nil {
+		return FindingsPage{}, err
+	}
+	countArgs := append([]any(nil), query.args...)
+	var total int
+	if err := d.SQL.QueryRowContext(ctx, "SELECT COUNT(*) FROM findings WHERE "+query.whereSQL, countArgs...).Scan(&total); err != nil {
+		return FindingsPage{}, err
+	}
+	queryArgs := append(query.selectArgs(), filter.Limit, filter.Offset)
+	rows, err := d.SQL.QueryContext(ctx, `SELECT `+findingColumns+`,`+query.statusExpr+` FROM findings WHERE `+query.whereSQL+` ORDER BY `+query.order+` LIMIT ? OFFSET ?`, queryArgs...)
 	if err != nil {
 		return FindingsPage{}, err
 	}
 	defer rows.Close()
 	page := FindingsPage{Total: total, Limit: filter.Limit, Offset: filter.Offset}
 	for rows.Next() {
-		var f analyzers.Finding
-		var severity, category, metadata string
-		if err := rows.Scan(&f.ID, &f.AnalyzerID, &f.RuleID, &f.Fingerprint, &severity, &category, &f.Title, &f.Message, &f.RelativePath, &f.StartLine, &f.StartColumn, &f.EndLine, &f.EndColumn, &f.Remediation, &f.DocumentationURL, &f.RawSeverity, &metadata, &f.Status); err != nil {
+		f, err := scanFindingRow(rows)
+		if err != nil {
 			return FindingsPage{}, err
 		}
-		f.Severity = analyzers.Severity(severity)
-		f.Category = analyzers.Category(category)
-		_ = json.Unmarshal([]byte(metadata), &f.Metadata)
 		page.Items = append(page.Items, f)
 	}
 	if err := rows.Err(); err != nil {
@@ -725,6 +771,31 @@ func (d *DB) FindingsPage(ctx context.Context, scan core.Scan, filter FindingFil
 		page.NextOffset = &next
 	}
 	return page, nil
+}
+
+// FindingsCSV returns every finding matching the filter with exactly the same
+// matching, ordering, and comparison-status rules as FindingsPage. Limit and
+// offset are ignored; the row count is capped at MaxFindingsExportRows.
+func (d *DB) FindingsCSV(ctx context.Context, scan core.Scan, filter FindingFilter) ([]analyzers.Finding, error) {
+	query, err := d.buildFindingQuery(ctx, scan, filter)
+	if err != nil {
+		return nil, err
+	}
+	queryArgs := append(query.selectArgs(), MaxFindingsExportRows)
+	rows, err := d.SQL.QueryContext(ctx, `SELECT `+findingColumns+`,`+query.statusExpr+` FROM findings WHERE `+query.whereSQL+` ORDER BY `+query.order+` LIMIT ?`, queryArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var output []analyzers.Finding
+	for rows.Next() {
+		f, err := scanFindingRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		output = append(output, f)
+	}
+	return output, rows.Err()
 }
 func (d *DB) Metrics(ctx context.Context, scanID string) ([]analyzers.Metric, error) {
 	rows, err := d.SQL.QueryContext(ctx, `SELECT analyzer_id,metric_key,label,COALESCE(value_number,0),COALESCE(unit,'') FROM metrics WHERE scan_id=?`, scanID)
