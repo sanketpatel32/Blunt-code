@@ -197,5 +197,8 @@ func sarifArtifactURI(path string) string {
 	if path == "" || path == "." {
 		return ""
 	}
+	if path == ".." || strings.HasPrefix(path, "../") || strings.Contains(path, "/../") {
+		return ""
+	}
 	return (&url.URL{Path: path}).EscapedPath()
 }

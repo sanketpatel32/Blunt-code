@@ -256,6 +256,21 @@ func (s *Server) createWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 	created, err := s.db.CreateWorkspace(r.Context(), core.Workspace{Name: input.Name, RootPath: root})
 	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "unique") || strings.Contains(err.Error(), "UNIQUE") {
+			if existing, lookupErr := s.db.WorkspaceByRoot(r.Context(), root); lookupErr == nil {
+				writeJSON(w, 200, existing)
+				return
+			}
+			key := workspace.CanonicalKey(root)
+			if all, listErr := s.db.Workspaces(r.Context()); listErr == nil {
+				for _, existing := range all {
+					if workspace.CanonicalKey(existing.RootPath) == key {
+						writeJSON(w, 200, existing)
+						return
+					}
+				}
+			}
+		}
 		fail(w, 500, "DATABASE_ERROR", "Could not save workspace.")
 		return
 	}
@@ -640,15 +655,24 @@ func (s *Server) putRules(w http.ResponseWriter, r *http.Request) {
 	}
 	rules := make([]core.WorkspaceRule, 0, len(input.Rules))
 	for _, item := range input.Rules {
-		if item.RuleType != "include" && item.RuleType != "exclude" || strings.TrimSpace(item.Pattern) == "" {
+		pattern := strings.TrimSpace(item.Pattern)
+		if item.RuleType != "include" && item.RuleType != "exclude" || pattern == "" {
 			fail(w, 400, "INVALID_RULE", "Each rule requires include/exclude and a pattern.")
+			return
+		}
+		if len(pattern) > 512 || strings.Contains(pattern, "..") && (strings.Contains(pattern, ".."+string(filepath.Separator)) || strings.Contains(pattern, "/..") || pattern == "..") {
+			fail(w, 400, "INVALID_RULE", "Pattern must not contain directory traversal.")
+			return
+		}
+		if filepath.IsAbs(pattern) || strings.Contains(pattern, ":") {
+			fail(w, 400, "INVALID_RULE", "Pattern must be relative and must not contain drive letters.")
 			return
 		}
 		enabled := true
 		if item.Enabled != nil {
 			enabled = *item.Enabled
 		}
-		rules = append(rules, core.WorkspaceRule{WorkspaceID: work.ID, RuleType: item.RuleType, Pattern: filepath.ToSlash(item.Pattern), Enabled: enabled})
+		rules = append(rules, core.WorkspaceRule{WorkspaceID: work.ID, RuleType: item.RuleType, Pattern: filepath.ToSlash(pattern), Enabled: enabled})
 	}
 	if err := s.db.ReplaceUserRules(r.Context(), work.ID, rules); err != nil {
 		fail(w, 500, "DATABASE_ERROR", "Could not save rules.")
@@ -706,7 +730,10 @@ func recentScanFilter(r *http.Request) (database.RecentScansFilter, error) {
 	if raw := strings.TrimSpace(query.Get("limit")); raw != "" {
 		value, err := strconv.Atoi(raw)
 		if err != nil || value < 1 {
-			return filter, fmt.Errorf("limit must be a positive integer of at most 50")
+			return filter, fmt.Errorf("limit must be a positive integer of at most %d", database.MaxRecentScansLimit)
+		}
+		if value > database.MaxRecentScansLimit {
+			value = database.MaxRecentScansLimit
 		}
 		filter.Limit = value
 	}
@@ -965,14 +992,23 @@ func (s *Server) findingsCSV(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="bluntcode-scan-%s-findings.csv"`, shortID(scan.ID)))
 	_, _ = w.Write([]byte(csvBOM))
 	writer := csv.NewWriter(w)
-	_ = writer.Write(findingsCSVHeader)
+	if err := writer.Write(findingsCSVHeader); err != nil {
+		s.log.Warn("csv header write failed", "error", err)
+		return
+	}
 	for _, f := range findings {
-		_ = writer.Write([]string{
+		if err := writer.Write([]string{
 			csvCell(string(f.Severity)), csvCell(string(f.Category)), csvCell(f.AnalyzerID), csvCell(f.RuleID), csvCell(f.Title), csvCell(f.Message), csvCell(f.RelativePath),
 			csvNumber(f.StartLine), csvNumber(f.StartColumn), csvNumber(f.EndLine), csvCell(f.Status), csvCell(f.Remediation), csvCell(f.DocumentationURL),
-		})
+		}); err != nil {
+			s.log.Warn("csv row write failed", "error", err)
+			return
+		}
 	}
 	writer.Flush()
+	if err := writer.Error(); err != nil {
+		s.log.Warn("csv flush failed", "error", err)
+	}
 }
 
 // csvNumber renders optional finding positions; zero means "not stored" and
@@ -1006,7 +1042,7 @@ func (s *Server) fixedFindings(w http.ResponseWriter, r *http.Request) {
 	limit := database.DefaultFixedFindingsLimit
 	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
 		value, err := strconv.Atoi(raw)
-		if err != nil || value < 1 {
+		if err != nil || value < 1 || value > database.MaxFixedFindingsLimit {
 			fail(w, 400, "INVALID_FINDING_QUERY", fmt.Sprintf("limit must be a positive integer of at most %d", database.MaxFixedFindingsLimit))
 			return
 		}
@@ -1476,11 +1512,16 @@ func securityMiddleware(next http.Handler) http.Handler {
 			return
 		}
 		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "no-referrer")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'")
 		next.ServeHTTP(w, r)
 	})
 }
 func loopbackHost(host string) bool {
+	if strings.TrimSpace(host) == "" {
+		return true
+	}
 	hostname, _, err := net.SplitHostPort(host)
 	if err != nil {
 		hostname = host

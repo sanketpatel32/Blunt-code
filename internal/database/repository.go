@@ -313,7 +313,7 @@ func (d *DB) CreateScanWithFiles(ctx context.Context, scan core.Scan, files []co
 	return scan, nil
 }
 func (d *DB) Scans(ctx context.Context, workspaceID string) ([]core.Scan, error) {
-	rows, err := d.SQL.QueryContext(ctx, `SELECT id,workspace_id,state,profile,started_at,finished_at,candidate_file_count,selected_file_count,total_findings,COALESCE(error_summary,''),snapshot_json FROM scans WHERE workspace_id=? ORDER BY started_at DESC`, workspaceID)
+	rows, err := d.SQL.QueryContext(ctx, `SELECT id,workspace_id,state,profile,started_at,finished_at,candidate_file_count,selected_file_count,total_findings,COALESCE(error_summary,''),snapshot_json FROM scans WHERE workspace_id=? ORDER BY started_at DESC, id DESC`, workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -940,7 +940,7 @@ func (d *DB) ReportPath(ctx context.Context, scanID string) (string, error) {
 }
 func (d *DB) PreviousCompletedScanID(ctx context.Context, workspaceID, currentScanID string) (string, error) {
 	var id string
-	err := d.SQL.QueryRowContext(ctx, `SELECT id FROM scans WHERE workspace_id=? AND id<>? AND state IN ('completed','completed_with_warnings') ORDER BY finished_at DESC LIMIT 1`, workspaceID, currentScanID).Scan(&id)
+	err := d.SQL.QueryRowContext(ctx, `SELECT id FROM scans WHERE workspace_id=? AND id<>? AND state IN ('completed','completed_with_warnings') ORDER BY COALESCE(finished_at, started_at) DESC, id DESC LIMIT 1`, workspaceID, currentScanID).Scan(&id)
 	return id, err
 }
 func (d *DB) SuccessfulAnalyzerIDs(ctx context.Context, scanID string) (map[string]bool, error) {

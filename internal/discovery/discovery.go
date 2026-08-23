@@ -3,6 +3,7 @@ package discovery
 
 import (
 	"context"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -112,6 +113,13 @@ func Tree(ctx context.Context, root, relative string, userExcludes []string) ([]
 	if relative != "" && relative != "." {
 		directory = filepath.Join(root, relative)
 	}
+	if directory != root {
+		if resolved, err := filepath.EvalSymlinks(directory); err == nil {
+			if ok, _ := workspace.IsWithin(root, resolved); !ok {
+				return nil, fmt.Errorf("path resolves outside workspace")
+			}
+		}
+	}
 	entries, err := os.ReadDir(directory)
 	if err != nil {
 		return nil, err
@@ -150,9 +158,9 @@ func Tree(ctx context.Context, root, relative string, userExcludes []string) ([]
 	return items, nil
 }
 func excludedByUser(rel string, patterns []string) bool {
-	rel = filepath.ToSlash(rel)
+	rel = strings.ToLower(filepath.ToSlash(rel))
 	for _, pattern := range patterns {
-		pattern = filepath.ToSlash(strings.TrimSpace(pattern))
+		pattern = strings.ToLower(filepath.ToSlash(strings.TrimSpace(pattern)))
 		if pattern == "" {
 			continue
 		}
@@ -161,6 +169,9 @@ func excludedByUser(rel string, patterns []string) bool {
 			return true
 		}
 		if strings.HasSuffix(pattern, "/**") && strings.HasPrefix(rel, strings.TrimSuffix(pattern, "/**")+"/") {
+			return true
+		}
+		if strings.HasPrefix(pattern, "**/") && (rel == strings.TrimPrefix(pattern, "**/") || strings.HasSuffix(rel, "/"+strings.TrimPrefix(pattern, "**/"))) {
 			return true
 		}
 	}
