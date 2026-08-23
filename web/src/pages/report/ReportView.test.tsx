@@ -76,6 +76,17 @@ function buttonByText(host: HTMLElement, text: string) {
   return [...host.querySelectorAll('button')].find((button) => button.textContent === text)!;
 }
 
+/** The select inside a labelled filter row, e.g. filterSelect(host, 'Rule'). */
+function filterSelect(host: HTMLElement, labelText: string) {
+  const label = [...host.querySelectorAll('#finding-filters label')].find((element) => element.textContent!.startsWith(labelText))!;
+  return label.querySelector('select')!;
+}
+
+/** Picks a select option the way a real user does (value + change event). */
+async function choose(select: HTMLSelectElement, value: string) {
+  await act(async () => { select.value = value; select.dispatchEvent(new Event('change', { bubbles: true })); });
+}
+
 beforeEach(() => { vi.useFakeTimers(); fetchMock.mockClear(); });
 
 afterEach(async () => {
@@ -164,6 +175,68 @@ describe('ReportView finding filters', () => {
   });
 });
 
+describe('ReportView analyzer and rule filters', () => {
+  const ruleFindings = [
+    { ...finding, id: 'f1', analyzer_id: 'ruff', rule_id: 'F821' },
+    { ...finding, id: 'f2', analyzer_id: 'ruff', rule_id: 'E501' },
+    { ...finding, id: 'f3', analyzer_id: 'biome', rule_id: 'COM841' },
+  ];
+  const ruleRuns = [{ analyzer_id: 'ruff', status: 'succeeded' }, { analyzer_id: 'biome', status: 'succeeded' }];
+
+  /** Runs the body against a scan whose report carries two tools and three distinct rules. */
+  async function withRuleScan(body: (host: HTMLElement) => Promise<void>) {
+    await fetchMock.withImplementation((input: string) => {
+      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan: { ...scan, analyzer_runs: ruleRuns }, warnings: [], findings: ruleFindings }));
+      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: ruleFindings, total: 3, limit: 50, offset: 0, has_more: false }));
+      return Promise.resolve(json({ items: [] }));
+    }, async () => { await body(await render()); });
+  }
+
+  it('selecting a tool from the scan runs sends analyzer= and refetches immediately', async () => {
+    await withRuleScan(async (host) => {
+      await click(buttonByText(host, 'Filters'));
+      expect(findingUrls()).toHaveLength(1);
+
+      await choose(filterSelect(host, 'Tool'), 'biome');
+      expect(findingUrls()).toHaveLength(2);
+      expect(findingUrls()[1]).toContain('analyzer=biome');
+      expect(host.textContent).toContain('tool: Biome'); // chip echoes the choice
+    });
+  });
+
+  it('offers rules scoped to the selected tool and sends rule= exactly', async () => {
+    await withRuleScan(async (host) => {
+      await click(buttonByText(host, 'Filters'));
+      expect([...filterSelect(host, 'Rule').options].map((option) => option.value)).toEqual(['', 'COM841', 'E501', 'F821']); // distinct rules across every run, sorted
+
+      await choose(filterSelect(host, 'Tool'), 'ruff');
+      expect([...filterSelect(host, 'Rule').options].map((option) => option.value)).toEqual(['', 'E501', 'F821']); // scoped to the active tool
+
+      await choose(filterSelect(host, 'Rule'), 'E501');
+      expect(findingUrls().at(-1)).toContain('analyzer=ruff');
+      expect(findingUrls().at(-1)).toContain('rule=E501');
+      expect(host.textContent).toContain('rule: E501');
+
+      await click(host.querySelector<HTMLButtonElement>('[aria-label="Remove rule filter"]')!);
+      expect(findingUrls().at(-1)).not.toContain('rule=');
+    });
+  });
+
+  it('switching tools resets a rule the new tool never reports', async () => {
+    await withRuleScan(async (host) => {
+      await click(buttonByText(host, 'Filters'));
+      await choose(filterSelect(host, 'Tool'), 'ruff');
+      await choose(filterSelect(host, 'Rule'), 'F821');
+      expect(findingUrls().at(-1)).toContain('rule=F821');
+
+      await choose(filterSelect(host, 'Tool'), 'biome');
+      const last = findingUrls().at(-1)!;
+      expect(last).toContain('analyzer=biome');
+      expect(last).not.toContain('rule='); // F821 belongs to ruff, so the rule filter resets with the tool
+    });
+  });
+});
+
 describe('ReportView findings sorting', () => {
   function sortButton(host: HTMLElement, label: string) {
     return [...host.querySelectorAll<HTMLButtonElement>('.findings-table thead .th-sort')].find((button) => button.textContent!.startsWith(label))!;
@@ -230,17 +303,95 @@ describe('ReportView findings sorting', () => {
   it('restarts on the first page when the sort changes', async () => {
     await fetchMock.withImplementation((input: string) => {
       if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, comparison: { new_count: 1, fixed_count: 0, persistent_count: 0 }, warnings: [], findings: [finding] }));
-      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: Array.from({ length: 25 }, (_, index) => ({ ...finding, id: `finding-${index}` })), total: 30, limit: 25, offset: 0, next_offset: 25, has_more: true }));
+      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: Array.from({ length: 50 }, (_, index) => ({ ...finding, id: `finding-${index}` })), total: 120, limit: 50, offset: 0, has_more: true }));
       return Promise.resolve(json({ items: [] }));
     }, async () => {
       const host = await render();
       const next = [...host.querySelectorAll('button')].find((button) => button.textContent === 'Next')!;
       await click(next);
-      expect(findingUrls().at(-1)).toContain('offset=25');
+      expect(findingUrls().at(-1)).toContain('page=2');
 
       await click(sortButton(host, 'Tool'));
       expect(findingUrls().at(-1)).toContain('sort=analyzer');
-      expect(findingUrls().at(-1)).toContain('offset=0');
+      expect(findingUrls().at(-1)).toContain('page=1');
+    });
+  });
+});
+
+describe('ReportView findings pagination', () => {
+  const TOTAL = 120;
+
+  /** Page-mode mock: answers whichever page/page_size the URL asks for, mirroring the server envelope. */
+  function pageMock(body: (host: HTMLElement) => Promise<void>, overrides?: { has_next?: boolean; has_more?: boolean }) {
+    return fetchMock.withImplementation((input: string) => {
+      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, warnings: [], findings: [finding] }));
+      if (input.includes('/scans/scan-1/findings')) {
+        const url = new URL(input, 'http://localhost');
+        const page = Number(url.searchParams.get('page') ?? '1');
+        const pageSize = Number(url.searchParams.get('page_size') ?? '50');
+        const start = (page - 1) * pageSize;
+        const items = Array.from({ length: Math.min(pageSize, Math.max(0, TOTAL - start)) }, (_, index) => ({ ...finding, id: `finding-${start + index}` }));
+        const hasNext = overrides?.has_next ?? start + pageSize < TOTAL;
+        return Promise.resolve(json({ items, total: TOTAL, limit: pageSize, offset: start, has_more: overrides?.has_more ?? hasNext, page, page_size: pageSize, has_next: hasNext }));
+      }
+      return Promise.resolve(json({ items: [] }));
+    }, async () => { await body(await render()); });
+  }
+
+  function pager(host: HTMLElement) {
+    const nav = host.querySelector('nav[aria-label="Findings pagination"]')!;
+    return {
+      previous: [...nav.querySelectorAll('button')].find((button) => button.textContent === 'Previous')! as HTMLButtonElement,
+      next: [...nav.querySelectorAll('button')].find((button) => button.textContent === 'Next')! as HTMLButtonElement,
+      output: nav.querySelector('output')!,
+      status: nav.querySelector('span')!,
+    };
+  }
+
+  it('loads page 1 at a 50-row window and walks Next/Next/Prev with boundary disables', async () => {
+    await pageMock(async (host) => {
+      expect(findingUrls()[0]).toContain('page=1');
+      expect(findingUrls()[0]).toContain('page_size=50');
+      const p = pager(host);
+      expect(p.status.textContent).toBe('Showing 1–50 of 120');
+      expect(p.output.textContent).toBe('Page 1 of 3');
+      expect(p.output.getAttribute('aria-live')).toBe('polite'); // page turns are announced politely
+      expect(p.previous.disabled).toBe(true); // already on the first page
+      expect(p.next.disabled).toBe(false);
+
+      await click(p.next);
+      expect(findingUrls().at(-1)).toContain('page=2');
+      expect(p.status.textContent).toBe('Showing 51–100 of 120');
+      expect(p.output.textContent).toBe('Page 2 of 3');
+      expect(p.previous.disabled).toBe(false);
+
+      await click(p.next);
+      expect(findingUrls().at(-1)).toContain('page=3');
+      expect(p.status.textContent).toBe('Showing 101–120 of 120'); // the final page holds the remainder
+      expect(p.output.textContent).toBe('Page 3 of 3');
+      expect(p.next.disabled).toBe(true); // has_next is false on the last page
+      expect(p.previous.disabled).toBe(false);
+
+      await click(p.previous);
+      expect(findingUrls().at(-1)).toContain('page=2');
+    });
+  });
+
+  it('treats the envelope has_next as authoritative over the legacy has_more flag', async () => {
+    await pageMock(async (host) => {
+      expect(pager(host).next.disabled).toBe(true); // page mode says no next page even though has_more lingers
+    }, { has_next: false, has_more: true });
+  });
+
+  it('resets to page 1 when a filter changes', async () => {
+    await pageMock(async (host) => {
+      await click(pager(host).next);
+      expect(findingUrls().at(-1)).toContain('page=2');
+
+      await click(host.querySelector<HTMLButtonElement>('.severity-pill.high')!);
+      const last = findingUrls().at(-1)!;
+      expect(last).toContain('severity=high');
+      expect(last).toContain('page=1');
     });
   });
 });
@@ -334,8 +485,8 @@ describe('ReportView export menu', () => {
     expect(csvHref).toContain('severity=high'); // the active filter rides along
     expect(csvHref).toContain('sort=severity');
     expect(csvHref).toContain('order=asc');
-    expect(csvHref).not.toContain('limit='); // paging params stay off the export
-    expect(csvHref).not.toContain('offset=');
+    expect(csvHref).not.toContain('page='); // paging params stay off the export
+    expect(csvHref).not.toContain('page_size=');
     expect(items.every((item) => item.hasAttribute('download'))).toBe(true); // plain GET navigation, no fetch
 
     await act(async () => { pressKey('Escape'); });

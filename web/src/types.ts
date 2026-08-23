@@ -135,7 +135,25 @@ export interface FindingPage {
   offset: number;
   next_offset?: number;
   has_more: boolean;
+  /** Present only when the request used `page`/`page_size`: the served page, its size, and whether another page follows. */
+  page?: number;
+  page_size?: number;
+  has_next?: boolean;
 }
+
+/** Query for GET /scans/{id}/findings. `severity`/`status` accept comma lists, `analyzer`/`rule` match exactly (rule case-insensitively), `path` is a substring match and `path_prefix` anchors at the start, `page`/`page_size` (1..200) page the results (never mixed with legacy `limit`/`offset`), and `sort`/`order` pick the ordering (`sort` also accepts a `-` prefix for descending). */
+export type FindingsQuery = Record<string, string> & {
+  severity?: string;
+  status?: string;
+  analyzer?: string;
+  rule?: string;
+  path?: string;
+  path_prefix?: string;
+  page?: string;
+  page_size?: string;
+  sort?: string;
+  order?: string;
+};
 
 /** Findings fixed versus the previous completed scan; `fixed` is severity-ordered and capped at 100 while `total_fixed` is exact. */
 export interface FixedFindingsResponse {

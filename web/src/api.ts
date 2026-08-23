@@ -1,4 +1,4 @@
-import type { FindingPage, FixedFindingsResponse, GlobalStats, PathOverride, RecentScansResponse, Report, Scan, SeverityTrendPoint, SourcePreview, Suppression, Tool, TreeNode, Workspace } from './types';
+import type { FindingPage, FindingsQuery, FixedFindingsResponse, GlobalStats, PathOverride, RecentScansResponse, Report, Scan, SeverityTrendPoint, SourcePreview, Suppression, Tool, TreeNode, Workspace } from './types';
 
 const PREFIX = '/api/v1';
 
@@ -70,7 +70,8 @@ export const api = {
     return response && typeof response === 'object' && 'scan' in response ? { ...response.scan, analyzer_runs: response.analyzer_runs ?? [] } : response;
   },
   cancelScan: (id: string) => request<Scan>(`/scans/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
-  findings: (id: string, params: Record<string, string>) => {
+  /** Filtered/sorted/paged findings for a scan; empty values are dropped from the query (see FindingsQuery for the param contract). */
+  findings: (id: string, params: FindingsQuery) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, v]) => v));
     return request<FindingPage>(`/scans/${encodeURIComponent(id)}/findings?${query}`);
   },
