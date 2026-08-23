@@ -37,7 +37,7 @@ const (
 	scanStatePollInterval = 2 * time.Second
 )
 
-const scanUsage = "usage: bluntcode scan <path> [--profile quick|standard|deep] [--format text|json|github] [--json] [--timeout 30m] [--quiet] [--fail-on high+] [--max-findings N] [--baseline <scan-id-or-sarif>] [--jobs N]"
+const scanUsage = "usage: bluntcode scan <path> [--profile quick|standard|deep] [--format text|json|github] [--json] [--timeout 30m] [--quiet] [--fail-on high+] [--max-findings N] [--baseline <scan-id-or-sarif>] [--jobs N] [--watch]"
 
 // The stdout report formats of `bluntcode scan`. text (the default) keeps the
 // historical human summary; json prints the full versioned JSON report
@@ -70,6 +70,10 @@ type scanConfig struct {
 	// jobs bounds how many analyzers may run concurrently; 0 (the default)
 	// keeps the sequential execution model.
 	jobs int
+	// watch keeps the command running after the first scan: the workspace is
+	// polled and the scan reruns whenever files change. Gate flags still
+	// report per scan but never exit the process; Ctrl+C (exit 130) stops it.
+	watch bool
 	// gate is the CI fail-gate assembled from --fail-on and --max-findings;
 	// the zero value keeps the historical gate-free exit codes.
 	gate scans.GateConfig
@@ -94,6 +98,7 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	maxFindings := flags.Int("max-findings", 0, "fail (exit 1) when the scan reports more than N unresolved findings (positive integer)")
 	baseline := flags.String("baseline", "", "exclude known findings from the gate: a previous scan ID or the path of a SARIF 2.1.0 file exported by Blunt Code")
 	jobs := flags.Int("jobs", 0, "run at most N analyzers concurrently (positive integer); by default analyzers run one after another")
+	watch := flags.Bool("watch", false, "keep running and rescan automatically when workspace files change (polls every 2s; a rescan starts after 1.5s without further changes); gate flags never exit the process; Ctrl+C stops it")
 	flags.Usage = func() {
 		fmt.Fprintln(errOut, scanUsage)
 		fmt.Fprintln(errOut)
@@ -104,7 +109,10 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 		fmt.Fprintln(errOut, "and for a tripped CI gate (--fail-on/--max-findings), 130 when stopped")
 		fmt.Fprintln(errOut, "with Ctrl+C, and 2 for usage errors. With --baseline, the gate counts")
 		fmt.Fprintln(errOut, "only findings that are new since the baseline (a previous scan ID or a")
-		fmt.Fprintln(errOut, "SARIF file exported by Blunt Code).")
+		fmt.Fprintln(errOut, "SARIF file exported by Blunt Code). With --watch the command keeps")
+		fmt.Fprintln(errOut, "running and rescans whenever workspace files change (poll every 2s,")
+		fmt.Fprintln(errOut, "rescan after 1.5s of quiet); gates never exit the process and Ctrl+C")
+		fmt.Fprintln(errOut, "(exit 130) stops it.")
 		flags.PrintDefaults()
 	}
 	var positional []string
@@ -149,7 +157,7 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	if len(positional) != 1 {
 		return usageError("exactly one workspace path is required")
 	}
-	cfg := scanConfig{path: positional[0], profile: *profile, json: *jsonOut, format: *format, timeout: *timeout, quiet: *quiet, baseline: *baseline, jobs: *jobs}
+	cfg := scanConfig{path: positional[0], profile: *profile, json: *jsonOut, format: *format, timeout: *timeout, quiet: *quiet, baseline: *baseline, jobs: *jobs, watch: *watch}
 	if cfg.profile != analyzers.ProfileQuick && cfg.profile != analyzers.ProfileStandard && cfg.profile != analyzers.ProfileDeep {
 		return usageError("profile must be quick, standard, or deep")
 	}
@@ -161,6 +169,9 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	}
 	if cfg.json && cfg.format == scanFormatGitHub {
 		return usageError("--json cannot be combined with --format github: --json prints the compact summary, --format github the annotation stream")
+	}
+	if cfg.watch && cfg.format == scanFormatGitHub {
+		return usageError("--watch cannot be combined with --format github: annotations make no sense in a watch loop; use text or json")
 	}
 	if cfg.timeout <= 0 {
 		return usageError("timeout must be a positive duration such as 5m")
@@ -309,7 +320,9 @@ func buildScanSummary(ctx context.Context, db *database.DB, work core.Workspace,
 	return summary, nil
 }
 
-// runScanCommand executes one headless scan and returns the process exit code.
+// runScanCommand executes one headless scan — or, with --watch, a scan loop
+// that reruns whenever the workspace changes — and returns the process exit
+// code.
 func runScanCommand(args []string, stdout, stderr io.Writer) int {
 	cfg, err := parseScanFlags(args, stderr)
 	if err != nil {
@@ -336,7 +349,8 @@ func runScanCommand(args []string, stdout, stderr io.Writer) int {
 	}
 	// The baseline resolves before the scan starts: an unknown scan ID or an
 	// unreadable/invalid SARIF file is a usage error (exit 2), not a failed
-	// scan, so CI fails fast without running any analyzer.
+	// scan, so CI fails fast without running any analyzer. In watch mode the
+	// same baseline then applies to every scan of the loop.
 	var baseline scans.Baseline
 	if cfg.baseline != "" {
 		baseline, err = loadScanBaseline(ctx, app.db, cfg.baseline, work.ID)
@@ -346,10 +360,53 @@ func runScanCommand(args []string, stdout, stderr io.Writer) int {
 			return 2
 		}
 	}
+	// The interrupt channel buffers two signals so a rapid Ctrl+C double-tap
+	// cannot drop the second press while the first is still being handled. In
+	// watch mode exactly one party selects on it at a time: the in-flight scan
+	// (first press cancels it, second exits immediately) or the idle watch
+	// loop (a single press stops it between scans).
+	interrupt := make(chan os.Signal, 2)
+	signal.Notify(interrupt, os.Interrupt)
+	defer signal.Stop(interrupt)
+	if cfg.watch {
+		return runWatchLoop(watchEnv{
+			quiet:     cfg.quiet,
+			stderr:    stderr,
+			interrupt: interrupt,
+			snapshot: func() (watchSnapshot, error) {
+				return buildWatchSnapshot(ctx, work.RootPath, userExcludePatterns(ctx, app.db, work.ID))
+			},
+			runScan: func(interrupts <-chan os.Signal) scanRunResult {
+				return runSingleScan(app, cfg, work, baseline, stdout, stderr, interrupts)
+			},
+		}, watchLoopOptions{pollInterval: watchPollInterval, quietWindow: watchQuietWindow})
+	}
+	return runSingleScan(app, cfg, work, baseline, stdout, stderr, interrupt).code
+}
+
+// scanRunResult is the outcome of one complete scan invocation: the exit code
+// the single-scan CLI path returns plus the interrupt flags the watch loop
+// needs to stop promptly.
+type scanRunResult struct {
+	code          int
+	interruptSeen bool
+	// exitNow means a second Ctrl+C arrived: return 130 immediately, without
+	// printing a summary.
+	exitNow bool
+}
+
+// runSingleScan executes one scan end to end — start, terminal-state wait,
+// summary output, and CI gate — and reports the exit code `bluntcode scan`
+// without --watch would print. It is the shared body of the one-shot command
+// and of every iteration of the --watch loop; every failure is printed here
+// and reflected in the result, never returned as an error, so the watch loop
+// can keep watching after a failed scan.
+func runSingleScan(app *appCore, cfg scanConfig, work core.Workspace, baseline scans.Baseline, stdout, stderr io.Writer, interrupts <-chan os.Signal) scanRunResult {
+	ctx := context.Background()
 	scan, err := app.scans.DiscoverAndStartWithOptions(ctx, work, cfg.profile, userExcludePatterns(ctx, app.db, work.ID), scans.ScanOptions{Jobs: cfg.jobs})
 	if err != nil {
 		fmt.Fprintf(stderr, "bluntcode scan: could not start scan: %v\n", err)
-		return 1
+		return scanRunResult{code: 1}
 	}
 	if !cfg.quiet {
 		fmt.Fprintf(stderr, "scanning %s (profile %s, timeout %s)\n", work.RootPath, cfg.profile, cfg.timeout)
@@ -359,15 +416,9 @@ func runScanCommand(args []string, stdout, stderr io.Writer) int {
 	eventCh, unsubscribe := app.bus.Subscribe(scan.ID)
 	defer unsubscribe()
 
-	// The interrupt channel buffers two signals so a rapid Ctrl+C double-tap
-	// cannot drop the second press while the first is still being handled.
-	interrupt := make(chan os.Signal, 2)
-	signal.Notify(interrupt, os.Interrupt)
-	defer signal.Stop(interrupt)
-
 	outcome := awaitScanTerminal(scanWaitInput{
 		events:     eventCh,
-		interrupts: interrupt,
+		interrupts: interrupts,
 		timeout:    time.After(cfg.timeout),
 		poll: func() (string, bool) {
 			current, err := app.db.Scan(ctx, scan.ID)
@@ -384,15 +435,15 @@ func runScanCommand(args []string, stdout, stderr io.Writer) int {
 		cancelGrace:  scanCancelGrace,
 	})
 	if outcome.exitNow {
-		// Second Ctrl+C: exit immediately. The deferred unsubscribe and
-		// release above still run, cancelling analyzers and closing the
-		// database cleanly on the way out.
-		return 130
+		// Second Ctrl+C: exit immediately. The deferred unsubscribe above (and
+		// the caller's release) still run, cancelling analyzers and closing
+		// the database cleanly on the way out.
+		return scanRunResult{code: 130, exitNow: true}
 	}
 	summary, err := buildScanSummary(ctx, app.db, work, scan.ID, outcome.timedOut)
 	if err != nil {
 		fmt.Fprintf(stderr, "bluntcode scan: could not load scan result: %v\n", err)
-		return 1
+		return scanRunResult{code: 1}
 	}
 	summary.state = outcome.finalState
 	switch {
@@ -400,7 +451,7 @@ func runScanCommand(args []string, stdout, stderr io.Writer) int {
 		model, err := buildScanReportModel(ctx, app.db, work, summary)
 		if err != nil {
 			fmt.Fprintf(stderr, "bluntcode scan: could not load report: %v\n", err)
-			return 1
+			return scanRunResult{code: 1}
 		}
 		// Both document formats share the report model and go to stdout; the
 		// annotation stream especially must stay on stdout because that is
@@ -413,18 +464,18 @@ func runScanCommand(args []string, stdout, stderr io.Writer) int {
 		}
 		if _, err := stdout.Write(document); err != nil {
 			fmt.Fprintf(stderr, "bluntcode scan: could not write report: %v\n", err)
-			return 1
+			return scanRunResult{code: 1}
 		}
 	case cfg.json:
 		if err := writeScanJSON(stdout, summary); err != nil {
 			fmt.Fprintf(stderr, "bluntcode scan: could not write summary: %v\n", err)
-			return 1
+			return scanRunResult{code: 1}
 		}
 	default:
 		writeScanHuman(stdout, summary)
 	}
 	if outcome.interruptSeen {
-		return 130
+		return scanRunResult{code: 130, interruptSeen: true}
 	}
 	code := scanExitCode(summary.state, summary.timedOut)
 	// Baseline mode always reports how much debt was inherited versus what the
@@ -440,14 +491,15 @@ func runScanCommand(args []string, stdout, stderr io.Writer) int {
 	// The CI gate applies only to scans that completed and would otherwise
 	// exit 0; failed, cancelled, and interrupted scans keep their own exit
 	// path regardless of gate flags. With a baseline, only findings whose
-	// fingerprints it does not know are counted.
+	// fingerprints it does not know are counted. In watch mode the caller
+	// ignores this code and keeps watching.
 	if code == 0 && cfg.gate.Enabled() {
 		if gate := scans.EvaluateGate(gatedFindings, cfg.gate); gate.Failed {
 			fmt.Fprintln(stderr, gate.FailureMessage())
-			return 1
+			return scanRunResult{code: 1}
 		}
 	}
-	return code
+	return scanRunResult{code: code}
 }
 
 // buildScanReportModel assembles the full report model behind
