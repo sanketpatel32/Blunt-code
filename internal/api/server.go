@@ -1014,6 +1014,13 @@ func (s *Server) findings(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, "DATABASE_ERROR", "Could not load findings.")
 		return
 	}
+	// Requests without the page/page_size params keep the original envelope
+	// byte-for-byte; page-mode responses add page, page_size, and has_next on
+	// top of the legacy fields so both client generations can read them.
+	if filter.PageSize > 0 {
+		writeJSON(w, 200, map[string]any{"items": page.Items, "total": page.Total, "limit": page.Limit, "offset": page.Offset, "next_offset": page.NextOffset, "has_more": page.HasMore, "page": filter.Page, "page_size": filter.PageSize, "has_next": page.HasMore})
+		return
+	}
 	writeJSON(w, 200, map[string]any{"items": page.Items, "total": page.Total, "limit": page.Limit, "offset": page.Offset, "next_offset": page.NextOffset, "has_more": page.HasMore})
 }
 
@@ -1329,30 +1336,60 @@ func (s *Server) findingPreview(w http.ResponseWriter, r *http.Request) {
 }
 
 // findingQueryFilter parses the finding controls shared by the JSON list and
-// the CSV export: severity, category, analyzer, path, status, q, sort, and
-// order. Both endpoints reject the same bad input because they parse through
-// this one function.
+// the CSV export: severity (single value or comma list), category, analyzer,
+// rule, path (substring), path_prefix (normalized prefix), status (single
+// value or comma list), q, sort, and order. sort accepts an optional leading
+// "-" for descending (sort=-severity), equivalent to order=desc; an explicit
+// order parameter wins over the prefix. Both endpoints reject the same bad
+// input because they parse through this one function.
 func findingQueryFilter(r *http.Request) (database.FindingFilter, error) {
 	query := r.URL.Query()
 	read := func(name string) string { return strings.TrimSpace(query.Get(name)) }
+	sortParam := strings.ToLower(read("sort"))
+	orderParam := strings.ToLower(read("order"))
+	descending := strings.HasPrefix(sortParam, "-")
+	if descending {
+		sortParam = sortParam[1:]
+	}
 	filter := database.FindingFilter{
-		Severity: strings.ToLower(read("severity")),
-		Category: strings.ToLower(read("category")),
-		Analyzer: strings.ToLower(read("analyzer")),
-		Path:     read("path"),
-		Status:   strings.ToLower(read("status")),
-		Query:    read("q"),
-		Sort:     strings.ToLower(read("sort")),
-		Order:    strings.ToLower(read("order")),
+		Severity:   strings.ToLower(read("severity")),
+		Category:   strings.ToLower(read("category")),
+		Analyzer:   strings.ToLower(read("analyzer")),
+		Rule:       read("rule"),
+		Path:       read("path"),
+		PathPrefix: read("path_prefix"),
+		Status:     strings.ToLower(read("status")),
+		Query:      read("q"),
+		Sort:       sortParam,
+		Order:      orderParam,
 	}
-	if filter.Severity != "" && !oneOf(filter.Severity, "critical", "high", "medium", "low", "info") {
-		return filter, fmt.Errorf("severity must be critical, high, medium, low, or info")
+	if descending && filter.Order == "" {
+		filter.Order = "desc"
 	}
-	if filter.Status != "" && !oneOf(filter.Status, "new", "persistent", "suppressed") {
-		return filter, fmt.Errorf("status must be new, persistent, or suppressed")
+	if filter.Severity != "" {
+		for _, value := range strings.Split(filter.Severity, ",") {
+			value = strings.TrimSpace(value)
+			if !oneOf(value, "critical", "high", "medium", "low", "info") {
+				return filter, fmt.Errorf("severity must be critical, high, medium, low, or info")
+			}
+			filter.Severities = append(filter.Severities, value)
+		}
 	}
-	if filter.Sort != "" && !oneOf(filter.Sort, "severity", "path", "analyzer", "status") {
-		return filter, fmt.Errorf("sort must be severity, path, analyzer, or status")
+	if filter.Status != "" {
+		for _, value := range strings.Split(filter.Status, ",") {
+			value = strings.TrimSpace(value)
+			if !oneOf(value, "new", "persistent", "suppressed") {
+				return filter, fmt.Errorf("status must be new, persistent, or suppressed")
+			}
+			filter.Statuses = append(filter.Statuses, value)
+		}
+	}
+	// A bare "-" prefix (or "-" alone) is not a field; the oneOf check covers
+	// it because descending forces validation even of an empty remainder.
+	if filter.Sort != "" || descending {
+		if !oneOf(filter.Sort, "severity", "path", "line", "rule", "analyzer", "status") {
+			return filter, fmt.Errorf("sort must be severity, path, line, rule, analyzer, or status")
+		}
 	}
 	if filter.Order != "" && !oneOf(filter.Order, "asc", "desc") {
 		return filter, fmt.Errorf("order must be asc or desc")
@@ -1361,30 +1398,59 @@ func findingQueryFilter(r *http.Request) (database.FindingFilter, error) {
 }
 
 // findingFilter extends the shared controls with the JSON list's pagination.
+// Two modes exist and are mutually exclusive: the original limit (25/50/100,
+// default 50) plus offset pair, and the page-based page (1-based) plus
+// page_size (1..MaxFindingsPageSize, default 50) pair. Combining them is
+// rejected because the window each implies would be ambiguous.
 func findingFilter(r *http.Request) (database.FindingFilter, error) {
 	filter, err := findingQueryFilter(r)
 	if err != nil {
 		return filter, err
 	}
-	filter.Limit = 50
 	query := r.URL.Query()
-	if raw := strings.TrimSpace(query.Get("limit")); raw != "" {
-		value, err := strconv.Atoi(raw)
-		if err != nil {
+	pageParam := strings.TrimSpace(query.Get("page"))
+	pageSizeParam := strings.TrimSpace(query.Get("page_size"))
+	if pageParam == "" && pageSizeParam == "" {
+		filter.Limit = 50
+		if raw := strings.TrimSpace(query.Get("limit")); raw != "" {
+			value, err := strconv.Atoi(raw)
+			if err != nil {
+				return filter, fmt.Errorf("limit must be 25, 50, or 100")
+			}
+			filter.Limit = value
+		}
+		if raw := strings.TrimSpace(query.Get("offset")); raw != "" {
+			value, err := strconv.Atoi(raw)
+			if err != nil || value < 0 {
+				return filter, fmt.Errorf("offset must be a non-negative integer")
+			}
+			filter.Offset = value
+		}
+		if !oneOf(strconv.Itoa(filter.Limit), "25", "50", "100") {
 			return filter, fmt.Errorf("limit must be 25, 50, or 100")
 		}
-		filter.Limit = value
+		return filter, nil
 	}
-	if raw := strings.TrimSpace(query.Get("offset")); raw != "" {
-		value, err := strconv.Atoi(raw)
-		if err != nil || value < 0 {
-			return filter, fmt.Errorf("offset must be a non-negative integer")
+	if strings.TrimSpace(query.Get("limit")) != "" || strings.TrimSpace(query.Get("offset")) != "" {
+		return filter, fmt.Errorf("limit and offset cannot be combined with page and page_size")
+	}
+	page := 1
+	if pageParam != "" {
+		value, err := strconv.Atoi(pageParam)
+		if err != nil || value < 1 {
+			return filter, fmt.Errorf("page must be a positive integer")
 		}
-		filter.Offset = value
+		page = value
 	}
-	if !oneOf(strconv.Itoa(filter.Limit), "25", "50", "100") {
-		return filter, fmt.Errorf("limit must be 25, 50, or 100")
+	pageSize := database.DefaultFindingsPageSize
+	if pageSizeParam != "" {
+		value, err := strconv.Atoi(pageSizeParam)
+		if err != nil || value < 1 || value > database.MaxFindingsPageSize {
+			return filter, fmt.Errorf("page_size must be between 1 and %d", database.MaxFindingsPageSize)
+		}
+		pageSize = value
 	}
+	filter.Page, filter.PageSize = page, pageSize
 	return filter, nil
 }
 

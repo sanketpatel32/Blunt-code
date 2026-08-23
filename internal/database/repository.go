@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -768,15 +769,31 @@ func (d *DB) Finding(ctx context.Context, scanID, id string) (analyzers.Finding,
 // SQL syntax.
 type FindingFilter struct {
 	Severity string
-	Category string
-	Analyzer string
-	Path     string
-	Status   string // "new", "persistent", or "suppressed"
-	Query    string
-	Sort     string // severity, path, analyzer, status
-	Order    string // asc or desc
-	Limit    int
-	Offset   int
+	// Severities selects several severities at once (severity=high,critical).
+	// When non-empty it takes precedence over the single-value Severity field;
+	// a one-element list compiles to the same SQL as Severity.
+	Severities []string
+	Category   string
+	Analyzer   string
+	// Rule matches rule_id exactly (case-insensitively), like Analyzer.
+	Rule string
+	Path string
+	// PathPrefix matches workspace-relative paths by normalized prefix (both
+	// slash styles accepted, case-insensitive). Path keeps its substring
+	// semantics for backward compatibility.
+	PathPrefix string
+	Status     string   // "new", "persistent", or "suppressed"
+	Statuses   []string // multi-value Status; takes precedence when non-empty
+	Query      string
+	Sort       string // severity, path, line, rule, analyzer, or status
+	Order      string // asc or desc
+	Limit      int
+	Offset     int
+	// Page and PageSize enable page-based pagination: when PageSize > 0 the
+	// 1-based page window replaces the legacy limit/offset pair and Limit and
+	// Offset are derived from it.
+	Page     int
+	PageSize int
 	// ExcludeSuppressed hides findings whose fingerprint is suppressed for the
 	// workspace unless Status explicitly selects them. The UI list leaves it
 	// off so dismissed findings stay visible with their status; exports turn
@@ -792,6 +809,15 @@ type FindingsPage struct {
 	NextOffset *int
 	HasMore    bool
 }
+
+const (
+	// DefaultFindingsPageSize and MaxFindingsPageSize bound the page/page_size
+	// pagination mode of the findings list. Unlike the fixed legacy limit set
+	// (25/50/100), any page size from 1 to MaxFindingsPageSize is allowed so
+	// API clients can pick their own window.
+	DefaultFindingsPageSize = 50
+	MaxFindingsPageSize     = 200
+)
 
 // MaxFindingsExportRows bounds the CSV export: every matching row is written,
 // but a pathological scan can never drag more than this many findings into
@@ -837,11 +863,25 @@ type findingQuery struct {
 // responsibility. The computed status is a three-way CASE: suppressed wins
 // over persistent, so a dismissed fingerprint never reports new/persistent.
 func (d *DB) buildFindingQuery(ctx context.Context, scan core.Scan, filter FindingFilter) (findingQuery, error) {
-	if filter.Status != "" && filter.Status != "new" && filter.Status != "persistent" && filter.Status != "suppressed" {
-		return findingQuery{}, fmt.Errorf("status must be new, persistent, or suppressed")
+	// Multi-value controls resolve to the effective list here: a single value
+	// keeps the original one-placeholder SQL so legacy requests compile to
+	// exactly the same statement as before the list fields existed.
+	statuses := filter.Statuses
+	if len(statuses) == 0 && filter.Status != "" {
+		statuses = []string{filter.Status}
 	}
-	if filter.Sort != "" && filter.Sort != "severity" && filter.Sort != "path" && filter.Sort != "analyzer" && filter.Sort != "status" {
-		return findingQuery{}, fmt.Errorf("sort must be severity, path, analyzer, or status")
+	for _, status := range statuses {
+		if status != "new" && status != "persistent" && status != "suppressed" {
+			return findingQuery{}, fmt.Errorf("status must be new, persistent, or suppressed")
+		}
+	}
+	for _, severity := range filter.Severities {
+		if severity != "critical" && severity != "high" && severity != "medium" && severity != "low" && severity != "info" {
+			return findingQuery{}, fmt.Errorf("severity must be critical, high, medium, low, or info")
+		}
+	}
+	if filter.Sort != "" && filter.Sort != "severity" && filter.Sort != "path" && filter.Sort != "line" && filter.Sort != "rule" && filter.Sort != "analyzer" && filter.Sort != "status" {
+		return findingQuery{}, fmt.Errorf("sort must be severity, path, line, rule, analyzer, or status")
 	}
 	if filter.Order != "" && filter.Order != "asc" && filter.Order != "desc" {
 		return findingQuery{}, fmt.Errorf("order must be asc or desc")
@@ -858,7 +898,7 @@ func (d *DB) buildFindingQuery(ctx context.Context, scan core.Scan, filter Findi
 	statusExpr := `CASE WHEN ` + suppressedStatusExpr + ` THEN 'suppressed' WHEN EXISTS (SELECT 1 FROM findings previous WHERE previous.scan_id=? AND previous.fingerprint=findings.fingerprint) THEN 'persistent' ELSE 'new' END`
 	where := []string{"findings.scan_id=?"}
 	args := []any{scan.ID}
-	if filter.ExcludeSuppressed && filter.Status != "suppressed" {
+	if filter.ExcludeSuppressed && filter.Status != "suppressed" && !hasStatus(statuses, "suppressed") {
 		where = append(where, suppressedNotInExpr)
 		args = append(args, scan.WorkspaceID)
 	}
@@ -868,20 +908,44 @@ func (d *DB) buildFindingQuery(ctx context.Context, scan core.Scan, filter Findi
 			args = append(args, value)
 		}
 	}
-	addEquals("findings.severity", filter.Severity)
+	if severities := resolveSeverities(filter); len(severities) == 1 {
+		addEquals("findings.severity", severities[0])
+	} else if len(severities) > 1 {
+		placeholders := make([]string, len(severities))
+		for i, severity := range severities {
+			placeholders[i] = "LOWER(?)"
+			args = append(args, severity)
+		}
+		where = append(where, "LOWER(findings.severity) IN ("+strings.Join(placeholders, ",")+")")
+	}
 	addEquals("findings.category", filter.Category)
 	addEquals("findings.analyzer_id", filter.Analyzer)
+	addEquals("COALESCE(findings.rule_id,'')", filter.Rule)
 	if filter.Path != "" {
 		where = append(where, "LOWER(COALESCE(findings.relative_path,'')) LIKE '%' || LOWER(?) || '%'")
 		args = append(args, filter.Path)
+	}
+	if prefix := normalizePathPrefix(filter.PathPrefix); prefix != "" {
+		where = append(where, "LOWER(COALESCE(findings.relative_path,'')) LIKE ? ESCAPE '\\'")
+		args = append(args, likePatternPrefix(prefix))
 	}
 	if filter.Query != "" {
 		where = append(where, "(LOWER(findings.message) LIKE '%' || LOWER(?) || '%' OR LOWER(COALESCE(findings.rule_id,'')) LIKE '%' || LOWER(?) || '%' OR LOWER(COALESCE(findings.relative_path,'')) LIKE '%' || LOWER(?) || '%')")
 		args = append(args, filter.Query, filter.Query, filter.Query)
 	}
-	if filter.Status != "" {
+	if len(statuses) == 1 {
 		where = append(where, statusExpr+"=?")
-		args = append(args, scan.WorkspaceID, previousID, filter.Status)
+		args = append(args, scan.WorkspaceID, previousID, statuses[0])
+	} else if len(statuses) > 1 {
+		placeholders := make([]string, len(statuses))
+		for i := range placeholders {
+			placeholders[i] = "?"
+		}
+		where = append(where, statusExpr+" IN ("+strings.Join(placeholders, ",")+")")
+		args = append(args, scan.WorkspaceID, previousID)
+		for _, status := range statuses {
+			args = append(args, status)
+		}
 	}
 	order, orderArgs := "findings.relative_path ASC, findings.start_line ASC, findings.analyzer_id ASC, findings.rule_id ASC", []any(nil)
 	direction := "ASC"
@@ -896,6 +960,10 @@ func (d *DB) buildFindingQuery(ctx context.Context, scan core.Scan, filter Findi
 		order = severityRankExpr + " " + direction + ", findings.relative_path ASC, findings.start_line ASC"
 	case "path":
 		order = "findings.relative_path " + direction + ", findings.start_line " + direction + ", findings.analyzer_id ASC"
+	case "line":
+		order = "COALESCE(findings.start_line,0) " + direction + ", findings.relative_path ASC, findings.analyzer_id ASC, findings.rule_id ASC"
+	case "rule":
+		order = "COALESCE(findings.rule_id,'') " + direction + ", findings.relative_path ASC, COALESCE(findings.start_line,0) ASC"
 	case "analyzer":
 		order = "findings.analyzer_id " + direction + ", findings.relative_path ASC, findings.start_line ASC"
 	case "status":
@@ -903,6 +971,56 @@ func (d *DB) buildFindingQuery(ctx context.Context, scan core.Scan, filter Findi
 		orderArgs = []any{scan.WorkspaceID, previousID}
 	}
 	return findingQuery{previousID: previousID, workspaceID: scan.WorkspaceID, statusExpr: statusExpr, whereSQL: strings.Join(where, " AND "), args: args, order: order, orderArgs: orderArgs}, nil
+}
+
+// resolveSeverities returns the effective severity list: the multi-value field
+// wins, a legacy single value becomes a one-element list, and an empty filter
+// stays empty.
+func resolveSeverities(filter FindingFilter) []string {
+	if len(filter.Severities) > 0 {
+		return filter.Severities
+	}
+	if filter.Severity != "" {
+		return []string{filter.Severity}
+	}
+	return nil
+}
+
+// hasStatus reports whether the resolved status list selects suppressed rows.
+func hasStatus(statuses []string, status string) bool {
+	for _, candidate := range statuses {
+		if candidate == status {
+			return true
+		}
+	}
+	return false
+}
+
+// pathPrefixEscaper neutralizes SQL LIKE wildcards inside a path prefix so a
+// prefix containing % or _ matches those characters literally; the companion
+// ESCAPE '\' clause in the WHERE expression activates it.
+var pathPrefixEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
+// likePatternPrefix builds the bound LIKE pattern for a normalized path
+// prefix: wildcards escaped, lowercased to match LOWER(relative_path), and
+// anchored at the start of the stored path.
+func likePatternPrefix(prefix string) string {
+	return strings.ToLower(pathPrefixEscaper.Replace(prefix)) + "%"
+}
+
+// normalizePathPrefix canonicalizes a workspace-relative path prefix for
+// prefix matching: Windows backslashes become forward slashes (both analyzer
+// output and user input arrive in either style), leading "./" and "/" are
+// dropped because the stored paths are workspace-relative, and surrounding
+// whitespace is trimmed. Matching is case-insensitive on Windows-style paths,
+// handled by the LOWER() comparison in the query. A trailing slash is a
+// meaningful directory boundary and is preserved.
+func normalizePathPrefix(value string) string {
+	value = strings.TrimSpace(strings.ReplaceAll(value, `\`, "/"))
+	for strings.HasPrefix(value, "./") {
+		value = value[2:]
+	}
+	return strings.TrimPrefix(value, "/")
 }
 
 // selectArgs orders bind parameters the way the shared SELECT mentions them:
@@ -930,16 +1048,39 @@ func scanFindingRow(rows *sql.Rows) (analyzers.Finding, error) {
 }
 
 // FindingsPage returns a bounded page and applies comparison status relative
-// to the previous completed scan in the same workspace.
+// to the previous completed scan in the same workspace. Pagination has two
+// modes: the legacy limit (25/50/100) plus offset pair, and the page-based
+// mode enabled by PageSize > 0 (1-based Page, any size up to
+// MaxFindingsPageSize), which derives limit and offset from the page window.
 func (d *DB) FindingsPage(ctx context.Context, scan core.Scan, filter FindingFilter) (FindingsPage, error) {
-	if filter.Limit == 0 {
-		filter.Limit = 50
-	}
-	if filter.Limit < 1 || filter.Limit > 100 || (filter.Limit != 25 && filter.Limit != 50 && filter.Limit != 100) {
-		return FindingsPage{}, fmt.Errorf("limit must be 25, 50, or 100")
-	}
-	if filter.Offset < 0 {
-		return FindingsPage{}, fmt.Errorf("offset must not be negative")
+	if filter.PageSize > 0 {
+		if filter.PageSize > MaxFindingsPageSize {
+			return FindingsPage{}, fmt.Errorf("page_size must be between 1 and %d", MaxFindingsPageSize)
+		}
+		page := filter.Page
+		if page < 0 {
+			return FindingsPage{}, fmt.Errorf("page must be a positive integer")
+		}
+		if page == 0 {
+			page = 1
+		}
+		// (page-1)*PageSize must not overflow int; a page that large could
+		// never match anyway, so it is a validation error rather than a wrap.
+		if page > 1 && page-1 > (math.MaxInt-filter.PageSize)/filter.PageSize {
+			return FindingsPage{}, fmt.Errorf("page is out of range")
+		}
+		filter.Limit = filter.PageSize
+		filter.Offset = (page - 1) * filter.PageSize
+	} else {
+		if filter.Limit == 0 {
+			filter.Limit = 50
+		}
+		if filter.Limit < 1 || filter.Limit > 100 || (filter.Limit != 25 && filter.Limit != 50 && filter.Limit != 100) {
+			return FindingsPage{}, fmt.Errorf("limit must be 25, 50, or 100")
+		}
+		if filter.Offset < 0 {
+			return FindingsPage{}, fmt.Errorf("offset must not be negative")
+		}
 	}
 	query, err := d.buildFindingQuery(ctx, scan, filter)
 	if err != nil {
