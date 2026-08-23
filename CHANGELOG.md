@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **SARIF export from the CLI:** `bluntcode scan --format sarif` writes the exact SARIF 2.1.0 document the API's report download serves, straight to stdout — byte-for-byte the same serialization (pinned by a test against the route's encoder invocation). This unlocks the CI baseline round-trip without a server (`bluntcode scan --format sarif > baseline.sarif`, then `--baseline baseline.sarif` on later runs) and feeds GitHub code-scanning uploads directly. In `--watch` mode each rescan emits one complete newline-separated SARIF document, mirroring `--format json`.
+- **Dashboard overview cards:** the home page now leads with a global overview fed by `/api/v1/stats` — Workspaces, Scans (with completed/running split and a live pulse when scans are in flight), Findings with a severity mini-bar and counted legend (latest-completed-per-workspace semantics, so the number matches what the dashboard shows), Suppressions, and Tools readiness (omitted when unwired). Loads with the standard skeleton, degrades to a quiet inline retry on error without blocking the rest of the dashboard, and renders zeros on a fresh install.
+- **GitHub Actions CI:** the repository now runs `.github/workflows/ci.yml` on pushes to main and pull requests — `go vet`, `go build`, the full Go test suite, the web test suite and build, then a self-scan dogfood gate: the freshly built exe scans `web/` with the quick profile under `--fail-on high+`, using a workspace-isolated `LOCALAPPDATA` so CI state never leaks, with the managed analyzer tools cached by manifest hash and the generated markdown report uploaded as an artifact when the gate trips.
+
 ## [0.3.0] - 2026-08-24
 
 ### Added
