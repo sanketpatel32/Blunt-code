@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **CI severity gate for headless scans:** `bluntcode scan` gained `--fail-on <severities>` (comma-separated, case-insensitive, with `high+`-style "and above" shorthand) and `--max-findings <N>` flags that turn a completed scan into a build gate. When either flag is given, the scan exits 1 — with a one-line `fail:` explanation on stderr — if any unresolved finding sits at or above the fail-on threshold or the total exceeds the maximum; otherwise it exits 0. Gate counts exclude resolved (fixed) findings, scans that fail, cancel, or time out keep their existing exit codes (1, or 130 after Ctrl+C), and invalid gate values are usage errors (exit 2) before any scan starts. Without the flags the exit-code contract is unchanged.
+
 ### Fixed
 
 - **Hardening batch from the 2026-08-24 QA review:** graceful scan shutdown on Ctrl+C (running analyzers are cancelled instead of being abandoned mid-write), event-bus history pruning so long-lived servers no longer grow per-scan history without bound, Biome source-position lookup capped at 2 MB files, ruff exit codes derived from merged findings instead of always reporting failure, a nil-scan-started guard in report writing, verified-download temp files cleaned up on checksum mismatch, and a fingerprint edge case for root-relative paths.

@@ -62,7 +62,7 @@ func runServer(args []string) {
 	if flags.NArg() > 1 {
 		fmt.Fprintln(os.Stderr, "usage: bluntcode [path] [--no-browser] [--port N]")
 		fmt.Fprintln(os.Stderr, "       bluntcode doctor [--json]")
-		fmt.Fprintln(os.Stderr, "       bluntcode scan <path> [--profile quick|standard|deep] [--json] [--timeout 30m] [--quiet]")
+		fmt.Fprintln(os.Stderr, "       bluntcode scan <path> [--profile quick|standard|deep] [--json] [--timeout 30m] [--quiet] [--fail-on high+] [--max-findings N]")
 		os.Exit(2)
 	}
 	// Shared bootstrap (single-instance lock, database, tool service, analyzer

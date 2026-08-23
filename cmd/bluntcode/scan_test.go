@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"bluntcode/internal/analyzers"
 	"bluntcode/internal/events"
 	"bluntcode/internal/reports"
 )
@@ -395,5 +396,117 @@ func TestParseScanFlagsHelpReturnsErrHelp(t *testing.T) {
 	_, err := parseScanFlags([]string{"--help"}, &errOut)
 	if !errors.Is(err, flag.ErrHelp) {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// --- CI gate flags: --fail-on and --max-findings --------------------------------
+
+func TestParseScanFlagsGateFlags(t *testing.T) {
+	cases := []struct {
+		name         string
+		args         []string
+		wantLabel    string
+		wantMax      int
+		wantEnabled  bool
+		wantCritical bool
+		wantHigh     bool
+		wantMedium   bool
+		wantLow      bool
+		wantInfo     bool
+	}{
+		{
+			name:      "fail-on plus with max-findings",
+			args:      []string{"--fail-on", "high+", "--max-findings", "10", `C:\proj`},
+			wantLabel: "high+", wantMax: 10, wantEnabled: true,
+			wantCritical: true, wantHigh: true,
+		},
+		{
+			name:      "fail-on list is case-insensitive",
+			args:      []string{`C:\proj`, "--fail-on", "Medium, LOW"},
+			wantLabel: "medium,low", wantEnabled: true,
+			wantMedium: true, wantLow: true,
+		},
+		{
+			name:    "max-findings alone",
+			args:    []string{"--max-findings", "1", `C:\proj`},
+			wantMax: 1, wantEnabled: true,
+		},
+		{
+			name: "no gate flags leaves the gate off",
+			args: []string{`C:\proj`},
+		},
+	}
+	for _, item := range cases {
+		t.Run(item.name, func(t *testing.T) {
+			var errOut bytes.Buffer
+			cfg, err := parseScanFlags(item.args, &errOut)
+			if err != nil {
+				t.Fatalf("parse: %v (stderr: %s)", err, errOut.String())
+			}
+			if cfg.gate.Enabled() != item.wantEnabled {
+				t.Fatalf("gate enabled = %v, want %v", cfg.gate.Enabled(), item.wantEnabled)
+			}
+			if cfg.gate.FailOn.Label != item.wantLabel {
+				t.Errorf("fail-on label = %q, want %q", cfg.gate.FailOn.Label, item.wantLabel)
+			}
+			if cfg.gate.MaxFindings != item.wantMax {
+				t.Errorf("max-findings = %d, want %d", cfg.gate.MaxFindings, item.wantMax)
+			}
+			for severity, want := range map[analyzers.Severity]bool{
+				analyzers.SeverityCritical: item.wantCritical,
+				analyzers.SeverityHigh:     item.wantHigh,
+				analyzers.SeverityMedium:   item.wantMedium,
+				analyzers.SeverityLow:      item.wantLow,
+				analyzers.SeverityInfo:     item.wantInfo,
+			} {
+				if got := cfg.gate.FailOn.Matches(severity); got != want {
+					t.Errorf("fail-on Matches(%s) = %v, want %v", severity, got, want)
+				}
+			}
+		})
+	}
+}
+
+func TestParseScanFlagsRejectsBadGateInput(t *testing.T) {
+	cases := []struct {
+		name    string
+		args    []string
+		message string
+	}{
+		{"unknown severity", []string{"--fail-on", "severe", `C:\proj`}, `unknown severity "severe"`},
+		{"garbage severity token", []string{"--fail-on", "high,bogus", `C:\proj`}, `unknown severity "bogus"`},
+		{"double plus", []string{"--fail-on", "high++", `C:\proj`}, `unknown severity "high++"`},
+		{"separators only", []string{"--fail-on", ",", `C:\proj`}, "no severities given"},
+		{"zero max-findings", []string{"--max-findings", "0", `C:\proj`}, "max-findings must be a positive integer"},
+		{"negative max-findings", []string{"--max-findings", "-3", `C:\proj`}, "max-findings must be a positive integer"},
+		{"garbage max-findings", []string{"--max-findings", "many", `C:\proj`}, "invalid value"},
+	}
+	for _, item := range cases {
+		t.Run(item.name, func(t *testing.T) {
+			var errOut bytes.Buffer
+			_, err := parseScanFlags(item.args, &errOut)
+			if err == nil {
+				t.Fatalf("expected error")
+			}
+			if !strings.Contains(err.Error(), item.message) {
+				t.Fatalf("error = %q, want substring %q", err.Error(), item.message)
+			}
+			if !strings.Contains(errOut.String(), "usage: bluntcode scan") {
+				t.Fatalf("usage not printed: %q", errOut.String())
+			}
+		})
+	}
+}
+
+func TestRunScanCommandRejectsBadGateFlagWithExitCodeTwo(t *testing.T) {
+	var out, errOut bytes.Buffer
+	if code := runScanCommand([]string{"--fail-on", "urgent", "--max-findings", "0", `C:\proj`}, &out, &errOut); code != 2 {
+		t.Fatalf("exit code = %d", code)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout = %q", out.String())
+	}
+	if !strings.Contains(errOut.String(), `unknown severity "urgent"`) {
+		t.Fatalf("reason missing: %q", errOut.String())
 	}
 }

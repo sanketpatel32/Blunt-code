@@ -36,7 +36,7 @@ const (
 	scanStatePollInterval = 2 * time.Second
 )
 
-const scanUsage = "usage: bluntcode scan <path> [--profile quick|standard|deep] [--json] [--timeout 30m] [--quiet]"
+const scanUsage = "usage: bluntcode scan <path> [--profile quick|standard|deep] [--json] [--timeout 30m] [--quiet] [--fail-on high+] [--max-findings N]"
 
 // scanConfig is the validated command line of `bluntcode scan`.
 type scanConfig struct {
@@ -45,6 +45,9 @@ type scanConfig struct {
 	json    bool
 	timeout time.Duration
 	quiet   bool
+	// gate is the CI fail-gate assembled from --fail-on and --max-findings;
+	// the zero value keeps the historical gate-free exit codes.
+	gate scans.GateConfig
 }
 
 // parseScanFlags parses and validates the scan command line. Parse and
@@ -61,22 +64,34 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	jsonOut := flags.Bool("json", false, "print a machine-readable JSON summary instead of human text")
 	timeout := flags.Duration("timeout", scanDefaultTimeout, "abort the scan when it exceeds this duration (for example 5m or 90s)")
 	quiet := flags.Bool("quiet", false, "suppress progress lines on stderr; the summary is still printed")
+	failOn := flags.String("fail-on", "", "fail (exit 1) when unresolved findings remain at these severities: comma-separated critical, high, medium, low, info (case-insensitive); a trailing + means \"and above\" (for example high+)")
+	maxFindings := flags.Int("max-findings", 0, "fail (exit 1) when the scan reports more than N unresolved findings (positive integer)")
 	flags.Usage = func() {
 		fmt.Fprintln(errOut, scanUsage)
 		fmt.Fprintln(errOut)
 		fmt.Fprintln(errOut, "Scans the workspace at <path> headlessly: no browser, no server. Progress is")
 		fmt.Fprintln(errOut, "written to stderr and a summary to stdout. Missing managed tools are")
 		fmt.Fprintln(errOut, "installed automatically unless offline mode is enabled. Exit code is 0 for a")
-		fmt.Fprintln(errOut, "completed scan (warnings included), 1 for failed/cancelled/interrupted,")
-		fmt.Fprintln(errOut, "130 when stopped with Ctrl+C.")
+		fmt.Fprintln(errOut, "completed scan (warnings included), 1 for failed/cancelled/interrupted scans")
+		fmt.Fprintln(errOut, "and for a tripped CI gate (--fail-on/--max-findings), 130 when stopped")
+		fmt.Fprintln(errOut, "with Ctrl+C, and 2 for usage errors.")
 		flags.PrintDefaults()
 	}
 	var positional []string
+	maxFindingsSet := false
 	remaining := args
 	for {
 		if err := flags.Parse(remaining); err != nil {
 			return scanConfig{}, err
 		}
+		// flags.Visit only covers the parse call it follows, so presence is
+		// recorded after every restart of the parser; this distinguishes an
+		// omitted --max-findings from an explicit (invalid) --max-findings 0.
+		flags.Visit(func(f *flag.Flag) {
+			if f.Name == "max-findings" {
+				maxFindingsSet = true
+			}
+		})
 		if flags.NArg() == 0 {
 			break
 		}
@@ -100,6 +115,19 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	}
 	if cfg.timeout <= 0 {
 		return usageError("timeout must be a positive duration such as 5m")
+	}
+	if *failOn != "" {
+		spec, specErr := scans.ParseSeveritySpec(*failOn)
+		if specErr != nil {
+			return usageError(specErr.Error())
+		}
+		cfg.gate.FailOn = spec
+	}
+	if maxFindingsSet {
+		if *maxFindings <= 0 {
+			return usageError("max-findings must be a positive integer")
+		}
+		cfg.gate.MaxFindings = *maxFindings
 	}
 	return cfg, nil
 }
@@ -134,6 +162,9 @@ type scanSummary struct {
 	reportPath    string
 	errorSummary  string
 	timedOut      bool
+	// findings keeps the raw rows behind the counts above so the CI gate can
+	// evaluate severity and comparison status without a second query.
+	findings []analyzers.Finding
 }
 
 func (s scanSummary) duration() time.Duration {
@@ -175,6 +206,7 @@ func buildScanSummary(ctx context.Context, db *database.DB, work core.Workspace,
 		reportPath:    reportPath,
 		errorSummary:  scan.ErrorSummary,
 		timedOut:      timedOut,
+		findings:      findings,
 	}
 	if scan.StartedAt != nil {
 		summary.startedAt = *scan.StartedAt
@@ -298,7 +330,17 @@ func runScanCommand(args []string, stdout, stderr io.Writer) int {
 	if outcome.interruptSeen {
 		return 130
 	}
-	return scanExitCode(summary.state, summary.timedOut)
+	code := scanExitCode(summary.state, summary.timedOut)
+	// The CI gate applies only to scans that completed and would otherwise
+	// exit 0; failed, cancelled, and interrupted scans keep their own exit
+	// path regardless of gate flags.
+	if code == 0 && cfg.gate.Enabled() {
+		if gate := scans.EvaluateGate(summary.findings, cfg.gate); gate.Failed {
+			fmt.Fprintln(stderr, gate.FailureMessage())
+			return 1
+		}
+	}
+	return code
 }
 
 // scanWaitInput bundles the injectable inputs of the scan event loop so the
