@@ -78,17 +78,28 @@ func TestNormalizeUsesBiomeLineLocation(t *testing.T) {
 }
 
 func TestPlanFiltersToJavaScriptAndTypeScriptFiles(t *testing.T) {
+	// The workspace declares a non-React manifest and the .tsx file carries
+	// no React import, so react-domain detection must stay silent and the
+	// command line must remain exactly the pre-detection shape.
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "package.json"), []byte(`{"name":"plain","dependencies":{"vue":"^3.4.0"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	app := filepath.Join(root, "app.tsx")
+	if err := os.WriteFile(app, []byte("export const x = 1;\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	adapter := New("biome.exe", "test")
 	req := analyzers.ScanRequest{
-		WorkspaceRoot: `C:\ws`,
+		WorkspaceRoot: root,
 		Languages:     []analyzers.Language{analyzers.LanguagePython, analyzers.LanguageTypeScript},
-		Files:         []string{`C:\ws\app.tsx`, `C:\ws\script.py`, `C:\ws\main.py`},
+		Files:         []string{app, filepath.Join(root, "script.py"), filepath.Join(root, "main.py")},
 	}
 	plan, err := adapter.Plan(context.Background(), req)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"lint", "--reporter=json", "--no-errors-on-unmatched", `C:\ws\app.tsx`}
+	want := []string{"lint", "--reporter=json", "--no-errors-on-unmatched", app}
 	if len(plan.Commands) != 1 || !reflect.DeepEqual(plan.Commands[0].Args, want) {
 		t.Fatalf("commands = %#v, want single command with args %#v", plan.Commands, want)
 	}

@@ -41,11 +41,23 @@ func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.
 		return analyzers.AnalyzerPlan{}, fmt.Errorf("biome does not apply")
 	}
 	prefix := []string{"lint", "--reporter=json", "--no-errors-on-unmatched"}
+	// React workspaces get the react domain injected via a generated biome
+	// config (see react.go); every other workspace keeps exactly the command
+	// line this adapter produced before, so non-React findings and their
+	// fingerprints cannot shift. No logger is wired into planning, so the
+	// detection reason travels in the plan metadata instead of a log line.
+	var metadata map[string]any
+	if d := detectReact(req.WorkspaceRoot, req.Files); d.Detected && !hasWorkspaceBiomeConfig(req.WorkspaceRoot) {
+		if configPath, ok := writeInjectedConfig(); ok {
+			prefix = append(prefix, "--config-path="+configPath)
+			metadata = map[string]any{"react_domain": d.Reason}
+		}
+	}
 	commands := make([]analyzers.ProcessSpec, 0)
 	for _, args := range analyzers.FileArgumentBatches(prefix, webFiles) {
 		commands = append(commands, analyzers.ProcessSpec{Executable: a.Executable, Args: args, Dir: req.WorkspaceRoot})
 	}
-	return analyzers.AnalyzerPlan{AnalyzerID: ID, Version: a.Version, Commands: commands}, nil
+	return analyzers.AnalyzerPlan{AnalyzerID: ID, Version: a.Version, Commands: commands, Metadata: metadata}, nil
 }
 func (a *Adapter) Run(ctx context.Context, p analyzers.AnalyzerPlan, emit analyzers.EventEmitter) (analyzers.AnalyzerResult, error) {
 	if len(p.Commands) <= 1 {
