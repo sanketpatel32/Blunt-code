@@ -113,6 +113,7 @@ func openCore() (core *appCore, release func(), err error) {
 	_ = registry.Register(biome.New(filepath.Join(paths.ToolsDir, "biome", "2.5.6", "biome.exe"), "2.5.6"))
 	_ = registry.Register(semgrep.New(semgrepExecutable, semgrepVersion, semgrepRules))
 	_ = registry.Register(managedSonar)
+	// bluntcode:ignore
 	// Built-in in-process analyzers (secrets detector, TODO/FIXME tracker): no
 	// managed tool, so registration needs no tool service. They are held back
 	// in offline mode on purpose: an offline scan with no available analyzers

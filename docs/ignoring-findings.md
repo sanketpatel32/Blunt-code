@@ -16,12 +16,14 @@ a scanned file.
 ## Inline `bluntcode:ignore` comments (built-in analyzers)
 
 The built-in analyzers — the committed-secrets detector (`secrets`) and the
+<!-- bluntcode:ignore -->
 TODO/FIXME tracker (`todo`) — honor an inline ignore comment: a line comment
 containing the case-sensitive marker `bluntcode:ignore`, with an optional
 single rule id and an optional trailing reason.
 
 ```python
 # bluntcode:ignore — local e2e fixture key, never used against production
+<!-- bluntcode:ignore -->
 dummy_aws_key = "AKIAIOSFODNN7EXAMPLE"
 
 # bluntcode:ignore secrets.aws-access-key-id recorded in the vault, see runbook

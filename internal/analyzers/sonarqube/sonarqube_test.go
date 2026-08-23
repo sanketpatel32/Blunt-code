@@ -81,7 +81,7 @@ func TestBootstrapCreatesDPAPIProtectedScannerToken(t *testing.T) {
 				t.Errorf("expected rotated admin credentials")
 			}
 			generated = true
-			_, _ = w.Write([]byte(`{"token":"scanner-token"}`))
+			_, _ = w.Write([]byte(`{"token":"scanner-token"}`)) // bluntcode:ignore
 		default:
 			t.Errorf("unexpected endpoint %s", r.URL.Path)
 			w.WriteHeader(http.StatusNotFound)

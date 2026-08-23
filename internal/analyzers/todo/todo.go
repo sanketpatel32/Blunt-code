@@ -1,4 +1,5 @@
 // Package todo implements Blunt Code's built-in procrastination-debt tracker:
+// bluntcode:ignore
 // TODO/FIXME/HACK/XXX/BUG markers left in comments. Like the secrets detector
 // it needs no managed executable — the scan runs in-process — while keeping
 // the adapter contract intact: Run serializes its diagnostics into
@@ -32,14 +33,14 @@ const (
 
 const remediation = "Finish the tracked work and delete the marker, or move it into the issue tracker so the debt stays visible outside the code."
 
-// Adapter is the built-in TODO/FIXME analyzer. It holds no state and no
+// Adapter is the built-in TODO/FIXME analyzer. It holds no state and no // bluntcode:ignore
 // executable; New is a tools-free constructor.
 type Adapter struct{}
 
 func New() *Adapter { return &Adapter{} }
 
 func (a *Adapter) ID() string          { return ID }
-func (a *Adapter) DisplayName() string { return "TODO Comment Tracker" }
+func (a *Adapter) DisplayName() string { return "TODO Comment Tracker" } // bluntcode:ignore
 
 // SupportedLanguages declares the languages where TODO/FIXME-style markers
 // plausibly live: every programming language discovery classifies (comments
@@ -224,8 +225,8 @@ func (a *Adapter) Normalize(_ context.Context, result analyzers.AnalyzerResult) 
 	return findings, metrics, nil
 }
 
-// severityFor ranks the markers: FIXME and BUG declare something known-broken,
-// so they land at medium; TODO, HACK, and XXX track ordinary deferred work at
+// severityFor ranks the markers: FIXME and BUG declare something known-broken, // bluntcode:ignore
+// so they land at medium; TODO, HACK, and XXX track ordinary deferred work at // bluntcode:ignore
 // low.
 func severityFor(rule string) analyzers.Severity {
 	if rule == ruleFIXME || rule == ruleBUG {

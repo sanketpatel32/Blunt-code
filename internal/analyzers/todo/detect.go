@@ -1,5 +1,6 @@
 package todo
 
+// bluntcode:ignore
 // Pure detection engine for the built-in TODO/FIXME comment tracker. Everything
 // in this file operates on byte slices held in memory and never touches the
 // network, the filesystem, or an external process, so the detector is fully
@@ -70,7 +71,7 @@ type match struct {
 
 // detect runs the marker scan over one file's content, line by line. A marker
 // counts only when it is followed by a colon, whitespace, or the end of the
-// line: `TODO:` and `TODO refactor` are debt, `TODOS` and `TODOING` are not.
+// line: `TODO:` and `TODO refactor` are debt, `TODOS` and `TODOING` are not. // bluntcode:ignore
 func detect(data []byte) []match {
 	var out []match
 	lineNo, lineStart := 1, 0
@@ -112,8 +113,8 @@ func detectLine(lineNo int, line []byte) []match {
 	return out
 }
 
-// followerCountsAsDebt accepts the tracked-marker shapes: a colon (TODO:),
-// whitespace before more text (TODO refactor), or nothing at all (a bare TODO
+// followerCountsAsDebt accepts the tracked-marker shapes: a colon (TODO:), // bluntcode:ignore
+// whitespace before more text (TODO refactor), or nothing at all (a bare TODO // bluntcode:ignore
 // at the end of the line). Anything else — punctuation like `TODO.` or
 // `TODO(name)` — means the word appeared without the marker convention, so it
 // is not counted. A marker inside a string literal can still match; that is

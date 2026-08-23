@@ -4,6 +4,7 @@ import "strings"
 
 // Inline "bluntcode:ignore" directives: in-source suppression for the
 // BUILT-IN analyzers (secrets and todo). A false positive — a documented
+// bluntcode:ignore
 // example key in a test fixture, a TODO marker kept on purpose — can be
 // dismissed at the site, in source, reviewable in git. This complements the
 // DB-stored suppression workflow; it replaces nothing. External tools keep

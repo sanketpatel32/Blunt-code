@@ -1,0 +1,14 @@
+# Intentional detector fixtures and feature documentation: the planted
+# markers, tokens, and credential-shaped strings in these files are test
+# data, not debt. Real findings elsewhere keep flowing.
+internal/analyzers/secrets/detect_test.go
+internal/analyzers/secrets/ignore_test.go
+internal/analyzers/secrets/secrets_test.go
+internal/analyzers/todo/detect_test.go
+internal/analyzers/todo/todo_test.go
+internal/analyzers/todo/ignore_test.go
+internal/analyzers/ignore_test.go
+internal/analyzers/analyzers_test.go
+tests/fixtures/**
+CHANGELOG.md
+IMPLEMENTATION_STATUS.md

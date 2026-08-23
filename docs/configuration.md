@@ -102,6 +102,7 @@ CLI or the profile picker in the UI:
 | Profile | Analyzers | Notes |
 | :--- | :--- | :--- |
 | **quick** | Ruff + Biome only | Fast feedback between edits; skips semgrep, SonarQube, and the built-ins entirely |
+<!-- bluntcode:ignore -->
 | **standard** | Ruff, Biome, Semgrep, SonarQube, secrets, TODO | The everyday default; Ruff runs its default rule set (E4, E7, E9, F) |
 | **deep** | Same set as standard | Ruff's rule selection widens to `E,W,F,B,SIM,C4,RET,ARG,PLR`; the other analyzers run the same configuration as standard |
 
