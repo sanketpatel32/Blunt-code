@@ -21,13 +21,16 @@ type Comparison struct {
 }
 type Input struct {
 	WorkspaceName, WorkspacePath, ScanID, Profile, BluntCodeVersion string
-	StartedAt, FinishedAt                                           time.Time
-	Files                                                           []string
-	SkippedFiles                                                    []string
-	Findings                                                        []analyzers.Finding
-	Metrics                                                         []analyzers.Metric
-	Runs                                                            []Run
-	Comparison                                                      Comparison
+	// State is the terminal scan state (for example "completed"); it feeds the
+	// JSON export's scan block and is not rendered by the other formats.
+	State                 string
+	StartedAt, FinishedAt time.Time
+	Files                 []string
+	SkippedFiles          []string
+	Findings              []analyzers.Finding
+	Metrics               []analyzers.Metric
+	Runs                  []Run
+	Comparison            Comparison
 }
 type Model struct {
 	Input

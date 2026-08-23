@@ -623,6 +623,162 @@ func TestFindingsCSVSURVIVESHostileCorpus(t *testing.T) {
 	}
 }
 
+// TestFindingsJSONDownloadsAttachment pins the findings.json export: the same
+// attachment conventions as findings.csv (content type, disposition, short
+// scan id), served through the loopback/security middleware like every route,
+// carrying the full versioned report document rather than a bare findings
+// array.
+func TestFindingsJSONDownloadsAttachment(t *testing.T) {
+	s := testServer(t)
+	ctx := context.Background()
+	work, err := s.db.CreateWorkspace(ctx, core.Workspace{RootPath: t.TempDir(), Name: "Example"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scan, err := s.db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: "completed", Profile: "standard",
+		CandidateFileCount: 5, SelectedFileCount: 3,
+		Snapshot: &core.ScanSnapshot{BluntCodeVersion: "9.9.9", CapturedAt: time.Now()}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A previous completed scan carrying the same F401 finding makes its
+	// comparison status persistent in the current scan; S101 is brand new.
+	f := finding("ruff", "F401", "src/main.py", "unused import", analyzers.SeverityHigh, analyzers.CategoryCorrectness)
+	f.StartLine, f.StartColumn, f.EndLine, f.EndColumn = 3, 1, 3, 20
+	f.Remediation, f.DocumentationURL = "Remove the import", "https://docs.astral.sh/ruff/rules/F401"
+	previous, err := s.db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: "queued"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.SaveAnalyzerResult(ctx, previous.ID, database.AnalyzerRunInput{AnalyzerID: "ruff", Version: "test", State: "succeeded"}, []analyzers.Finding{f}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.db.CompleteScan(ctx, previous.ID, "completed", ""); err != nil {
+		t.Fatal(err)
+	}
+	fresh := finding("ruff", "S101", "src/other.py", "assert used", analyzers.SeverityMedium, analyzers.CategoryBug)
+	if _, err := s.db.SaveAnalyzerResult(ctx, scan.ID, database.AnalyzerRunInput{AnalyzerID: "ruff", Version: "test", State: "succeeded"}, []analyzers.Finding{f, fresh}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.db.CompleteScan(ctx, scan.ID, "completed", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+scan.ID+"/findings.json", nil)
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("findings.json: %d %s", response.Code, response.Body.String())
+	}
+	if contentType := response.Header().Get("Content-Type"); contentType != "application/json; charset=utf-8" {
+		t.Fatalf("content type %q", contentType)
+	}
+	disposition := response.Header().Get("Content-Disposition")
+	if disposition != `attachment; filename="bluntcode-scan-`+scan.ID[:8]+`-findings.json"` {
+		t.Fatalf("disposition %q", disposition)
+	}
+	body := response.Body.Bytes()
+	if !bytes.HasSuffix(body, []byte("}\n")) {
+		t.Fatalf("document must end with a single trailing LF: %q", body[min(len(body), 32):])
+	}
+	var doc struct {
+		Schema        string `json:"schema"`
+		SchemaVersion int    `json:"schemaVersion"`
+		Workspace     struct {
+			Name string `json:"name"`
+		} `json:"workspace"`
+		Scan struct {
+			ID        string `json:"id"`
+			State     string `json:"state"`
+			Profile   string `json:"profile"`
+			StartedAt string `json:"started_at"`
+		} `json:"scan"`
+		Files struct {
+			Candidate int `json:"candidate"`
+			Selected  int `json:"selected"`
+			Skipped   int `json:"skipped"`
+		} `json:"files"`
+		Severity struct {
+			High   int `json:"high"`
+			Medium int `json:"medium"`
+			Total  int `json:"total"`
+		} `json:"severity"`
+		Comparison struct {
+			New        int `json:"new"`
+			Fixed      int `json:"fixed"`
+			Persistent int `json:"persistent"`
+		} `json:"comparison"`
+		Analyzers []struct {
+			ID       string `json:"id"`
+			State    string `json:"state"`
+			Findings int    `json:"findings"`
+		} `json:"analyzers"`
+		Findings []struct {
+			Severity         string `json:"severity"`
+			RuleID           string `json:"rule_id"`
+			File             string `json:"file"`
+			StartLine        int    `json:"start_line"`
+			StartColumn      int    `json:"start_column"`
+			EndLine          int    `json:"end_line"`
+			EndColumn        int    `json:"end_column"`
+			Status           string `json:"status"`
+			Remediation      string `json:"remediation"`
+			DocumentationURL string `json:"documentation_url"`
+			Fingerprint      string `json:"fingerprint"`
+		} `json:"findings"`
+	}
+	if err := json.Unmarshal(body, &doc); err != nil {
+		t.Fatalf("invalid JSON report: %v: %s", err, body)
+	}
+	if doc.Schema != "bluntcode/scan-report" || doc.SchemaVersion != 1 {
+		t.Fatalf("schema marker = %q v%d", doc.Schema, doc.SchemaVersion)
+	}
+	if doc.Workspace.Name != "Example" || doc.Scan.ID != scan.ID || doc.Scan.State != "completed" || doc.Scan.Profile != "standard" || doc.Scan.StartedAt == "" {
+		t.Fatalf("scan block = %#v", doc.Scan)
+	}
+	if doc.Files.Candidate != 5 || doc.Files.Selected != 3 || doc.Files.Skipped != 2 {
+		t.Fatalf("file counts = %#v", doc.Files)
+	}
+	if doc.Severity.High != 1 || doc.Severity.Medium != 1 || doc.Severity.Total != 2 {
+		t.Fatalf("severity counts = %#v", doc.Severity)
+	}
+	if doc.Comparison.New != 1 || doc.Comparison.Fixed != 0 || doc.Comparison.Persistent != 1 {
+		t.Fatalf("comparison = %#v", doc.Comparison)
+	}
+	if len(doc.Analyzers) != 1 || doc.Analyzers[0].ID != "ruff" || doc.Analyzers[0].State != "succeeded" || doc.Analyzers[0].Findings != 2 {
+		t.Fatalf("analyzers = %#v", doc.Analyzers)
+	}
+	if len(doc.Findings) != 2 {
+		t.Fatalf("findings = %#v", doc.Findings)
+	}
+	got, added := doc.Findings[0], doc.Findings[1]
+	if got.Severity != "high" || got.RuleID != "F401" || got.File != "src/main.py" || got.StartLine != 3 || got.StartColumn != 1 ||
+		got.EndLine != 3 || got.EndColumn != 20 || got.Status != "persistent" || got.Remediation != "Remove the import" ||
+		got.DocumentationURL != "https://docs.astral.sh/ruff/rules/F401" || got.Fingerprint != f.Fingerprint {
+		t.Fatalf("persistent finding = %#v", got)
+	}
+	if added.RuleID != "S101" || added.File != "src/other.py" || added.Status != "new" || added.Severity != "medium" {
+		t.Fatalf("new finding = %#v", added)
+	}
+}
+
+func TestFindingsJSONRejectsUnknownScan(t *testing.T) {
+	s := testServer(t)
+	unknown := "00000000-0000-4000-8000-000000000000"
+	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+unknown+"/findings.json", nil)
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusNotFound || !strings.Contains(response.Body.String(), "SCAN_NOT_FOUND") {
+		t.Fatalf("got %d: %s", response.Code, response.Body.String())
+	}
+	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/not-a-uuid/findings.json", nil)
+	response = httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusNotFound || !strings.Contains(response.Body.String(), "SCAN_NOT_FOUND") {
+		t.Fatalf("malformed id got %d: %s", response.Code, response.Body.String())
+	}
+}
+
 type fixedFindingsResponse struct {
 	Fixed               []analyzers.Finding `json:"fixed"`
 	TotalFixed          int                 `json:"total_fixed"`

@@ -37,13 +37,26 @@ const (
 	scanStatePollInterval = 2 * time.Second
 )
 
-const scanUsage = "usage: bluntcode scan <path> [--profile quick|standard|deep] [--json] [--timeout 30m] [--quiet] [--fail-on high+] [--max-findings N] [--baseline <scan-id-or-sarif>]"
+const scanUsage = "usage: bluntcode scan <path> [--profile quick|standard|deep] [--format text|json] [--json] [--timeout 30m] [--quiet] [--fail-on high+] [--max-findings N] [--baseline <scan-id-or-sarif>]"
+
+// The stdout report formats of `bluntcode scan`. text (the default) keeps the
+// historical human summary; json prints the full versioned JSON report
+// document that GET /api/v1/scans/{id}/findings.json also serves. The compact
+// summary behind --json stays a separate, unchanged output.
+const (
+	scanFormatText = "text"
+	scanFormatJSON = "json"
+)
 
 // scanConfig is the validated command line of `bluntcode scan`.
 type scanConfig struct {
 	path    string
 	profile string
 	json    bool
+	// format selects the stdout report: the human summary (text, the
+	// historical default) or the full JSON report document (json). The empty
+	// value means text, so an omitted flag keeps the pre-flag behavior.
+	format  string
 	timeout time.Duration
 	quiet   bool
 	// baseline names the reference the CI gate treats as known findings: a
@@ -66,6 +79,7 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	flags := flag.NewFlagSet("scan", flag.ContinueOnError)
 	flags.SetOutput(errOut)
 	profile := flags.String("profile", "standard", "scan profile: quick, standard, or deep")
+	format := flags.String("format", "", "stdout report format: text (human summary, the default) or json (the full JSON report document)")
 	jsonOut := flags.Bool("json", false, "print a machine-readable JSON summary instead of human text")
 	timeout := flags.Duration("timeout", scanDefaultTimeout, "abort the scan when it exceeds this duration (for example 5m or 90s)")
 	quiet := flags.Bool("quiet", false, "suppress progress lines on stderr; the summary is still printed")
@@ -122,9 +136,15 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	if len(positional) != 1 {
 		return usageError("exactly one workspace path is required")
 	}
-	cfg := scanConfig{path: positional[0], profile: *profile, json: *jsonOut, timeout: *timeout, quiet: *quiet, baseline: *baseline}
+	cfg := scanConfig{path: positional[0], profile: *profile, json: *jsonOut, format: *format, timeout: *timeout, quiet: *quiet, baseline: *baseline}
 	if cfg.profile != analyzers.ProfileQuick && cfg.profile != analyzers.ProfileStandard && cfg.profile != analyzers.ProfileDeep {
 		return usageError("profile must be quick, standard, or deep")
+	}
+	if cfg.format != "" && cfg.format != scanFormatText && cfg.format != scanFormatJSON {
+		return usageError("format must be text or json")
+	}
+	if cfg.json && cfg.format == scanFormatJSON {
+		return usageError("--json cannot be combined with --format json: --json prints the compact summary, --format json the full report")
 	}
 	if cfg.timeout <= 0 {
 		return usageError("timeout must be a positive duration such as 5m")
@@ -347,12 +367,23 @@ func runScanCommand(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	summary.state = outcome.finalState
-	if cfg.json {
+	switch {
+	case cfg.format == scanFormatJSON:
+		model, err := buildScanReportModel(ctx, app.db, work, summary)
+		if err != nil {
+			fmt.Fprintf(stderr, "bluntcode scan: could not load report: %v\n", err)
+			return 1
+		}
+		if _, err := stdout.Write(reports.JSON(model)); err != nil {
+			fmt.Fprintf(stderr, "bluntcode scan: could not write report: %v\n", err)
+			return 1
+		}
+	case cfg.json:
 		if err := writeScanJSON(stdout, summary); err != nil {
 			fmt.Fprintf(stderr, "bluntcode scan: could not write summary: %v\n", err)
 			return 1
 		}
-	} else {
+	default:
 		writeScanHuman(stdout, summary)
 	}
 	if outcome.interruptSeen {
@@ -380,6 +411,51 @@ func runScanCommand(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	return code
+}
+
+// buildScanReportModel assembles the full report model behind
+// `--format json`. It mirrors the API server's reportModel loader (same
+// metrics, comparison coverage rule, and file-count placeholders) so the CLI
+// document and the GET /api/v1/scans/{id}/findings.json download carry the
+// same data through the same renderer.
+func buildScanReportModel(ctx context.Context, db *database.DB, work core.Workspace, summary scanSummary) (reports.Model, error) {
+	scan, err := db.Scan(ctx, summary.scanID)
+	if err != nil {
+		return reports.Model{}, err
+	}
+	metrics, err := db.Metrics(ctx, summary.scanID)
+	if err != nil {
+		return reports.Model{}, err
+	}
+	comparison := reports.Comparison{}
+	if previousID, prevErr := db.PreviousCompletedScanID(ctx, work.ID, summary.scanID); prevErr == nil {
+		previousFindings, findErr := db.Findings(ctx, previousID)
+		coverage, coverageErr := db.SuccessfulAnalyzerIDs(ctx, summary.scanID)
+		if findErr == nil && coverageErr == nil {
+			diff := scans.Compare(summary.findings, previousFindings, coverage)
+			comparison = reports.Comparison{New: diff.New, Fixed: diff.Fixed, Persistent: diff.Persistent, UnknownAnalyzerIDs: diff.UnknownAnalyzerIDs}
+		}
+	}
+	files := []string(nil)
+	bluntCodeVersion := ""
+	if scan.Snapshot != nil {
+		files = append(files, scan.Snapshot.SelectedFiles...)
+		bluntCodeVersion = scan.Snapshot.BluntCodeVersion
+	}
+	if len(files) == 0 && scan.SelectedFileCount > 0 {
+		files = make([]string, scan.SelectedFileCount)
+	}
+	skipped := scan.CandidateFileCount - scan.SelectedFileCount
+	if skipped < 0 {
+		skipped = 0
+	}
+	return reports.Build(reports.Input{
+		WorkspaceName: work.Name, WorkspacePath: work.RootPath, ScanID: summary.scanID, Profile: summary.profile,
+		State: summary.state, BluntCodeVersion: bluntCodeVersion,
+		StartedAt: summary.startedAt, FinishedAt: summary.finishedAt,
+		Files: files, SkippedFiles: make([]string, skipped),
+		Findings: summary.findings, Metrics: metrics, Runs: summary.runs, Comparison: comparison,
+	}), nil
 }
 
 // loadScanBaseline resolves a --baseline reference: an existing file on disk

@@ -510,3 +510,75 @@ func TestRunScanCommandRejectsBadGateFlagWithExitCodeTwo(t *testing.T) {
 		t.Fatalf("reason missing: %q", errOut.String())
 	}
 }
+
+// --- report format flag: --format text|json -------------------------------------
+
+func TestParseScanFlagsFormatFlag(t *testing.T) {
+	cases := []struct {
+		name       string
+		args       []string
+		wantFormat string
+		wantJSON   bool
+	}{
+		{"absent keeps the historical text output", []string{`C:\proj`}, "", false},
+		{"explicit text", []string{"--format", "text", `C:\proj`}, "text", false},
+		{"json selects the full report document", []string{"--format", "json", `C:\proj`}, "json", false},
+		{"format after the path works", []string{`C:\proj`, "--format", "json"}, "json", false},
+		{"json summary flag still accepted with text format", []string{"--json", "--format", "text", `C:\proj`}, "text", true},
+	}
+	for _, item := range cases {
+		t.Run(item.name, func(t *testing.T) {
+			var errOut bytes.Buffer
+			cfg, err := parseScanFlags(item.args, &errOut)
+			if err != nil {
+				t.Fatalf("parse: %v (stderr: %s)", err, errOut.String())
+			}
+			if cfg.format != item.wantFormat {
+				t.Errorf("format = %q, want %q", cfg.format, item.wantFormat)
+			}
+			if cfg.json != item.wantJSON {
+				t.Errorf("json = %v, want %v", cfg.json, item.wantJSON)
+			}
+		})
+	}
+}
+
+func TestParseScanFlagsRejectsBadFormatInput(t *testing.T) {
+	cases := []struct {
+		name    string
+		args    []string
+		message string
+	}{
+		{"unknown format", []string{"--format", "yaml", `C:\proj`}, "format must be text or json"},
+		{"sarif is api-only", []string{"--format", "sarif", `C:\proj`}, "format must be text or json"},
+		{"json summary combined with report format", []string{"--json", "--format", "json", `C:\proj`}, "--json cannot be combined with --format json"},
+	}
+	for _, item := range cases {
+		t.Run(item.name, func(t *testing.T) {
+			var errOut bytes.Buffer
+			_, err := parseScanFlags(item.args, &errOut)
+			if err == nil {
+				t.Fatalf("expected error")
+			}
+			if !strings.Contains(err.Error(), item.message) {
+				t.Fatalf("error = %q, want substring %q", err.Error(), item.message)
+			}
+			if !strings.Contains(errOut.String(), "usage: bluntcode scan") {
+				t.Fatalf("usage not printed: %q", errOut.String())
+			}
+		})
+	}
+}
+
+func TestRunScanCommandRejectsBadFormatFlagWithExitCodeTwo(t *testing.T) {
+	var out, errOut bytes.Buffer
+	if code := runScanCommand([]string{"--format", "yaml", `C:\proj`}, &out, &errOut); code != 2 {
+		t.Fatalf("exit code = %d", code)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout = %q", out.String())
+	}
+	if !strings.Contains(errOut.String(), "format must be text or json") {
+		t.Fatalf("reason missing: %q", errOut.String())
+	}
+}

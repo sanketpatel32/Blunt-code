@@ -98,6 +98,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/events", s.scanEvents)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings", s.findings)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings.csv", s.findingsCSV)
+	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings.json", s.findingsJSON)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/fixed", s.fixedFindings)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings/{findingID}/preview", s.findingPreview)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/report", s.report)
@@ -1020,6 +1021,42 @@ func csvNumber(value int) string {
 	return strconv.Itoa(value)
 }
 
+// findingsJSON exports the scan as the full versioned JSON report document
+// (the same document `bluntcode scan --format json` prints). It follows the
+// findings.csv handler's shape — an attachment regenerated from stored scan
+// data — but serves the complete report model: severity counts, analyzer
+// runs, metrics, and every finding field the other exports surface. Query
+// filters do not apply; the document is always the whole scan.
+func (s *Server) findingsJSON(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !validID(id) {
+		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
+		return
+	}
+	scan, err := s.db.Scan(r.Context(), id)
+	if errors.Is(err, sql.ErrNoRows) {
+		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
+		return
+	}
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load scan.")
+		return
+	}
+	work, err := s.db.Workspace(r.Context(), scan.WorkspaceID)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load report.")
+		return
+	}
+	model, err := s.reportModel(r.Context(), scan, work)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load report.")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="bluntcode-scan-%s-findings.json"`, shortID(scan.ID)))
+	_, _ = w.Write(reports.JSON(model))
+}
+
 // fixedFindings lists what the fixed count on the scan report actually refers
 // to: findings present in the previous completed scan and gone from this one,
 // with the same coverage-aware rule the report comparison applies. The list is
@@ -1271,7 +1308,7 @@ func (s *Server) reportModel(ctx context.Context, scan core.Scan, work core.Work
 		skippedCount = 0
 	}
 	return reports.Build(reports.Input{
-		WorkspaceName: work.Name, WorkspacePath: work.RootPath, ScanID: scan.ID, Profile: scan.Profile, BluntCodeVersion: bluntCodeVersion,
+		WorkspaceName: work.Name, WorkspacePath: work.RootPath, ScanID: scan.ID, Profile: scan.Profile, State: scan.State, BluntCodeVersion: bluntCodeVersion,
 		StartedAt: startedAtValue(startedAt), FinishedAt: finishedAtValue(scan.FinishedAt), Files: files, SkippedFiles: make([]string, skippedCount), Findings: findings, Metrics: metrics, Runs: runs,
 		Comparison: reports.Comparison{New: comparison.New, Fixed: comparison.Fixed, Persistent: comparison.Persistent, UnknownAnalyzerIDs: comparison.UnknownAnalyzerIDs},
 	}), nil
