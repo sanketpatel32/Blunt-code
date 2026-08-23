@@ -37,7 +37,7 @@ const (
 	scanStatePollInterval = 2 * time.Second
 )
 
-const scanUsage = "usage: bluntcode scan <path> [--profile quick|standard|deep] [--format text|json] [--json] [--timeout 30m] [--quiet] [--fail-on high+] [--max-findings N] [--baseline <scan-id-or-sarif>]"
+const scanUsage = "usage: bluntcode scan <path> [--profile quick|standard|deep] [--format text|json] [--json] [--timeout 30m] [--quiet] [--fail-on high+] [--max-findings N] [--baseline <scan-id-or-sarif>] [--jobs N]"
 
 // The stdout report formats of `bluntcode scan`. text (the default) keeps the
 // historical human summary; json prints the full versioned JSON report
@@ -63,6 +63,9 @@ type scanConfig struct {
 	// path to a SARIF 2.1.0 file (Blunt Code's own export) or the ID of a
 	// previous scan of the same workspace. Empty disables baseline mode.
 	baseline string
+	// jobs bounds how many analyzers may run concurrently; 0 (the default)
+	// keeps the sequential execution model.
+	jobs int
 	// gate is the CI fail-gate assembled from --fail-on and --max-findings;
 	// the zero value keeps the historical gate-free exit codes.
 	gate scans.GateConfig
@@ -86,6 +89,7 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	failOn := flags.String("fail-on", "", "fail (exit 1) when unresolved findings remain at these severities: comma-separated critical, high, medium, low, info (case-insensitive); a trailing + means \"and above\" (for example high+)")
 	maxFindings := flags.Int("max-findings", 0, "fail (exit 1) when the scan reports more than N unresolved findings (positive integer)")
 	baseline := flags.String("baseline", "", "exclude known findings from the gate: a previous scan ID or the path of a SARIF 2.1.0 file exported by Blunt Code")
+	jobs := flags.Int("jobs", 0, "run at most N analyzers concurrently (positive integer); by default analyzers run one after another")
 	flags.Usage = func() {
 		fmt.Fprintln(errOut, scanUsage)
 		fmt.Fprintln(errOut)
@@ -102,6 +106,7 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	var positional []string
 	maxFindingsSet := false
 	baselineSet := false
+	jobsSet := false
 	remaining := args
 	for {
 		if err := flags.Parse(remaining); err != nil {
@@ -109,14 +114,18 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 		}
 		// flags.Visit only covers the parse call it follows, so presence is
 		// recorded after every restart of the parser; this distinguishes an
-		// omitted --max-findings from an explicit (invalid) --max-findings 0
-		// and an omitted --baseline from an explicit (invalid) --baseline "".
+		// omitted --max-findings from an explicit (invalid) --max-findings 0,
+		// an omitted --baseline from an explicit (invalid) --baseline "", and
+		// an omitted --jobs from an explicit (invalid) --jobs 0.
 		flags.Visit(func(f *flag.Flag) {
 			if f.Name == "max-findings" {
 				maxFindingsSet = true
 			}
 			if f.Name == "baseline" {
 				baselineSet = true
+			}
+			if f.Name == "jobs" {
+				jobsSet = true
 			}
 		})
 		if flags.NArg() == 0 {
@@ -136,7 +145,7 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	if len(positional) != 1 {
 		return usageError("exactly one workspace path is required")
 	}
-	cfg := scanConfig{path: positional[0], profile: *profile, json: *jsonOut, format: *format, timeout: *timeout, quiet: *quiet, baseline: *baseline}
+	cfg := scanConfig{path: positional[0], profile: *profile, json: *jsonOut, format: *format, timeout: *timeout, quiet: *quiet, baseline: *baseline, jobs: *jobs}
 	if cfg.profile != analyzers.ProfileQuick && cfg.profile != analyzers.ProfileStandard && cfg.profile != analyzers.ProfileDeep {
 		return usageError("profile must be quick, standard, or deep")
 	}
@@ -164,6 +173,9 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 			return usageError("max-findings must be a positive integer")
 		}
 		cfg.gate.MaxFindings = *maxFindings
+	}
+	if jobsSet && cfg.jobs <= 0 {
+		return usageError("jobs must be a positive integer")
 	}
 	return cfg, nil
 }
@@ -327,7 +339,7 @@ func runScanCommand(args []string, stdout, stderr io.Writer) int {
 			return 2
 		}
 	}
-	scan, err := app.scans.DiscoverAndStart(ctx, work, cfg.profile, userExcludePatterns(ctx, app.db, work.ID))
+	scan, err := app.scans.DiscoverAndStartWithOptions(ctx, work, cfg.profile, userExcludePatterns(ctx, app.db, work.ID), scans.ScanOptions{Jobs: cfg.jobs})
 	if err != nil {
 		fmt.Fprintf(stderr, "bluntcode scan: could not start scan: %v\n", err)
 		return 1

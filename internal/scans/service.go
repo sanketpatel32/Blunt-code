@@ -43,10 +43,10 @@ func New(db *database.DB, registry *analyzers.Registry, bus *events.Bus, reports
 }
 
 func (s *Service) Start(ctx context.Context, work core.Workspace, profile string, files []core.FileEntry) (core.Scan, error) {
-	return s.start(ctx, work, profile, files, nil)
+	return s.start(ctx, work, profile, files, nil, ScanOptions{})
 }
 
-func (s *Service) start(ctx context.Context, work core.Workspace, profile string, files []core.FileEntry, excludes []string) (core.Scan, error) {
+func (s *Service) start(ctx context.Context, work core.Workspace, profile string, files []core.FileEntry, excludes []string, opts ScanOptions) (core.Scan, error) {
 	if profile == "" {
 		profile = "standard"
 	}
@@ -59,7 +59,7 @@ func (s *Service) start(ctx context.Context, work core.Workspace, profile string
 	s.mu.Lock()
 	s.cancels[scan.ID] = cancel
 	s.mu.Unlock()
-	go s.run(runCtx, scan, work, files)
+	go s.run(runCtx, scan, work, files, opts.Jobs)
 	return scan, nil
 }
 
@@ -153,7 +153,7 @@ func (s *Service) Shutdown() {
 func (s *Service) emit(scanID, event string, data map[string]any) {
 	s.bus.Publish(events.Event{Type: event, ScanID: scanID, Data: data})
 }
-func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, files []core.FileEntry) {
+func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, files []core.FileEntry, jobs int) {
 	defer func() { s.mu.Lock(); delete(s.cancels, scan.ID); s.mu.Unlock() }()
 	// A panic inside an adapter must not take the whole application down with
 	// it or leave the scan row non-terminal: contain it, fail the scan, and
@@ -172,91 +172,23 @@ func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, 
 		s.emit(scan.ID, "scan.completed", map[string]any{"state": "failed"})
 		return
 	}
-	var successful, failed int
-	for _, adapter := range s.registry.All() {
-		if ctx.Err() != nil {
-			s.finishCancelled(scan.ID)
+	// Analyzers run either sequentially (the historical default, jobs < 1) or
+	// with at most jobs runs in flight (jobs >= 1). Both drivers share the
+	// same per-analyzer pipeline in executeAnalyzer, so events, persistence,
+	// and error summaries are identical either way.
+	counters := newScanCounters()
+	if jobs >= 1 {
+		// A recovered worker panic fails the scan exactly like the run-level
+		// recover below does for sequential scans.
+		if panicValue := s.runAnalyzersBounded(ctx, scan, work, languages, filesByLanguage, counters, jobs); panicValue != "" {
+			_ = s.db.UpdateScanState(context.Background(), scan.ID, "failed", fmt.Sprintf("Internal scan error: %v", panicValue))
+			s.emit(scan.ID, "scan.completed", map[string]any{"state": "failed"})
 			return
 		}
-		// Each adapter is handed only the selected files whose language it
-		// supports. Gating on the workspace language list alone was not
-		// enough: a mixed-language workspace used to pass every file to
-		// every analyzer, so ruff received minified JavaScript and failed
-		// parsing it as Python.
-		adapterFiles := filesForLanguages(filesByLanguage, adapter.SupportedLanguages()...)
-		if len(adapterFiles) == 0 {
-			continue
-		}
-		// Profile tiers:
-		//   quick    - ruff and biome only: a fast language-specific pass that
-		//              skips semgrep and sonarqube entirely.
-		//   standard - every analyzer with its default rules, including ruff's
-		//              built-in default rule set (E4, E7, E9, F).
-		//   deep     - every analyzer, with ruff's rule selection widened via
-		//              --select for a broader correctness and maintainability
-		//              sweep. Biome, semgrep, and sonarqube already run their
-		//              full configuration in every non-quick tier, so ruff is
-		//              the only analyzer that changes behavior here.
-		if scan.Profile == analyzers.ProfileQuick && adapter.ID() != "ruff" && adapter.ID() != "biome" {
-			s.emit(scan.ID, "analyzer.skipped", map[string]any{"analyzer_id": adapter.ID(), "reason": "Quick profile runs language-specific analyzers only."})
-			continue
-		}
-		started := time.Now()
-		s.emit(scan.ID, "analyzer.started", map[string]any{"analyzer_id": adapter.ID(), "name": adapter.DisplayName()})
-		_ = s.db.UpdateScanState(context.Background(), scan.ID, "running", "")
-		status := adapter.Check(ctx, analyzers.ToolEnvironment{ToolsDir: s.toolsDir})
-		if !status.Ready && s.tools != nil && (adapter.ID() == "ruff" || adapter.ID() == "biome" || adapter.ID() == "semgrep" || adapter.ID() == "sonarqube") {
-			s.emit(scan.ID, "scan.stage", map[string]any{"stage": "Preparing " + adapter.DisplayName()})
-			if installErr := s.tools.Ensure(ctx, adapter.ID()); installErr == nil {
-				status = adapter.Check(ctx, analyzers.ToolEnvironment{ToolsDir: s.toolsDir})
-			} else {
-				status.Detail = installErr.Error()
-			}
-		}
-		if !status.Ready {
-			errorText := status.Detail
-			if errorText == "" {
-				errorText = "Analyzer is not ready."
-			}
-			_, _ = s.db.SaveAnalyzerResult(context.Background(), scan.ID, database.AnalyzerRunInput{AnalyzerID: adapter.ID(), Version: status.Version, State: "failed", StartedAt: started, FinishedAt: time.Now(), Error: errorText}, nil, nil)
-			failed++
-			s.emit(scan.ID, "analyzer.failed", map[string]any{"analyzer_id": adapter.ID(), "error": errorText})
-			continue
-		}
-		plan, err := adapter.Plan(ctx, analyzers.ScanRequest{WorkspaceID: work.ID, ScanID: scan.ID, WorkspaceRoot: work.RootPath, Files: adapterFiles, Languages: languages, Profile: scan.Profile})
-		if err != nil {
-			_, _ = s.db.SaveAnalyzerResult(context.Background(), scan.ID, database.AnalyzerRunInput{AnalyzerID: adapter.ID(), Version: status.Version, State: "failed", StartedAt: started, FinishedAt: time.Now(), Error: err.Error()}, nil, nil)
-			failed++
-			s.emit(scan.ID, "analyzer.failed", map[string]any{"analyzer_id": adapter.ID(), "error": err.Error()})
-			continue
-		}
-		analyzerCtx, analyzerCancel := context.WithTimeout(ctx, analyzerTimeout(adapter.ID()))
-		result, err := adapter.Run(analyzerCtx, plan, eventEmitter{service: s, scanID: scan.ID})
-		analyzerCancel()
-		finished := time.Now()
-		s.writeDiagnosticLog(scan.ID, adapter.ID(), result)
-		if ctx.Err() != nil {
-			s.finishCancelled(scan.ID)
-			return
-		}
-		if err == nil {
-			var findings []analyzers.Finding
-			var metrics []analyzers.Metric
-			findings, metrics, err = adapter.Normalize(ctx, result)
-			if err == nil {
-				_, err = s.db.SaveAnalyzerResult(context.Background(), scan.ID, database.AnalyzerRunInput{AnalyzerID: adapter.ID(), Version: plan.Version, State: "succeeded", StartedAt: started, FinishedAt: finished, ExitCode: result.ExitCode}, findings, metrics)
-				if err == nil {
-					successful++
-					s.emit(scan.ID, "analyzer.completed", map[string]any{"analyzer_id": adapter.ID(), "findings": len(findings)})
-					continue
-				}
-			}
-		}
-		errorText := err.Error()
-		_, _ = s.db.SaveAnalyzerResult(context.Background(), scan.ID, database.AnalyzerRunInput{AnalyzerID: adapter.ID(), Version: plan.Version, State: "failed", StartedAt: started, FinishedAt: finished, ExitCode: result.ExitCode, Error: errorText}, nil, nil)
-		failed++
-		s.emit(scan.ID, "analyzer.failed", map[string]any{"analyzer_id": adapter.ID(), "error": errorText})
+	} else if !s.runAnalyzersSequential(ctx, scan, work, languages, filesByLanguage, counters) {
+		return
 	}
+	successful, failed := counters.snapshot()
 	state := "completed"
 	if successful == 0 {
 		state = "failed"
@@ -479,6 +411,13 @@ func (s *Service) writeReport(scan core.Scan, work core.Workspace, files []core.
 
 // DiscoverAndStart is the API-friendly entry that keeps discovery out of HTTP handlers.
 func (s *Service) DiscoverAndStart(ctx context.Context, work core.Workspace, profile string, excludes []string) (core.Scan, error) {
+	return s.DiscoverAndStartWithOptions(ctx, work, profile, excludes, ScanOptions{})
+}
+
+// DiscoverAndStartWithOptions is DiscoverAndStart with per-scan execution
+// options (see ScanOptions). The web API keeps the defaults through
+// DiscoverAndStart; the CLI uses this to pass its --jobs bound through.
+func (s *Service) DiscoverAndStartWithOptions(ctx context.Context, work core.Workspace, profile string, excludes []string, opts ScanOptions) (core.Scan, error) {
 	// Fold in the workspace's committed .bluntcodeignore so its patterns are
 	// recorded in the scan snapshot's exclusions. Discover and Tree merge the
 	// file themselves too; WorkspaceExcludes deduplicates, so the double
@@ -493,7 +432,7 @@ func (s *Service) DiscoverAndStart(ctx context.Context, work core.Workspace, pro
 		return core.Scan{}, err
 	}
 	applyPathOverrides(found.Files, overrides)
-	return s.start(ctx, work, profile, found.Files, excludes)
+	return s.start(ctx, work, profile, found.Files, excludes, opts)
 }
 
 func applyPathOverrides(files []core.FileEntry, overrides []core.PathOverride) {
