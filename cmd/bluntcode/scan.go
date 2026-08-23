@@ -37,7 +37,7 @@ const (
 	scanStatePollInterval = 2 * time.Second
 )
 
-const scanUsage = "usage: bluntcode scan <path> [--profile quick|standard|deep] [--format text|json|github|sarif] [--json] [--timeout 30m] [--quiet] [--fail-on high+] [--max-findings N] [--baseline <scan-id-or-sarif>] [--jobs N] [--watch]"
+const scanUsage = "usage: bluntcode scan <path> [--profile quick|standard|deep] [--format text|json|github|sarif] [--json] [--timeout 30m] [--quiet] [--fail-on high+] [--max-findings N] [--baseline <scan-id-or-sarif>] [--jobs N] [--incremental] [--watch]"
 
 // The stdout report formats of `bluntcode scan`. text (the default) keeps the
 // historical human summary; json prints the full versioned JSON report
@@ -74,6 +74,12 @@ type scanConfig struct {
 	// jobs bounds how many analyzers may run concurrently; 0 (the default)
 	// keeps the sequential execution model.
 	jobs int
+	// incremental opts this one-shot scan into incremental mode: analyzers
+	// run only on files that changed since the previous completed scan and
+	// findings for unchanged files are reused from it. The default stays a
+	// full scan for backward compatibility; --watch turns incremental on by
+	// itself from its second scan onward.
+	incremental bool
 	// watch keeps the command running after the first scan: the workspace is
 	// polled and the scan reruns whenever files change. Gate flags still
 	// report per scan but never exit the process; Ctrl+C (exit 130) stops it.
@@ -102,6 +108,7 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	maxFindings := flags.Int("max-findings", 0, "fail (exit 1) when the scan reports more than N unresolved findings (positive integer)")
 	baseline := flags.String("baseline", "", "exclude known findings from the gate: a previous scan ID or the path of a SARIF 2.1.0 file exported by Blunt Code")
 	jobs := flags.Int("jobs", 0, "run at most N analyzers concurrently (positive integer); by default analyzers run one after another")
+	incremental := flags.Bool("incremental", false, "reuse the previous completed scan's findings for unchanged files and run analyzers only on changed files (a boolean flag: --incremental, never --incremental <value>); composes with gate, baseline, format, and jobs flags")
 	watch := flags.Bool("watch", false, "keep running and rescan automatically when workspace files change (polls every 2s; a rescan starts after 1.5s without further changes); gate flags never exit the process; Ctrl+C stops it")
 	flags.Usage = func() {
 		fmt.Fprintln(errOut, scanUsage)
@@ -161,7 +168,7 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	if len(positional) != 1 {
 		return usageError("exactly one workspace path is required")
 	}
-	cfg := scanConfig{path: positional[0], profile: *profile, json: *jsonOut, format: *format, timeout: *timeout, quiet: *quiet, baseline: *baseline, jobs: *jobs, watch: *watch}
+	cfg := scanConfig{path: positional[0], profile: *profile, json: *jsonOut, format: *format, timeout: *timeout, quiet: *quiet, baseline: *baseline, jobs: *jobs, incremental: *incremental, watch: *watch}
 	if cfg.profile != analyzers.ProfileQuick && cfg.profile != analyzers.ProfileStandard && cfg.profile != analyzers.ProfileDeep {
 		return usageError("profile must be quick, standard, or deep")
 	}
@@ -383,8 +390,13 @@ func runScanCommand(args []string, stdout, stderr io.Writer) int {
 			snapshot: func() (watchSnapshot, error) {
 				return buildWatchSnapshot(ctx, work.RootPath, userExcludePatterns(ctx, app.db, work.ID))
 			},
-			runScan: func(interrupts <-chan os.Signal) scanRunResult {
-				return runSingleScan(app, cfg, work, baseline, stdout, stderr, interrupts)
+			runScan: func(interrupts <-chan os.Signal, incremental bool) scanRunResult {
+				// --watch switches to incremental rescans from its second
+				// scan onward (the first has nothing to reuse); an explicit
+				// --incremental opts every scan in.
+				scanCfg := cfg
+				scanCfg.incremental = incremental || cfg.incremental
+				return runSingleScan(app, scanCfg, work, baseline, stdout, stderr, interrupts)
 			},
 		}, watchLoopOptions{pollInterval: watchPollInterval, quietWindow: watchQuietWindow})
 	}
@@ -410,7 +422,7 @@ type scanRunResult struct {
 // can keep watching after a failed scan.
 func runSingleScan(app *appCore, cfg scanConfig, work core.Workspace, baseline scans.Baseline, stdout, stderr io.Writer, interrupts <-chan os.Signal) scanRunResult {
 	ctx := context.Background()
-	scan, err := app.scans.DiscoverAndStartWithOptions(ctx, work, cfg.profile, userExcludePatterns(ctx, app.db, work.ID), scans.ScanOptions{Jobs: cfg.jobs})
+	scan, err := app.scans.DiscoverAndStartWithOptions(ctx, work, cfg.profile, userExcludePatterns(ctx, app.db, work.ID), scans.ScanOptions{Jobs: cfg.jobs, Incremental: cfg.incremental})
 	if err != nil {
 		fmt.Fprintf(stderr, "bluntcode scan: could not start scan: %v\n", err)
 		return scanRunResult{code: 1}

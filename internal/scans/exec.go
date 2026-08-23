@@ -27,6 +27,14 @@ type ScanOptions struct {
 	// changes, and events, persistence, and cancellation semantics stay the
 	// same.
 	Jobs int
+	// Incremental reuses the previous completed scan's findings for files
+	// whose content is unchanged and runs the analyzers only on changed or
+	// added files. Reuse is refused (and the scan silently degrades to a full
+	// run) when there is no previous completed scan, when it recorded no file
+	// hashes, or when the analyzer identity (ids, versions, profile, Blunt
+	// Code build) changed. Totals, suppression, and comparison semantics are
+	// identical to a full scan.
+	Incremental bool
 }
 
 // analyzerOutcome classifies how one analyzer execution ended.
@@ -43,16 +51,35 @@ const (
 )
 
 // scanCounters aggregates per-scan analyzer outcomes. Sequential scans mutate
-// it from a single goroutine, bounded scans from many, so it stays atomic.
+// it from a single goroutine, bounded scans from many, so the counters stay
+// atomic and the succeeded-analyzer set is mutex-guarded.
 type scanCounters struct {
-	successful atomic.Int64
-	failed     atomic.Int64
+	successful   atomic.Int64
+	failed       atomic.Int64
+	mu           sync.Mutex
+	succeededIDs map[string]bool
 }
 
-func newScanCounters() *scanCounters { return &scanCounters{} }
+func newScanCounters() *scanCounters {
+	return &scanCounters{succeededIDs: map[string]bool{}}
+}
 
-func (c *scanCounters) markSucceeded() { c.successful.Add(1) }
-func (c *scanCounters) markFailed()    { c.failed.Add(1) }
+func (c *scanCounters) markSucceeded(analyzerID string) {
+	c.successful.Add(1)
+	c.mu.Lock()
+	c.succeededIDs[analyzerID] = true
+	c.mu.Unlock()
+}
+func (c *scanCounters) markFailed() { c.failed.Add(1) }
+
+// succeeded reports whether the analyzer completed a successful run in this
+// scan. Incremental reuse consults it to distinguish "skipped because nothing
+// changed" from "ran and failed".
+func (c *scanCounters) succeeded(analyzerID string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.succeededIDs[analyzerID]
+}
 
 func (c *scanCounters) snapshot() (successful, failed int) {
 	return int(c.successful.Load()), int(c.failed.Load())
@@ -83,7 +110,7 @@ func (s *Service) executeAnalyzer(ctx context.Context, scan core.Scan, work core
 	//              sweep. Biome, semgrep, and sonarqube already run their
 	//              full configuration in every non-quick tier, so ruff is
 	//              the only analyzer that changes behavior here.
-	if scan.Profile == analyzers.ProfileQuick && adapter.ID() != "ruff" && adapter.ID() != "biome" {
+	if !profileAllowsAnalyzer(scan.Profile, adapter.ID()) {
 		s.emit(scan.ID, "analyzer.skipped", map[string]any{"analyzer_id": adapter.ID(), "reason": "Quick profile runs language-specific analyzers only."})
 		return analyzerSkipped
 	}
@@ -131,7 +158,7 @@ func (s *Service) executeAnalyzer(ctx context.Context, scan core.Scan, work core
 		if err == nil {
 			_, err = s.db.SaveAnalyzerResult(context.Background(), scan.ID, database.AnalyzerRunInput{AnalyzerID: adapter.ID(), Version: plan.Version, State: "succeeded", StartedAt: started, FinishedAt: finished, ExitCode: result.ExitCode}, findings, metrics)
 			if err == nil {
-				counters.markSucceeded()
+				counters.markSucceeded(adapter.ID())
 				s.emit(scan.ID, "analyzer.completed", map[string]any{"analyzer_id": adapter.ID(), "findings": len(findings)})
 				return analyzerSucceeded
 			}

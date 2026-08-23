@@ -35,7 +35,7 @@ func TestBuildWatchSnapshotHonorsDiscoveryExcludes(t *testing.T) {
 	root := t.TempDir()
 	writeWatchFile(t, root, "main.py", "x = 1\n")
 	writeWatchFile(t, root, "util.ts", "export const x = 1;\n")
-	writeWatchFile(t, root, "notes.txt", "not a source file\n")
+	writeWatchFile(t, root, "logo.bin", "\x00\x01 not a classified file\n")
 	writeWatchFile(t, root, "node_modules/bundled.js", "x")
 	writeWatchFile(t, root, "dist/out.js", "x")
 	writeWatchFile(t, root, "gen/generated.py", "x = 2\n")
@@ -275,12 +275,14 @@ func TestRunScanCommandRejectsWatchWithGitHubFormatExitTwo(t *testing.T) {
 
 // --- Watch loop integration (fake scan runner, real temp workspace) ----------
 
-// watchFake is a scripted scan runner: it counts invocations and returns the
-// scripted result per call. Scripts end the loop by returning interruptSeen.
+// watchFake is a scripted scan runner: it counts invocations, records the
+// incremental flag each call received, and returns the scripted result per
+// call. Scripts end the loop by returning interruptSeen.
 type watchFake struct {
-	mu     sync.Mutex
-	calls  int
-	script func(call int) scanRunResult
+	mu          sync.Mutex
+	calls       int
+	incremental []bool
+	script      func(call int) scanRunResult
 }
 
 func (f *watchFake) count() int {
@@ -289,10 +291,11 @@ func (f *watchFake) count() int {
 	return f.calls
 }
 
-func (f *watchFake) run(interrupts <-chan os.Signal) scanRunResult {
+func (f *watchFake) run(interrupts <-chan os.Signal, incremental bool) scanRunResult {
 	f.mu.Lock()
 	f.calls++
 	call := f.calls
+	f.incremental = append(f.incremental, incremental)
 	f.mu.Unlock()
 	return f.script(call)
 }

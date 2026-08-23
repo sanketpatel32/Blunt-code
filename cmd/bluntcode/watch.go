@@ -148,12 +148,15 @@ type watchLoopOptions struct {
 // scan handles Ctrl+C exactly like the one-shot command (first press cancels
 // it, second exits immediately); the loop itself consumes interrupts only
 // while idle, so exactly one party selects on the channel at any moment.
+// runScan's incremental argument is false for the first scan (nothing to
+// reuse yet) and true for every rescan, so the loop's repeat scans copy
+// findings for unchanged files instead of re-analyzing the whole workspace.
 type watchEnv struct {
 	quiet     bool
 	stderr    io.Writer
 	interrupt <-chan os.Signal
 	snapshot  func() (watchSnapshot, error)
-	runScan   func(interrupts <-chan os.Signal) scanRunResult
+	runScan   func(interrupts <-chan os.Signal, incremental bool) scanRunResult
 }
 
 // runWatchLoop runs scans back to back: one scan immediately, then a rescan
@@ -179,15 +182,20 @@ func runWatchLoop(env watchEnv, opts watchLoopOptions) int {
 		scanning          bool
 		done              chan scanRunResult
 		changedDuringScan bool
+		scanCount         int
 	)
 	// startScan launches one scan in the background so polling keeps running
 	// while analyzers work; the buffered channel lets the goroutine complete
-	// even if the loop returns without reading the result.
+	// even if the loop returns without reading the result. Every scan after
+	// the first runs incrementally: the first built the hash base, so each
+	// rescan can reuse findings for files that did not change.
 	startScan := func() {
 		scanning = true
+		scanCount++
 		outcome := make(chan scanRunResult, 1)
 		done = outcome
-		go func() { outcome <- env.runScan(env.interrupt) }()
+		incremental := scanCount > 1
+		go func() { outcome <- env.runScan(env.interrupt, incremental) }()
 	}
 	// fire starts a rescan: it reports how many files changed since the last
 	// scan started, rebases both snapshots on the current file state (so the

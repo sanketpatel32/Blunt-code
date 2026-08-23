@@ -4,6 +4,7 @@ package scans
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -59,7 +60,7 @@ func (s *Service) start(ctx context.Context, work core.Workspace, profile string
 	s.mu.Lock()
 	s.cancels[scan.ID] = cancel
 	s.mu.Unlock()
-	go s.run(runCtx, scan, work, files, opts.Jobs)
+	go s.run(runCtx, scan, work, files, opts)
 	return scan, nil
 }
 
@@ -94,7 +95,7 @@ func (s *Service) snapshot(ctx context.Context, work core.Workspace, profile str
 		WorkspaceID:        work.ID,
 		WorkspaceRoot:      work.RootPath,
 		WorkspaceName:      work.Name,
-		BluntCodeVersion:   "0.3.0",
+		BluntCodeVersion:   bluntCodeVersion,
 		Profile:            profile,
 		CandidateFileCount: len(files),
 		SelectedFileCount:  len(selectedFiles),
@@ -153,7 +154,7 @@ func (s *Service) Shutdown() {
 func (s *Service) emit(scanID, event string, data map[string]any) {
 	s.bus.Publish(events.Event{Type: event, ScanID: scanID, Data: data})
 }
-func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, files []core.FileEntry, jobs int) {
+func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, files []core.FileEntry, opts ScanOptions) {
 	defer func() { s.mu.Lock(); delete(s.cancels, scan.ID); s.mu.Unlock() }()
 	// A panic inside an adapter must not take the whole application down with
 	// it or leave the scan row non-terminal: contain it, fail the scan, and
@@ -172,21 +173,43 @@ func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, 
 		s.emit(scan.ID, "scan.completed", map[string]any{"state": "failed"})
 		return
 	}
+	// Content hashes are computed once per scan (the scan already touches
+	// every selected file here). Every completed scan persists them so a
+	// later incremental scan has a base to compare against, regardless of
+	// how the base scan itself was run.
+	fileHashes := hashSelectedFiles(work.RootPath, files)
+	// An incremental scan reuses the previous completed scan's findings for
+	// unchanged files; prepareIncremental degrades to nil (a full scan) on
+	// every refusal path, logging why.
+	var incremental *incrementalState
+	if opts.Incremental {
+		incremental = s.prepareIncremental(ctx, scan, work, files, fileHashes, filesByLanguage)
+	}
+	analyzerFilesByLanguage := filesByLanguage
+	if incremental != nil {
+		analyzerFilesByLanguage = incremental.changedByLanguage
+	}
 	// Analyzers run either sequentially (the historical default, jobs < 1) or
 	// with at most jobs runs in flight (jobs >= 1). Both drivers share the
 	// same per-analyzer pipeline in executeAnalyzer, so events, persistence,
 	// and error summaries are identical either way.
 	counters := newScanCounters()
-	if jobs >= 1 {
+	if jobs := opts.Jobs; jobs >= 1 {
 		// A recovered worker panic fails the scan exactly like the run-level
 		// recover below does for sequential scans.
-		if panicValue := s.runAnalyzersBounded(ctx, scan, work, languages, filesByLanguage, counters, jobs); panicValue != "" {
+		if panicValue := s.runAnalyzersBounded(ctx, scan, work, languages, analyzerFilesByLanguage, counters, jobs); panicValue != "" {
 			_ = s.db.UpdateScanState(context.Background(), scan.ID, "failed", fmt.Sprintf("Internal scan error: %v", panicValue))
 			s.emit(scan.ID, "scan.completed", map[string]any{"state": "failed"})
 			return
 		}
-	} else if !s.runAnalyzersSequential(ctx, scan, work, languages, filesByLanguage, counters) {
+	} else if !s.runAnalyzersSequential(ctx, scan, work, languages, analyzerFilesByLanguage, counters) {
 		return
+	}
+	// Copy the previous scan's findings for unchanged files into this scan
+	// before totals, the report, and the comparison are computed, so an
+	// incremental scan is indistinguishable from a full one downstream.
+	if incremental != nil {
+		s.finishIncremental(scan, incremental, counters)
 	}
 	successful, failed := counters.snapshot()
 	state := "completed"
@@ -203,6 +226,22 @@ func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, 
 		s.finishCancelled(scan.ID)
 		return
 	}
+	// Only scans that produced a result record hashes: failed, cancelled, and
+	// interrupted scans never become a reuse base.
+	if state == "completed" || state == "completed_with_warnings" {
+		if identity, ok := s.analyzerIdentityJSON(scan, filesByLanguage); ok {
+			if err := s.db.SaveScanFileHashes(context.Background(), scan.ID, fileHashes, identity); err != nil {
+				log.Printf("incremental: could not record file hashes for scan %s (%v)", scan.ID, err)
+			}
+		}
+	}
+	// The incremental note is written before the terminal state lands so no
+	// observer can ever see a completed incremental scan without its note.
+	var incrementalNote string
+	if incremental != nil {
+		incrementalNote = fmt.Sprintf("incremental: reused findings for %d unchanged file(s), ran analyzers on %d file(s)", len(incremental.unchanged), incremental.changedCount)
+		_ = s.db.SetScanNote(context.Background(), scan.ID, incrementalNote)
+	}
 	s.emit(scan.ID, "scan.stage", map[string]any{"stage": "Generating report"})
 	reportPath, err := s.writeReport(scan, work, files)
 	if err != nil {
@@ -216,8 +255,13 @@ func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, 
 	if err := s.db.CompleteScan(context.Background(), scan.ID, state, reportPath); err != nil {
 		// CompleteScan also finalizes counts; fall back to a plain state write
 		// so the scan still reaches a terminal state when only the summary
-		// write fails.
-		_ = s.db.UpdateScanState(context.Background(), scan.ID, state, "Scan finished, but persisting its final summary failed.")
+		// write fails. The incremental note rides along so the scan stays
+		// explainable either way.
+		fallback := "Scan finished, but persisting its final summary failed."
+		if incrementalNote != "" {
+			fallback += " " + incrementalNote
+		}
+		_ = s.db.UpdateScanState(context.Background(), scan.ID, state, fallback)
 	}
 	s.emit(scan.ID, "scan.completed", map[string]any{"state": state})
 }
@@ -333,11 +377,10 @@ func scanInputs(root string, files []core.FileEntry) ([]analyzers.Language, []st
 		byLanguage[lang] = append(byLanguage[lang], path)
 	}
 	var languages []analyzers.Language
-	for _, lang := range []analyzers.Language{analyzers.LanguagePython, analyzers.LanguageJavaScript, analyzers.LanguageTypeScript} {
-		if languageSet[lang] {
-			languages = append(languages, lang)
-		}
+	for lang := range languageSet {
+		languages = append(languages, lang)
 	}
+	sort.Slice(languages, func(i, j int) bool { return languages[i] < languages[j] })
 	return languages, absolute, byLanguage
 }
 

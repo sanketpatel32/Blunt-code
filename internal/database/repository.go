@@ -711,19 +711,7 @@ func (d *DB) SaveAnalyzerResult(ctx context.Context, scanID string, run Analyzer
 		return "", err
 	}
 	for _, finding := range findings {
-		if finding.Fingerprint == "" {
-			finding.SetFingerprint()
-		}
-		metadata := "{}"
-		if finding.Metadata != nil {
-			data, marshalErr := json.Marshal(finding.Metadata)
-			if marshalErr != nil {
-				_ = tx.Rollback()
-				return "", marshalErr
-			}
-			metadata = string(data)
-		}
-		if _, err = tx.ExecContext(ctx, `INSERT INTO findings(id,scan_id,analyzer_run_id,analyzer_id,rule_id,fingerprint,severity,category,title,message,relative_path,start_line,start_column,end_line,end_column,remediation,documentation_url,raw_severity,metadata_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, NewID(), scanID, runID, finding.AnalyzerID, finding.RuleID, finding.Fingerprint, string(finding.Severity), string(finding.Category), nullIfEmpty(finding.Title), finding.Message, nullIfEmpty(finding.RelativePath), nullInt(finding.StartLine), nullInt(finding.StartColumn), nullInt(finding.EndLine), nullInt(finding.EndColumn), nullIfEmpty(finding.Remediation), nullIfEmpty(finding.DocumentationURL), nullIfEmpty(finding.RawSeverity), metadata); err != nil {
+		if err = insertFinding(ctx, tx, scanID, runID, finding); err != nil {
 			_ = tx.Rollback()
 			return "", err
 		}
@@ -744,6 +732,26 @@ func nullIfEmpty(value string) any {
 		return nil
 	}
 	return value
+}
+
+// insertFinding writes one finding row inside a transaction, deriving the
+// fingerprint when the producer did not. It is shared by SaveAnalyzerResult
+// (fresh analyzer output) and AppendReusedFindings (findings copied forward
+// from a previous scan), so both paths persist the identical row shape.
+func insertFinding(ctx context.Context, tx *sql.Tx, scanID, runID string, finding analyzers.Finding) error {
+	if finding.Fingerprint == "" {
+		finding.SetFingerprint()
+	}
+	metadata := "{}"
+	if finding.Metadata != nil {
+		data, err := json.Marshal(finding.Metadata)
+		if err != nil {
+			return err
+		}
+		metadata = string(data)
+	}
+	_, err := tx.ExecContext(ctx, `INSERT INTO findings(id,scan_id,analyzer_run_id,analyzer_id,rule_id,fingerprint,severity,category,title,message,relative_path,start_line,start_column,end_line,end_column,remediation,documentation_url,raw_severity,metadata_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, NewID(), scanID, runID, finding.AnalyzerID, finding.RuleID, finding.Fingerprint, string(finding.Severity), string(finding.Category), nullIfEmpty(finding.Title), finding.Message, nullIfEmpty(finding.RelativePath), nullInt(finding.StartLine), nullInt(finding.StartColumn), nullInt(finding.EndLine), nullInt(finding.EndColumn), nullIfEmpty(finding.Remediation), nullIfEmpty(finding.DocumentationURL), nullIfEmpty(finding.RawSeverity), metadata)
+	return err
 }
 func nullInt(value int) any {
 	if value == 0 {
@@ -1333,4 +1341,105 @@ func (d *DB) SuccessfulAnalyzerIDs(ctx context.Context, scanID string) (map[stri
 		out[id] = true
 	}
 	return out, rows.Err()
+}
+
+// SaveScanFileHashes records the content hashes of a scan's selected files
+// together with the analyzer identity that produced them (a small JSON blob
+// pinned by the scan pipeline; the scans package owns its shape). Both tables
+// are written in one transaction at scan completion; replace semantics keep a
+// retry from colliding on the primary keys.
+func (d *DB) SaveScanFileHashes(ctx context.Context, scanID string, hashes map[string]string, analyzersJSON string) error {
+	tx, err := d.SQL.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM scan_file_hashes WHERE scan_id=?`, scanID); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM scan_hash_meta WHERE scan_id=?`, scanID); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	for path, hash := range hashes {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO scan_file_hashes(scan_id,relative_path,content_hash) VALUES(?,?,?)`, scanID, path, hash); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO scan_hash_meta(scan_id,analyzers_json) VALUES(?,?)`, scanID, analyzersJSON); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
+
+// ScanFileHashes loads the content hashes a scan recorded at completion. A
+// scan without hash rows yields an empty map, not an error; callers decide
+// what an empty base means.
+func (d *DB) ScanFileHashes(ctx context.Context, scanID string) (map[string]string, error) {
+	rows, err := d.SQL.QueryContext(ctx, `SELECT relative_path,content_hash FROM scan_file_hashes WHERE scan_id=?`, scanID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var path, hash string
+		if err := rows.Scan(&path, &hash); err != nil {
+			return nil, err
+		}
+		out[path] = hash
+	}
+	return out, rows.Err()
+}
+
+// ScanHashAnalyzerSet returns the analyzer identity JSON pinned to a scan's
+// file hashes. sql.ErrNoRows means the scan never recorded hashes (it predates
+// the feature or did not complete), which callers treat as "nothing to reuse".
+func (d *DB) ScanHashAnalyzerSet(ctx context.Context, scanID string) (string, error) {
+	var raw string
+	err := d.SQL.QueryRowContext(ctx, `SELECT analyzers_json FROM scan_hash_meta WHERE scan_id=?`, scanID).Scan(&raw)
+	return raw, err
+}
+
+// AppendReusedFindings copies findings from a previous scan into this scan by
+// attaching them to the analyzer's existing succeeded run, bumping that run's
+// finding count so run summaries stay truthful. Reused findings keep their
+// fingerprints (the caller copied them verbatim), so suppression and the
+// new/fixed/persistent comparison behave exactly as on fresh findings. It is
+// an error when no succeeded run exists - callers only append after a real
+// execution succeeded.
+func (d *DB) AppendReusedFindings(ctx context.Context, scanID, analyzerID string, findings []analyzers.Finding) error {
+	if len(findings) == 0 {
+		return nil
+	}
+	tx, err := d.SQL.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	var runID string
+	if err = tx.QueryRowContext(ctx, `SELECT id FROM analyzer_runs WHERE scan_id=? AND analyzer_id=? AND state='succeeded' ORDER BY started_at DESC LIMIT 1`, scanID, analyzerID).Scan(&runID); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	for _, finding := range findings {
+		if err = insertFinding(ctx, tx, scanID, runID, finding); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE analyzer_runs SET finding_count=finding_count+? WHERE id=?`, len(findings), runID); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
+
+// SetScanNote records a non-fatal note on a scan row through error_summary,
+// the field completed scans otherwise leave empty and every summary surface
+// (CLI output, JSON, API) already displays.
+func (d *DB) SetScanNote(ctx context.Context, scanID, note string) error {
+	_, err := d.SQL.ExecContext(ctx, `UPDATE scans SET error_summary=? WHERE id=?`, note, scanID)
+	return err
 }
