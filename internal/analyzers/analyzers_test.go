@@ -4,7 +4,49 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"bluntcode/internal/discovery"
 )
+
+// TestLanguageClassificationMirrorsDiscovery guards the deliberate
+// duplication between this package's languageExtensions/languageOfPath and
+// discovery's classifier: both must map the same extensions to the same
+// language names — and apply the same .env*/Dockerfile basename rules — or
+// per-adapter file filtering would disagree with how files were discovered.
+// discovery does not import this package, so importing it here cannot cycle.
+func TestLanguageClassificationMirrorsDiscovery(t *testing.T) {
+	discoveryExts := discovery.ExtensionLanguages()
+	if len(discoveryExts) <= 10 {
+		t.Fatal("discovery extension table unexpectedly small; the mirror assumption is wrong")
+	}
+	for ext, want := range discoveryExts {
+		if got := languageExtensions[ext]; got != Language(want) {
+			t.Errorf("extension %s: analyzers classifies %q, discovery %q", ext, got, want)
+		}
+	}
+	for ext := range languageExtensions {
+		if _, ok := discoveryExts[ext]; !ok {
+			t.Errorf("extension %s: analyzers classifies it but discovery does not", ext)
+		}
+	}
+	for _, path := range []string{".env", ".env.local", "Dockerfile", "ci/Dockerfile.prod", "photo.png", "Makefile"} {
+		if got, want := languageOfPath(path), Language(discovery.Language(path)); got != want {
+			t.Errorf("path %q: analyzers classifies %q, discovery %q", path, got, want)
+		}
+	}
+	// AllLanguages must cover every language discovery can produce.
+	all := AllLanguages()
+	for ext, lang := range discoveryExts {
+		if !HasLanguage(all, Language(lang)) {
+			t.Errorf("AllLanguages is missing %s (extension %s)", lang, ext)
+		}
+	}
+	for _, lang := range []Language{LanguageDockerfile} {
+		if !HasLanguage(all, lang) {
+			t.Errorf("AllLanguages is missing %s (basename form)", lang)
+		}
+	}
+}
 
 func TestFingerprintIgnoresPositionAndMessageSpacing(t *testing.T) {
 	a := Finding{AnalyzerID: "ruff", RuleID: "F401", RelativePath: "src\\app.py", Message: " Imported   module is unused ", StartLine: 1}

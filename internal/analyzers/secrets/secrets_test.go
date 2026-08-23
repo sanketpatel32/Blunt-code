@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"bluntcode/internal/analyzers"
+	"bluntcode/internal/discovery"
 )
 
 func writeFile(t *testing.T, dir, name, content string) string {
@@ -36,11 +37,24 @@ func TestCheckAlwaysReady(t *testing.T) {
 	}
 }
 
+// TestSupportedLanguagesCoverDiscovery keeps the invariant that secrets sees
+// everything discovery classifies: every extension in the classifier's table,
+// plus the .env dotfile and Dockerfile basename forms, must be routable to
+// this adapter. New languages added to discovery fail here until declared.
 func TestSupportedLanguagesCoverDiscovery(t *testing.T) {
 	langs := New().SupportedLanguages()
-	for _, want := range []analyzers.Language{analyzers.LanguagePython, analyzers.LanguageJavaScript, analyzers.LanguageTypeScript} {
-		if !analyzers.HasLanguage(langs, want) {
-			t.Fatalf("SupportedLanguages %v is missing %s", langs, want)
+	for ext, lang := range discovery.ExtensionLanguages() {
+		if !analyzers.HasLanguage(langs, analyzers.Language(lang)) {
+			t.Fatalf("SupportedLanguages %v is missing %s (extension %s)", langs, lang, ext)
+		}
+	}
+	for _, path := range []string{".env", ".env.local", "Dockerfile", "ci/Dockerfile.prod"} {
+		lang := discovery.Language(path)
+		if lang == "" {
+			t.Fatalf("%s is not classified by discovery; the fixture is wrong", path)
+		}
+		if !analyzers.HasLanguage(langs, analyzers.Language(lang)) {
+			t.Fatalf("SupportedLanguages %v is missing %s (basename form %s)", langs, lang, path)
 		}
 	}
 }
@@ -53,10 +67,13 @@ func TestPlanSelectsAllLanguageFiles(t *testing.T) {
 		Files: []string{
 			`C:\ws\main.py`,
 			`C:\ws\app.tsx`,
-			`C:\ws\bundle.mjs`,
-			`C:\ws\deploy.pyi`,
-			`C:\ws\config.env`, // never classified by discovery; filtered like ruff does
-			`C:\ws\server.pem`, // ditto
+			`C:\ws\main.go`,
+			`C:\ws\config.env`,  // classified as env; credentials hide here
+			`C:\ws\.env`,        // dotfile form of env
+			`C:\ws\server.pem`,  // classified as certificate
+			`C:\ws\Dockerfile`,  // basename form of dockerfile
+			`C:\ws\logo.png`,    // never classified by discovery; filtered like ruff does
+			`C:\ws\archive.zip`, // ditto
 		},
 	}
 	plan, err := adapter.Plan(context.Background(), req)
@@ -64,7 +81,10 @@ func TestPlanSelectsAllLanguageFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	files, _ := plan.Metadata[planKeyFiles].([]string)
-	want := []string{`C:\ws\main.py`, `C:\ws\app.tsx`, `C:\ws\bundle.mjs`, `C:\ws\deploy.pyi`}
+	want := []string{
+		`C:\ws\main.py`, `C:\ws\app.tsx`, `C:\ws\main.go`,
+		`C:\ws\config.env`, `C:\ws\.env`, `C:\ws\server.pem`, `C:\ws\Dockerfile`,
+	}
 	if len(files) != len(want) {
 		t.Fatalf("plan files = %v, want %v", files, want)
 	}
@@ -80,7 +100,7 @@ func TestPlanSelectsAllLanguageFiles(t *testing.T) {
 
 func TestPlanRejectsEmptySelection(t *testing.T) {
 	adapter := New()
-	req := analyzers.ScanRequest{WorkspaceRoot: `C:\ws`, Files: []string{`C:\ws\README.md`}}
+	req := analyzers.ScanRequest{WorkspaceRoot: `C:\ws`, Files: []string{`C:\ws\logo.png`, `C:\ws\archive.zip`}}
 	if _, err := adapter.Plan(context.Background(), req); err == nil {
 		t.Fatal("expected error when the selection has no supported files")
 	}
@@ -175,6 +195,47 @@ func TestRunNormalizeContract(t *testing.T) {
 	}
 	if !filesScanned {
 		t.Fatalf("metrics missing files_scanned=2: %+v", metrics)
+	}
+}
+
+// TestRunScansDotenvAndDockerfile is the feature-level proof for the
+// broadened routing: a committed AWS key in a .env dotfile and a hardcoded
+// token in a Dockerfile are found end to end through Plan -> Run ->
+// Normalize, file types the detector could never receive before.
+func TestRunScansDotenvAndDockerfile(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, ".env", "AWS_ACCESS_KEY_ID=AKIA1234567890ABCDEF\n")
+	writeFile(t, dir, "Dockerfile", "ENV token = \"dfe3a91b77214f0c\"\n")
+
+	adapter := New()
+	ctx := context.Background()
+	plan, err := adapter.Plan(ctx, analyzers.ScanRequest{
+		WorkspaceRoot: dir,
+		Files:         []string{filepath.Join(dir, ".env"), filepath.Join(dir, "Dockerfile")},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := adapter.Run(ctx, plan, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	findings, _, err := adapter.Normalize(ctx, result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(findings) != 2 {
+		t.Fatalf("got %d findings, want 2 (one per file): %+v", len(findings), findings)
+	}
+	byPath := map[string]analyzers.Finding{}
+	for _, f := range findings {
+		byPath[f.RelativePath] = f
+	}
+	if f := byPath[".env"]; f.RuleID != ruleAWSAccessKey || f.StartLine != 1 {
+		t.Fatalf(".env finding rule/line = %s/%d, want %s/1", f.RuleID, f.StartLine, ruleAWSAccessKey)
+	}
+	if f := byPath["Dockerfile"]; f.RuleID != ruleGenericAssign {
+		t.Fatalf("Dockerfile finding rule = %s, want %s", f.RuleID, ruleGenericAssign)
 	}
 }
 

@@ -36,11 +36,13 @@ func (a *Adapter) ID() string          { return ID }
 func (a *Adapter) DisplayName() string { return "Secrets Detector" }
 
 // SupportedLanguages declares every language the discovery layer classifies.
-// The orchestrator routes files by language, so asking for all three makes
-// this analyzer receive the broadest file set the pipeline supports —
-// credentials hide in Python, JavaScript, and TypeScript alike.
+// The orchestrator routes files by language, and credentials hide everywhere
+// a scan can reach: source code, shell scripts, YAML/TOML/INI configs,
+// Dockerfiles, .env files, and committed certificates alike. Declaring
+// analyzers.AllLanguages() keeps this literally true as discovery learns new
+// languages instead of drifting behind a hand-maintained list.
 func (a *Adapter) SupportedLanguages() []analyzers.Language {
-	return []analyzers.Language{analyzers.LanguagePython, analyzers.LanguageJavaScript, analyzers.LanguageTypeScript}
+	return analyzers.AllLanguages()
 }
 
 // Check always succeeds: there is no external tool to verify.

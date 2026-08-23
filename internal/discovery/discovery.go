@@ -26,17 +26,75 @@ func DefaultExcluded(path string, directory bool) bool {
 	return strings.HasSuffix(base, ".min.js") || strings.HasSuffix(base, ".map") || strings.HasSuffix(base, ".pyc") || strings.HasSuffix(base, ".pyo")
 }
 
-func Language(path string) string {
-	switch strings.ToLower(filepath.Ext(path)) {
-	case ".py", ".pyi":
-		return "python"
-	case ".ts", ".tsx", ".mts", ".cts":
-		return "typescript"
-	case ".js", ".jsx", ".mjs", ".cjs":
-		return "javascript"
-	default:
-		return ""
+// extensionLanguages maps every file extension discovery classifies to a
+// normalized lowercase language name. Extensions are matched case-
+// insensitively. The python, javascript, and typescript names are load-
+// bearing: analyzer routing, fingerprints, and persisted snapshots rely on
+// them, so they must never be renamed. Binaries and assets are excluded by
+// omission exactly as before — an extension that is not a key here makes the
+// file a non-candidate.
+//
+// internal/analyzers keeps a mirrored copy of this table (plus the basename
+// rules below) so its file filtering agrees with discovery; the analyzers
+// tests assert the two stay in sync.
+var extensionLanguages = map[string]string{
+	// Original trio; names are exact and stable.
+	".py": "python", ".pyi": "python",
+	".ts": "typescript", ".tsx": "typescript", ".mts": "typescript", ".cts": "typescript",
+	".js": "javascript", ".jsx": "javascript", ".mjs": "javascript", ".cjs": "javascript",
+	// Code.
+	".go": "go", ".java": "java",
+	".kt": "kotlin", ".kts": "kotlin",
+	".cs": "csharp",
+	".c":  "c", ".h": "c",
+	".cpp": "cpp", ".hpp": "cpp", ".cc": "cpp",
+	".rb": "ruby", ".php": "php", ".rs": "rust", ".swift": "swift", ".scala": "scala",
+	".m": "objective-c", ".mm": "objective-c",
+	".vue": "vue", ".svelte": "svelte",
+	// Web and data.
+	".css": "css", ".scss": "scss", ".less": "less",
+	".html": "html", ".htm": "html",
+	".json": "json", ".jsonc": "json",
+	".yaml": "yaml", ".yml": "yaml",
+	".toml": "toml", ".xml": "xml", ".sql": "sql", ".graphql": "graphql",
+	// Shell and scripts.
+	".sh": "shell", ".bash": "shell", ".zsh": "shell",
+	".ps1": "powershell", ".bat": "batch", ".cmd": "batch",
+	// Config, docs, credentials.
+	".md": "markdown", ".markdown": "markdown", ".txt": "text",
+	".ini": "ini", ".cfg": "ini", ".conf": "ini", ".properties": "properties",
+	".env": "env",
+	".pem": "certificate", ".key": "certificate", ".pub": "certificate",
+}
+
+// ExtensionLanguages returns a copy of the extension-to-language table so
+// other packages (and tests) can enumerate everything discovery classifies
+// without duplicating the map. The copy is fresh on every call; callers
+// cannot mutate the classifier through it.
+func ExtensionLanguages() map[string]string {
+	out := make(map[string]string, len(extensionLanguages))
+	for ext, lang := range extensionLanguages {
+		out[ext] = lang
 	}
+	return out
+}
+
+// Language classifies a path into a normalized lowercase language name, or ""
+// when the file is not a scan candidate. Extensions are matched first; a few
+// dotfile and extension-less basenames (.env*, Dockerfile*) are classified by
+// name because their "extension" is either the whole filename (".env.local"
+// has extension ".local") or absent ("Dockerfile").
+func Language(path string) string {
+	if lang, ok := extensionLanguages[strings.ToLower(filepath.Ext(path))]; ok {
+		return lang
+	}
+	switch base := strings.ToLower(filepath.Base(path)); {
+	case base == "dockerfile" || strings.HasPrefix(base, "dockerfile."):
+		return "dockerfile"
+	case base == ".env" || strings.HasPrefix(base, ".env."):
+		return "env"
+	}
+	return ""
 }
 
 type Result struct {

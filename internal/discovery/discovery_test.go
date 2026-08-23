@@ -32,8 +32,199 @@ func TestDiscoverSkipsDefaultsAndDetectsLanguages(t *testing.T) {
 	}
 }
 func TestLanguage(t *testing.T) {
-	if Language("A.TS") != "typescript" || Language("a.txt") != "" {
+	if Language("A.TS") != "typescript" || Language("a.bin") != "" {
 		t.Fatal("language detection wrong")
+	}
+}
+
+// TestLanguageClassificationTable pins the full extension map: the original
+// python/javascript/typescript names are asserted exactly (they are load-
+// bearing for routing and fingerprints), every broadened extension maps to
+// its language case-insensitively, and unknown extensions stay "" so those
+// files remain non-candidates exactly as before the broadening.
+func TestLanguageClassificationTable(t *testing.T) {
+	cases := []struct {
+		path string
+		want string
+	}{
+		// Original trio, unchanged.
+		{"main.py", "python"}, {"stub.pyi", "python"},
+		{"app.ts", "typescript"}, {"ui.tsx", "typescript"}, {"mod.mts", "typescript"}, {"mod.cts", "typescript"},
+		{"index.js", "javascript"}, {"comp.jsx", "javascript"}, {"lib.mjs", "javascript"}, {"lib.cjs", "javascript"},
+		// Code.
+		{"main.go", "go"}, {"App.java", "java"}, {"Main.kt", "kotlin"}, {"build.gradle.kts", "kotlin"},
+		{"Program.cs", "csharp"}, {"main.c", "c"}, {"header.h", "c"},
+		{"impl.cpp", "cpp"}, {"header.hpp", "cpp"}, {"source.cc", "cpp"},
+		{"app.rb", "ruby"}, {"index.php", "php"}, {"main.rs", "rust"},
+		{"View.swift", "swift"}, {"Job.scala", "scala"},
+		{"AppDelegate.m", "objective-c"}, {"Bridge.mm", "objective-c"},
+		{"App.vue", "vue"}, {"Widget.svelte", "svelte"},
+		// Web and data.
+		{"style.css", "css"}, {"style.scss", "scss"}, {"style.less", "less"},
+		{"page.html", "html"}, {"page.htm", "html"},
+		{"data.json", "json"}, {"tsconfig.jsonc", "json"},
+		{"ci.yaml", "yaml"}, {"cfg.yml", "yaml"},
+		{"pyproject.toml", "toml"}, {"pom.xml", "xml"}, {"query.sql", "sql"}, {"schema.graphql", "graphql"},
+		// Shell and scripts.
+		{"run.sh", "shell"}, {"run.bash", "shell"}, {"run.zsh", "shell"},
+		{"task.ps1", "powershell"}, {"build.bat", "batch"}, {"win.cmd", "batch"},
+		// Config, docs, credentials.
+		{"README.md", "markdown"}, {"NOTES.markdown", "markdown"}, {"notes.txt", "text"},
+		{"app.ini", "ini"}, {"app.cfg", "ini"}, {"app.conf", "ini"}, {"app.properties", "properties"},
+		{"config.env", "env"}, {"server.pem", "certificate"}, {"id_rsa.key", "certificate"}, {"id_rsa.pub", "certificate"},
+		// Case-insensitive matching, old and new alike.
+		{"A.TS", "typescript"}, {"MAIN.GO", "go"}, {"STYLE.SCSS", "scss"}, {"TASK.PS1", "powershell"},
+		// Unknown extensions and basenames stay unclassified.
+		{"photo.png", ""}, {"PHOTO.PNG", ""}, {"archive.zip", ""}, {"binary.exe", ""}, {"data.bin", ""},
+		{"Makefile", ""}, {"app.dockerfile", ""}, {"mydockerfile", ""}, {".envrc", ""},
+	}
+	for _, tc := range cases {
+		if got := Language(tc.path); got != tc.want {
+			t.Errorf("Language(%q) = %q, want %q", tc.path, got, tc.want)
+		}
+	}
+}
+
+// TestLanguageDotfilesAndDockerfile pins the basename rules: dotfile env
+// variants and extension-less Dockerfiles are candidates, extension matching
+// keeps precedence over basename matching (dockerfile.go is Go source), and
+// look-alike names stay out.
+func TestLanguageDotfilesAndDockerfile(t *testing.T) {
+	cases := []struct {
+		path string
+		want string
+	}{
+		{".env", "env"},
+		{".env.local", "env"},
+		{".env.production", "env"},
+		{".ENV", "env"},
+		{".Env.Production", "env"},
+		{"nested/.env", "env"},
+		{"Dockerfile", "dockerfile"},
+		{"Dockerfile.dev", "dockerfile"},
+		{"dockerfile", "dockerfile"},
+		{"DOCKERFILE", "dockerfile"},
+		{"ci/Dockerfile.prod", "dockerfile"},
+		{"dockerfile.go", "go"},    // extension wins over basename
+		{"compose.dockerfile", ""}, // basename not anchored at "dockerfile"
+		{".envrc", ""},             // ".env." prefix does not swallow .envrc
+		{"env", ""},                // bare name is not a dotfile form
+	}
+	for _, tc := range cases {
+		if got := Language(tc.path); got != tc.want {
+			t.Errorf("Language(%q) = %q, want %q", tc.path, got, tc.want)
+		}
+	}
+}
+
+// TestDiscoverClassifiesConfigAndCredentialCandidates proves the broadened
+// classifier changes candidacy end to end: .env dotfiles, certificates,
+// Dockerfiles, shell scripts, and markdown become scan candidates, while
+// binaries, assets, and the pre-existing suffix exclusions stay out.
+func TestDiscoverClassifiesConfigAndCredentialCandidates(t *testing.T) {
+	root := t.TempDir()
+	files := map[string]string{
+		"main.py":         "x",
+		".env":            "x",
+		".env.local":      "x",
+		"server.pem":      "x",
+		"Dockerfile":      "x",
+		"deploy/build.sh": "x",
+		"README.md":       "x",
+		"logo.png":        "x",
+		"photo.jpg":       "x",
+		"app.min.js":      "x",
+		"bundle.map":      "x",
+		"module.pyc":      "x",
+	}
+	for path, content := range files {
+		full := filepath.Join(root, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := Discover(context.Background(), root, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths := map[string]bool{}
+	for _, file := range got.Files {
+		paths[file.RelativePath] = true
+	}
+	want := map[string]bool{
+		"main.py": true, ".env": true, ".env.local": true, "server.pem": true,
+		"Dockerfile": true, "deploy/build.sh": true, "README.md": true,
+	}
+	if len(paths) != len(want) {
+		t.Fatalf("discovered %v, want exactly %v", paths, want)
+	}
+	for path := range want {
+		if !paths[path] {
+			t.Fatalf("%s missing from discovery: %v", path, paths)
+		}
+	}
+	for _, lang := range []string{"python", "env", "certificate", "dockerfile", "shell", "markdown"} {
+		if got.Languages[lang] == 0 {
+			t.Fatalf("language %s missing from counts: %v", lang, got.Languages)
+		}
+	}
+	if got.Languages["python"] != 1 || got.Languages["env"] != 2 {
+		t.Fatalf("language counts wrong: %v", got.Languages)
+	}
+}
+
+// TestDiscoverExcludesStillApplyToNewFileTypes pins that the exclusion
+// machinery (DB user excludes and the committed .bluntcodeignore) filters
+// the newly classified file types exactly like it always filtered source
+// files.
+func TestDiscoverExcludesStillApplyToNewFileTypes(t *testing.T) {
+	root := t.TempDir()
+	files := map[string]string{
+		"main.go":           "x",
+		"cert.pem":          "x",
+		"keys/local.key":    "x",
+		".env":              "x",
+		".env.local":        "x",
+		"deploy/Dockerfile": "x",
+		"notes.md":          "x",
+	}
+	for path, content := range files {
+		full := filepath.Join(root, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, IgnoreFileName), []byte("notes.md\nkeys/**\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Discover(context.Background(), root, []string{"*.pem", ".env"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths := map[string]bool{}
+	for _, file := range got.Files {
+		paths[file.RelativePath] = true
+	}
+	for _, excluded := range []string{"cert.pem", ".env", "keys/local.key", "notes.md"} {
+		if paths[excluded] {
+			t.Fatalf("%s should be excluded (user pattern or ignore file), got %v", excluded, paths)
+		}
+	}
+	// The user's ".env" pattern is a basename match: it hides the dotfile
+	// itself but not the .env.local variant or the config.env extension form.
+	for _, included := range []string{"main.go", ".env.local", "deploy/Dockerfile"} {
+		if !paths[included] {
+			t.Fatalf("%s missing from discovery: %v", included, paths)
+		}
+	}
+	if len(paths) != 3 {
+		t.Fatalf("discovered %v, want exactly the three surviving files", paths)
 	}
 }
 

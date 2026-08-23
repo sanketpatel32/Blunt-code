@@ -16,10 +16,51 @@ import (
 
 type Language string
 
+// The original routing trio. These names are load-bearing (discovery
+// classification, fingerprints, persisted snapshots); never rename them.
 const (
 	LanguagePython     Language = "python"
 	LanguageJavaScript Language = "javascript"
 	LanguageTypeScript Language = "typescript"
+)
+
+// Languages for everything else discovery classifies: code, web/data formats,
+// shell scripts, config/docs, and credential material.
+const (
+	LanguageGo          Language = "go"
+	LanguageJava        Language = "java"
+	LanguageKotlin      Language = "kotlin"
+	LanguageCSharp      Language = "csharp"
+	LanguageC           Language = "c"
+	LanguageCPP         Language = "cpp"
+	LanguageRuby        Language = "ruby"
+	LanguagePHP         Language = "php"
+	LanguageRust        Language = "rust"
+	LanguageSwift       Language = "swift"
+	LanguageScala       Language = "scala"
+	LanguageObjectiveC  Language = "objective-c"
+	LanguageVue         Language = "vue"
+	LanguageSvelte      Language = "svelte"
+	LanguageCSS         Language = "css"
+	LanguageSCSS        Language = "scss"
+	LanguageLess        Language = "less"
+	LanguageHTML        Language = "html"
+	LanguageJSON        Language = "json"
+	LanguageYAML        Language = "yaml"
+	LanguageTOML        Language = "toml"
+	LanguageXML         Language = "xml"
+	LanguageSQL         Language = "sql"
+	LanguageGraphQL     Language = "graphql"
+	LanguageShell       Language = "shell"
+	LanguagePowerShell  Language = "powershell"
+	LanguageBatch       Language = "batch"
+	LanguageMarkdown    Language = "markdown"
+	LanguageText        Language = "text"
+	LanguageINI         Language = "ini"
+	LanguageProperties  Language = "properties"
+	LanguageEnv         Language = "env"
+	LanguageDockerfile  Language = "dockerfile"
+	LanguageCertificate Language = "certificate"
 )
 
 type Severity string
@@ -212,14 +253,67 @@ func HasLanguage(have []Language, wanted ...Language) bool {
 	return false
 }
 
-// languageExtensions mirrors the discovery classifier's extension map. It is
-// duplicated here so the analyzers package stays importable without discovery;
-// both must classify the same extensions or per-language file filtering would
-// disagree with how files were discovered.
+// languageExtensions mirrors the discovery classifier's extension map (see
+// discovery.ExtensionLanguages). It is duplicated here so the analyzers
+// package stays importable without discovery; both must classify the same
+// extensions — and apply the same .env*/Dockerfile basename rules — or
+// per-language file filtering would disagree with how files were discovered.
 var languageExtensions = map[string]Language{
 	".py": LanguagePython, ".pyi": LanguagePython,
 	".ts": LanguageTypeScript, ".tsx": LanguageTypeScript, ".mts": LanguageTypeScript, ".cts": LanguageTypeScript,
 	".js": LanguageJavaScript, ".jsx": LanguageJavaScript, ".mjs": LanguageJavaScript, ".cjs": LanguageJavaScript,
+	".go": LanguageGo, ".java": LanguageJava,
+	".kt": LanguageKotlin, ".kts": LanguageKotlin,
+	".cs": LanguageCSharp,
+	".c":  LanguageC, ".h": LanguageC,
+	".cpp": LanguageCPP, ".hpp": LanguageCPP, ".cc": LanguageCPP,
+	".rb": LanguageRuby, ".php": LanguagePHP, ".rs": LanguageRust, ".swift": LanguageSwift, ".scala": LanguageScala,
+	".m": LanguageObjectiveC, ".mm": LanguageObjectiveC,
+	".vue": LanguageVue, ".svelte": LanguageSvelte,
+	".css": LanguageCSS, ".scss": LanguageSCSS, ".less": LanguageLess,
+	".html": LanguageHTML, ".htm": LanguageHTML,
+	".json": LanguageJSON, ".jsonc": LanguageJSON,
+	".yaml": LanguageYAML, ".yml": LanguageYAML,
+	".toml": LanguageTOML, ".xml": LanguageXML, ".sql": LanguageSQL, ".graphql": LanguageGraphQL,
+	".sh": LanguageShell, ".bash": LanguageShell, ".zsh": LanguageShell,
+	".ps1": LanguagePowerShell, ".bat": LanguageBatch, ".cmd": LanguageBatch,
+	".md": LanguageMarkdown, ".markdown": LanguageMarkdown, ".txt": LanguageText,
+	".ini": LanguageINI, ".cfg": LanguageINI, ".conf": LanguageINI, ".properties": LanguageProperties,
+	".env": LanguageEnv,
+	".pem": LanguageCertificate, ".key": LanguageCertificate, ".pub": LanguageCertificate,
+}
+
+// languageOfPath classifies a single path with the same extension-first,
+// basename-fallback rules discovery uses, so FilesForLanguages agrees with
+// the walk that produced the file list.
+func languageOfPath(file string) Language {
+	if lang, ok := languageExtensions[strings.ToLower(filepath.Ext(file))]; ok {
+		return lang
+	}
+	switch base := strings.ToLower(filepath.Base(file)); {
+	case base == "dockerfile" || strings.HasPrefix(base, "dockerfile."):
+		return LanguageDockerfile
+	case base == ".env" || strings.HasPrefix(base, ".env."):
+		return LanguageEnv
+	}
+	return ""
+}
+
+// AllLanguages returns every language the shared classifier can produce,
+// sorted for deterministic ordering. Adapters that want the broadest
+// routable set (the built-in secrets detector) declare this instead of
+// enumerating languages and drifting as discovery learns new ones.
+func AllLanguages() []Language {
+	set := map[Language]struct{}{LanguageDockerfile: {}, LanguageEnv: {}}
+	for _, lang := range languageExtensions {
+		set[lang] = struct{}{}
+	}
+	out := make([]Language, 0, len(set))
+	for lang := range set {
+		out = append(out, lang)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
 }
 
 // FilesForLanguages filters file paths down to the extensions that belong to
@@ -234,7 +328,7 @@ func FilesForLanguages(files []string, langs ...Language) []string {
 	}
 	out := make([]string, 0, len(files))
 	for _, file := range files {
-		if wanted[languageExtensions[strings.ToLower(filepath.Ext(file))]] {
+		if wanted[languageOfPath(file)] {
 			out = append(out, file)
 		}
 	}

@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"bluntcode/internal/analyzers"
+	"bluntcode/internal/discovery"
 )
 
 func writeFile(t *testing.T, dir, name, content string) string {
@@ -35,11 +36,43 @@ func TestCheckAlwaysReady(t *testing.T) {
 	}
 }
 
+// excludedLanguages documents the languages discovery classifies that todo
+// deliberately does not declare (see SupportedLanguages): machine-consumed
+// or vendored formats where marker hits are noise, plain prose, and the
+// credential blobs owned by the secrets detector.
+var excludedLanguages = map[analyzers.Language]bool{
+	analyzers.LanguageCSS: true, analyzers.LanguageSCSS: true, analyzers.LanguageLess: true,
+	analyzers.LanguageHTML: true, analyzers.LanguageJSON: true, analyzers.LanguageXML: true,
+	analyzers.LanguageSQL: true, analyzers.LanguageGraphQL: true,
+	analyzers.LanguageText: true, analyzers.LanguageEnv: true, analyzers.LanguageCertificate: true,
+}
+
+// TestSupportedLanguagesCoverDiscovery keeps the routing invariant honest in
+// both directions: every language discovery classifies is either declared by
+// todo or appears in the documented exclusion list above (and every exclusion
+// names a language discovery really classifies, so a rename or typo fails
+// here instead of silently dropping coverage).
 func TestSupportedLanguagesCoverDiscovery(t *testing.T) {
 	langs := New().SupportedLanguages()
-	for _, want := range []analyzers.Language{analyzers.LanguagePython, analyzers.LanguageJavaScript, analyzers.LanguageTypeScript} {
-		if !analyzers.HasLanguage(langs, want) {
-			t.Fatalf("SupportedLanguages %v is missing %s", langs, want)
+	known := map[analyzers.Language]bool{}
+	for _, lang := range discovery.ExtensionLanguages() {
+		known[analyzers.Language(lang)] = true
+	}
+	known[analyzers.LanguageDockerfile] = true // basename form
+	if len(known) <= 3 {
+		t.Fatal("discovery table unexpectedly small; the fixture assumption is wrong")
+	}
+	for lang := range known {
+		if !analyzers.HasLanguage(langs, lang) && !excludedLanguages[lang] {
+			t.Fatalf("language %s is neither declared by todo nor documented as excluded; SupportedLanguages = %v", lang, langs)
+		}
+	}
+	for lang := range excludedLanguages {
+		if !known[lang] {
+			t.Fatalf("exclusion %s is not a language discovery classifies; fix the exclusion list", lang)
+		}
+		if analyzers.HasLanguage(langs, lang) {
+			t.Fatalf("language %s is both declared and excluded; the comment and the set disagree", lang)
 		}
 	}
 }
@@ -52,10 +85,12 @@ func TestPlanSelectsAllLanguageFiles(t *testing.T) {
 		Files: []string{
 			`C:\ws\main.py`,
 			`C:\ws\app.tsx`,
-			`C:\ws\bundle.mjs`,
-			`C:\ws\deploy.pyi`,
-			`C:\ws\README.md`,  // never classified by discovery; filtered like ruff does
-			`C:\ws\config.env`, // ditto
+			`C:\ws\main.go`,
+			`C:\ws\README.md`,  // markdown is tracked: docs carry debt markers too
+			`C:\ws\Dockerfile`, // '# TODO' lives in Dockerfile comments
+			`C:\ws\config.env`, // env is excluded: credential blob, not a comment carrier
+			`C:\ws\server.pem`, // certificate is excluded likewise
+			`C:\ws\logo.png`,   // never classified by discovery; filtered like ruff does
 		},
 	}
 	plan, err := adapter.Plan(context.Background(), req)
@@ -63,7 +98,7 @@ func TestPlanSelectsAllLanguageFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	files, _ := plan.Metadata[planKeyFiles].([]string)
-	want := []string{`C:\ws\main.py`, `C:\ws\app.tsx`, `C:\ws\bundle.mjs`, `C:\ws\deploy.pyi`}
+	want := []string{`C:\ws\main.py`, `C:\ws\app.tsx`, `C:\ws\main.go`, `C:\ws\README.md`, `C:\ws\Dockerfile`}
 	if len(files) != len(want) {
 		t.Fatalf("plan files = %v, want %v", files, want)
 	}
@@ -79,7 +114,7 @@ func TestPlanSelectsAllLanguageFiles(t *testing.T) {
 
 func TestPlanRejectsEmptySelection(t *testing.T) {
 	adapter := New()
-	req := analyzers.ScanRequest{WorkspaceRoot: `C:\ws`, Files: []string{`C:\ws\README.md`}}
+	req := analyzers.ScanRequest{WorkspaceRoot: `C:\ws`, Files: []string{`C:\ws\logo.png`, `C:\ws\config.env`}}
 	if _, err := adapter.Plan(context.Background(), req); err == nil {
 		t.Fatal("expected error when the selection has no supported files")
 	}
@@ -188,6 +223,55 @@ func TestRunNormalizeContract(t *testing.T) {
 	}
 	if !filesScanned {
 		t.Fatalf("metrics missing files_scanned=2: %+v", metrics)
+	}
+}
+
+// TestRunTracksMarkersBeyondTheOriginalTrio proves the broadened routing end
+// to end: markers left in a Go file, a shell script, and a Dockerfile become
+// findings through Plan -> Run -> Normalize.
+func TestRunTracksMarkersBeyondTheOriginalTrio(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "main.go", "package main\n\n// TODO: wire up flags\n")
+	writeFile(t, dir, "deploy.sh", "#!/bin/sh\n# FIXME: pin the toolchain\n")
+	writeFile(t, dir, "Dockerfile", "FROM golang:1.26\n# TODO: multi-stage build\n")
+
+	adapter := New()
+	ctx := context.Background()
+	plan, err := adapter.Plan(ctx, analyzers.ScanRequest{
+		WorkspaceRoot: dir,
+		Files: []string{
+			filepath.Join(dir, "main.go"),
+			filepath.Join(dir, "deploy.sh"),
+			filepath.Join(dir, "Dockerfile"),
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := adapter.Run(ctx, plan, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	findings, _, err := adapter.Normalize(ctx, result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(findings) != 3 {
+		t.Fatalf("got %d findings, want 3 (one per file): %+v", len(findings), findings)
+	}
+	byPath := map[string]analyzers.Finding{}
+	for _, f := range findings {
+		byPath[f.RelativePath] = f
+	}
+	wantRule := map[string]string{"main.go": ruleTODO, "deploy.sh": ruleFIXME, "Dockerfile": ruleTODO}
+	for path, rule := range wantRule {
+		f, ok := byPath[path]
+		if !ok {
+			t.Fatalf("%s missing from findings: %+v", path, findings)
+		}
+		if f.RuleID != rule {
+			t.Fatalf("%s finding rule = %s, want %s", path, f.RuleID, rule)
+		}
 	}
 }
 

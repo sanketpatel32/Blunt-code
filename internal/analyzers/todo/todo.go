@@ -36,11 +36,29 @@ func New() *Adapter { return &Adapter{} }
 func (a *Adapter) ID() string          { return ID }
 func (a *Adapter) DisplayName() string { return "TODO Comment Tracker" }
 
-// SupportedLanguages declares every language the discovery layer classifies,
-// the same broadest routable set the secrets detector uses — markers hide in
-// Python, JavaScript, and TypeScript alike.
+// SupportedLanguages declares the languages where TODO/FIXME-style markers
+// plausibly live: every programming language discovery classifies (comments
+// exist in all of them), the shell script family (powershell and batch
+// included — '#' and REM comments carry markers too), config formats with a
+// comment syntax worth reading (yaml, toml, ini, properties, dockerfile),
+// and markdown (markers in docs are tracked debt). Deliberately excluded:
+// json, css, scss, less, html, xml, sql, and graphql (machine-consumed,
+// frequently generated or vendored — json has no comments at all — so marker
+// hits there are noise, not deferred work); text (plain prose has no comment
+// context); and the credential blobs env and certificate, which are the
+// secrets detector's territory, not comment carriers.
 func (a *Adapter) SupportedLanguages() []analyzers.Language {
-	return []analyzers.Language{analyzers.LanguagePython, analyzers.LanguageJavaScript, analyzers.LanguageTypeScript}
+	return []analyzers.Language{
+		analyzers.LanguagePython, analyzers.LanguageJavaScript, analyzers.LanguageTypeScript,
+		analyzers.LanguageGo, analyzers.LanguageJava, analyzers.LanguageKotlin,
+		analyzers.LanguageCSharp, analyzers.LanguageC, analyzers.LanguageCPP,
+		analyzers.LanguageRuby, analyzers.LanguagePHP, analyzers.LanguageRust,
+		analyzers.LanguageSwift, analyzers.LanguageScala, analyzers.LanguageObjectiveC,
+		analyzers.LanguageVue, analyzers.LanguageSvelte,
+		analyzers.LanguageShell, analyzers.LanguagePowerShell, analyzers.LanguageBatch,
+		analyzers.LanguageYAML, analyzers.LanguageTOML, analyzers.LanguageINI,
+		analyzers.LanguageProperties, analyzers.LanguageDockerfile, analyzers.LanguageMarkdown,
+	}
 }
 
 // Check always succeeds: there is no external tool to verify.
