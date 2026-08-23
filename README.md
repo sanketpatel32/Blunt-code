@@ -30,10 +30,10 @@
 
 - **100% Local & Private:** Runs entirely on loopback (`127.0.0.1`). Your code, findings, reports, and logs never leave your device.
 - **Zero-Config Managed Tools:** Automatically installs and sandboxes code analyzers in isolated application directories. No manual `PATH` configuring or Python/Java/Node dependency hassle — and `doctor --fix` self-heals stale rules and interrupted installs.
-- **Multi-Tool Coverage:** Runs **Ruff**, **Biome**, **Semgrep**, and **SonarQube** concurrently to check for lint issues, security SAST vulnerabilities, formatting errors, and code smells — plus built-in **secrets** and **TODO/FIXME** detectors that ship in the binary with nothing extra to install.
-- **Interactive UI Dashboard:** Built-in web app with a home dashboard, real-time scan logs, file-level previews, severity visualizations, rich filtering by tool/severity, severity trends across scan history, and per-finding suppression (with reason) that hides dismissed findings from future scans and gates.
-- **Reports in Every Format:** One-click export to **Markdown**, standalone **HTML**, **SARIF 2.1.0** (VS Code / GitHub code scanning), **CSV**, and **JSON** — or emit inline **GitHub Actions annotations** straight from the CLI.
-- **CI Gates, Baselines & Watch Mode:** `--fail-on high+` / `--max-findings N` turn a headless scan into a build gate, `--baseline` (a previous scan ID or SARIF file) excludes known findings so gates start passing on day one, `--jobs N` parallelizes analyzers, `--watch` rescans automatically as files change, and a committed `.bluntcodeignore` shares excludes per project. See [docs/ci.md](docs/ci.md) for the full CI guide.
+- **Multi-Tool Coverage:** Runs **Ruff**, **Biome**, **Semgrep**, and **SonarQube** concurrently to check for lint issues, security SAST vulnerabilities, formatting errors, and code smells — plus built-in **secrets** and **TODO/FIXME** detectors that ship in the binary with nothing extra to install, across 40+ file types from Go and Java to `.env` files, Dockerfiles, and YAML.
+- **Interactive UI Dashboard:** Built-in web app with a home dashboard of global overview cards, real-time scan logs, file-level previews, severity visualizations, rich filtering by tool/rule/severity, severity trends across scan history, and per-finding suppression (with reason) that hides dismissed findings from future scans and gates.
+- **Reports in Every Format:** One-click export to **Markdown**, standalone **HTML**, **SARIF 2.1.0** (VS Code / GitHub code scanning), **CSV**, and **JSON** — or emit **SARIF**, full **JSON** reports, and inline **GitHub Actions annotations** straight from the CLI.
+- **CI Gates, Baselines & Watch Mode:** `--fail-on high+` / `--max-findings N` turn a headless scan into a build gate, `--baseline` (a previous scan ID or SARIF file) excludes known findings so gates start passing on day one, `--jobs N` parallelizes analyzers, `--incremental` rescans only files that changed (`--watch` does this automatically from its second scan onward), a committed `.bluntcodeignore` shares excludes per project, and inline `bluntcode:ignore` comments dismiss false positives at the source. See [docs/ci.md](docs/ci.md) for the full CI guide.
 - **Dark Mode & Keyboard Shortcuts:** Light/dark theme that follows your OS preference, and keyboard-first navigation (`g`+`h/w/t/s` to jump between pages, `/` to search, `?` for the shortcut cheat sheet).
 - **Offline Capable:** Once analyzers are downloaded on initial setup, full scans can run 100% offline without internet access.
 
@@ -77,7 +77,7 @@ If you prefer to download and verify files manually without running a web-based 
 
 ```powershell
 # 1. Verify file integrity
-$package = '.\BluntCode-0.3.0-windows-amd64.zip' # Update filename to match download
+$package = '.\BluntCode-0.4.0-windows-amd64.zip' # Update filename to match download
 $expected = (Get-Content "$package.sha256" -Raw).Trim().Split()[0].ToLowerInvariant()
 $actual = (Get-FileHash $package -Algorithm SHA256).Hash.ToLowerInvariant()
 
@@ -189,13 +189,18 @@ Every scan runs in one of three profiles:
 # Gate against a baseline (previous scan ID or exported SARIF) so pre-existing findings don't fail the build
 .\bluntcode.exe scan "C:\Projects\my-python-app" --fail-on high+ --baseline .\last-scan.sarif
 
-# Full JSON report on stdout, or GitHub Actions annotations for PR checks
+# Full JSON report on stdout, a SARIF file for baselines / code-scanning uploads, or GitHub Actions annotations for PR checks
 .\bluntcode.exe scan "C:\Projects\my-python-app" --format json
+.\bluntcode.exe scan "C:\Projects\my-python-app" --format sarif > .\baseline.sarif
 .\bluntcode.exe scan "C:\Projects\my-python-app" --format github
 
-# Run up to 2 analyzers concurrently, or keep scanning and rescan on file changes
+# Run up to 2 analyzers concurrently, rescan only files that changed, or keep watching and rescan on file changes
 .\bluntcode.exe scan "C:\Projects\my-python-app" --jobs 2
+.\bluntcode.exe scan "C:\Projects\my-python-app" --incremental
 .\bluntcode.exe scan "C:\Projects\my-python-app" --watch
+
+# Show the effective configuration (resolved paths, overrides, managed tool versions)
+.\bluntcode.exe config
 
 # Diagnose the local installation, repairing mechanical problems (stale rules, interrupted installs)
 .\bluntcode.exe doctor --fix
@@ -313,7 +318,7 @@ npm run build
 Set-Location ..
 
 # Package a release zip & checksum
-.\scripts\package.ps1 -Version 0.3.0
+.\scripts\package.ps1 -Version 0.4.0
 ```
 
 For guidelines on coding standards and codebase architecture, see [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/architecture.md](docs/architecture.md).

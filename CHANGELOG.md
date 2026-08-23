@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-24
+
 ### Added
 
 - **Inline `bluntcode:ignore` comments for the built-in analyzers:** false positives from the secrets and TODO trackers can now be dismissed at the source, reviewable in git. A line comment containing the case-sensitive token `bluntcode:ignore` (any comment leader — `#`, `//`, `<!-- -->`, `/* */`, `--`, `;`) suppresses same-line findings or findings on the immediately following line; it can target a single rule (`bluntcode:ignore secrets.aws-access-key-id`) or act bare, and trailing free text after `reason:` is allowed for annotation. Parsing is fail-safe — a typo'd rule id matches nothing, keeping the finding visible rather than silently suppressed — and the JSON envelope carries parsed directives rather than raw line text so secrets never leak through their own ignore comments. External tools keep their own mechanisms (`# noqa`, `// biome-ignore`, `# nosemgrep`), and the directive never affects another analyzer's findings.
@@ -18,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SARIF export from the CLI:** `bluntcode scan --format sarif` writes the exact SARIF 2.1.0 document the API's report download serves, straight to stdout — byte-for-byte the same serialization (pinned by a test against the route's encoder invocation). This unlocks the CI baseline round-trip without a server (`bluntcode scan --format sarif > baseline.sarif`, then `--baseline baseline.sarif` on later runs) and feeds GitHub code-scanning uploads directly. In `--watch` mode each rescan emits one complete newline-separated SARIF document, mirroring `--format json`.
 - **Dashboard overview cards:** the home page now leads with a global overview fed by `/api/v1/stats` — Workspaces, Scans (with completed/running split and a live pulse when scans are in flight), Findings with a severity mini-bar and counted legend (latest-completed-per-workspace semantics, so the number matches what the dashboard shows), Suppressions, and Tools readiness (omitted when unwired). Loads with the standard skeleton, degrades to a quiet inline retry on error without blocking the rest of the dashboard, and renders zeros on a fresh install.
 - **GitHub Actions CI:** the repository now runs `.github/workflows/ci.yml` on pushes to main and pull requests — `go vet`, `go build`, the full Go test suite, the web test suite and build, then a self-scan dogfood gate: the freshly built exe scans `web/` with the quick profile under `--fail-on high+`, using a workspace-isolated `LOCALAPPDATA` so CI state never leaks, with the managed analyzer tools cached by manifest hash and the generated markdown report uploaded as an artifact when the gate trips.
+
+### Changed
+
+- **Dogfood self-scan cleanup:** pointing the broadened built-in analyzers at this repository's own source surfaced 305 findings (34 high) — all intentional (detector fixtures, prose mentions of the tracked markers, documentation examples). Fixture files and feature-documentation prose are now excluded via a committed `.bluntcodeignore`; the remaining self-referential lines carry inline `bluntcode:ignore` directives (including invisible HTML comments in the markdown docs). Self-scan reports 0 high findings (158 low-baseline), the CI gate (`--fail-on high+`) passes, and an incremental rescan of the unchanged workspace completes in 92 ms.
 
 ## [0.3.0] - 2026-08-24
 
