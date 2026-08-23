@@ -1204,6 +1204,162 @@ func finding(analyzer, rule, path, message string, severity analyzers.Severity, 
 	f.SetFingerprint()
 	return f
 }
+
+type suppressionsResponse struct {
+	Items []core.Suppression `json:"items"`
+}
+
+func TestSuppressionRoutesLifecycle(t *testing.T) {
+	s := testServer(t)
+	ctx := context.Background()
+	work, err := s.db.CreateWorkspace(ctx, core.Workspace{RootPath: t.TempDir(), Name: "Example"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fingerprint := strings.Repeat("ab", 32)
+	base := "http://127.0.0.1/api/v1/workspaces/" + work.ID + "/suppressions"
+
+	request := httptest.NewRequest(http.MethodPost, base, strings.NewReader(`{"fingerprint":"`+fingerprint+`","reason":"wontfix"}`))
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	var created core.Suppression
+	if response.Code != http.StatusCreated || json.Unmarshal(response.Body.Bytes(), &created) != nil ||
+		created.WorkspaceID != work.ID || created.Fingerprint != fingerprint || created.Reason != "wontfix" || created.CreatedAt.IsZero() {
+		t.Fatalf("create: %d %s", response.Code, response.Body.String())
+	}
+
+	request = httptest.NewRequest(http.MethodGet, base, nil)
+	response = httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	var list suppressionsResponse
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &list) != nil || len(list.Items) != 1 || list.Items[0].Fingerprint != fingerprint {
+		t.Fatalf("list: %d %s", response.Code, response.Body.String())
+	}
+
+	// Invalid bodies and fingerprints are rejected.
+	for name, body := range map[string]string{
+		"short fingerprint":   `{"fingerprint":"abc"}`,
+		"missing fingerprint": `{"reason":"no fingerprint"}`,
+		"malformed json":      `{"fingerprint":`,
+		"long reason":         `{"fingerprint":"` + fingerprint + `","reason":"` + strings.Repeat("x", 501) + `"}`,
+	} {
+		request = httptest.NewRequest(http.MethodPost, base, strings.NewReader(body))
+		response = httptest.NewRecorder()
+		s.Handler().ServeHTTP(response, request)
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("%s was accepted: %d %s", name, response.Code, response.Body.String())
+		}
+	}
+
+	// Deleting a well-formed fingerprint that was never suppressed is a 404.
+	request = httptest.NewRequest(http.MethodDelete, base+"/"+strings.Repeat("99", 32), nil)
+	response = httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("unknown suppression delete: %d %s", response.Code, response.Body.String())
+	}
+	// A malformed fingerprint is a 400, not a 404.
+	request = httptest.NewRequest(http.MethodDelete, base+"/nothex", nil)
+	response = httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("malformed fingerprint delete: %d %s", response.Code, response.Body.String())
+	}
+
+	request = httptest.NewRequest(http.MethodDelete, base+"/"+fingerprint, nil)
+	response = httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("delete: %d %s", response.Code, response.Body.String())
+	}
+	request = httptest.NewRequest(http.MethodGet, base, nil)
+	response = httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &list) != nil || len(list.Items) != 0 {
+		t.Fatalf("list after delete: %d %s", response.Code, response.Body.String())
+	}
+
+	// Unknown workspaces 404 on every verb.
+	missing := "http://127.0.0.1/api/v1/workspaces/11111111-1111-1111-1111-111111111111/suppressions"
+	for _, target := range []struct {
+		method, url string
+		body        io.Reader
+	}{
+		{http.MethodGet, missing, nil},
+		{http.MethodPost, missing, strings.NewReader(`{"fingerprint":"` + fingerprint + `"}`)},
+		{http.MethodDelete, missing + "/" + fingerprint, nil},
+	} {
+		request = httptest.NewRequest(target.method, target.url, target.body)
+		response = httptest.NewRecorder()
+		s.Handler().ServeHTTP(response, request)
+		if response.Code != http.StatusNotFound {
+			t.Fatalf("unknown workspace %s %s: %d %s", target.method, target.url, response.Code, response.Body.String())
+		}
+	}
+}
+
+// TestReportAndExportsExcludeSuppressedFindings pins the model filter point:
+// once a fingerprint is suppressed, the report model (and every renderer built
+// from it) and the CSV export drop the finding, while the findings list keeps
+// it visible with the suppressed status.
+func TestReportAndExportsExcludeSuppressedFindings(t *testing.T) {
+	s := testServer(t)
+	ctx := context.Background()
+	work, err := s.db.CreateWorkspace(ctx, core.Workspace{RootPath: t.TempDir(), Name: "Example"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dismissed := finding("ruff", "DISMISSED", "src/dismissed.py", "dismissed issue", analyzers.SeverityHigh, analyzers.CategoryCorrectness)
+	kept := finding("ruff", "KEPT", "src/kept.py", "kept issue", analyzers.SeverityMedium, analyzers.CategoryCorrectness)
+	completedScan(t, s, work.ID, "completed", dismissed)
+	current := completedScan(t, s, work.ID, "completed", dismissed, kept)
+
+	fetchReport := func(t *testing.T) (findings []analyzers.Finding, comparison map[string]int) {
+		t.Helper()
+		request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+current.ID+"/report", nil)
+		response := httptest.NewRecorder()
+		s.Handler().ServeHTTP(response, request)
+		var body struct {
+			Findings   []analyzers.Finding `json:"findings"`
+			Comparison map[string]int      `json:"comparison"`
+		}
+		if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil {
+			t.Fatalf("report: %d %s", response.Code, response.Body.String())
+		}
+		return body.Findings, body.Comparison
+	}
+
+	beforeFindings, beforeComparison := fetchReport(t)
+	if len(beforeFindings) != 2 || beforeComparison["persistent_count"] != 1 || beforeComparison["new_count"] != 1 {
+		t.Fatalf("report before suppression: %#v", beforeComparison)
+	}
+
+	if _, err := s.db.AddSuppression(ctx, work.ID, dismissed.Fingerprint, "wontfix"); err != nil {
+		t.Fatal(err)
+	}
+	afterFindings, afterComparison := fetchReport(t)
+	if len(afterFindings) != 1 || afterFindings[0].RuleID != "KEPT" {
+		t.Fatalf("suppressed finding must be absent from the report model: %#v", afterFindings)
+	}
+	if afterComparison["new_count"] != 1 || afterComparison["persistent_count"] != 0 || afterComparison["fixed_count"] != 0 {
+		t.Fatalf("comparison must ignore the suppressed fingerprint: %#v", afterComparison)
+	}
+
+	records := csvRows(t, s, current.ID, "")
+	if len(records) != 2 || csvRowByRule(records, "DISMISSED") != nil {
+		t.Fatalf("CSV export must exclude the suppressed finding: %#v", records)
+	}
+
+	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+current.ID+"/findings?status=suppressed", nil)
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	var page findingsResponse
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &page) != nil ||
+		page.Total != 1 || len(page.Items) != 1 || page.Items[0].RuleID != "DISMISSED" || page.Items[0].Status != "suppressed" {
+		t.Fatalf("findings list must keep the suppressed finding visible: %d %s", response.Code, response.Body.String())
+	}
+}
+
 func TestRejectsNonLoopbackHost(t *testing.T) {
 	s := testServer(t)
 	request := httptest.NewRequest(http.MethodGet, "http://example.com/api/v1/health", nil)

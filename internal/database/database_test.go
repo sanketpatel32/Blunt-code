@@ -2,7 +2,9 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -457,6 +459,210 @@ func stuckOrder(stuck map[string]string) string {
 		return scanID
 	}
 	return ""
+}
+
+func TestSuppressionsRoundTripUniquenessAndIsolation(t *testing.T) {
+	db, err := Open(context.Background(), filepath.Join(t.TempDir(), "bluntcode.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	alpha, err := db.CreateWorkspace(ctx, core.Workspace{Name: "Alpha", RootPath: "C:/alpha"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	beta, err := db.CreateWorkspace(ctx, core.Workspace{Name: "Beta", RootPath: "C:/beta"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := strings.Repeat("ab", 32)
+	second := strings.Repeat("cd", 32)
+
+	item, err := db.AddSuppression(ctx, alpha.ID, first, "wontfix")
+	if err != nil || item.WorkspaceID != alpha.ID || item.Fingerprint != first || item.Reason != "wontfix" || item.CreatedAt.IsZero() {
+		t.Fatalf("add suppression: %#v (%v)", item, err)
+	}
+	// Re-suppressing the same fingerprint is an idempotent upsert that
+	// refreshes the reason; the (workspace, fingerprint) pair stays unique.
+	if _, err := db.AddSuppression(ctx, alpha.ID, first, "updated reason"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.AddSuppression(ctx, alpha.ID, second, ""); err != nil {
+		t.Fatal(err)
+	}
+	// The same fingerprint in another workspace is an independent record.
+	if _, err := db.AddSuppression(ctx, beta.ID, first, "other workspace"); err != nil {
+		t.Fatal(err)
+	}
+
+	alphaItems, err := db.Suppressions(ctx, alpha.ID)
+	if err != nil || len(alphaItems) != 2 || alphaItems[0].Fingerprint != first || alphaItems[0].Reason != "updated reason" || alphaItems[1].Fingerprint != second || alphaItems[1].Reason != "" {
+		t.Fatalf("alpha suppressions: %#v (%v)", alphaItems, err)
+	}
+	betaItems, err := db.Suppressions(ctx, beta.ID)
+	if err != nil || len(betaItems) != 1 || betaItems[0].WorkspaceID != beta.ID || betaItems[0].Reason != "other workspace" {
+		t.Fatalf("beta suppressions: %#v (%v)", betaItems, err)
+	}
+	set, err := db.SuppressedFingerprints(ctx, alpha.ID)
+	if err != nil || len(set) != 2 || !set[first] || !set[second] {
+		t.Fatalf("alpha fingerprint set: %#v (%v)", set, err)
+	}
+
+	// Removing an unknown fingerprint reports no rows.
+	if err := db.RemoveSuppression(ctx, alpha.ID, strings.Repeat("ef", 32)); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("unknown removal must return sql.ErrNoRows: %v", err)
+	}
+	if err := db.RemoveSuppression(ctx, alpha.ID, first); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.RemoveSuppression(ctx, alpha.ID, second); err != nil {
+		t.Fatal(err)
+	}
+	alphaItems, err = db.Suppressions(ctx, alpha.ID)
+	if err != nil || len(alphaItems) != 0 || alphaItems == nil {
+		t.Fatalf("alpha must be an empty, non-nil list after removals: %#v (%v)", alphaItems, err)
+	}
+	if set, err = db.SuppressedFingerprints(ctx, alpha.ID); err != nil || len(set) != 0 {
+		t.Fatalf("alpha fingerprint set must be empty: %#v (%v)", set, err)
+	}
+	// Beta's suppression is untouched by alpha's removals.
+	betaItems, err = db.Suppressions(ctx, beta.ID)
+	if err != nil || len(betaItems) != 1 {
+		t.Fatalf("beta suppression must survive alpha removals: %#v (%v)", betaItems, err)
+	}
+
+	// An empty fingerprint is rejected at the repository door.
+	if _, err := db.AddSuppression(ctx, alpha.ID, "", "reason"); err == nil {
+		t.Fatal("empty fingerprint must be rejected")
+	}
+}
+
+func TestSuppressedFindingsExcludedFromTotalsExportsAndFixed(t *testing.T) {
+	db, err := Open(context.Background(), filepath.Join(t.TempDir(), "bluntcode.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	work, err := db.CreateWorkspace(ctx, core.Workspace{Name: "Sample", RootPath: "C:/sample"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	issue := func(rule, message string, severity analyzers.Severity) analyzers.Finding {
+		f := analyzers.Finding{AnalyzerID: "ruff", RuleID: rule, RelativePath: "src/" + strings.ToLower(rule) + ".py", Message: message, Severity: severity, Category: analyzers.CategoryCorrectness}
+		f.SetFingerprint()
+		return f
+	}
+	acknowledged := issue("ACK", "acknowledged issue", analyzers.SeverityHigh)
+	dismissed := issue("GONE", "dismissed and gone", analyzers.SeverityLow)
+	kept := issue("KEEP", "kept issue", analyzers.SeverityMedium)
+
+	previous, err := db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: "queued"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.SaveAnalyzerResult(ctx, previous.ID, AnalyzerRunInput{AnalyzerID: "ruff", Version: "test", State: "succeeded"}, []analyzers.Finding{acknowledged, dismissed}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CompleteScan(ctx, previous.ID, "completed", ""); err != nil {
+		t.Fatal(err)
+	}
+	baseline, err := db.Scan(ctx, previous.ID)
+	if err != nil || baseline.TotalFindings != 2 {
+		t.Fatalf("baseline scan must count both findings: %#v (%v)", baseline, err)
+	}
+
+	// Suppress the persistent finding and the one that disappears next scan.
+	if _, err := db.AddSuppression(ctx, work.ID, acknowledged.Fingerprint, "wontfix"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.AddSuppression(ctx, work.ID, dismissed.Fingerprint, ""); err != nil {
+		t.Fatal(err)
+	}
+	current, err := db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: "queued"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.SaveAnalyzerResult(ctx, current.ID, AnalyzerRunInput{AnalyzerID: "ruff", Version: "test", State: "succeeded"}, []analyzers.Finding{acknowledged, kept}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CompleteScan(ctx, current.ID, "completed", ""); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := db.Scan(ctx, current.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Suppressed findings stay stored but never feed totals or severity counts.
+	if loaded.TotalFindings != 1 {
+		t.Fatalf("suppressed findings must not count toward totals: %#v", loaded)
+	}
+	var highCount, mediumCount int
+	if err := db.SQL.QueryRowContext(ctx, `SELECT high_count,medium_count FROM scans WHERE id=?`, current.ID).Scan(&highCount, &mediumCount); err != nil {
+		t.Fatal(err)
+	}
+	if highCount != 0 || mediumCount != 1 {
+		t.Fatalf("severity counts must exclude suppressed findings: high=%d medium=%d", highCount, mediumCount)
+	}
+
+	// The findings list keeps suppressed rows visible, stamped with their status.
+	page, err := db.FindingsPage(ctx, loaded, FindingFilter{Limit: 25})
+	if err != nil || page.Total != 2 || len(page.Items) != 2 {
+		t.Fatalf("list must show stored suppressed findings with their status: %#v (%v)", page, err)
+	}
+	statuses := map[string]string{}
+	for _, item := range page.Items {
+		statuses[item.Fingerprint] = item.Status
+	}
+	if statuses[acknowledged.Fingerprint] != "suppressed" || statuses[kept.Fingerprint] != "new" {
+		t.Fatalf("statuses: %#v", statuses)
+	}
+
+	// The CSV export excludes suppressed findings by default.
+	rows, err := db.FindingsCSV(ctx, loaded, FindingFilter{})
+	if err != nil || len(rows) != 1 || rows[0].Fingerprint != kept.Fingerprint {
+		t.Fatalf("export must exclude suppressed findings: %#v (%v)", rows, err)
+	}
+	// ...unless the filter explicitly selects them.
+	suppressed, err := db.FindingsCSV(ctx, loaded, FindingFilter{Status: "suppressed"})
+	if err != nil || len(suppressed) != 1 || suppressed[0].Fingerprint != acknowledged.Fingerprint {
+		t.Fatalf("status=suppressed must export the dismissed finding: %#v (%v)", suppressed, err)
+	}
+
+	// A dismissed fingerprint that disappeared is not fixed.
+	fixed, err := db.FixedFindings(ctx, loaded, 0)
+	if err != nil || fixed.Total != 0 || len(fixed.Items) != 0 {
+		t.Fatalf("a suppressed fingerprint must not report as fixed: %#v (%v)", fixed, err)
+	}
+
+	// Removing the suppression un-suppresses the next scan.
+	if err := db.RemoveSuppression(ctx, work.ID, acknowledged.Fingerprint); err != nil {
+		t.Fatal(err)
+	}
+	next, err := db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: "queued"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.SaveAnalyzerResult(ctx, next.ID, AnalyzerRunInput{AnalyzerID: "ruff", Version: "test", State: "succeeded"}, []analyzers.Finding{acknowledged, kept}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CompleteScan(ctx, next.ID, "completed", ""); err != nil {
+		t.Fatal(err)
+	}
+	nextLoaded, err := db.Scan(ctx, next.ID)
+	if err != nil || nextLoaded.TotalFindings != 2 {
+		t.Fatalf("removed suppression must restore counting: %#v (%v)", nextLoaded, err)
+	}
+	page, err = db.FindingsPage(ctx, nextLoaded, FindingFilter{Limit: 25})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range page.Items {
+		if item.Fingerprint == acknowledged.Fingerprint && item.Status != "persistent" {
+			t.Fatalf("un-suppressed persistent finding must compare normally again: %#v", item)
+		}
+	}
 }
 
 // ---------------------------------------------------------------------------

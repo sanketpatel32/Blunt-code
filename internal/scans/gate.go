@@ -25,6 +25,8 @@ var gateSeverityOrder = []analyzers.Severity{
 // fixed-findings view (internal/database). Rows loaded for a scan itself carry
 // no status, but the gate excludes "fixed" defensively so a mixed list of open
 // and resolved findings can never trip — or pass — on resolved issues.
+// StatusSuppressed is excluded for the same reason: callers filter suppressed
+// findings before the gate, and a stray suppressed row must never count.
 const statusFixed = "fixed"
 
 // SeveritySpec is a parsed --fail-on value: a severity set plus the canonical
@@ -142,13 +144,14 @@ type GateResult struct {
 
 // EvaluateGate counts a scan's open findings against the gate. Findings whose
 // Status is "fixed" are resolved issues that only exist in the comparison
-// view; they are excluded so the gate counts problems the scan still reports.
-// The gate trips when any open finding matches the --fail-on set or the open
+// view, and "suppressed" findings were dismissed via fingerprint suppression;
+// both are excluded so the gate counts problems the scan still reports. The
+// gate trips when any open finding matches the --fail-on set or the open
 // total exceeds --max-findings.
 func EvaluateGate(findings []analyzers.Finding, gate GateConfig) GateResult {
 	result := GateResult{Gate: gate}
 	for _, finding := range findings {
-		if finding.Status == statusFixed {
+		if finding.Status == statusFixed || finding.Status == StatusSuppressed {
 			continue
 		}
 		result.OpenTotal++

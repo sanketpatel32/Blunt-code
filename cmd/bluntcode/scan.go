@@ -214,7 +214,9 @@ func (s scanSummary) duration() time.Duration {
 }
 
 // buildScanSummary loads the terminal scan record plus the same
-// comparison data the Markdown report writer uses.
+// comparison data the Markdown report writer uses. Suppressed findings are
+// filtered out here so the severity counts, the --json summary, the JSON
+// report model, and the CI gate all operate on unsuppressed findings only.
 func buildScanSummary(ctx context.Context, db *database.DB, work core.Workspace, scanID string, timedOut bool) (scanSummary, error) {
 	scan, err := db.Scan(ctx, scanID)
 	if err != nil {
@@ -224,6 +226,11 @@ func buildScanSummary(ctx context.Context, db *database.DB, work core.Workspace,
 	if err != nil {
 		return scanSummary{}, err
 	}
+	suppressed, err := db.SuppressedFingerprints(ctx, work.ID)
+	if err != nil {
+		return scanSummary{}, err
+	}
+	findings = scans.FilterSuppressed(findings, suppressed)
 	runs, err := db.AnalyzerRuns(ctx, scanID)
 	if err != nil {
 		return scanSummary{}, err
@@ -266,12 +273,14 @@ func buildScanSummary(ctx context.Context, db *database.DB, work core.Workspace,
 		}
 	}
 	// New/fixed/persistent against the previous completed scan, with exactly
-	// the same coverage rules as the Markdown report.
+	// the same coverage rules as the Markdown report. Suppressed fingerprints
+	// are filtered from both sides so a dismissed finding is never counted as
+	// fixed either.
 	if previousID, prevErr := db.PreviousCompletedScanID(ctx, work.ID, scanID); prevErr == nil {
 		previousFindings, findErr := db.Findings(ctx, previousID)
 		coverage, coverageErr := db.SuccessfulAnalyzerIDs(ctx, scanID)
 		if findErr == nil && coverageErr == nil {
-			diff := scans.Compare(findings, previousFindings, coverage)
+			diff := scans.Compare(findings, scans.FilterSuppressed(previousFindings, suppressed), coverage)
 			summary.hasPrevious = true
 			summary.newCount = len(diff.New)
 			summary.fixedCount = len(diff.Fixed)
@@ -415,9 +424,9 @@ func runScanCommand(args []string, stdout, stderr io.Writer) int {
 
 // buildScanReportModel assembles the full report model behind
 // `--format json`. It mirrors the API server's reportModel loader (same
-// metrics, comparison coverage rule, and file-count placeholders) so the CLI
-// document and the GET /api/v1/scans/{id}/findings.json download carry the
-// same data through the same renderer.
+// metrics, comparison coverage rule, suppression filter, and file-count
+// placeholders) so the CLI document and the GET /api/v1/scans/{id}/findings.json
+// download carry the same data through the same renderer.
 func buildScanReportModel(ctx context.Context, db *database.DB, work core.Workspace, summary scanSummary) (reports.Model, error) {
 	scan, err := db.Scan(ctx, summary.scanID)
 	if err != nil {
@@ -427,12 +436,18 @@ func buildScanReportModel(ctx context.Context, db *database.DB, work core.Worksp
 	if err != nil {
 		return reports.Model{}, err
 	}
+	// summary.findings is already suppression-filtered by buildScanSummary;
+	// the previous scan's findings need the same treatment here.
+	suppressed, err := db.SuppressedFingerprints(ctx, work.ID)
+	if err != nil {
+		return reports.Model{}, err
+	}
 	comparison := reports.Comparison{}
 	if previousID, prevErr := db.PreviousCompletedScanID(ctx, work.ID, summary.scanID); prevErr == nil {
 		previousFindings, findErr := db.Findings(ctx, previousID)
 		coverage, coverageErr := db.SuccessfulAnalyzerIDs(ctx, summary.scanID)
 		if findErr == nil && coverageErr == nil {
-			diff := scans.Compare(summary.findings, previousFindings, coverage)
+			diff := scans.Compare(summary.findings, scans.FilterSuppressed(previousFindings, suppressed), coverage)
 			comparison = reports.Comparison{New: diff.New, Fixed: diff.Fixed, Persistent: diff.Persistent, UnknownAnalyzerIDs: diff.UnknownAnalyzerIDs}
 		}
 	}

@@ -33,6 +33,18 @@ type PathOverride struct {
 	Mode         string `json:"mode"`
 }
 
+// Suppression records one dismissed finding fingerprint for a workspace (the
+// "ignore this finding forever" workflow). Suppressed findings keep being
+// stored by future scans, but they are excluded from scan totals, severity
+// counts, reports, exports, and the CI gate; the findings list still shows
+// them with the status "suppressed".
+type Suppression struct {
+	WorkspaceID string    `json:"workspace_id"`
+	Fingerprint string    `json:"fingerprint"`
+	Reason      string    `json:"reason,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
 type Scan struct {
 	ID                 string        `json:"id"`
 	WorkspaceID        string        `json:"workspace_id"`

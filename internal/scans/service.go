@@ -440,12 +440,20 @@ func (s *Service) writeReport(scan core.Scan, work core.Workspace, files []core.
 	if err != nil {
 		return "", err
 	}
+	// Suppressed findings stay stored, but reports never carry them: filter
+	// them from both sides of the comparison so a dismissed fingerprint is
+	// neither new/persistent nor falsely reported as fixed.
+	suppressed, err := s.db.SuppressedFingerprints(context.Background(), work.ID)
+	if err != nil {
+		return "", err
+	}
+	findings = FilterSuppressed(findings, suppressed)
 	comparison := reports.Comparison{}
 	if previousID, previousErr := s.db.PreviousCompletedScanID(context.Background(), work.ID, scan.ID); previousErr == nil {
 		previousFindings, findErr := s.db.Findings(context.Background(), previousID)
 		coverage, coverageErr := s.db.SuccessfulAnalyzerIDs(context.Background(), scan.ID)
 		if findErr == nil && coverageErr == nil {
-			diff := Compare(findings, previousFindings, coverage)
+			diff := Compare(findings, FilterSuppressed(previousFindings, suppressed), coverage)
 			comparison = reports.Comparison{New: diff.New, Fixed: diff.Fixed, Persistent: diff.Persistent, UnknownAnalyzerIDs: diff.UnknownAnalyzerIDs}
 		}
 	}

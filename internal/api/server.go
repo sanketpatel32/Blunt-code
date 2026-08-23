@@ -90,6 +90,9 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("PUT /api/v1/workspaces/{id}/path-overrides", s.putPathOverrides)
 	s.mux.HandleFunc("GET /api/v1/workspaces/{id}/rules", s.getRules)
 	s.mux.HandleFunc("PUT /api/v1/workspaces/{id}/rules", s.putRules)
+	s.mux.HandleFunc("GET /api/v1/workspaces/{id}/suppressions", s.getSuppressions)
+	s.mux.HandleFunc("POST /api/v1/workspaces/{id}/suppressions", s.addSuppression)
+	s.mux.HandleFunc("DELETE /api/v1/workspaces/{id}/suppressions/{fingerprint}", s.removeSuppression)
 	s.mux.HandleFunc("GET /api/v1/workspaces/{id}/scans", s.listScans)
 	s.mux.HandleFunc("POST /api/v1/workspaces/{id}/scans", s.startScan)
 	s.mux.HandleFunc("GET /api/v1/scans", s.recentScans)
@@ -681,6 +684,101 @@ func (s *Server) putRules(w http.ResponseWriter, r *http.Request) {
 	}
 	s.getRules(w, r)
 }
+
+// maxSuppressionReasonLength bounds the optional dismissal note; a reason is a
+// short human annotation, not a document.
+const maxSuppressionReasonLength = 500
+
+// validFingerprint accepts exactly the shape Finding.SetFingerprint produces:
+// a 64-character lowercase sha256 hex string.
+func validFingerprint(value string) bool {
+	if len(value) != 64 {
+		return false
+	}
+	for _, c := range value {
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// getSuppressions lists the workspace's dismissed finding fingerprints.
+func (s *Server) getSuppressions(w http.ResponseWriter, r *http.Request) {
+	work, ok := s.workspace(r)
+	if !ok {
+		fail(w, 404, "WORKSPACE_NOT_FOUND", "Workspace was not found.")
+		return
+	}
+	items, err := s.db.Suppressions(r.Context(), work.ID)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load suppressions.")
+		return
+	}
+	writeJSON(w, 200, map[string]any{"items": items})
+}
+
+// addSuppression records a dismissed finding fingerprint (the "ignore this
+// finding forever" workflow). The suppression is keyed by workspace and
+// fingerprint, so every future scan of this workspace still stores matching
+// findings but excludes them from totals, reports, exports, and the CI gate.
+// Suppressing while a scan is running is safe: that scan keeps its
+// already-stored findings and the suppression applies from the next scan.
+func (s *Server) addSuppression(w http.ResponseWriter, r *http.Request) {
+	work, ok := s.workspace(r)
+	if !ok {
+		fail(w, 404, "WORKSPACE_NOT_FOUND", "Workspace was not found.")
+		return
+	}
+	var input struct {
+		Fingerprint string `json:"fingerprint"`
+		Reason      string `json:"reason"`
+	}
+	if err := decode(r, &input); err != nil {
+		fail(w, 400, "INVALID_JSON", "fingerprint is required.")
+		return
+	}
+	input.Fingerprint = strings.ToLower(strings.TrimSpace(input.Fingerprint))
+	if !validFingerprint(input.Fingerprint) {
+		fail(w, 400, "INVALID_FINGERPRINT", "fingerprint must be a 64-character sha256 hex string.")
+		return
+	}
+	input.Reason = strings.TrimSpace(input.Reason)
+	if len(input.Reason) > maxSuppressionReasonLength {
+		fail(w, 400, "INVALID_REASON", fmt.Sprintf("reason must be at most %d characters.", maxSuppressionReasonLength))
+		return
+	}
+	item, err := s.db.AddSuppression(r.Context(), work.ID, input.Fingerprint, input.Reason)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not save suppression.")
+		return
+	}
+	writeJSON(w, 201, item)
+}
+
+// removeSuppression deletes one dismissal; the next scan stores and counts the
+// finding normally again.
+func (s *Server) removeSuppression(w http.ResponseWriter, r *http.Request) {
+	work, ok := s.workspace(r)
+	if !ok {
+		fail(w, 404, "WORKSPACE_NOT_FOUND", "Workspace was not found.")
+		return
+	}
+	fingerprint := strings.ToLower(strings.TrimSpace(r.PathValue("fingerprint")))
+	if !validFingerprint(fingerprint) {
+		fail(w, 400, "INVALID_FINGERPRINT", "fingerprint must be a 64-character sha256 hex string.")
+		return
+	}
+	if err := s.db.RemoveSuppression(r.Context(), work.ID, fingerprint); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			fail(w, 404, "SUPPRESSION_NOT_FOUND", "This fingerprint was not suppressed.")
+			return
+		}
+		fail(w, 500, "DATABASE_ERROR", "Could not remove suppression.")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
 func (s *Server) listScans(w http.ResponseWriter, r *http.Request) {
 	work, ok := s.workspace(r)
 	if !ok {
@@ -1220,8 +1318,8 @@ func findingQueryFilter(r *http.Request) (database.FindingFilter, error) {
 	if filter.Severity != "" && !oneOf(filter.Severity, "critical", "high", "medium", "low", "info") {
 		return filter, fmt.Errorf("severity must be critical, high, medium, low, or info")
 	}
-	if filter.Status != "" && !oneOf(filter.Status, "new", "persistent") {
-		return filter, fmt.Errorf("status must be new or persistent")
+	if filter.Status != "" && !oneOf(filter.Status, "new", "persistent", "suppressed") {
+		return filter, fmt.Errorf("status must be new, persistent, or suppressed")
 	}
 	if filter.Sort != "" && !oneOf(filter.Sort, "severity", "path", "analyzer", "status") {
 		return filter, fmt.Errorf("sort must be severity, path, analyzer, or status")
@@ -1274,6 +1372,15 @@ func (s *Server) reportModel(ctx context.Context, scan core.Scan, work core.Work
 	if err != nil {
 		return reports.Model{}, err
 	}
+	// Suppressed findings never enter the model, so every renderer built from
+	// it (JSON, SARIF, HTML, Markdown regeneration) excludes them. Filtering
+	// both sides of the comparison also keeps a dismissed fingerprint from
+	// being reported as fixed.
+	suppressed, err := s.db.SuppressedFingerprints(ctx, work.ID)
+	if err != nil {
+		return reports.Model{}, err
+	}
+	findings = scans.FilterSuppressed(findings, suppressed)
 	metrics, err := s.db.Metrics(ctx, scan.ID)
 	if err != nil {
 		return reports.Model{}, err
@@ -1287,7 +1394,7 @@ func (s *Server) reportModel(ctx context.Context, scan core.Scan, work core.Work
 		previous, previousFindingsErr := s.db.Findings(ctx, previousID)
 		succeeded, succeededErr := s.db.SuccessfulAnalyzerIDs(ctx, scan.ID)
 		if previousFindingsErr == nil && succeededErr == nil {
-			comparison = scans.Compare(findings, previous, succeeded)
+			comparison = scans.Compare(findings, scans.FilterSuppressed(previous, suppressed), succeeded)
 		}
 	}
 	startedAt := scan.StartedAt
