@@ -29,6 +29,10 @@ type Check struct {
 	Status Status `json:"status"`
 	Detail string `json:"detail,omitempty"`
 	Hard   bool   `json:"hard"`
+	// Repair records what the `--fix` pass did about this check. It is only
+	// ever set when fixing is enabled, so plain diagnostics (human and JSON)
+	// serialize exactly as before. See fix.go.
+	Repair *Repair `json:"repair,omitempty"`
 }
 
 type Result struct {
@@ -41,11 +45,19 @@ type Options struct {
 	Version string
 	Paths   config.Paths
 	Tools   *tools.Service
+	// Fix enables the repair pass that follows diagnosis. Repairs are local
+	// and mechanical only (missing directories, stale bundled Semgrep rules,
+	// interrupted-install leftovers): doctor still never downloads, installs,
+	// or starts anything, and repairs are refused while another Blunt Code
+	// process holds the data-directory lock.
+	Fix bool
 }
 
 // Run only reads installed-tool state and performs local filesystem, SQLite,
 // and loopback bind checks. It does not download, install, start analyzers, or
-// send a request anywhere.
+// send a request anywhere. With Fix set, a repair pass follows diagnosis; it
+// changes only local files under the single-instance data-directory lock and
+// keeps the same no-network guarantee.
 func Run(ctx context.Context, options Options) Result {
 	result := Result{Version: options.Version}
 	result.add(Check{Name: "Blunt Code", Status: StatusOK, Detail: options.Version, Hard: true})
@@ -54,6 +66,9 @@ func Run(ctx context.Context, options Options) Result {
 	result.add(databaseCheck(ctx, options.Paths))
 	result.add(loopbackCheck())
 	result.addTools(options.Tools)
+	if options.Fix {
+		applyRepairs(options, &result)
+	}
 	result.OK = true
 	for _, check := range result.Checks {
 		if check.Hard && check.Status == StatusFail {
@@ -212,6 +227,9 @@ func (r Result) WriteHuman(w io.Writer) {
 		line := fmt.Sprintf("%s: %s", check.Name, strings.ToUpper(string(check.Status)))
 		if check.Detail != "" {
 			line += " — " + check.Detail
+		}
+		if check.Repair != nil {
+			line += "; " + check.Repair.phrase()
 		}
 		fmt.Fprintln(w, line)
 	}

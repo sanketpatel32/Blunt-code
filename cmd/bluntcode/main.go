@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"net"
@@ -61,7 +62,7 @@ func runServer(args []string) {
 	}
 	if flags.NArg() > 1 {
 		fmt.Fprintln(os.Stderr, "usage: bluntcode [path] [--no-browser] [--port N]")
-		fmt.Fprintln(os.Stderr, "       bluntcode doctor [--json]")
+		fmt.Fprintln(os.Stderr, "       bluntcode doctor [--json] [--fix]")
 		fmt.Fprintln(os.Stderr, "       bluntcode scan <path> [--profile quick|standard|deep] [--json] [--timeout 30m] [--quiet] [--fail-on high+] [--max-findings N]")
 		os.Exit(2)
 	}
@@ -118,15 +119,37 @@ func runServer(args []string) {
 	}
 }
 
-func runDoctor(args []string) {
+const doctorUsage = "usage: bluntcode doctor [--json] [--fix]"
+
+// doctorConfig is the validated command line of `bluntcode doctor`.
+type doctorConfig struct {
+	json bool
+	fix  bool
+}
+
+// parseDoctorFlags parses the `bluntcode doctor` command line. --fix is a
+// boolean flag (it takes no value) and combines with --json in any order.
+// Parse failures and any positional argument are usage errors, exactly as
+// before --fix existed.
+func parseDoctorFlags(args []string, errOut io.Writer) (doctorConfig, error) {
 	flags := flag.NewFlagSet("doctor", flag.ContinueOnError)
-	flags.SetOutput(os.Stderr)
-	jsonOutput := flags.Bool("json", false, "write JSON diagnostics")
+	flags.SetOutput(errOut)
+	var cfg doctorConfig
+	flags.BoolVar(&cfg.json, "json", false, "write JSON diagnostics")
+	flags.BoolVar(&cfg.fix, "fix", false, "repair mechanical problems (missing data directories, stale local Semgrep rules, interrupted-install leftovers); repairs are refused while another Blunt Code process holds the data directory")
 	if err := flags.Parse(args); err != nil {
-		os.Exit(2)
+		return doctorConfig{}, err
 	}
 	if flags.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "usage: bluntcode doctor [--json]")
+		fmt.Fprintln(errOut, doctorUsage)
+		return doctorConfig{}, fmt.Errorf("doctor takes no positional arguments")
+	}
+	return cfg, nil
+}
+
+func runDoctor(args []string) {
+	cfg, err := parseDoctorFlags(args, os.Stderr)
+	if err != nil {
 		os.Exit(2)
 	}
 	paths, err := config.DefaultPaths()
@@ -141,8 +164,9 @@ func runDoctor(args []string) {
 		Version: version,
 		Paths:   paths,
 		Tools:   tools.NewService(paths.ToolsDir, manifest, true),
+		Fix:     cfg.fix,
 	})
-	if *jsonOutput {
+	if cfg.json {
 		encoder := json.NewEncoder(os.Stdout)
 		encoder.SetIndent("", "  ")
 		if err := encoder.Encode(result); err != nil {
