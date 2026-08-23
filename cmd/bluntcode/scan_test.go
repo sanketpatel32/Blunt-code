@@ -511,7 +511,7 @@ func TestRunScanCommandRejectsBadGateFlagWithExitCodeTwo(t *testing.T) {
 	}
 }
 
-// --- report format flag: --format text|json -------------------------------------
+// --- report format flag: --format text|json|github -------------------------------
 
 func TestParseScanFlagsFormatFlag(t *testing.T) {
 	cases := []struct {
@@ -523,7 +523,9 @@ func TestParseScanFlagsFormatFlag(t *testing.T) {
 		{"absent keeps the historical text output", []string{`C:\proj`}, "", false},
 		{"explicit text", []string{"--format", "text", `C:\proj`}, "text", false},
 		{"json selects the full report document", []string{"--format", "json", `C:\proj`}, "json", false},
+		{"github selects the annotation stream", []string{"--format", "github", `C:\proj`}, "github", false},
 		{"format after the path works", []string{`C:\proj`, "--format", "json"}, "json", false},
+		{"github format after the path works", []string{`C:\proj`, "--format", "github"}, "github", false},
 		{"json summary flag still accepted with text format", []string{"--json", "--format", "text", `C:\proj`}, "text", true},
 	}
 	for _, item := range cases {
@@ -549,9 +551,11 @@ func TestParseScanFlagsRejectsBadFormatInput(t *testing.T) {
 		args    []string
 		message string
 	}{
-		{"unknown format", []string{"--format", "yaml", `C:\proj`}, "format must be text or json"},
-		{"sarif is api-only", []string{"--format", "sarif", `C:\proj`}, "format must be text or json"},
+		{"unknown format", []string{"--format", "yaml", `C:\proj`}, "format must be text, json, or github"},
+		{"sarif is api-only", []string{"--format", "sarif", `C:\proj`}, "format must be text, json, or github"},
+		{"github annotations misspelled", []string{"--format", "actions", `C:\proj`}, "format must be text, json, or github"},
 		{"json summary combined with report format", []string{"--json", "--format", "json", `C:\proj`}, "--json cannot be combined with --format json"},
+		{"json summary combined with github format", []string{"--json", "--format", "github", `C:\proj`}, "--json cannot be combined with --format github"},
 	}
 	for _, item := range cases {
 		t.Run(item.name, func(t *testing.T) {
@@ -578,7 +582,7 @@ func TestRunScanCommandRejectsBadFormatFlagWithExitCodeTwo(t *testing.T) {
 	if out.Len() != 0 {
 		t.Fatalf("stdout = %q", out.String())
 	}
-	if !strings.Contains(errOut.String(), "format must be text or json") {
+	if !strings.Contains(errOut.String(), "format must be text, json, or github") {
 		t.Fatalf("reason missing: %q", errOut.String())
 	}
 }

@@ -37,15 +37,18 @@ const (
 	scanStatePollInterval = 2 * time.Second
 )
 
-const scanUsage = "usage: bluntcode scan <path> [--profile quick|standard|deep] [--format text|json] [--json] [--timeout 30m] [--quiet] [--fail-on high+] [--max-findings N] [--baseline <scan-id-or-sarif>] [--jobs N]"
+const scanUsage = "usage: bluntcode scan <path> [--profile quick|standard|deep] [--format text|json|github] [--json] [--timeout 30m] [--quiet] [--fail-on high+] [--max-findings N] [--baseline <scan-id-or-sarif>] [--jobs N]"
 
 // The stdout report formats of `bluntcode scan`. text (the default) keeps the
 // historical human summary; json prints the full versioned JSON report
-// document that GET /api/v1/scans/{id}/findings.json also serves. The compact
-// summary behind --json stays a separate, unchanged output.
+// document that GET /api/v1/scans/{id}/findings.json also serves; github
+// prints GitHub Actions workflow-command annotations that the runner turns
+// into inline PR annotations. The compact summary behind --json stays a
+// separate, unchanged output.
 const (
-	scanFormatText = "text"
-	scanFormatJSON = "json"
+	scanFormatText   = "text"
+	scanFormatJSON   = "json"
+	scanFormatGitHub = "github"
 )
 
 // scanConfig is the validated command line of `bluntcode scan`.
@@ -54,8 +57,9 @@ type scanConfig struct {
 	profile string
 	json    bool
 	// format selects the stdout report: the human summary (text, the
-	// historical default) or the full JSON report document (json). The empty
-	// value means text, so an omitted flag keeps the pre-flag behavior.
+	// historical default), the full JSON report document (json), or the
+	// GitHub Actions annotation stream (github). The empty value means text,
+	// so an omitted flag keeps the pre-flag behavior.
 	format  string
 	timeout time.Duration
 	quiet   bool
@@ -82,7 +86,7 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	flags := flag.NewFlagSet("scan", flag.ContinueOnError)
 	flags.SetOutput(errOut)
 	profile := flags.String("profile", "standard", "scan profile: quick, standard, or deep")
-	format := flags.String("format", "", "stdout report format: text (human summary, the default) or json (the full JSON report document)")
+	format := flags.String("format", "", "stdout report format: text (human summary, the default), json (the full JSON report document), or github (GitHub Actions annotations)")
 	jsonOut := flags.Bool("json", false, "print a machine-readable JSON summary instead of human text")
 	timeout := flags.Duration("timeout", scanDefaultTimeout, "abort the scan when it exceeds this duration (for example 5m or 90s)")
 	quiet := flags.Bool("quiet", false, "suppress progress lines on stderr; the summary is still printed")
@@ -149,11 +153,14 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	if cfg.profile != analyzers.ProfileQuick && cfg.profile != analyzers.ProfileStandard && cfg.profile != analyzers.ProfileDeep {
 		return usageError("profile must be quick, standard, or deep")
 	}
-	if cfg.format != "" && cfg.format != scanFormatText && cfg.format != scanFormatJSON {
-		return usageError("format must be text or json")
+	if cfg.format != "" && cfg.format != scanFormatText && cfg.format != scanFormatJSON && cfg.format != scanFormatGitHub {
+		return usageError("format must be text, json, or github")
 	}
 	if cfg.json && cfg.format == scanFormatJSON {
 		return usageError("--json cannot be combined with --format json: --json prints the compact summary, --format json the full report")
+	}
+	if cfg.json && cfg.format == scanFormatGitHub {
+		return usageError("--json cannot be combined with --format github: --json prints the compact summary, --format github the annotation stream")
 	}
 	if cfg.timeout <= 0 {
 		return usageError("timeout must be a positive duration such as 5m")
@@ -389,13 +396,22 @@ func runScanCommand(args []string, stdout, stderr io.Writer) int {
 	}
 	summary.state = outcome.finalState
 	switch {
-	case cfg.format == scanFormatJSON:
+	case cfg.format == scanFormatJSON || cfg.format == scanFormatGitHub:
 		model, err := buildScanReportModel(ctx, app.db, work, summary)
 		if err != nil {
 			fmt.Fprintf(stderr, "bluntcode scan: could not load report: %v\n", err)
 			return 1
 		}
-		if _, err := stdout.Write(reports.JSON(model)); err != nil {
+		// Both document formats share the report model and go to stdout; the
+		// annotation stream especially must stay on stdout because that is
+		// the only stream GitHub Actions scans for workflow commands. The
+		// gate and baseline summaries below keep writing to stderr, so the
+		// formats compose with the CI flags without interleaving.
+		document := reports.JSON(model)
+		if cfg.format == scanFormatGitHub {
+			document = reports.GitHubAnnotations(model)
+		}
+		if _, err := stdout.Write(document); err != nil {
 			fmt.Fprintf(stderr, "bluntcode scan: could not write report: %v\n", err)
 			return 1
 		}
@@ -435,7 +451,7 @@ func runScanCommand(args []string, stdout, stderr io.Writer) int {
 }
 
 // buildScanReportModel assembles the full report model behind
-// `--format json`. It mirrors the API server's reportModel loader (same
+// `--format json` and `--format github`. It mirrors the API server's reportModel loader (same
 // metrics, comparison coverage rule, suppression filter, and file-count
 // placeholders) so the CLI document and the GET /api/v1/scans/{id}/findings.json
 // download carry the same data through the same renderer.
