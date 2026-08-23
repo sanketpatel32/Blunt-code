@@ -74,6 +74,7 @@ func (s *Server) SetShutdown(fn func()) { s.shutdown = fn }
 func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/health", s.health)
 	s.mux.HandleFunc("GET /api/v1/meta", s.meta)
+	s.mux.HandleFunc("GET /api/v1/stats", s.globalStats)
 	s.mux.HandleFunc("GET /api/v1/settings", s.getSettings)
 	s.mux.HandleFunc("PATCH /api/v1/settings", s.updateSettings)
 	s.mux.HandleFunc("GET /api/v1/workspaces", s.listWorkspaces)

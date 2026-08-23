@@ -636,6 +636,59 @@ func (d *DB) ScanSummary(ctx context.Context) (ScanSummary, error) {
 	return summary, nil
 }
 
+// GlobalStats holds the cross-workspace overview served at GET /api/v1/stats.
+// Findings mirror the dashboard summary's semantics: the persisted severity
+// split of the single latest completed scan per workspace, so rescanning one
+// project never double-counts its findings.
+type GlobalStats struct {
+	Workspaces   int            `json:"workspaces"`
+	Scans        GlobalScans    `json:"scans"`
+	Findings     GlobalFindings `json:"findings"`
+	Suppressions int            `json:"suppressions"`
+}
+
+// GlobalScans splits the scan history into the counters the overview shows:
+// every scan, the producing terminal states (completed plus
+// completed_with_warnings), and the in-flight states (anything non-terminal,
+// the same active set ScanSummary counts).
+type GlobalScans struct {
+	Total     int `json:"total"`
+	Completed int `json:"completed"`
+	Running   int `json:"running"`
+}
+
+// GlobalFindings is the severity rollup over each workspace's latest completed
+// scan. Severity reuses the fixed SeverityCounts struct (never a map) so the
+// JSON keys are stable and an empty database serializes zeros, not nulls.
+type GlobalFindings struct {
+	Severity SeverityCounts `json:"severity"`
+	Total    int            `json:"total"`
+}
+
+// GlobalStats computes the overview in two aggregate queries, following the
+// ScanSummary pattern: one row of scalar subselects for the counters, then the
+// latest-completed-per-workspace window (ROW_NUMBER over workspace partitions
+// of the producing terminal states, the same recency rule the dashboard
+// summary uses) summed in SQL. No per-workspace queries are issued, and an
+// empty database returns the zero value rather than an error.
+func (d *DB) GlobalStats(ctx context.Context) (GlobalStats, error) {
+	var stats GlobalStats
+	if err := d.SQL.QueryRowContext(ctx, `SELECT
+		(SELECT COUNT(*) FROM workspaces),
+		(SELECT COUNT(*) FROM scans),
+		(SELECT COUNT(*) FROM scans WHERE state IN ('completed','completed_with_warnings')),
+		(SELECT COUNT(*) FROM scans WHERE state NOT IN ('completed','completed_with_warnings','failed','cancelled','interrupted')),
+		(SELECT COUNT(*) FROM suppressed_findings)`).Scan(&stats.Workspaces, &stats.Scans.Total, &stats.Scans.Completed, &stats.Scans.Running, &stats.Suppressions); err != nil {
+		return GlobalStats{}, err
+	}
+	if err := d.SQL.QueryRowContext(ctx, `SELECT COALESCE(SUM(latest.critical_count),0),COALESCE(SUM(latest.high_count),0),COALESCE(SUM(latest.medium_count),0),COALESCE(SUM(latest.low_count),0),COALESCE(SUM(latest.info_count),0),COALESCE(SUM(latest.total_findings),0) FROM (
+		SELECT critical_count,high_count,medium_count,low_count,info_count,total_findings,ROW_NUMBER() OVER (PARTITION BY workspace_id ORDER BY COALESCE(finished_at,started_at) DESC,id DESC) AS recency FROM scans WHERE state IN ('completed','completed_with_warnings')
+	) latest WHERE recency=1`).Scan(&stats.Findings.Severity.Critical, &stats.Findings.Severity.High, &stats.Findings.Severity.Medium, &stats.Findings.Severity.Low, &stats.Findings.Severity.Info, &stats.Findings.Total); err != nil {
+		return GlobalStats{}, err
+	}
+	return stats, nil
+}
+
 type AnalyzerRunInput struct {
 	AnalyzerID string
 	Version    string
