@@ -1,4 +1,4 @@
-import type { FindingPage, FixedFindingsResponse, PathOverride, RecentScansResponse, Report, Scan, SeverityTrendPoint, SourcePreview, Suppression, Tool, TreeNode, Workspace } from './types';
+import type { FindingPage, FixedFindingsResponse, GlobalStats, PathOverride, RecentScansResponse, Report, Scan, SeverityTrendPoint, SourcePreview, Suppression, Tool, TreeNode, Workspace } from './types';
 
 const PREFIX = '/api/v1';
 
@@ -62,6 +62,8 @@ export const api = {
     return list<SeverityTrendPoint>(await request<SeverityTrendPoint[] | { items?: SeverityTrendPoint[] }>(`/workspaces/${encodeURIComponent(id)}/trends${query}`));
   },
   recentScans: () => request<RecentScansResponse>('/scans'),
+  /** Cross-workspace overview for the dashboard: counters plus the latest-completed-per-workspace severity rollup. */
+  stats: () => request<GlobalStats>('/stats'),
   startScan: (id: string, profile?: string) => request<Scan>(`/workspaces/${encodeURIComponent(id)}/scans`, { method: 'POST', body: JSON.stringify(profile ? { profile } : {}) }),
   scan: async (id: string) => {
     const response = await request<Scan | { scan: Scan; analyzer_runs?: Scan['analyzer_runs'] } | null>(`/scans/${encodeURIComponent(id)}`);

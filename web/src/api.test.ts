@@ -47,6 +47,14 @@ describe('API client', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/workspaces/ws-1', expect.objectContaining({ method: 'DELETE' }));
   });
 
+  it('reads the global overview from the stats endpoint', async () => {
+    const payload = { workspaces: 3, scans: { total: 5, completed: 3, running: 1 }, findings: { severity: { critical: 2, high: 0, medium: 1, low: 0, info: 0 }, total: 3 }, suppressions: 3, generated_at: '2026-08-24T12:00:00Z' };
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(payload), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(api.stats()).resolves.toEqual(payload);
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/stats', expect.anything());
+  });
+
   it('requests a graceful local server stop', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ state: 'stopping' }), { status: 202 }));
     vi.stubGlobal('fetch', fetchMock);

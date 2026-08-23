@@ -7,6 +7,7 @@ import { message } from '../lib/notice';
 import { date, relativeTime } from '../lib/format';
 import { useLoad } from '../hooks/useLoad';
 import { Empty, ErrorPanel, LanguageBadges, SummaryCard } from '../components/ui';
+import { StatsOverview } from '../components/StatsOverview';
 import { FolderIcon, ScanIcon } from '../components/icons';
 import { SkeletonCards, SkeletonLines, SkeletonTable } from '../components/skeletons';
 import { ConfirmationDialog } from '../components/dialogs';
@@ -29,6 +30,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
     catch (e) { notify({ kind: 'error', text: message(e) }); setQuickScanning(false); }
   }
   return <div className="page dashboard-page"><header className="dashboard-heading"><div><h1>Workspaces</h1><p>Run a local scan, then follow every result in one place.</p></div><div className="dashboard-actions"><button type="button" className="button secondary" onClick={() => void quickScan()} disabled={!latestWorkspaceId || quickScanning} title={latestWorkspaceId ? 'Run a scan on the most recently scanned workspace' : undefined}>{quickScanning ? 'Starting scan…' : 'Scan latest workspace'}</button><button type="button" className="button primary" onClick={onAdd}>+ Add workspace</button></div></header>
+    <StatsOverview />
     {recent.loading ? <div className="dashboard-summary-loading"><SkeletonCards count={5} /></div> : summary && <section className="summary-grid dashboard-summary" aria-label="Scan activity summary">
       <article className={`summary-card${(summary.active_scans ?? 0) > 0 ? ' live' : ''}`}><strong>{summary.active_scans ?? 0}{(summary.active_scans ?? 0) > 0 && <i className="pulse-dot" aria-hidden="true" />}</strong><span>Active scans</span></article>
       <SummaryCard label="Critical + high" value={(summary.critical_count ?? 0) + (summary.high_count ?? 0)} tone="high" />

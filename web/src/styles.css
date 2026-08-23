@@ -265,6 +265,18 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 @media (prefers-reduced-motion: reduce) { .summary-card .pulse-dot { animation: none; } }
 
+/* global overview · GET /api/v1/stats: the at-a-glance strip above the scan
+   activity. Cards reuse the .summary-card language on an auto-fit grid (the
+   count changes when the tools pair is unwired), and the severity row reuses
+   the report's stacked severity-bar + counted legend so severity colors read
+   the same everywhere and invert with the theme. */
+.stats-overview { margin-top: var(--space-sm); }
+.stats-overview .section-head { margin: 0 0 var(--space-md); }
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr)); gap: var(--space-sm); }
+.stats-overview-loading .summary-grid { grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr)); margin: 0; }
+.summary-card .card-split { color: var(--color-ink-faint); font: 600 var(--text-xs) var(--font-mono); }
+.stats-distribution { margin: var(--space-sm) 0 var(--space-lg); }
+
 /* dialogs a11y */
 .dialog-backdrop { cursor: default; }
 .dialog-backdrop dialog { cursor: auto; }

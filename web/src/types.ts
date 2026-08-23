@@ -76,6 +76,22 @@ export interface RecentScansResponse {
   summary?: ScanSummary;
 }
 
+/** Tool readiness pair on the global overview; the whole field is absent when no tools service is wired into the server. */
+export interface StatsTools {
+  total: number;
+  ready: number;
+}
+
+/** Global overview from GET /api/v1/stats. Findings roll up the latest completed scan per workspace (rescanning one project never double-counts it), `tools` is omitted when unwired, and `generated_at` is the RFC3339 snapshot time. */
+export interface GlobalStats {
+  workspaces: number;
+  scans: { total: number; completed: number; running: number };
+  findings: { severity: Record<Severity, number>; total: number };
+  suppressions: number;
+  tools?: StatsTools;
+  generated_at: string;
+}
+
 /** One completed scan on the workspace severity trend chart; points arrive oldest-first and `finished_at` falls back to the start time. */
 export interface SeverityTrendPoint {
   scan_id: string;
