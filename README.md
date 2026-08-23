@@ -18,6 +18,7 @@
 - [🛠️ Managed Analyzers & Languages](#️-managed-analyzers--languages)
 - [🖥️ Command-Line Interface (CLI)](#️-command-line-interface-cli)
 - [📁 Data Storage & Privacy](#-data-storage--privacy)
+- [📚 Documentation](#-documentation)
 - [❓ Troubleshooting & FAQ](#-troubleshooting--faq)
 - [🗑️ Uninstalling](#️-uninstalling)
 - [🤝 Contributing](#-contributing)
@@ -32,7 +33,7 @@
 - **Multi-Tool Coverage:** Runs **Ruff**, **Biome**, **Semgrep**, and **SonarQube** concurrently to check for lint issues, security SAST vulnerabilities, formatting errors, and code smells — plus built-in **secrets** and **TODO/FIXME** detectors that ship in the binary with nothing extra to install.
 - **Interactive UI Dashboard:** Built-in web app with a home dashboard, real-time scan logs, file-level previews, severity visualizations, rich filtering by tool/severity, severity trends across scan history, and per-finding suppression (with reason) that hides dismissed findings from future scans and gates.
 - **Reports in Every Format:** One-click export to **Markdown**, standalone **HTML**, **SARIF 2.1.0** (VS Code / GitHub code scanning), **CSV**, and **JSON** — or emit inline **GitHub Actions annotations** straight from the CLI.
-- **CI Gates, Baselines & Watch Mode:** `--fail-on high+` / `--max-findings N` turn a headless scan into a build gate, `--baseline` (a previous scan ID or SARIF file) excludes known findings so gates start passing on day one, `--jobs N` parallelizes analyzers, `--watch` rescans automatically as files change, and a committed `.bluntcodeignore` shares excludes per project.
+- **CI Gates, Baselines & Watch Mode:** `--fail-on high+` / `--max-findings N` turn a headless scan into a build gate, `--baseline` (a previous scan ID or SARIF file) excludes known findings so gates start passing on day one, `--jobs N` parallelizes analyzers, `--watch` rescans automatically as files change, and a committed `.bluntcodeignore` shares excludes per project. See [docs/ci.md](docs/ci.md) for the full CI guide.
 - **Dark Mode & Keyboard Shortcuts:** Light/dark theme that follows your OS preference, and keyboard-first navigation (`g`+`h/w/t/s` to jump between pages, `/` to search, `?` for the shortcut cheat sheet).
 - **Offline Capable:** Once analyzers are downloaded on initial setup, full scans can run 100% offline without internet access.
 
@@ -200,7 +201,7 @@ Every scan runs in one of three profiles:
 .\bluntcode.exe doctor --fix
 ```
 
-`bluntcode scan` exits with code `0` when the scan completes (warnings included), `1` when it fails, is cancelled, or a `--fail-on`/`--max-findings` gate trips, `2` for usage errors, and `130` after Ctrl+C — so CI pipelines can gate on it directly. With `--baseline`, the gate only counts findings that are new since the baseline.
+`bluntcode scan` exits with code `0` when the scan completes (warnings included), `1` when it fails, is cancelled, or a `--fail-on`/`--max-findings` gate trips, `2` for usage errors, and `130` after Ctrl+C — so CI pipelines can gate on it directly. With `--baseline`, the gate only counts findings that are new since the baseline. For the full CI guide — baselines, output formats, GitHub Actions annotations, and a ready-to-use workflow — see [docs/ci.md](docs/ci.md).
 
 ---
 
@@ -219,6 +220,19 @@ Blunt Code is designed from the ground up for **complete data privacy**:
 ├── logs\              # Redacted diagnostic log files
 └── tools\             # Sandboxed managed tool binaries (Ruff, Biome, Semgrep, SonarQube)
 ```
+
+For the complete data layout, `bluntcode config`, environment overrides, offline mode, and scan profiles, see [docs/configuration.md](docs/configuration.md).
+
+---
+
+## 📚 Documentation
+
+- [docs/ci.md](docs/ci.md) — CI guide: headless scans, exit codes, `--fail-on`/`--max-findings` gates, baselines, output formats (text/JSON/SARIF/GitHub annotations), and a complete GitHub Actions workflow.
+- [docs/ignoring-findings.md](docs/ignoring-findings.md) — Inline `bluntcode:ignore` comments, fingerprint-based suppressions, external-tool ignores, and `.bluntcodeignore` patterns.
+- [docs/configuration.md](docs/configuration.md) — Data layout, `bluntcode config`, `BLUNTCODE_SONAR_STARTUP_TIMEOUT`, offline mode, and scan profiles.
+- [docs/architecture.md](docs/architecture.md) — How the Go backend, analyzer boundary, and React UI fit together.
+- [docs/analyzers.md](docs/analyzers.md) — How managed analyzers are pinned, sandboxed, and invoked.
+- [docs/privacy.md](docs/privacy.md) and [docs/release.md](docs/release.md) — Privacy guarantees and the release checklist.
 
 ---
 
