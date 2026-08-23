@@ -57,8 +57,9 @@ func New(i Installer, r Runtime, s Server, c Client) *Adapter {
 	// healthy installs report "did not become healthy within 3m0s". Ten
 	// minutes still leaves room for the analysis itself inside the sonarqube
 	// analyzer timeout; warm servers answer the first health check and skip
-	// the wait entirely.
-	return &Adapter{Installer: i, Runtime: r, Server: s, Client: c, BaseURL: "http://127.0.0.1:9000", StartupTimeout: 10 * time.Minute}
+	// the wait entirely. BLUNTCODE_SONAR_STARTUP_TIMEOUT can tighten or
+	// extend the budget per environment.
+	return &Adapter{Installer: i, Runtime: r, Server: s, Client: c, BaseURL: "http://127.0.0.1:9000", StartupTimeout: defaultStartupTimeout}
 }
 func (a *Adapter) ID() string          { return ID }
 func (a *Adapter) DisplayName() string { return "SonarQube" }
@@ -111,34 +112,10 @@ func (a *Adapter) EnsureRunning(ctx context.Context) error {
 	if err := a.Server.Start(ctx, a.Runtime.Environment()); err != nil {
 		return fmt.Errorf("start managed SonarQube: %w", err)
 	}
-	wait := a.StartupTimeout
-	if wait <= 0 {
-		wait = 3 * time.Minute
+	if err := waitForHealthy(ctx, a.Server, a.startupBudget(), startupPollInterval, nil); err != nil {
+		return err
 	}
-	deadline := time.Now().Add(wait)
-	for time.Now().Before(deadline) {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		if monitor, ok := a.Server.(interface{ ExitStatus() (error, bool) }); ok {
-			if exitErr, exited := monitor.ExitStatus(); exited {
-				if exitErr == nil {
-					return fmt.Errorf("managed SonarQube stopped during startup")
-				}
-				return fmt.Errorf("managed SonarQube stopped during startup: %w", exitErr)
-			}
-		}
-		ok, err := a.Server.Healthy(ctx)
-		if err == nil && ok {
-			return a.Client.Bootstrap(ctx)
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(time.Second):
-		}
-	}
-	return fmt.Errorf("managed SonarQube did not become healthy within %s", wait)
+	return a.Client.Bootstrap(ctx)
 }
 func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.AnalyzerPlan, error) {
 	if !analyzers.HasLanguage(req.Languages, a.SupportedLanguages()...) {
