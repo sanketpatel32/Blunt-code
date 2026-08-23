@@ -75,6 +75,7 @@ func (m Manager) Download(ctx context.Context, a Artifact) (string, error) {
 		return "", err
 	}
 	if err := VerifySHA256(tmpName, a.SHA256); err != nil {
+		_ = os.Remove(tmpName)
 		return "", err
 	}
 	return tmpName, nil

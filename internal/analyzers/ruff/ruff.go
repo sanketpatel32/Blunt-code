@@ -107,7 +107,11 @@ func (a *Adapter) Run(ctx context.Context, p analyzers.AnalyzerPlan, emit analyz
 	if err != nil {
 		return analyzers.AnalyzerResult{Plan: p}, err
 	}
-	return analyzers.AnalyzerResult{Plan: p, Stdout: stdout, ExitCode: 1, StartedAt: started, FinishedAt: time.Now()}, nil
+	exitCode := 0
+	if len(merged) > 0 {
+		exitCode = 1
+	}
+	return analyzers.AnalyzerResult{Plan: p, Stdout: stdout, ExitCode: exitCode, StartedAt: started, FinishedAt: time.Now()}, nil
 }
 
 type rawDiagnostic struct {

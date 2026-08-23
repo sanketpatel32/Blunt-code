@@ -59,6 +59,20 @@ func (b *Bus) Publish(event Event) {
 		history = history[len(history)-historyLimit:]
 	}
 	b.history[event.ScanID] = history
+	if len(b.history) > 500 {
+		// Prune oldest entries to bound memory for long-lived servers that
+		// have seen thousands of scans; subscribers already hold their own
+		// buffered replay, so dropping old history never breaks live streams.
+		oldest := ""
+		for k := range b.history {
+			oldest = k
+			break
+		}
+		if oldest != "" && oldest != event.ScanID {
+			delete(b.history, oldest)
+			delete(b.subscribers, oldest)
+		}
+	}
 	for ch := range b.subscribers[event.ScanID] {
 		select {
 		case ch <- event:

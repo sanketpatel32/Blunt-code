@@ -159,6 +159,10 @@ func (a *Adapter) Normalize(_ context.Context, r analyzers.AnalyzerResult) ([]an
 // sourcePosition translates Biome's UTF-8 byte offset into a 1-based source
 // position. If source is unavailable, normalization still returns the finding.
 func sourcePosition(path string, offset int) (line, column int) {
+	info, err := os.Stat(path)
+	if err != nil || info.Size() > 2<<20 {
+		return 0, 0
+	}
 	data, err := os.ReadFile(path)
 	if err != nil || offset < 0 || offset > len(data) {
 		return 0, 0

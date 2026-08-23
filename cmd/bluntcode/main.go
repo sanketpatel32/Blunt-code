@@ -97,6 +97,7 @@ func runServer(args []string) {
 	shutdown := func() {
 		shutdownOnce.Do(func() {
 			app.logger.Info("shutdown requested")
+			app.scans.Shutdown()
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 			defer cancel()
 			if err := httpServer.Shutdown(shutdownCtx); err != nil {
@@ -105,7 +106,7 @@ func runServer(args []string) {
 		})
 	}
 	server.SetShutdown(shutdown)
-	interrupt := make(chan os.Signal, 1)
+	interrupt := make(chan os.Signal, 2)
 	signal.Notify(interrupt, os.Interrupt)
 	defer signal.Stop(interrupt)
 	go func() {

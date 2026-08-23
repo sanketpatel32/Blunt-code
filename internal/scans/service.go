@@ -457,7 +457,11 @@ func (s *Service) writeReport(scan core.Scan, work core.Workspace, files []core.
 			skipped = append(skipped, file.RelativePath)
 		}
 	}
-	markdown := reports.Markdown(reports.Build(reports.Input{WorkspaceName: work.Name, WorkspacePath: work.RootPath, ScanID: scan.ID, Profile: scan.Profile, StartedAt: *scan.StartedAt, Files: selected, SkippedFiles: skipped, Findings: findings, Metrics: metrics, Runs: runs, Comparison: comparison}))
+	startedAt := time.Now()
+	if scan.StartedAt != nil {
+		startedAt = *scan.StartedAt
+	}
+	markdown := reports.Markdown(reports.Build(reports.Input{WorkspaceName: work.Name, WorkspacePath: work.RootPath, ScanID: scan.ID, Profile: scan.Profile, StartedAt: startedAt, Files: selected, SkippedFiles: skipped, Findings: findings, Metrics: metrics, Runs: runs, Comparison: comparison}))
 	if err := os.MkdirAll(s.reportsDir, 0o700); err != nil {
 		return "", err
 	}

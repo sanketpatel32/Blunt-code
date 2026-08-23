@@ -76,6 +76,9 @@ type Finding struct {
 func (f *Finding) SetFingerprint() {
 	path := filepath.ToSlash(filepath.Clean(f.RelativePath))
 	path = strings.TrimPrefix(path, "./")
+	if path == "." {
+		path = ""
+	}
 	message := strings.Join(strings.Fields(strings.ToLower(f.Message)), " ")
 	s := strings.Join([]string{f.AnalyzerID, f.RuleID, path, message}, "\x00")
 	hash := sha256.Sum256([]byte(s))
