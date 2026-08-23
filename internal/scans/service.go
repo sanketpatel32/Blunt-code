@@ -94,7 +94,7 @@ func (s *Service) snapshot(ctx context.Context, work core.Workspace, profile str
 		WorkspaceID:        work.ID,
 		WorkspaceRoot:      work.RootPath,
 		WorkspaceName:      work.Name,
-		BluntCodeVersion:   "0.1.0-dev",
+		BluntCodeVersion:   "0.3.0",
 		Profile:            profile,
 		CandidateFileCount: len(files),
 		SelectedFileCount:  len(selectedFiles),

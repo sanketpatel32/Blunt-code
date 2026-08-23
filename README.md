@@ -28,10 +28,11 @@
 ## ✨ Key Features
 
 - **100% Local & Private:** Runs entirely on loopback (`127.0.0.1`). Your code, findings, reports, and logs never leave your device.
-- **Zero-Config Managed Tools:** Automatically installs and sandboxes code analyzers in isolated application directories. No manual `PATH` configuring or Python/Java/Node dependency hassle.
-- **Multi-Tool Coverage:** Runs **Ruff**, **Biome**, **Semgrep**, and **SonarQube** concurrently to check for lint issues, security SAST vulnerabilities, formatting errors, and code smells.
-- **Interactive UI Dashboard:** Built-in web app with a home dashboard, real-time scan logs, file-level previews, severity visualizations, and rich filtering by tool/severity.
-- **Reports in Every Format:** One-click export to **Markdown**, standalone **HTML**, **SARIF 2.1.0** (VS Code / GitHub code scanning), and **CSV** — plus a headless `scan` CLI for CI pipelines.
+- **Zero-Config Managed Tools:** Automatically installs and sandboxes code analyzers in isolated application directories. No manual `PATH` configuring or Python/Java/Node dependency hassle — and `doctor --fix` self-heals stale rules and interrupted installs.
+- **Multi-Tool Coverage:** Runs **Ruff**, **Biome**, **Semgrep**, and **SonarQube** concurrently to check for lint issues, security SAST vulnerabilities, formatting errors, and code smells — plus built-in **secrets** and **TODO/FIXME** detectors that ship in the binary with nothing extra to install.
+- **Interactive UI Dashboard:** Built-in web app with a home dashboard, real-time scan logs, file-level previews, severity visualizations, rich filtering by tool/severity, severity trends across scan history, and per-finding suppression (with reason) that hides dismissed findings from future scans and gates.
+- **Reports in Every Format:** One-click export to **Markdown**, standalone **HTML**, **SARIF 2.1.0** (VS Code / GitHub code scanning), **CSV**, and **JSON** — or emit inline **GitHub Actions annotations** straight from the CLI.
+- **CI Gates, Baselines & Watch Mode:** `--fail-on high+` / `--max-findings N` turn a headless scan into a build gate, `--baseline` (a previous scan ID or SARIF file) excludes known findings so gates start passing on day one, `--jobs N` parallelizes analyzers, `--watch` rescans automatically as files change, and a committed `.bluntcodeignore` shares excludes per project.
 - **Dark Mode & Keyboard Shortcuts:** Light/dark theme that follows your OS preference, and keyboard-first navigation (`g`+`h/w/t/s` to jump between pages, `/` to search, `?` for the shortcut cheat sheet).
 - **Offline Capable:** Once analyzers are downloaded on initial setup, full scans can run 100% offline without internet access.
 
@@ -75,7 +76,7 @@ If you prefer to download and verify files manually without running a web-based 
 
 ```powershell
 # 1. Verify file integrity
-$package = '.\BluntCode-0.1.0-windows-amd64.zip' # Update filename to match download
+$package = '.\BluntCode-0.3.0-windows-amd64.zip' # Update filename to match download
 $expected = (Get-Content "$package.sha256" -Raw).Trim().Split()[0].ToLowerInvariant()
 $actual = (Get-FileHash $package -Algorithm SHA256).Hash.ToLowerInvariant()
 
@@ -180,9 +181,26 @@ Every scan runs in one of three profiles:
 
 # Machine-readable JSON summary for CI pipelines (progress still goes to stderr)
 .\bluntcode.exe scan "C:\Projects\my-python-app" --json --quiet --timeout 10m
+
+# CI gate: fail the build (exit 1) on high+ severity findings or more than 50 total
+.\bluntcode.exe scan "C:\Projects\my-python-app" --fail-on high+ --max-findings 50
+
+# Gate against a baseline (previous scan ID or exported SARIF) so pre-existing findings don't fail the build
+.\bluntcode.exe scan "C:\Projects\my-python-app" --fail-on high+ --baseline .\last-scan.sarif
+
+# Full JSON report on stdout, or GitHub Actions annotations for PR checks
+.\bluntcode.exe scan "C:\Projects\my-python-app" --format json
+.\bluntcode.exe scan "C:\Projects\my-python-app" --format github
+
+# Run up to 2 analyzers concurrently, or keep scanning and rescan on file changes
+.\bluntcode.exe scan "C:\Projects\my-python-app" --jobs 2
+.\bluntcode.exe scan "C:\Projects\my-python-app" --watch
+
+# Diagnose the local installation, repairing mechanical problems (stale rules, interrupted installs)
+.\bluntcode.exe doctor --fix
 ```
 
-`bluntcode scan` exits with code `0` when the scan completes (warnings included), `1` when it fails or is cancelled, `2` for usage errors, and `130` after Ctrl+C — so CI pipelines can gate on it directly.
+`bluntcode scan` exits with code `0` when the scan completes (warnings included), `1` when it fails, is cancelled, or a `--fail-on`/`--max-findings` gate trips, `2` for usage errors, and `130` after Ctrl+C — so CI pipelines can gate on it directly. With `--baseline`, the gate only counts findings that are new since the baseline.
 
 ---
 
@@ -281,7 +299,7 @@ npm run build
 Set-Location ..
 
 # Package a release zip & checksum
-.\scripts\package.ps1 -Version 0.1.0
+.\scripts\package.ps1 -Version 0.3.0
 ```
 
 For guidelines on coding standards and codebase architecture, see [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/architecture.md](docs/architecture.md).

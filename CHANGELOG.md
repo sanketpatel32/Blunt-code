@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-24
+
 ### Added
 
 - **Watch mode:** `bluntcode scan --watch` keeps the command alive — it scans once immediately, then polls the workspace every 2 seconds and rescans automatically once changes settle (a 1.5-second quiet window debounces save bursts; a change during a running scan coalesces into exactly one queued rescan). Each rescan prints a short `rescan: N file(s) changed` header on stderr, so `--format json` stdout stays pure newline-separated documents; scan failures and gate failures print per scan but never stop the loop, and Ctrl+C keeps its existing graceful/forced (exit 130) semantics. `--watch` composes with the gate, baseline, and jobs flags and is rejected with `--format github` (annotations make no sense in a loop).
