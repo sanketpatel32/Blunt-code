@@ -37,6 +37,9 @@ func main() {
 		case "doctor":
 			runDoctor(os.Args[2:])
 			return
+		case "config":
+			runConfig(os.Args[2:])
+			return
 		case "scan":
 			runScan(os.Args[2:])
 			return
@@ -63,6 +66,7 @@ func runServer(args []string) {
 	if flags.NArg() > 1 {
 		fmt.Fprintln(os.Stderr, "usage: bluntcode [path] [--no-browser] [--port N]")
 		fmt.Fprintln(os.Stderr, "       bluntcode doctor [--json] [--fix]")
+		fmt.Fprintln(os.Stderr, "       bluntcode config [--json]")
 		fmt.Fprintln(os.Stderr, "       bluntcode scan <path> [--profile quick|standard|deep] [--json] [--timeout 30m] [--quiet] [--fail-on high+] [--max-findings N]")
 		os.Exit(2)
 	}
