@@ -5,6 +5,11 @@
 // AnalyzerResult.Stdout as JSON and Normalize parses that JSON into findings,
 // exactly like the ruff and biome adapters parse tool output, so the pipeline
 // treats it like any other analyzer.
+//
+// Findings can be dismissed in source with an inline bluntcode:ignore
+// comment directive on the marker's line or the line immediately above;
+// the canonical syntax and semantics are documented in
+// internal/analyzers/ignore.go.
 package todo
 
 import (
@@ -100,6 +105,11 @@ type rawDiagnostic struct {
 	EndLine   int    `json:"end_line"`
 	EndColumn int    `json:"end_column"`
 	Message   string `json:"message"`
+	// Inline bluntcode:ignore context, parsed at Run time: the directive on
+	// the finding's line and the one on the contiguous line above (nil when
+	// that line carries no directive).
+	IgnoreSameLine *analyzers.IgnoreDirective `json:"ignore_same_line,omitempty"`
+	IgnorePrevLine *analyzers.IgnoreDirective `json:"ignore_prev_line,omitempty"`
 }
 
 type rawEnvelope struct {
@@ -180,6 +190,13 @@ func (a *Adapter) Normalize(_ context.Context, result analyzers.AnalyzerResult) 
 	}
 	findings := make([]analyzers.Finding, 0, len(env.Diagnostics))
 	for _, d := range env.Diagnostics {
+		// Inline bluntcode:ignore directives (same line or the contiguous
+		// line above) are honored per finding, before it is built or
+		// fingerprinted: suppressed diagnostics never become findings, and
+		// surviving fingerprints are unaffected by ignored neighbors.
+		if analyzers.IgnoreSuppressedDirectives(d.IgnoreSameLine, d.IgnorePrevLine, d.Rule) {
+			continue
+		}
 		f := analyzers.Finding{
 			AnalyzerID:   ID,
 			RuleID:       d.Rule,
@@ -201,7 +218,7 @@ func (a *Adapter) Normalize(_ context.Context, result analyzers.AnalyzerResult) 
 	}
 	metrics := []analyzers.Metric{
 		{AnalyzerID: ID, Key: "files_scanned", Label: "Files scanned", Value: float64(env.FilesScanned)},
-		{AnalyzerID: ID, Key: "findings", Label: "Findings", Value: float64(len(env.Diagnostics))},
+		{AnalyzerID: ID, Key: "findings", Label: "Findings", Value: float64(len(findings))}, // surviving findings, after inline ignores
 		{AnalyzerID: ID, Key: "files_skipped_binary", Label: "Binary files skipped", Value: float64(env.FilesSkippedBinary)},
 	}
 	return findings, metrics, nil
@@ -262,7 +279,7 @@ func scanFile(rel string, data []byte) (diagnostics []rawDiagnostic, truncated b
 	}
 	diagnostics = make([]rawDiagnostic, 0, len(matches))
 	for _, m := range matches {
-		diagnostics = append(diagnostics, rawDiagnostic{
+		d := rawDiagnostic{
 			Rule:      m.rule,
 			Marker:    m.marker,
 			Path:      rel,
@@ -271,7 +288,11 @@ func scanFile(rel string, data []byte) (diagnostics []rawDiagnostic, truncated b
 			EndLine:   m.line,
 			EndColumn: m.column + len(m.marker), // markers are ASCII, so rune length == byte length
 			Message:   m.message,
-		})
+		}
+		// Parse the inline bluntcode:ignore directives for the marker's line
+		// and the line above here, at Run time, so Normalize stays pure.
+		d.IgnoreSameLine, d.IgnorePrevLine = analyzers.IgnoreDirectivesAt(data, m.line)
+		diagnostics = append(diagnostics, d)
 	}
 	return diagnostics, truncated
 }
