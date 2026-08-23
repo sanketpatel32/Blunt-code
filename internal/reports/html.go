@@ -5,13 +5,16 @@ import (
 	"fmt"
 	"html/template"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
-// htmlDocument is the whole report: one file, no external assets, no scripts.
+// htmlDocument is the whole report: one file, no external assets, and exactly
+// one inline script (htmlScript) that powers the client-side filters.
 // Everything dynamic goes through html/template actions so contextual
 // auto-escaping applies to workspace names, analyzer messages, rule ids, paths,
-// and documentation URLs alike. The <style> block is static CSS only.
+// and documentation URLs alike — including the data-* attributes the script
+// reads back at run time. The <style> block is static CSS only.
 const htmlDocument = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -60,6 +63,26 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 code.path{font-family:ui-monospace,SFMono-Regular,Consolas,"Courier New",monospace;font-size:.82rem;white-space:nowrap}
 a{color:#1d4ed8}
 .empty{margin:.5rem 0 0;padding:.9rem 1rem;border:1px solid var(--line);border-radius:.5rem;color:var(--muted)}
+.filters{display:flex;flex-wrap:wrap;gap:.6rem .9rem;align-items:flex-end;margin:0 0 1rem}
+.filter-group{display:flex;flex-direction:column;gap:.3rem}
+.filter-label{font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.chip{font:inherit;font-size:.8rem;font-weight:600;color:var(--muted);background:var(--page);border:1px solid var(--line);border-radius:999px;padding:.25rem .7rem;cursor:pointer}
+.chip.is-active{color:var(--ink);background:#f9fafb;border-color:#9ca3af}
+.chip-critical.is-active{color:var(--critical);border-color:var(--critical)}
+.chip-high.is-active{color:var(--high);border-color:var(--high)}
+.chip-medium.is-active{color:var(--medium);border-color:var(--medium)}
+.chip-low.is-active{color:var(--low);border-color:var(--low)}
+.chip-info.is-active{color:var(--info);border-color:var(--info)}
+.chip-count{margin-left:.15rem;font-weight:700;font-variant-numeric:tabular-nums}
+select,input[type="search"]{font:inherit;font-size:.85rem;color:var(--ink);background:var(--page);border:1px solid var(--line);border-radius:.4rem;padding:.3rem .5rem;max-width:14rem}
+.filter-clear{font:inherit;font-size:.85rem;color:var(--ink);background:var(--page);border:1px solid var(--line);border-radius:.4rem;padding:.32rem .7rem;cursor:pointer}
+.filter-status{margin:0 0 0 auto;align-self:center;font-size:.85rem;color:var(--muted);font-variant-numeric:tabular-nums}
+:focus-visible{outline:2px solid #1d4ed8;outline-offset:2px}
+tr[hidden]{display:none}
+details.file-group{border:1px solid var(--line);border-radius:.5rem;margin:0 0 .75rem}
+details.file-group[hidden]{display:none}
+.file-group summary{display:flex;flex-wrap:wrap;gap:.25rem .6rem;align-items:baseline;cursor:pointer;padding:.5rem .75rem}
+.group-count{font-size:.78rem;color:var(--muted)}
 footer{margin-top:2.5rem;padding-top:1rem;border-top:1px solid var(--line);font-size:.85rem;color:var(--muted)}
 @media (max-width:40rem){body{padding:1rem .75rem 2rem}.stat{min-width:calc(50% - .6rem);flex:1}}
 @media print{
@@ -72,7 +95,12 @@ footer{margin-top:2.5rem;padding-top:1rem;border-top:1px solid var(--line);font-
  tr{break-inside:avoid;page-break-inside:avoid}
  .table-wrap{overflow:visible}
  h2{break-after:avoid}
+ .filters{display:none}
+ details.file-group{border-color:#999;break-inside:avoid;page-break-inside:avoid}
 }
+body.is-printing .filters,body.is-printing #filter-no-match{display:none}
+body.is-printing tr[hidden]{display:table-row}
+body.is-printing details.file-group[hidden]{display:block}
 </style>
 </head>
 <body>
@@ -109,26 +137,51 @@ footer{margin-top:2.5rem;padding-top:1rem;border-top:1px solid var(--line);font-
 </table>
 </div>
 </section>
-<section>
+<section id="findings">
 <h2>Findings</h2>
-{{if .Findings}}<div class="table-wrap">
+{{if .Findings}}<div class="filters">
+<div class="filter-group" role="group" aria-label="Filter findings by severity">
+{{range .Severities}}<button type="button" class="chip chip-{{.Class}} is-active" data-sev="{{.Class}}" aria-pressed="true">{{.Name}} <span class="chip-count">{{.Count}}</span></button>
+{{end}}</div>
+<div class="filter-group">
+<label class="filter-label" for="filter-analyzer">Analyzer</label>
+<select id="filter-analyzer">
+<option value="">All analyzers</option>
+{{range .Analyzers}}<option value="{{.}}">{{.}}</option>
+{{end}}</select>
+</div>
+<div class="filter-group">
+<label class="filter-label" for="filter-search">Search</label>
+<input type="search" id="filter-search" placeholder="Rule, message, or file" autocomplete="off">
+</div>
+<button type="button" class="filter-clear" id="filter-clear">Clear filters</button>
+<p class="filter-status" id="filter-status" role="status" aria-live="polite">Showing {{.Total}} of {{.Total}} findings</p>
+</div>
+<p class="empty" id="filter-no-match" hidden>No findings match the current filters.</p>
+{{range .Groups}}<details class="file-group" data-file="{{.Path}}" open>
+<summary><code class="path">{{.Path}}</code> <span class="group-count">{{.Label}}</span></summary>
+<div class="table-wrap">
 <table>
-<thead><tr><th>Severity</th><th>Rule</th><th>Message</th><th>File</th><th>Analyzer</th></tr></thead>
+<thead><tr><th>Severity</th><th>Rule</th><th>Message</th><th class="num">Line</th><th>Analyzer</th></tr></thead>
 <tbody>
-{{range .Findings}}<tr>
+{{range .Findings}}<tr data-sev="{{.Class}}" data-an="{{.Analyzer}}" data-rule="{{.Rule}}" data-file="{{.File}}">
 <td><span class="badge badge-{{.Class}}">{{.Severity}}</span></td>
 <td>{{if .Title}}<span class="rule-title">{{.Title}}</span><br>{{end}}<span class="rule-id">{{if .DocsURL}}<a href="{{.DocsURL}}" rel="noopener noreferrer" target="_blank">{{.Rule}}</a>{{else}}{{.Rule}}{{end}}</span></td>
 <td>{{if .Message}}{{.Message}}{{else}}—{{end}}{{if .Remediation}}<div class="remediation"><strong>Fix:</strong> {{.Remediation}}</div>{{end}}</td>
-<td>{{if .Location}}<code class="path">{{.Location}}</code>{{else}}—{{end}}</td>
+<td class="num">{{if .Line}}{{.Line}}{{else}}—{{end}}</td>
 <td>{{if .Analyzer}}<span class="tag">{{.Analyzer}}</span>{{else}}—{{end}}</td>
 </tr>
 {{end}}</tbody>
 </table>
 </div>
-{{else}}<p class="empty">No findings — nice work.</p>
+</details>
+{{end}}{{else}}<p class="empty">No findings — nice work.</p>
 {{end}}</section>
 <footer>Generated locally by Blunt Code{{if .Version}} v{{.Version}}{{end}} — code never left this computer.</footer>
 </main>
+<script>
+{{.Script}}
+</script>
 </body>
 </html>
 `
@@ -144,6 +197,9 @@ type htmlModel struct {
 	Warnings                                                                []string
 	Runs                                                                    []htmlRun
 	Findings                                                                []htmlFinding
+	Groups                                                                  []htmlGroup
+	Analyzers                                                               []string
+	Script                                                                  template.JS
 }
 type htmlSeverity struct {
 	Name, Class string
@@ -154,18 +210,29 @@ type htmlRun struct {
 	Findings              int
 }
 type htmlFinding struct {
-	Class, Severity, Title, Rule, Message, Remediation, Location, Analyzer, DocsURL string
+	Class, Severity, Title, Rule, Message, Remediation, Analyzer, DocsURL, File string
+	Line                                                                        int
+}
+
+// htmlGroup buckets the findings of one file into a collapsible section; Path
+// doubles as the deterministic sort key and Label carries the pre-pluralized
+// count so the template never formats.
+type htmlGroup struct {
+	Path, Label string
+	Findings    []htmlFinding
 }
 
 // HTML renders the report model as a standalone, self-contained HTML document
 // that can be shared, archived, or printed with zero dependencies. Every
 // user-controlled value passes through html/template contextual auto-escaping;
-// nothing is concatenated into markup by hand, and the document ships no
-// scripts.
+// nothing is concatenated into markup by hand. The document ships one static
+// inline script (htmlScript) whose only job is toggling the visibility of the
+// server-rendered finding rows; it never builds HTML from finding text.
 func HTML(m Model) []byte {
 	view := htmlModel{
 		WorkspaceName: scrubControls(m.WorkspaceName), WorkspacePath: scrubControls(m.WorkspacePath), Profile: scrubControls(m.Profile), Version: m.BluntCodeVersion,
 		Total: len(m.Findings), New: len(m.Comparison.New), Fixed: len(m.Comparison.Fixed), Persistent: len(m.Comparison.Persistent),
+		Script: template.JS(htmlScript),
 	}
 	for _, warning := range m.Warnings {
 		view.Warnings = append(view.Warnings, scrubControls(warning))
@@ -197,9 +264,12 @@ func HTML(m Model) []byte {
 		view.Findings = append(view.Findings, htmlFinding{
 			Class: severityClass(f.Severity), Severity: string(f.Severity), Title: scrubControls(title),
 			Rule: scrubControls(f.RuleID), Message: scrubControls(f.Message), Remediation: scrubControls(strings.TrimSpace(f.Remediation)),
-			Location: scrubControls(htmlLocation(f)), Analyzer: scrubControls(f.AnalyzerID), DocsURL: scrubControls(strings.TrimSpace(f.DocumentationURL)),
+			File: scrubControls(htmlFilePath(f)), Analyzer: scrubControls(f.AnalyzerID), DocsURL: scrubControls(strings.TrimSpace(f.DocumentationURL)),
+			Line: f.StartLine,
 		})
 	}
+	view.Groups = htmlGroups(view.Findings)
+	view.Analyzers = htmlAnalyzerOptions(m)
 	var b strings.Builder
 	if err := htmlTemplate.Execute(&b, view); err != nil {
 		// Unreachable with this view model: the template parses at startup and
@@ -227,18 +297,66 @@ func severityClass(severity analyzers.Severity) string {
 	}
 }
 
-// htmlLocation renders the workspace-relative file and start line the way
-// people cite them in reviews; project-level findings keep a word instead of a
-// bare "." so the cell is never empty or cryptic.
-func htmlLocation(f analyzers.Finding) string {
+// htmlFilePath normalizes the workspace-relative path used both for grouping
+// findings into file sections and for display; project-level findings keep a
+// word instead of a bare "." so the cell is never empty or cryptic.
+func htmlFilePath(f analyzers.Finding) string {
 	path := strings.TrimPrefix(filepath.ToSlash(strings.TrimSpace(f.RelativePath)), "./")
 	if path == "" || path == "." {
-		path = "project"
-	}
-	if f.StartLine > 0 {
-		return fmt.Sprintf("%s:%d", path, f.StartLine)
+		return "project"
 	}
 	return path
+}
+
+// htmlGroups buckets the rendered findings by file path, preserving the model's
+// order inside each group and sorting the groups by path so identical input
+// always renders byte-identical HTML.
+func htmlGroups(findings []htmlFinding) []htmlGroup {
+	var groups []htmlGroup
+	index := map[string]int{}
+	for _, f := range findings {
+		i, ok := index[f.File]
+		if !ok {
+			groups = append(groups, htmlGroup{Path: f.File})
+			i = len(groups) - 1
+			index[f.File] = i
+		}
+		groups[i].Findings = append(groups[i].Findings, f)
+	}
+	sort.SliceStable(groups, func(i, j int) bool { return groups[i].Path < groups[j].Path })
+	for i := range groups {
+		groups[i].Label = fmt.Sprintf("%d findings", len(groups[i].Findings))
+		if len(groups[i].Findings) == 1 {
+			groups[i].Label = "1 finding"
+		}
+	}
+	return groups
+}
+
+// htmlAnalyzerOptions lists the analyzer ids present in runs or findings for
+// the analyzer filter dropdown, deduplicated and sorted. Ids are scrubbed
+// before deduplication so two hostile ids that scrub to the same text collapse
+// into one option, and the template escapes them again in both the value
+// attribute and the option label.
+func htmlAnalyzerOptions(m Model) []string {
+	seen := map[string]bool{}
+	var out []string
+	add := func(raw string) {
+		id := scrubControls(strings.TrimSpace(raw))
+		if id == "" || seen[id] {
+			return
+		}
+		seen[id] = true
+		out = append(out, id)
+	}
+	for _, r := range m.Runs {
+		add(r.AnalyzerID)
+	}
+	for _, f := range m.Findings {
+		add(f.AnalyzerID)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // isHostileControl reports whether a rune is a C0 control (other than the
