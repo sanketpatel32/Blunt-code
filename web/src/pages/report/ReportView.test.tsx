@@ -35,7 +35,7 @@ function findingsPage() {
   return { items: [finding], total: 1, limit: 25, offset: 0, has_more: false };
 }
 
-const fetchMock = vi.fn((input: string) => {
+const fetchMock = vi.fn((input: string, _init?: RequestInit) => {
   if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, comparison: { new_count: 1, fixed_count: 0, persistent_count: 0 }, warnings: [], findings: [finding] }));
   if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json(findingsPage()));
   return Promise.resolve(json({ items: [] }));
@@ -433,5 +433,68 @@ describe('ReportView render guards', () => {
       const message = host.querySelector('.finding-message');
       expect(message?.textContent).toContain(`tail 0`);
     });
+  });
+});
+
+describe('ReportView suppression actions', () => {
+  const FINGERPRINT = 'f'.repeat(64);
+  const fingerprinted = { ...finding, fingerprint: FINGERPRINT };
+  const suppressedItem = { ...finding, id: 'finding-suppressed', fingerprint: FINGERPRINT, status: 'suppressed' };
+
+  async function flush() {
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
+  }
+
+  function callsFor(method: string) {
+    return fetchMock.mock.calls.filter(([, init]) => init?.method === method);
+  }
+
+  it('suppresses from a row: opens the dialog, posts the fingerprint, and refreshes the findings', async () => {
+    await fetchMock.withImplementation((input: string) => {
+      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, comparison: { new_count: 1, fixed_count: 0, persistent_count: 0 }, warnings: [], findings: [fingerprinted] }));
+      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: [fingerprinted], total: 1, limit: 25, offset: 0, has_more: false }));
+      return Promise.resolve(json({ fingerprint: FINGERPRINT, created_at: '2026-08-24T00:00:00Z' }, 201));
+    }, async () => {
+      const host = await render();
+      const rowButton = host.querySelector<HTMLButtonElement>('[aria-label="Suppress Example finding"]')!;
+      expect(rowButton.textContent).toBe('Suppress…');
+      await click(rowButton);
+      expect(host.querySelector('dialog')!.textContent).toContain('Suppressing hides this finding from future scans, reports, and the CI gate.');
+
+      await click(buttonByText(host, 'Suppress finding'));
+      await flush();
+      const posts = callsFor('POST');
+      expect(posts).toHaveLength(1);
+      expect(posts[0][0]).toBe('/api/v1/workspaces/ws-1/suppressions');
+      expect(JSON.parse(String(posts[0][1]!.body))).toEqual({ fingerprint: FINGERPRINT, reason: '' });
+      expect(host.querySelector('dialog')).toBeNull(); // closes on success
+      expect(findingUrls()).toHaveLength(2); // the list refetches so the row drops out
+    });
+  });
+
+  it('restores a suppressed finding via DELETE and refreshes the findings', async () => {
+    await fetchMock.withImplementation((input: string) => {
+      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, comparison: { new_count: 0, fixed_count: 0, persistent_count: 0 }, warnings: [], findings: [suppressedItem] }));
+      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: [suppressedItem], total: 1, limit: 25, offset: 0, has_more: false }));
+      return Promise.resolve(new Response(null, { status: 204 }));
+    }, async () => {
+      const host = await render();
+      expect(host.querySelector('.status-text.suppressed')!.textContent).toBe('suppressed');
+      expect(host.querySelector('[aria-label="Suppress Example finding"]')).toBeNull(); // suppressed rows restore instead
+      const restore = host.querySelector<HTMLButtonElement>('[aria-label="Restore Example finding"]')!;
+      expect(restore.textContent).toBe('Restore');
+      await click(restore);
+      await flush();
+      const deletes = callsFor('DELETE');
+      expect(deletes).toHaveLength(1);
+      expect(deletes[0][0]).toBe(`/api/v1/workspaces/ws-1/suppressions/${FINGERPRINT}`);
+      expect(findingUrls()).toHaveLength(2);
+    });
+  });
+
+  it('offers no suppress action when a finding carries no fingerprint', async () => {
+    const host = await render();
+    expect(host.querySelector('.suppress-finding')).toBeNull();
+    expect(host.querySelector('.restore-finding')).toBeNull();
   });
 });

@@ -406,6 +406,32 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .copy-finding svg { width: .9rem; height: .9rem; }
 .copy-finding.copied { color: var(--color-success); }
 @media (hover: hover) { .copy-finding:hover { background: var(--color-surface-muted); color: var(--color-ink); } }
-@media print { .copy-finding { display: none; } .finding-actions-cell { justify-content: flex-start; } }
+@media print { .copy-finding, .finding-row-actions { display: none; } .finding-actions-cell { justify-content: flex-start; } }
 .copy-location.copied { color: var(--color-success); border-color: var(--color-success); }
+
+/* Suppression · Row actions sit between the status text and the copy button:
+   a quiet text button so real buttons stay keyboard-reachable per row. The
+   suppressed status text reads muted rather than the success green. */
+.finding-row-actions { display: inline-flex; align-items: center; gap: var(--space-2xs); margin-left: auto; }
+.finding-row-actions .text-button { padding: var(--space-3xs) var(--space-2xs); font-size: var(--text-xs); }
+.status-text.suppressed { color: var(--color-ink-faint); }
+
+/* Suppression · Dialog context line (finding name + location), helper hint, and
+   the live character count under the reason textarea. */
+.suppress-finding-context { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2xs) var(--space-sm); }
+.suppress-finding-context code { color: var(--color-ink-faint); font-size: var(--text-xs); }
+#suppress-finding-hint { margin-top: var(--space-xs); }
+.suppress-finding-count { display: block; margin-top: var(--space-2xs); color: var(--color-ink-faint); font: 600 var(--text-xs) var(--font-mono); }
+
+/* Suppression · Workspace panel under the severity trend: one row per dismissed
+   fingerprint. The short prefix anchors the row, the reason flexes, and the
+   date + Restore stay flush right; the full fingerprint rides in the title. */
+.suppressions-section { margin: 0 0 var(--space-2xl); }
+.suppressions-list { margin: 0; padding: 0; list-style: none; }
+.suppression-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2xs) var(--space-md); padding: var(--space-2xs) var(--space-xs); border-bottom: var(--rule) solid var(--color-rule); }
+.suppression-row:last-child { border-bottom: 0; }
+.suppression-fingerprint { color: var(--color-ink-faint); font-size: var(--text-xs); }
+.suppression-reason { flex: 1; min-width: 12rem; overflow-wrap: anywhere; color: var(--color-ink); font-size: var(--text-sm); }
+.suppression-date { color: var(--color-ink-faint); font-size: var(--text-xs); white-space: nowrap; }
+.suppression-row .text-button { flex: none; }
 

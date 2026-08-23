@@ -1,8 +1,9 @@
 import { act, useState, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { AddWorkspaceDialog, ConfirmationDialog, FindingPreviewDialog } from './dialogs';
+import { AddWorkspaceDialog, ConfirmationDialog, FindingPreviewDialog, SuppressFindingDialog, SUPPRESSION_REASON_MAX } from './dialogs';
 import type { Finding } from '../types';
+import type { Notice } from '../lib/notice';
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
@@ -48,6 +49,17 @@ function confirmation(close: () => void, busy = false) {
 }
 
 const finding: Finding = { id: 'finding-1', analyzer_id: 'biome', severity: 'high', category: 'correctness', title: 'Example finding', message: 'Undefined name', relative_path: 'src/main.py', start_line: 4 };
+
+const FINGERPRINT = 'a'.repeat(64);
+const suppressedFinding: Finding = { ...finding, fingerprint: FINGERPRINT };
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+}
+
+function suppressDialog(close: () => void, onSuppressed: (reason: string) => void = () => {}, notify: (n: Notice) => void = () => {}) {
+  return <SuppressFindingDialog workspaceId="ws-1" finding={suppressedFinding} onClose={close} onSuppressed={onSuppressed} notify={notify} />;
+}
 
 afterEach(async () => { await act(async () => { root?.unmount(); }); document.body.replaceChildren(); vi.unstubAllGlobals(); });
 
@@ -151,5 +163,94 @@ describe('dialog accessibility', () => {
     await openDialog(host);
     await act(async () => { press(document.activeElement!, 'Escape'); });
     expect(host.querySelector('dialog')).toBeNull();
+  });
+});
+
+describe('suppress finding dialog', () => {
+  const fetchMock = vi.fn((_input: string, _init?: RequestInit) => Promise.resolve(json({ workspace_id: 'ws-1', fingerprint: FINGERPRINT, created_at: '2026-08-24T00:00:00Z' }, 201)));
+
+  async function typeReason(textarea: HTMLTextAreaElement, value: string) {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!;
+    await act(async () => {
+      setter.call(textarea, value);
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  }
+
+  async function flush() {
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
+  }
+
+  it('is modal and labelled, focuses the reason textarea, and caps the reason at 500 characters', async () => {
+    vi.stubGlobal('fetch', fetchMock);
+    const host = await renderHarness(suppressDialog);
+    await openDialog(host);
+    const dialog = host.querySelector('dialog')!;
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    expect(dialog.getAttribute('aria-labelledby')).toBe('suppress-finding-title');
+    expect(document.getElementById('suppress-finding-title')).not.toBeNull();
+    const textarea = dialog.querySelector<HTMLTextAreaElement>('#suppress-finding-reason')!;
+    expect(textarea.maxLength).toBe(500);
+    expect(SUPPRESSION_REASON_MAX).toBe(500);
+    expect(document.activeElement).toBe(textarea); // the note field is the primary control
+    expect(textarea.getAttribute('aria-describedby')).toContain('suppress-finding-hint');
+    expect(dialog.textContent).toContain('Suppressing hides this finding from future scans, reports, and the CI gate.');
+    expect(dialog.textContent).toContain('Example finding'); // names the finding being hidden
+  });
+
+  it('confirms with a POST of the fingerprint and reason, then hands back to the caller', async () => {
+    vi.stubGlobal('fetch', fetchMock);
+    fetchMock.mockClear();
+    const onSuppressed = vi.fn();
+    const host = await renderHarness((close) => suppressDialog(close, (reason) => { onSuppressed(reason); close(); })); // callers close on success, like ReportView
+    await openDialog(host);
+    await typeReason(host.querySelector<HTMLTextAreaElement>('#suppress-finding-reason')!, 'False positive for this project');
+    await act(async () => { ([...host.querySelectorAll('button')].find((button) => button.textContent === 'Suppress finding') as HTMLButtonElement).click(); });
+    await flush();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [input, init] = fetchMock.mock.calls[0];
+    expect(input).toBe('/api/v1/workspaces/ws-1/suppressions');
+    expect(init?.method).toBe('POST');
+    expect(JSON.parse(String(init?.body))).toEqual({ fingerprint: FINGERPRINT, reason: 'False positive for this project' });
+    expect(onSuppressed).toHaveBeenCalledWith('False positive for this project');
+    expect(host.querySelector('dialog')).toBeNull(); // caller closed it on success
+  });
+
+  it('posts an empty reason when the note is left blank', async () => {
+    vi.stubGlobal('fetch', fetchMock);
+    fetchMock.mockClear();
+    const host = await renderHarness((close) => suppressDialog(close));
+    await openDialog(host);
+    await act(async () => { ([...host.querySelectorAll('button')].find((button) => button.textContent === 'Suppress finding') as HTMLButtonElement).click(); });
+    await flush();
+    const [, init] = fetchMock.mock.calls[0];
+    expect(JSON.parse(String(init?.body))).toEqual({ fingerprint: FINGERPRINT, reason: '' });
+  });
+
+  it('closes on Escape and on Cancel without posting anything', async () => {
+    vi.stubGlobal('fetch', fetchMock);
+    fetchMock.mockClear();
+    const host = await renderHarness(suppressDialog);
+    const trigger = host.querySelector<HTMLButtonElement>('button')!;
+    await act(async () => { trigger.focus(); trigger.click(); }); // focus the trigger so close can restore focus, like a real row button
+    expect(host.querySelector('dialog')).not.toBeNull();
+    await act(async () => { press(document.activeElement!, 'Escape'); });
+    expect(host.querySelector('dialog')).toBeNull();
+    expect(document.activeElement).toBe(trigger); // focus returns to the row that opened it
+    await openDialog(host);
+    await act(async () => { ([...host.querySelectorAll('button')].find((button) => button.textContent === 'Cancel') as HTMLButtonElement).click(); });
+    expect(host.querySelector('dialog')).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps the dialog open and raises the error notice when the post fails', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(json({ error: { code: 'DATABASE_ERROR', message: 'Could not save suppression.' } }, 500))));
+    const notify = vi.fn();
+    const host = await renderHarness((close) => suppressDialog(close, () => {}, notify));
+    await openDialog(host);
+    await act(async () => { ([...host.querySelectorAll('button')].find((button) => button.textContent === 'Suppress finding') as HTMLButtonElement).click(); });
+    await flush();
+    expect(notify).toHaveBeenCalledWith({ kind: 'error', text: 'DATABASE_ERROR: Could not save suppression.' });
+    expect(host.querySelector('dialog')).not.toBeNull(); // nothing is lost; the user can retry or cancel
   });
 });

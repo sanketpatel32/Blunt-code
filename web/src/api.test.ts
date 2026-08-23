@@ -53,4 +53,23 @@ describe('API client', () => {
     await expect(api.stopServer()).resolves.toEqual({ state: 'stopping' });
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/system/stop', expect.objectContaining({ method: 'POST' }));
   });
+
+  it('manages finding suppressions through the workspace endpoints', async () => {
+    const fingerprint = 'a'.repeat(64);
+    const item = { workspace_id: 'ws-1', fingerprint, reason: 'False positive', created_at: '2026-08-24T00:00:00Z' };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [item] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(item), { status: 201 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(api.suppressions('ws-1')).resolves.toEqual([item]); // {items} envelope reads as a list
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/workspaces/ws-1/suppressions', expect.anything());
+
+    await expect(api.addSuppression('ws-1', fingerprint, 'False positive')).resolves.toEqual(item);
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/workspaces/ws-1/suppressions', expect.objectContaining({ method: 'POST', body: JSON.stringify({ fingerprint, reason: 'False positive' }) }));
+
+    await expect(api.removeSuppression('ws-1', fingerprint)).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenNthCalledWith(3, `/api/v1/workspaces/ws-1/suppressions/${fingerprint}`, expect.objectContaining({ method: 'DELETE' }));
+  });
 });

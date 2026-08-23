@@ -1,4 +1,4 @@
-import type { FindingPage, FixedFindingsResponse, PathOverride, RecentScansResponse, Report, Scan, SeverityTrendPoint, SourcePreview, Tool, TreeNode, Workspace } from './types';
+import type { FindingPage, FixedFindingsResponse, PathOverride, RecentScansResponse, Report, Scan, SeverityTrendPoint, SourcePreview, Suppression, Tool, TreeNode, Workspace } from './types';
 
 const PREFIX = '/api/v1';
 
@@ -45,6 +45,10 @@ export const api = {
     return Array.isArray(value) ? value : value?.items ?? value?.children ?? [];
   },
   pathOverrides: async (id: string) => list<PathOverride>(await request<PathOverride[] | { items?: PathOverride[] }>(`/workspaces/${encodeURIComponent(id)}/path-overrides`)),
+  /** Fingerprints dismissed for this workspace; suppressed findings stay stored but drop out of future scan totals, reports, and the CI gate. */
+  suppressions: async (id: string) => list<Suppression>(await request<Suppression[] | { items?: Suppression[] }>(`/workspaces/${encodeURIComponent(id)}/suppressions`)),
+  addSuppression: (id: string, fingerprint: string, reason?: string) => request<Suppression>(`/workspaces/${encodeURIComponent(id)}/suppressions`, { method: 'POST', body: JSON.stringify({ fingerprint, reason: reason ?? '' }) }),
+  removeSuppression: (id: string, fingerprint: string) => request<void>(`/workspaces/${encodeURIComponent(id)}/suppressions/${encodeURIComponent(fingerprint)}`, { method: 'DELETE' }),
   savePathOverrides: (id: string, overrides: PathOverride[]) => request<{ items: PathOverride[] }>(`/workspaces/${encodeURIComponent(id)}/path-overrides`, { method: 'PUT', body: JSON.stringify({ overrides }) }),
   rules: async (id: string) => {
     const value = await request<{ items?: unknown[]; rules?: unknown[] } | null>(`/workspaces/${encodeURIComponent(id)}/rules`);

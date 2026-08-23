@@ -30,6 +30,38 @@ export function ConfirmationDialog({ title, description, confirmLabel, busy, onC
     <div className="dialog-backdrop" role="presentation" onMouseDown={onBackdropMouseDown}><dialog ref={dialogRef} open aria-modal="true" aria-labelledby="confirmation-title"><div className="confirmation-dialog"><header><h2 id="confirmation-title">{title}</h2><button type="button" className="icon-button" onClick={onCancel} disabled={busy} aria-label="Close">×</button></header><p>{description}</p><footer><button ref={cancelRef} type="button" className="button secondary" onClick={onCancel} disabled={busy}>Cancel</button><button type="button" className="button danger" onClick={onConfirm} disabled={busy}>{busy ? 'Working…' : confirmLabel}</button></footer></div></dialog></div>);
 }
 
+/** Upper bound on the optional suppression note; mirrors the backend's maxSuppressionReasonLength. */
+export const SUPPRESSION_REASON_MAX = 500;
+
+/**
+ * "Suppress this finding" dialog: records a fingerprint dismissal for the workspace.
+ * The reason is optional and capped at 500 characters; confirming posts the
+ * suppression and hands control back to the caller (which closes the dialog and
+ * refreshes the findings list). Errors keep the dialog open so nothing is lost.
+ */
+export function SuppressFindingDialog({ workspaceId, finding, onClose, onSuppressed, notify }: { workspaceId: string; finding: Finding; onClose: () => void; onSuppressed: (reason: string) => void; notify: (n: Notice) => void }) {
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const reasonRef = useRef<HTMLTextAreaElement>(null);
+  const { dialogRef, onBackdropMouseDown } = useDialogA11y({ onClose, busy, autoFocusRef: reasonRef });
+  const name = finding.title ?? finding.rule_id ?? 'finding';
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!finding.fingerprint) return;
+    setBusy(true);
+    try {
+      await api.addSuppression(workspaceId, finding.fingerprint, reason.trim() || undefined);
+      onSuppressed(reason.trim());
+    } catch (e) {
+      notify({ kind: 'error', text: message(e) });
+      setBusy(false);
+    }
+  };
+  return (
+  // biome-ignore lint/a11y/noStaticElementInteractions: backdrop-only dismissal is pointer convenience; keyboard users close via Escape and the dialog's own Cancel/close button.
+    <div className="dialog-backdrop" role="presentation" onMouseDown={onBackdropMouseDown}><dialog ref={dialogRef} open aria-modal="true" aria-labelledby="suppress-finding-title"><form onSubmit={(event) => void submit(event)}><header><h2 id="suppress-finding-title">Suppress this finding?</h2><button type="button" className="icon-button" onClick={onClose} aria-label="Close">×</button></header><p className="suppress-finding-context"><strong>{name}</strong> <code>{findingLocation(finding)}</code></p><p id="suppress-finding-hint">Suppressing hides this finding from future scans, reports, and the CI gate.</p><label htmlFor="suppress-finding-reason">Reason (optional)<textarea id="suppress-finding-reason" ref={reasonRef} rows={3} maxLength={SUPPRESSION_REASON_MAX} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Why this finding is being hidden" aria-describedby="suppress-finding-hint suppress-finding-count" /></label><small id="suppress-finding-count" className="suppress-finding-count">{reason.length}/{SUPPRESSION_REASON_MAX} characters</small><footer><button type="button" className="button secondary" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" className="button danger" disabled={busy || !finding.fingerprint}>{busy ? 'Suppressing…' : 'Suppress finding'}</button></footer></form></dialog></div>);
+}
+
 export function FindingPreviewDialog({ scanId, finding, onClose }: { scanId: string; finding: Finding; onClose: () => void }) {
   const preview = useLoad(() => api.findingPreview(scanId, finding.id), [scanId, finding.id]);
   const closeRef = useRef<HTMLButtonElement>(null);

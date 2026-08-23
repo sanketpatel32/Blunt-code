@@ -100,7 +100,16 @@ export interface Finding {
   start_column?: number;
   remediation?: string;
   documentation_url?: string;
-  status?: 'new' | 'persistent';
+  /** Computed per scan by the backend; `suppressed` marks a fingerprint dismissed for this workspace. */
+  status?: 'new' | 'persistent' | 'suppressed';
+}
+
+/** One dismissed fingerprint on a workspace; `reason` is the optional human note (≤500 chars). */
+export interface Suppression {
+  workspace_id?: string;
+  fingerprint: string;
+  reason?: string;
+  created_at: string;
 }
 
 export interface FindingPage {
