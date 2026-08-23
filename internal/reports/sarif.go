@@ -1,6 +1,9 @@
 package reports
 
 import (
+	"bytes"
+	"encoding/json"
+
 	"bluntcode/internal/analyzers"
 	"net/url"
 	"path/filepath"
@@ -118,6 +121,23 @@ func SARIF(m Model) sarifLog {
 		Tool:    sarifTool{Driver: sarifDriver{Name: "Blunt Code", Version: m.BluntCodeVersion, InformationURI: sarifDriverURI, Rules: rules}},
 		Results: results,
 	}}}
+}
+
+// SARIFBytes serializes the SARIF log exactly the way the API download route
+// (GET /api/v1/scans/{id}/report.sarif) serves it: one json.Encoder pass with
+// default settings — compact (no indentation), default HTML escaping —
+// terminated by the single LF Encode appends. `bluntcode scan --format sarif`
+// writes these same bytes to stdout, so a CLI-produced baseline file and a
+// server download are interchangeable byte for byte, and consecutive
+// watch-mode rescans come out as newline-separated complete documents (the
+// same convention the JSON format's watch behavior uses). Like JSON() the
+// render is infallible: the log holds only strings, numbers, and slices
+// thereof, so Encode cannot fail (the error is ignored for parity with the
+// route, which ignores it too).
+func SARIFBytes(m Model) []byte {
+	var buf bytes.Buffer
+	_ = json.NewEncoder(&buf).Encode(SARIF(m))
+	return buf.Bytes()
 }
 
 // sarifRegion projects a finding's stored positions onto the SARIF 2.1.0

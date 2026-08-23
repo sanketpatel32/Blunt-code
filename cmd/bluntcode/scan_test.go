@@ -511,7 +511,7 @@ func TestRunScanCommandRejectsBadGateFlagWithExitCodeTwo(t *testing.T) {
 	}
 }
 
-// --- report format flag: --format text|json|github -------------------------------
+// --- report format flag: --format text|json|github|sarif --------------------------
 
 func TestParseScanFlagsFormatFlag(t *testing.T) {
 	cases := []struct {
@@ -524,8 +524,10 @@ func TestParseScanFlagsFormatFlag(t *testing.T) {
 		{"explicit text", []string{"--format", "text", `C:\proj`}, "text", false},
 		{"json selects the full report document", []string{"--format", "json", `C:\proj`}, "json", false},
 		{"github selects the annotation stream", []string{"--format", "github", `C:\proj`}, "github", false},
+		{"sarif selects the SARIF code-scanning document", []string{"--format", "sarif", `C:\proj`}, "sarif", false},
 		{"format after the path works", []string{`C:\proj`, "--format", "json"}, "json", false},
 		{"github format after the path works", []string{`C:\proj`, "--format", "github"}, "github", false},
+		{"sarif format after the path works", []string{`C:\proj`, "--format", "sarif"}, "sarif", false},
 		{"json summary flag still accepted with text format", []string{"--json", "--format", "text", `C:\proj`}, "text", true},
 	}
 	for _, item := range cases {
@@ -551,11 +553,11 @@ func TestParseScanFlagsRejectsBadFormatInput(t *testing.T) {
 		args    []string
 		message string
 	}{
-		{"unknown format", []string{"--format", "yaml", `C:\proj`}, "format must be text, json, or github"},
-		{"sarif is api-only", []string{"--format", "sarif", `C:\proj`}, "format must be text, json, or github"},
-		{"github annotations misspelled", []string{"--format", "actions", `C:\proj`}, "format must be text, json, or github"},
+		{"unknown format", []string{"--format", "yaml", `C:\proj`}, "format must be text, json, github, or sarif"},
+		{"github annotations misspelled", []string{"--format", "actions", `C:\proj`}, "format must be text, json, github, or sarif"},
 		{"json summary combined with report format", []string{"--json", "--format", "json", `C:\proj`}, "--json cannot be combined with --format json"},
 		{"json summary combined with github format", []string{"--json", "--format", "github", `C:\proj`}, "--json cannot be combined with --format github"},
+		{"json summary combined with sarif format", []string{"--json", "--format", "sarif", `C:\proj`}, "--json cannot be combined with --format sarif"},
 	}
 	for _, item := range cases {
 		t.Run(item.name, func(t *testing.T) {
@@ -582,7 +584,31 @@ func TestRunScanCommandRejectsBadFormatFlagWithExitCodeTwo(t *testing.T) {
 	if out.Len() != 0 {
 		t.Fatalf("stdout = %q", out.String())
 	}
-	if !strings.Contains(errOut.String(), "format must be text, json, or github") {
+	if !strings.Contains(errOut.String(), "format must be text, json, github, or sarif") {
 		t.Fatalf("reason missing: %q", errOut.String())
+	}
+}
+
+// TestParseScanFlagsWatchWithSARIFFormatAllowed pins the watch interplay of the
+// document formats: --watch --format sarif is accepted (each rescan emits one
+// complete, newline-terminated SARIF log, mirroring how --format json behaves
+// in the loop) while --watch --format github stays rejected exactly as before
+// (also pinned by the watch_test.go rejection tests).
+func TestParseScanFlagsWatchWithSARIFFormatAllowed(t *testing.T) {
+	var errOut bytes.Buffer
+	cfg, err := parseScanFlags([]string{"--watch", "--format", "sarif", `C:\proj`}, &errOut)
+	if err != nil {
+		t.Fatalf("parse: %v (stderr: %s)", err, errOut.String())
+	}
+	if !cfg.watch || cfg.format != "sarif" {
+		t.Fatalf("watch/format = %v/%q, want true/sarif", cfg.watch, cfg.format)
+	}
+	// The counterpart is unchanged: the annotation stream is the one document
+	// format the watch loop refuses.
+	var rejectOut bytes.Buffer
+	if _, err := parseScanFlags([]string{"--watch", "--format", "github", `C:\proj`}, &rejectOut); err == nil {
+		t.Fatal("--watch --format github must still be rejected")
+	} else if !strings.Contains(err.Error(), "--watch cannot be combined with --format github") {
+		t.Fatalf("rejection reason = %q", err.Error())
 	}
 }

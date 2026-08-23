@@ -1,12 +1,14 @@
 package reports
 
 import (
+	"bytes"
+	"testing"
+
 	"bluntcode/internal/analyzers"
 	"encoding/json"
 	"net/url"
 	"path/filepath"
 	"strings"
-	"testing"
 	"unicode/utf8"
 )
 
@@ -405,5 +407,97 @@ func TestSARIFRegionSanitizesInvalidCoordinates(t *testing.T) {
 	region = byRule["unicode-bmp-astral"]
 	if region["startLine"] != float64(3) || region["startColumn"] != float64(4) || region["endLine"] != float64(3) || region["endColumn"] != float64(9) {
 		t.Fatalf("a fully valid region must survive untouched: %#v", region)
+	}
+}
+
+// --- CLI export bytes: SARIFBytes (`bluntcode scan --format sarif`) --------------
+
+// sarifBytesInput is the shared fixture of the SARIFBytes tests: fingerprinted
+// findings across severities and paths, a bare finding without a fingerprint,
+// markup characters that exercise the encoder's default HTML escaping, and a
+// driver version.
+func sarifBytesInput() Input {
+	return Input{BluntCodeVersion: "1.2.3", Findings: []analyzers.Finding{
+		fingerprinted("F401", "src/a.py", "unused import <script>alert(1)</script>", analyzers.SeverityMedium),
+		fingerprinted("S1", "src/deep/nested b.py", "hardcoded credential", analyzers.SeverityCritical),
+		fingerprinted("project:coverage", "", "coverage below threshold", analyzers.SeverityInfo),
+		{AnalyzerID: "ruff", RuleID: "E501", Severity: analyzers.SeverityLow, Message: "m", RelativePath: "src/b.py"},
+	}}
+}
+
+// TestSARIFBytesMatchTheAPIDownloadBytes pins the helper behind `bluntcode
+// scan --format sarif` to the exact serialization the API route
+// GET /api/v1/scans/{id}/report.sarif performs (json.NewEncoder(w).Encode of
+// the SARIF log): compact, default HTML escaping, one trailing LF. A
+// CLI-produced baseline and a server download must be interchangeable byte for
+// byte.
+func TestSARIFBytesMatchTheAPIDownloadBytes(t *testing.T) {
+	var api bytes.Buffer
+	_ = json.NewEncoder(&api).Encode(SARIF(Build(sarifBytesInput()))) // the route's exact serialization
+	got := SARIFBytes(Build(sarifBytesInput()))
+	if !bytes.Equal(got, api.Bytes()) {
+		t.Fatalf("SARIFBytes must equal the API download bytes:\n got  %s\n want %s", got, api.Bytes())
+	}
+	// The markup-sensitive payload must survive as escaped JSON entities in
+	// both renderings, proving the comparison above exercised the escaping.
+	if !strings.Contains(string(got), `\u003cscript\u003e`) {
+		t.Fatalf("HTML escaping missing from SARIF bytes: %s", got)
+	}
+}
+
+// TestSARIFBytesAreByteStableAndSingleLineTerminated pins the determinism the
+// baseline round-trip and GitHub code-scanning uploads rely on: identical
+// input renders identical bytes, and the document is one compact JSON line
+// terminated by exactly one LF (Encode escapes every in-string newline, so the
+// only raw LF is the terminator) — which is also what makes consecutive
+// watch-mode rescans newline-separated complete documents.
+func TestSARIFBytesAreByteStableAndSingleLineTerminated(t *testing.T) {
+	first := SARIFBytes(Build(sarifBytesInput()))
+	second := SARIFBytes(Build(sarifBytesInput()))
+	if !bytes.Equal(first, second) {
+		t.Fatalf("identical input must render identical bytes:\n first  %s\n second %s", first, second)
+	}
+	if n := bytes.Count(first, []byte("\n")); n != 1 {
+		t.Fatalf("document must carry exactly one raw LF (the terminator), found %d: %s", n, first)
+	}
+	if !bytes.HasSuffix(first, []byte("\n")) {
+		t.Fatalf("document must end with the LF terminator: %s", first)
+	}
+}
+
+// TestReadSARIFRoundTripThroughSARIFBytes closes the CLI loop the feature
+// exists for: the bytes `bluntcode scan --format sarif` writes to stdout parse
+// with ReadSARIF and yield the same fingerprints the model contained, so
+// `--format sarif > baseline.sarif` followed by `--baseline baseline.sarif`
+// works without the server. Model after TestReadSARIFRoundTripMatchesFindingFingerprints.
+func TestReadSARIFRoundTripThroughSARIFBytes(t *testing.T) {
+	findings := []analyzers.Finding{
+		fingerprinted("F401", "src/a.py", "unused import", analyzers.SeverityMedium),
+		fingerprinted("S1", "src/deep/nested b.py", "hardcoded credential", analyzers.SeverityCritical),
+		fingerprinted("project:coverage", "", "coverage below threshold", analyzers.SeverityInfo),
+	}
+	parsed, err := ReadSARIF(bytes.NewReader(SARIFBytes(Build(Input{Findings: findings}))))
+	if err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if len(parsed) != len(findings) {
+		t.Fatalf("parsed %d findings, want %d: %#v", len(parsed), len(findings), parsed)
+	}
+	wantLevels := map[string]string{
+		findings[0].Fingerprint: "warning",
+		findings[1].Fingerprint: "error",
+		findings[2].Fingerprint: "note",
+	}
+	seen := map[string]bool{}
+	for _, result := range parsed {
+		seen[result.Fingerprint] = true
+		if level := wantLevels[result.Fingerprint]; level != "" && result.Level != level {
+			t.Errorf("level for %s = %q, want %q", result.Fingerprint, result.Level, level)
+		}
+	}
+	for _, finding := range findings {
+		if !seen[finding.Fingerprint] {
+			t.Errorf("fingerprint of rule %s missing from parsed results", finding.RuleID)
+		}
 	}
 }

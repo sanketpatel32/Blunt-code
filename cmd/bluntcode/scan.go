@@ -37,18 +37,21 @@ const (
 	scanStatePollInterval = 2 * time.Second
 )
 
-const scanUsage = "usage: bluntcode scan <path> [--profile quick|standard|deep] [--format text|json|github] [--json] [--timeout 30m] [--quiet] [--fail-on high+] [--max-findings N] [--baseline <scan-id-or-sarif>] [--jobs N] [--watch]"
+const scanUsage = "usage: bluntcode scan <path> [--profile quick|standard|deep] [--format text|json|github|sarif] [--json] [--timeout 30m] [--quiet] [--fail-on high+] [--max-findings N] [--baseline <scan-id-or-sarif>] [--jobs N] [--watch]"
 
 // The stdout report formats of `bluntcode scan`. text (the default) keeps the
 // historical human summary; json prints the full versioned JSON report
 // document that GET /api/v1/scans/{id}/findings.json also serves; github
 // prints GitHub Actions workflow-command annotations that the runner turns
-// into inline PR annotations. The compact summary behind --json stays a
-// separate, unchanged output.
+// into inline PR annotations; sarif prints the SARIF 2.1.0 log that
+// GET /api/v1/scans/{id}/report.sarif also serves, so a CI can capture a
+// baseline or feed GitHub code scanning without running the server. The
+// compact summary behind --json stays a separate, unchanged output.
 const (
 	scanFormatText   = "text"
 	scanFormatJSON   = "json"
 	scanFormatGitHub = "github"
+	scanFormatSARIF  = "sarif"
 )
 
 // scanConfig is the validated command line of `bluntcode scan`.
@@ -57,9 +60,10 @@ type scanConfig struct {
 	profile string
 	json    bool
 	// format selects the stdout report: the human summary (text, the
-	// historical default), the full JSON report document (json), or the
-	// GitHub Actions annotation stream (github). The empty value means text,
-	// so an omitted flag keeps the pre-flag behavior.
+	// historical default), the full JSON report document (json), the GitHub
+	// Actions annotation stream (github), or the SARIF 2.1.0 code-scanning
+	// document (sarif). The empty value means text, so an omitted flag keeps
+	// the pre-flag behavior.
 	format  string
 	timeout time.Duration
 	quiet   bool
@@ -90,7 +94,7 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	flags := flag.NewFlagSet("scan", flag.ContinueOnError)
 	flags.SetOutput(errOut)
 	profile := flags.String("profile", "standard", "scan profile: quick, standard, or deep")
-	format := flags.String("format", "", "stdout report format: text (human summary, the default), json (the full JSON report document), or github (GitHub Actions annotations)")
+	format := flags.String("format", "", "stdout report format: text (human summary, the default), json (the full JSON report document), github (GitHub Actions annotations), or sarif (the SARIF 2.1.0 code-scanning document)")
 	jsonOut := flags.Bool("json", false, "print a machine-readable JSON summary instead of human text")
 	timeout := flags.Duration("timeout", scanDefaultTimeout, "abort the scan when it exceeds this duration (for example 5m or 90s)")
 	quiet := flags.Bool("quiet", false, "suppress progress lines on stderr; the summary is still printed")
@@ -161,8 +165,8 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	if cfg.profile != analyzers.ProfileQuick && cfg.profile != analyzers.ProfileStandard && cfg.profile != analyzers.ProfileDeep {
 		return usageError("profile must be quick, standard, or deep")
 	}
-	if cfg.format != "" && cfg.format != scanFormatText && cfg.format != scanFormatJSON && cfg.format != scanFormatGitHub {
-		return usageError("format must be text, json, or github")
+	if cfg.format != "" && cfg.format != scanFormatText && cfg.format != scanFormatJSON && cfg.format != scanFormatGitHub && cfg.format != scanFormatSARIF {
+		return usageError("format must be text, json, github, or sarif")
 	}
 	if cfg.json && cfg.format == scanFormatJSON {
 		return usageError("--json cannot be combined with --format json: --json prints the compact summary, --format json the full report")
@@ -170,8 +174,11 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	if cfg.json && cfg.format == scanFormatGitHub {
 		return usageError("--json cannot be combined with --format github: --json prints the compact summary, --format github the annotation stream")
 	}
+	if cfg.json && cfg.format == scanFormatSARIF {
+		return usageError("--json cannot be combined with --format sarif: --json prints the compact summary, --format sarif the SARIF document")
+	}
 	if cfg.watch && cfg.format == scanFormatGitHub {
-		return usageError("--watch cannot be combined with --format github: annotations make no sense in a watch loop; use text or json")
+		return usageError("--watch cannot be combined with --format github: annotations make no sense in a watch loop; use text, json, or sarif")
 	}
 	if cfg.timeout <= 0 {
 		return usageError("timeout must be a positive duration such as 5m")
@@ -447,20 +454,28 @@ func runSingleScan(app *appCore, cfg scanConfig, work core.Workspace, baseline s
 	}
 	summary.state = outcome.finalState
 	switch {
-	case cfg.format == scanFormatJSON || cfg.format == scanFormatGitHub:
+	case cfg.format == scanFormatJSON || cfg.format == scanFormatGitHub || cfg.format == scanFormatSARIF:
 		model, err := buildScanReportModel(ctx, app.db, work, summary)
 		if err != nil {
 			fmt.Fprintf(stderr, "bluntcode scan: could not load report: %v\n", err)
 			return scanRunResult{code: 1}
 		}
-		// Both document formats share the report model and go to stdout; the
-		// annotation stream especially must stay on stdout because that is
-		// the only stream GitHub Actions scans for workflow commands. The
+		// All three document formats share the report model and go to stdout;
+		// the annotation stream especially must stay on stdout because that is
+		// the only stream GitHub Actions scans for workflow commands. The SARIF
+		// bytes are the exact serialization GET /api/v1/scans/{id}/report.sarif
+		// serves (reports.SARIFBytes), so `--format sarif > baseline.sarif`
+		// round-trips through --baseline without the server. Every document
+		// ends with its own single LF, so in --watch mode each rescan emits one
+		// complete, newline-separated document, mirroring the json format. The
 		// gate and baseline summaries below keep writing to stderr, so the
 		// formats compose with the CI flags without interleaving.
 		document := reports.JSON(model)
 		if cfg.format == scanFormatGitHub {
 			document = reports.GitHubAnnotations(model)
+		}
+		if cfg.format == scanFormatSARIF {
+			document = reports.SARIFBytes(model)
 		}
 		if _, err := stdout.Write(document); err != nil {
 			fmt.Fprintf(stderr, "bluntcode scan: could not write report: %v\n", err)
