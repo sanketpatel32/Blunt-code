@@ -402,6 +402,7 @@ func (d *DB) Scans(ctx context.Context, workspaceID string) ([]core.Scan, error)
 	}
 	return result, rows.Err()
 }
+
 // LatestScans resolves each workspace's single most recent scan (same recency
 // rule as Scans: started_at DESC) in one aggregate query. It exists so the
 // workspace list can avoid the per-workspace Scans() loop, which issues one
@@ -521,6 +522,76 @@ func (d *DB) RecentScans(ctx context.Context, filter RecentScansFilter) ([]Recen
 		result = append(result, item)
 	}
 	return result, total, rows.Err()
+}
+
+// SeverityCounts is the per-severity split persisted on every completed scan
+// row; CompleteScan writes it once at completion so history never recomputes.
+type SeverityCounts struct {
+	Critical int `json:"critical"`
+	High     int `json:"high"`
+	Medium   int `json:"medium"`
+	Low      int `json:"low"`
+	Info     int `json:"info"`
+}
+
+// SeverityTrendPoint is one completed scan on the workspace trend chart: the
+// persisted severity split plus the identity fields the chart labels. The
+// timestamp prefers finished_at and falls back to started_at, matching the
+// recency rule the summary and previous-scan lookups use.
+type SeverityTrendPoint struct {
+	ScanID     string         `json:"scan_id"`
+	FinishedAt time.Time      `json:"finished_at"`
+	Profile    string         `json:"profile"`
+	State      string         `json:"state"`
+	Severity   SeverityCounts `json:"severity"`
+	Total      int            `json:"total"`
+}
+
+const (
+	// DefaultSeverityTrendLimit and MaxSeverityTrendLimit bound the workspace
+	// trend series: the chart shows the most recent window of scans, never the
+	// unbounded history.
+	DefaultSeverityTrendLimit = 20
+	MaxSeverityTrendLimit     = 100
+)
+
+// SeverityTrend returns the newest limit completed scans of one workspace,
+// ordered oldest first so the series reads left-to-right over time. Only the
+// producing terminal states count as completed (the same rule as ScanSummary);
+// failed, cancelled, interrupted, and still-running scans never chart. Limit is
+// clamped to 1..MaxSeverityTrendLimit with DefaultSeverityTrendLimit default.
+func (d *DB) SeverityTrend(ctx context.Context, workspaceID string, limit int) ([]SeverityTrendPoint, error) {
+	if limit <= 0 {
+		limit = DefaultSeverityTrendLimit
+	}
+	if limit > MaxSeverityTrendLimit {
+		limit = MaxSeverityTrendLimit
+	}
+	rows, err := d.SQL.QueryContext(ctx, `SELECT id,profile,state,COALESCE(finished_at,started_at),critical_count,high_count,medium_count,low_count,info_count,total_findings FROM scans WHERE workspace_id=? AND state IN ('completed','completed_with_warnings') ORDER BY COALESCE(finished_at,started_at) DESC,id DESC LIMIT ?`, workspaceID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make([]SeverityTrendPoint, 0, limit)
+	for rows.Next() {
+		var point SeverityTrendPoint
+		var when sql.NullString
+		if err := rows.Scan(&point.ScanID, &point.Profile, &point.State, &when, &point.Severity.Critical, &point.Severity.High, &point.Severity.Medium, &point.Severity.Low, &point.Severity.Info, &point.Total); err != nil {
+			return nil, err
+		}
+		if finished, parseErr := parseNullableTime(when); parseErr == nil && finished != nil {
+			point.FinishedAt = *finished
+		}
+		result = append(result, point)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	// The query walks newest-to-oldest; the chart reads oldest-to-newest.
+	for i, j := 0, len(result)-1; i < j; i, j = i+1, j-1 {
+		result[i], result[j] = result[j], result[i]
+	}
+	return result, nil
 }
 
 // ScanSummary holds the cross-workspace aggregates rendered by the dashboard.

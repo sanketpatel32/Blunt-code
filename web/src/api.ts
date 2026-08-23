@@ -1,4 +1,4 @@
-import type { FindingPage, FixedFindingsResponse, PathOverride, RecentScansResponse, Report, Scan, SourcePreview, Tool, TreeNode, Workspace } from './types';
+import type { FindingPage, FixedFindingsResponse, PathOverride, RecentScansResponse, Report, Scan, SeverityTrendPoint, SourcePreview, Tool, TreeNode, Workspace } from './types';
 
 const PREFIX = '/api/v1';
 
@@ -52,6 +52,11 @@ export const api = {
   },
   saveRules: (id: string, rules: unknown) => request(`/workspaces/${encodeURIComponent(id)}/rules`, { method: 'PUT', body: JSON.stringify(rules) }),
   scans: async (id: string) => list<Scan>(await request<Scan[] | { scans?: Scan[] }>(`/workspaces/${encodeURIComponent(id)}/scans`)),
+  /** Severity trend over completed scan history, oldest first; limit defaults to 20 on the server. */
+  trends: async (id: string, limit?: number) => {
+    const query = limit ? `?limit=${limit}` : '';
+    return list<SeverityTrendPoint>(await request<SeverityTrendPoint[] | { items?: SeverityTrendPoint[] }>(`/workspaces/${encodeURIComponent(id)}/trends${query}`));
+  },
   recentScans: () => request<RecentScansResponse>('/scans'),
   startScan: (id: string, profile?: string) => request<Scan>(`/workspaces/${encodeURIComponent(id)}/scans`, { method: 'POST', body: JSON.stringify(profile ? { profile } : {}) }),
   scan: async (id: string) => {

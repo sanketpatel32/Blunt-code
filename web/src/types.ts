@@ -76,6 +76,16 @@ export interface RecentScansResponse {
   summary?: ScanSummary;
 }
 
+/** One completed scan on the workspace severity trend chart; points arrive oldest-first and `finished_at` falls back to the start time. */
+export interface SeverityTrendPoint {
+  scan_id: string;
+  finished_at?: string | null;
+  profile?: string;
+  state: string;
+  severity: { critical: number; high: number; medium: number; low: number; info: number };
+  total: number;
+}
+
 export interface Finding {
   id: string;
   analyzer_id: string;

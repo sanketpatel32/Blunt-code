@@ -93,6 +93,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/workspaces/{id}/suppressions", s.getSuppressions)
 	s.mux.HandleFunc("POST /api/v1/workspaces/{id}/suppressions", s.addSuppression)
 	s.mux.HandleFunc("DELETE /api/v1/workspaces/{id}/suppressions/{fingerprint}", s.removeSuppression)
+	s.mux.HandleFunc("GET /api/v1/workspaces/{id}/trends", s.workspaceTrends)
 	s.mux.HandleFunc("GET /api/v1/workspaces/{id}/scans", s.listScans)
 	s.mux.HandleFunc("POST /api/v1/workspaces/{id}/scans", s.startScan)
 	s.mux.HandleFunc("GET /api/v1/scans", s.recentScans)
@@ -779,6 +780,35 @@ func (s *Server) removeSuppression(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// workspaceTrends serves the severity-over-time series for the workspace
+// detail page's trend chart: one point per completed scan, oldest first,
+// carrying the severity counts persisted at completion. Only the producing
+// terminal states count as completed (the same rule as the dashboard summary),
+// so failed, cancelled, and interrupted scans never chart.
+func (s *Server) workspaceTrends(w http.ResponseWriter, r *http.Request) {
+	work, ok := s.workspace(r)
+	if !ok {
+		fail(w, 404, "WORKSPACE_NOT_FOUND", "Workspace was not found.")
+		return
+	}
+	limit := database.DefaultSeverityTrendLimit
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 1 || value > database.MaxSeverityTrendLimit {
+			fail(w, 400, "INVALID_TREND_QUERY", fmt.Sprintf("limit must be a positive integer of at most %d", database.MaxSeverityTrendLimit))
+			return
+		}
+		limit = value
+	}
+	points, err := s.db.SeverityTrend(r.Context(), work.ID, limit)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load severity trends.")
+		return
+	}
+	writeJSON(w, 200, map[string]any{"items": points})
+}
+
 func (s *Server) listScans(w http.ResponseWriter, r *http.Request) {
 	work, ok := s.workspace(r)
 	if !ok {
