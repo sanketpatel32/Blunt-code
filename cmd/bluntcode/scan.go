@@ -7,6 +7,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -36,7 +37,7 @@ const (
 	scanStatePollInterval = 2 * time.Second
 )
 
-const scanUsage = "usage: bluntcode scan <path> [--profile quick|standard|deep] [--json] [--timeout 30m] [--quiet] [--fail-on high+] [--max-findings N]"
+const scanUsage = "usage: bluntcode scan <path> [--profile quick|standard|deep] [--json] [--timeout 30m] [--quiet] [--fail-on high+] [--max-findings N] [--baseline <scan-id-or-sarif>]"
 
 // scanConfig is the validated command line of `bluntcode scan`.
 type scanConfig struct {
@@ -45,6 +46,10 @@ type scanConfig struct {
 	json    bool
 	timeout time.Duration
 	quiet   bool
+	// baseline names the reference the CI gate treats as known findings: a
+	// path to a SARIF 2.1.0 file (Blunt Code's own export) or the ID of a
+	// previous scan of the same workspace. Empty disables baseline mode.
+	baseline string
 	// gate is the CI fail-gate assembled from --fail-on and --max-findings;
 	// the zero value keeps the historical gate-free exit codes.
 	gate scans.GateConfig
@@ -66,6 +71,7 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	quiet := flags.Bool("quiet", false, "suppress progress lines on stderr; the summary is still printed")
 	failOn := flags.String("fail-on", "", "fail (exit 1) when unresolved findings remain at these severities: comma-separated critical, high, medium, low, info (case-insensitive); a trailing + means \"and above\" (for example high+)")
 	maxFindings := flags.Int("max-findings", 0, "fail (exit 1) when the scan reports more than N unresolved findings (positive integer)")
+	baseline := flags.String("baseline", "", "exclude known findings from the gate: a previous scan ID or the path of a SARIF 2.1.0 file exported by Blunt Code")
 	flags.Usage = func() {
 		fmt.Fprintln(errOut, scanUsage)
 		fmt.Fprintln(errOut)
@@ -74,11 +80,14 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 		fmt.Fprintln(errOut, "installed automatically unless offline mode is enabled. Exit code is 0 for a")
 		fmt.Fprintln(errOut, "completed scan (warnings included), 1 for failed/cancelled/interrupted scans")
 		fmt.Fprintln(errOut, "and for a tripped CI gate (--fail-on/--max-findings), 130 when stopped")
-		fmt.Fprintln(errOut, "with Ctrl+C, and 2 for usage errors.")
+		fmt.Fprintln(errOut, "with Ctrl+C, and 2 for usage errors. With --baseline, the gate counts")
+		fmt.Fprintln(errOut, "only findings that are new since the baseline (a previous scan ID or a")
+		fmt.Fprintln(errOut, "SARIF file exported by Blunt Code).")
 		flags.PrintDefaults()
 	}
 	var positional []string
 	maxFindingsSet := false
+	baselineSet := false
 	remaining := args
 	for {
 		if err := flags.Parse(remaining); err != nil {
@@ -86,10 +95,14 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 		}
 		// flags.Visit only covers the parse call it follows, so presence is
 		// recorded after every restart of the parser; this distinguishes an
-		// omitted --max-findings from an explicit (invalid) --max-findings 0.
+		// omitted --max-findings from an explicit (invalid) --max-findings 0
+		// and an omitted --baseline from an explicit (invalid) --baseline "".
 		flags.Visit(func(f *flag.Flag) {
 			if f.Name == "max-findings" {
 				maxFindingsSet = true
+			}
+			if f.Name == "baseline" {
+				baselineSet = true
 			}
 		})
 		if flags.NArg() == 0 {
@@ -109,12 +122,15 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	if len(positional) != 1 {
 		return usageError("exactly one workspace path is required")
 	}
-	cfg := scanConfig{path: positional[0], profile: *profile, json: *jsonOut, timeout: *timeout, quiet: *quiet}
+	cfg := scanConfig{path: positional[0], profile: *profile, json: *jsonOut, timeout: *timeout, quiet: *quiet, baseline: *baseline}
 	if cfg.profile != analyzers.ProfileQuick && cfg.profile != analyzers.ProfileStandard && cfg.profile != analyzers.ProfileDeep {
 		return usageError("profile must be quick, standard, or deep")
 	}
 	if cfg.timeout <= 0 {
 		return usageError("timeout must be a positive duration such as 5m")
+	}
+	if baselineSet && cfg.baseline == "" {
+		return usageError("baseline must be a scan ID or the path of a SARIF file")
 	}
 	if *failOn != "" {
 		spec, specErr := scans.ParseSeveritySpec(*failOn)
@@ -270,6 +286,18 @@ func runScanCommand(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "bluntcode scan: %v\n", err)
 		return 1
 	}
+	// The baseline resolves before the scan starts: an unknown scan ID or an
+	// unreadable/invalid SARIF file is a usage error (exit 2), not a failed
+	// scan, so CI fails fast without running any analyzer.
+	var baseline scans.Baseline
+	if cfg.baseline != "" {
+		baseline, err = loadScanBaseline(ctx, app.db, cfg.baseline, work.ID)
+		if err != nil {
+			fmt.Fprintf(stderr, "bluntcode scan: %v\n", err)
+			fmt.Fprintln(stderr, scanUsage)
+			return 2
+		}
+	}
 	scan, err := app.scans.DiscoverAndStart(ctx, work, cfg.profile, userExcludePatterns(ctx, app.db, work.ID))
 	if err != nil {
 		fmt.Fprintf(stderr, "bluntcode scan: could not start scan: %v\n", err)
@@ -331,16 +359,64 @@ func runScanCommand(args []string, stdout, stderr io.Writer) int {
 		return 130
 	}
 	code := scanExitCode(summary.state, summary.timedOut)
+	// Baseline mode always reports how much debt was inherited versus what the
+	// scan added, even without gate flags (which leave the exit code alone).
+	var gatedFindings []analyzers.Finding
+	if cfg.baseline != "" {
+		known, fresh := baseline.Split(summary.findings)
+		gatedFindings = fresh
+		fmt.Fprintf(stderr, "baseline: %d known finding(s) excluded from gate, %d new finding(s)\n", len(known), len(fresh))
+	} else {
+		gatedFindings = summary.findings
+	}
 	// The CI gate applies only to scans that completed and would otherwise
 	// exit 0; failed, cancelled, and interrupted scans keep their own exit
-	// path regardless of gate flags.
+	// path regardless of gate flags. With a baseline, only findings whose
+	// fingerprints it does not know are counted.
 	if code == 0 && cfg.gate.Enabled() {
-		if gate := scans.EvaluateGate(summary.findings, cfg.gate); gate.Failed {
+		if gate := scans.EvaluateGate(gatedFindings, cfg.gate); gate.Failed {
 			fmt.Fprintln(stderr, gate.FailureMessage())
 			return 1
 		}
 	}
 	return code
+}
+
+// loadScanBaseline resolves a --baseline reference: an existing file on disk
+// is a SARIF 2.1.0 baseline (Blunt Code's own export), anything else must be
+// the ID of a previous scan of the same workspace. Every failure is a
+// usage-style error the caller reports with exit code 2.
+func loadScanBaseline(ctx context.Context, db *database.DB, ref, workspaceID string) (scans.Baseline, error) {
+	if info, err := os.Stat(ref); err == nil {
+		if info.IsDir() {
+			return scans.Baseline{}, fmt.Errorf("baseline %q is a directory, not a SARIF file", ref)
+		}
+		file, err := os.Open(ref)
+		if err != nil {
+			return scans.Baseline{}, fmt.Errorf("cannot read baseline file %q: %v", ref, err)
+		}
+		defer file.Close()
+		baseline, err := scans.BaselineFromSARIF(file)
+		if err != nil {
+			return scans.Baseline{}, fmt.Errorf("baseline file %q: %v", ref, err)
+		}
+		return baseline, nil
+	}
+	scan, err := db.Scan(ctx, ref)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return scans.Baseline{}, fmt.Errorf("baseline %q not found: it is neither an existing file nor a known scan ID", ref)
+		}
+		return scans.Baseline{}, fmt.Errorf("could not load baseline scan %q: %v", ref, err)
+	}
+	if scan.WorkspaceID != workspaceID {
+		return scans.Baseline{}, fmt.Errorf("baseline scan %q belongs to a different workspace", ref)
+	}
+	findings, err := db.Findings(ctx, ref)
+	if err != nil {
+		return scans.Baseline{}, fmt.Errorf("could not load findings of baseline scan %q: %v", ref, err)
+	}
+	return scans.BaselineFromFindings(findings), nil
 }
 
 // scanWaitInput bundles the injectable inputs of the scan event loop so the

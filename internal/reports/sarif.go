@@ -13,6 +13,11 @@ const (
 	SARIFSchemaURI = "https://json.schemastore.org/sarif-2.1.0.json"
 	sarifVersion   = "2.1.0"
 	sarifDriverURI = "https://github.com/sanketpatel32/Blunt-code"
+	// SARIFFingerprintKey namespaces Blunt Code's finding fingerprint inside a
+	// result's partialFingerprints bag so `bluntcode scan --baseline <sarif>`
+	// can recognize its own exports (and foreign fingerprints stay readable
+	// through the same property bag).
+	SARIFFingerprintKey = "bluntcode/v1"
 )
 
 type sarifLog struct {
@@ -39,11 +44,12 @@ type sarifRule struct {
 	HelpURI          string    `json:"helpUri,omitempty"`
 }
 type sarifResult struct {
-	RuleID    string          `json:"ruleId"`
-	RuleIndex int             `json:"ruleIndex"`
-	Level     string          `json:"level"`
-	Message   sarifText       `json:"message"`
-	Locations []sarifLocation `json:"locations,omitempty"`
+	RuleID              string            `json:"ruleId"`
+	RuleIndex           int               `json:"ruleIndex"`
+	Level               string            `json:"level"`
+	Message             sarifText         `json:"message"`
+	Locations           []sarifLocation   `json:"locations,omitempty"`
+	PartialFingerprints map[string]string `json:"partialFingerprints,omitempty"`
 }
 type sarifText struct {
 	Text string `json:"text"`
@@ -68,7 +74,9 @@ type sarifRegion struct {
 // SARIF renders the report model as a SARIF 2.1.0 log. Artifact URIs are
 // workspace-relative with forward slashes and no leading slash, which is what
 // GitHub code scanning resolves against the repository root; project-level
-// findings carry no location at all.
+// findings carry no location at all. Each result carries the finding's
+// fingerprint under partialFingerprints[SARIFFingerprintKey] so the log can be
+// fed back as a `bluntcode scan --baseline` baseline (see ReadSARIF).
 //
 // Analyzer-derived strings (rule ids, titles, messages, remediation, help
 // URIs) pass through scrubControls before they are marshaled: encoding/json
@@ -92,6 +100,12 @@ func SARIF(m Model) sarifLog {
 			rules[index].HelpURI = uri
 		}
 		result := sarifResult{RuleID: scrubControls(f.RuleID), RuleIndex: index, Level: sarifLevel(f.Severity), Message: sarifText{Text: sarifMessage(f)}}
+		// The fingerprint is Blunt Code's own sha256 hex, but it is scrubbed
+		// like every other result string so a hostile finding can never smuggle
+		// control bytes through the fingerprint bag.
+		if fingerprint := scrubControls(strings.TrimSpace(f.Fingerprint)); fingerprint != "" {
+			result.PartialFingerprints = map[string]string{SARIFFingerprintKey: fingerprint}
+		}
 		if uri := sarifArtifactURI(f.RelativePath); uri != "" {
 			result.Locations = []sarifLocation{{PhysicalLocation: sarifPhysicalLocation{
 				ArtifactLocation: sarifArtifactLocation{URI: uri},
