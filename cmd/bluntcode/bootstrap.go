@@ -20,6 +20,7 @@ import (
 	"bluntcode/internal/analyzers/secrets"
 	"bluntcode/internal/analyzers/semgrep"
 	"bluntcode/internal/analyzers/sonarqube"
+	"bluntcode/internal/analyzers/todo"
 	"bluntcode/internal/config"
 	"bluntcode/internal/core"
 	"bluntcode/internal/database"
@@ -112,12 +113,13 @@ func openCore() (core *appCore, release func(), err error) {
 	_ = registry.Register(biome.New(filepath.Join(paths.ToolsDir, "biome", "2.5.6", "biome.exe"), "2.5.6"))
 	_ = registry.Register(semgrep.New(semgrepExecutable, semgrepVersion, semgrepRules))
 	_ = registry.Register(managedSonar)
-	// Built-in in-process secrets detector: no managed tool, so registration
-	// needs no tool service. It is held back in offline mode on purpose: an
-	// offline scan with no available analyzers must keep failing honestly
-	// instead of being rescued by the built-in one.
+	// Built-in in-process analyzers (secrets detector, TODO/FIXME tracker): no
+	// managed tool, so registration needs no tool service. They are held back
+	// in offline mode on purpose: an offline scan with no available analyzers
+	// must keep failing honestly instead of being rescued by the built-ins.
 	if !appSettings.Offline {
 		_ = registry.Register(secrets.New())
+		_ = registry.Register(todo.New())
 	}
 	scanService := scans.New(db, registry, bus, paths.ReportsDir, paths.ToolsDir, toolService)
 	app := &appCore{
