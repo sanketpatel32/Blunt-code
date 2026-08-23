@@ -1,0 +1,212 @@
+rules:
+  - id: blunt-code.python.eval
+    languages: [python]
+    severity: ERROR
+    message: Avoid eval() on data that may be controlled outside this code path.
+    metadata:
+      category: security
+    pattern: eval(...)
+  - id: blunt-code.javascript.eval
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Avoid eval() on data that may be controlled outside this code path.
+    metadata:
+      category: security
+    pattern: eval(...)
+  - id: blunt-code.python.exec
+    languages: [python]
+    severity: ERROR
+    message: Avoid exec() on dynamically built code since attacker-controlled input turns it into arbitrary code execution. Call the intended functions directly.
+    metadata:
+      category: security
+    pattern: exec(...)
+  - id: blunt-code.python.subprocess-shell-true
+    languages: [python]
+    severity: ERROR
+    message: Spawning a shell with shell=True lets command strings break out into arbitrary commands. Pass an argument list without shell=True, or strictly validate the command string.
+    metadata:
+      category: security
+    pattern-either:
+      - pattern: subprocess.run(..., shell=True, ...)
+      - pattern: subprocess.call(..., shell=True, ...)
+      - pattern: subprocess.Popen(..., shell=True, ...)
+      - pattern: subprocess.check_call(..., shell=True, ...)
+      - pattern: subprocess.check_output(..., shell=True, ...)
+  - id: blunt-code.python.os-system-injection
+    languages: [python]
+    severity: ERROR
+    message: os.system() always runs a shell, so interpolated values can inject extra commands. Use subprocess.run() with an argument list.
+    metadata:
+      category: security
+    patterns:
+      - pattern: os.system(...)
+      - pattern-not: "os.system(\"...\")"
+  - id: blunt-code.python.pickle-deserialization
+    languages: [python]
+    severity: ERROR
+    message: pickle deserialization executes code embedded in the payload, so untrusted input leads to remote code execution. Use a data-only format such as JSON.
+    metadata:
+      category: security
+    pattern-either:
+      - pattern: pickle.loads(...)
+      - pattern: pickle.load(...)
+  - id: blunt-code.python.yaml-unsafe-load
+    languages: [python]
+    severity: WARNING
+    message: yaml.load() with a non-safe Loader can construct arbitrary Python objects. Use yaml.safe_load() or pass Loader=yaml.SafeLoader explicitly.
+    metadata:
+      category: security
+    patterns:
+      - pattern: yaml.load(...)
+      - pattern-not: yaml.load(..., Loader=yaml.SafeLoader, ...)
+      - pattern-not: yaml.load(..., Loader=yaml.CSafeLoader, ...)
+      - pattern-not: yaml.load(..., Loader=SafeLoader, ...)
+  - id: blunt-code.python.sql-string-format
+    languages: [python]
+    severity: ERROR
+    message: Building SQL with f-strings, format, or concatenation enables SQL injection. Use parameterized queries and pass values as query arguments.
+    metadata:
+      category: security
+    pattern-either:
+      - pattern: "$CURSOR.execute(f\"...{$VALUE}...\")"
+      - pattern: $CURSOR.execute($QUERY.format($ARG, ...))
+      - pattern: $CURSOR.execute($FORMAT % $VALUE)
+      - pattern: $CURSOR.execute($LEFT + $RIGHT)
+  - id: blunt-code.python.hardcoded-secret
+    languages: [python]
+    severity: ERROR
+    message: Hardcoded credential in source control. Load the value from an environment variable or secret manager and rotate the exposed credential.
+    metadata:
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: "$NAME = \"...\""
+          - pattern: "$NAME = '...'"
+      - metavariable-regex:
+          metavariable: $NAME
+          regex: "(?i)^(.*_)?(password|passwd|pwd|secret|secrets|token|api_?key|apikey|access_?key|auth_?key|private_?key|client_?secret)(_[a-z0-9]+)*$"
+  - id: blunt-code.python.flask-debug-mode
+    languages: [python]
+    severity: WARNING
+    message: Running a Flask app with debug=True exposes the Werkzeug debugger, which permits arbitrary code execution when reachable. Disable debug mode for anything others can reach.
+    metadata:
+      category: security
+    pattern: $APP.run(..., debug=True, ...)
+  - id: blunt-code.python.tarfile-extractall
+    languages: [python]
+    severity: WARNING
+    message: extractall() keeps member paths from the archive, enabling path traversal with crafted tar files. Extract with filter=data on Python 3.12 or later, or validate member paths first.
+    metadata:
+      category: security
+    patterns:
+      - pattern: $TAR.extractall(...)
+      - pattern-not: $TAR.extractall(..., filter=..., ...)
+  - id: blunt-code.python.requests-verify-disabled
+    languages: [python]
+    severity: ERROR
+    message: verify=False disables TLS certificate validation and allows man-in-the-middle attacks. Keep verification enabled or provide the expected CA bundle.
+    metadata:
+      category: security
+    pattern-either:
+      - pattern: requests.get(..., verify=False, ...)
+      - pattern: requests.post(..., verify=False, ...)
+      - pattern: requests.put(..., verify=False, ...)
+      - pattern: requests.patch(..., verify=False, ...)
+      - pattern: requests.delete(..., verify=False, ...)
+      - pattern: requests.head(..., verify=False, ...)
+      - pattern: requests.request(..., verify=False, ...)
+  - id: blunt-code.python.weak-hash
+    languages: [python]
+    severity: WARNING
+    message: MD5 and SHA-1 are broken for security purposes such as signatures or password hashing. Use SHA-256 or stronger, or bcrypt and argon2 for passwords.
+    metadata:
+      category: security
+    pattern-either:
+      - pattern: hashlib.md5(...)
+      - pattern: hashlib.sha1(...)
+      - pattern: "hashlib.new(\"md5\", ...)"
+      - pattern: "hashlib.new(\"sha1\", ...)"
+      - pattern: "hashlib.new('md5', ...)"
+      - pattern: "hashlib.new('sha1', ...)"
+  - id: blunt-code.javascript.child-process-exec
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: child_process.exec() runs its argument through a shell, so interpolated values can inject commands. Use execFile() or spawn() with an argument array, or keep the command literal.
+    metadata:
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: child_process.exec($CMD, ...)
+          - pattern: child_process.execSync($CMD, ...)
+      - pattern-not: "child_process.exec(\"...\", ...)"
+      - pattern-not: "child_process.execSync(\"...\", ...)"
+  - id: blunt-code.javascript.exec-from-environment
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Feeding environment values into a shell command allows command injection when the variable is attacker-controlled. Pass a fixed argument array to execFile() or spawn() instead.
+    metadata:
+      category: security
+    pattern-either:
+      - pattern: child_process.exec(process.env.$KEY, ...)
+      - pattern: child_process.exec(process.env[...], ...)
+      - pattern: child_process.exec(process.env.$KEY + $REST, ...)
+      - pattern: child_process.exec($PREFIX + process.env.$KEY, ...)
+      - pattern: "child_process.exec(`...${process.env.$KEY}...`)"
+  - id: blunt-code.javascript.dynamic-function
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: new Function() compiles its argument as code, which equals eval() when the body is dynamic. Declare the function explicitly or dispatch to fixed handlers.
+    metadata:
+      category: security
+    patterns:
+      - pattern: new Function(...)
+      - pattern-not: "new Function(\"...\")"
+  - id: blunt-code.javascript.react-dangerous-html
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: dangerouslySetInnerHTML with a dynamic value enables cross-site scripting unless the HTML is sanitized first. Render the value as text or sanitize it with DOMPurify.
+    metadata:
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: <... dangerouslySetInnerHTML = { __html: $VALUE } ... />
+          - pattern: $ELEMENT.dangerouslySetInnerHTML = { __html: $VALUE }
+      - pattern-not: "<... dangerouslySetInnerHTML = { __html: \"...\" } ... />"
+      - pattern-not: "$ELEMENT.dangerouslySetInnerHTML = { __html: \"...\" }"
+  - id: blunt-code.javascript.sql-string-format
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Building SQL with template literals or concatenation enables SQL injection. Use parameterized queries with placeholders and pass values separately.
+    metadata:
+      category: security
+    pattern-either:
+      - pattern: "$DB.query(`...${$VALUE}...`)"
+      - pattern: $DB.query($LEFT + $RIGHT)
+      - pattern: "$DB.execute(`...${$VALUE}...`)"
+      - pattern: $DB.execute($LEFT + $RIGHT)
+  - id: blunt-code.javascript.hardcoded-secret
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Hardcoded credential in source control. Load the value from process.env or a secret manager and rotate the exposed credential.
+    metadata:
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: "const $NAME = \"...\""
+          - pattern: "const $NAME = '...'"
+          - pattern: "let $NAME = \"...\""
+          - pattern: "var $NAME = \"...\""
+          - pattern: "$NAME = \"...\""
+          - pattern: "$NAME = '...'"
+      - metavariable-regex:
+          metavariable: $NAME
+          regex: "(?i)^(.*_)?(password|passwd|pwd|secret|secrets|token|api_?key|apikey|access_?key|auth_?key|private_?key|client_?secret)(_[a-z0-9]+)*$"
+  - id: blunt-code.javascript.javascript-url-href
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: Using a javascript URL scheme in href executes script when the link is used, enabling cross-site scripting. Link to a real route or handle the action in an event handler.
+    metadata:
+      category: security
+    pattern-either:
+      - pattern: "<... href = \"javascript:...\" ... />"
+      - pattern: "$ELEMENT.href = \"javascript:...\""
