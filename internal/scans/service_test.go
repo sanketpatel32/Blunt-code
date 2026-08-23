@@ -658,6 +658,78 @@ func testFinding(analyzerID string) analyzers.Finding {
 	return f
 }
 
+// TestDiscoverAndStartAppliesBluntCodeIgnore checks the scan pipeline end to
+// end: a workspace's committed .bluntcodeignore must exclude files from the
+// analyzer inputs and be recorded in the scan snapshot's exclusions.
+func TestDiscoverAndStartAppliesBluntCodeIgnore(t *testing.T) {
+	root := t.TempDir()
+	for _, name := range []string{"main.py", "skipme.py"} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte("x=1"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, ".bluntcodeignore"), []byte("# generated code\nskipme.py\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	paths, err := config.NewPaths(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := database.Open(context.Background(), paths.DBPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	work, err := db.CreateWorkspace(context.Background(), core.Workspace{Name: "Ignored", RootPath: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := analyzers.NewRegistry()
+	analyzer := &recordingAnalyzer{id: "fake"}
+	if err := registry.Register(analyzer); err != nil {
+		t.Fatal(err)
+	}
+	service := New(db, registry, events.New(), filepath.Join(paths.DataDir, "reports"), paths.ToolsDir, nil)
+	scan, err := service.DiscoverAndStart(context.Background(), work, "standard", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		current, scanErr := db.Scan(context.Background(), scan.ID)
+		if scanErr != nil {
+			t.Fatal(scanErr)
+		}
+		if terminal(current.State) {
+			if current.State != "completed" {
+				t.Fatalf("scan state %q", current.State)
+			}
+			if got := analyzer.lastFiles(); len(got) != 1 || !strings.HasSuffix(got[0], "main.py") {
+				t.Fatalf("analyzer files = %#v, want only main.py", got)
+			}
+			if current.Snapshot == nil {
+				t.Fatal("scan snapshot missing")
+			}
+			foundExclusion := false
+			for _, pattern := range current.Snapshot.Exclusions {
+				if pattern == "skipme.py" {
+					foundExclusion = true
+				}
+			}
+			if !foundExclusion {
+				t.Fatalf("snapshot exclusions = %#v, want the ignore file's pattern recorded", current.Snapshot.Exclusions)
+			}
+			var manifestCount int
+			if err := db.SQL.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM scan_files WHERE scan_id=? AND selected=1`, scan.ID).Scan(&manifestCount); err != nil || manifestCount != 1 {
+				t.Fatalf("scan file manifest: count=%d err=%v, want only main.py selected", manifestCount, err)
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("scan did not finish")
+}
+
 // TestPreviousCompletedScanSkipsCancelledScan checks comparison resolution
 // across failures: after A completes, B is cancelled mid-run, and C completes,
 // C must compare against A - never the cancelled B.

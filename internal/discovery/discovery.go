@@ -46,6 +46,7 @@ type Result struct {
 }
 
 func Discover(ctx context.Context, root string, userExcludes []string) (Result, error) {
+	userExcludes = WorkspaceExcludes(root, userExcludes)
 	result := Result{Languages: map[string]int{}}
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -109,6 +110,7 @@ func Discover(ctx context.Context, root string, userExcludes []string) (Result, 
 // Tree returns only immediate safe children. The UI requests children when a
 // folder is expanded, so this never walks an entire large repository.
 func Tree(ctx context.Context, root, relative string, userExcludes []string) ([]core.FileEntry, error) {
+	userExcludes = WorkspaceExcludes(root, userExcludes)
 	directory := root
 	if relative != "" && relative != "." {
 		directory = filepath.Join(root, relative)

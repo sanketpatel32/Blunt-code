@@ -471,6 +471,11 @@ func (s *Service) writeReport(scan core.Scan, work core.Workspace, files []core.
 
 // DiscoverAndStart is the API-friendly entry that keeps discovery out of HTTP handlers.
 func (s *Service) DiscoverAndStart(ctx context.Context, work core.Workspace, profile string, excludes []string) (core.Scan, error) {
+	// Fold in the workspace's committed .bluntcodeignore so its patterns are
+	// recorded in the scan snapshot's exclusions. Discover and Tree merge the
+	// file themselves too; WorkspaceExcludes deduplicates, so the double
+	// merge is idempotent.
+	excludes = discovery.WorkspaceExcludes(work.RootPath, excludes)
 	found, err := discovery.Discover(ctx, work.RootPath, excludes)
 	if err != nil {
 		return core.Scan{}, err
