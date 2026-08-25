@@ -97,9 +97,7 @@ tools download, then toggle offline mode on.
 ## Scan profiles
 
 Every scan runs in one of three profiles, selected with `--profile` in the
-CLI or the profile picker in the UI:
-
-| Profile | Analyzers | Notes |
+CLI or the profile picker in the UI:| Profile | Analyzers | Notes |
 | :--- | :--- | :--- |
 | **quick** | Ruff + Biome only | Fast feedback between edits; skips semgrep, SonarQube, and the built-ins entirely |
 <!-- bluntcode:ignore -->
@@ -114,3 +112,30 @@ Related pages: [ci.md](ci.md) for headless scans and gates,
 [ignoring-findings.md](ignoring-findings.md) for ignore mechanisms and
 exclude patterns, [analyzers.md](analyzers.md) for how each managed tool is
 pinned and sandboxed.
+
+## Workspace tags, risk score, and scan retention
+
+**Tags** are freeform lowercase labels (1–20 characters: letters, digits,
+hyphens) attached to a workspace via `GET/PUT /api/v1/workspaces/{id}/tags`.
+They live in the `workspace_tags` table (migration 006) and ride along in
+every workspace JSON payload.
+
+**Risk score** is served by `GET /api/v1/workspaces/{id}/risk`. The latest
+completed scan's persisted severity counts are weighed critical ×10,
+high ×5, medium ×2, low ×1 into a raw score bucketed A (<5), B (<20),
+C (<50), D. When a previous completed scan exists the response also carries
+`previous_score` and a `trend` of up/down/flat so the dashboard card can show
+direction, not just level.
+
+**Scan retention:** history grows with every scan, so Blunt Code offers two
+deletion paths — `DELETE /api/v1/scans/{id}` removes one terminal scan
+(cascade-deleting its findings, metrics, per-file hashes, and analyzer runs;
+active scans must be cancelled first and answer 409), and
+`DELETE /api/v1/workspaces/{id}/scans?keep=N` keeps only the newest N terminal
+scans for that workspace. The same pruning is available headlessly as
+`bluntcode prune <path> --keep N`. Both paths never touch non-terminal scans.
+
+**Global findings search** is `GET /api/v1/findings/search`: one query across
+every stored scan on this computer, filtered by text (`q` over message/rule/
+path), comma-separated severities, analyzer, workspace, and optionally
+including suppressed findings; results are paged and severity-ranked.
