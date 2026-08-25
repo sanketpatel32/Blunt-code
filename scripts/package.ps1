@@ -1,11 +1,14 @@
 [CmdletBinding()]
 param(
   [string]$Version = '0.5.0',
-  [string]$OutputDir = (Join-Path (Split-Path -Parent $PSScriptRoot) 'dist')
+  # No $PSScriptRoot here: Windows PowerShell 5.1 leaves it empty inside
+  # param() default expressions, so resolve after the body starts.
+  [string]$OutputDir = ''
 )
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
+if (-not $OutputDir) { $OutputDir = Join-Path $root 'dist' }
 & (Join-Path $PSScriptRoot 'build.ps1')
 if ($LASTEXITCODE -ne 0) { throw "Build failed with exit code $LASTEXITCODE" }
 
