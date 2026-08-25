@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
-import type { Finding, Scan } from '../types';
+import type { AnalyzerRun, Finding, Scan } from '../types';
 import type { Route } from '../lib/router';
 import type { Notice } from '../lib/notice';
 import { message } from '../lib/notice';
 import { analyzerName, date, elapsed, findingLocation } from '../lib/format';
 import { eventCopy, isTerminalScanState, liveHeadline, stageLabels, type ScanEvent } from '../lib/scanEvents';
 import { useLoad } from '../hooks/useLoad';
+import { useTicker } from '../hooks/useTicker';
 import { ErrorPanel, Loading, SeverityCounts } from '../components/ui';
 import { SkeletonLines } from '../components/skeletons';
 import { AnalyzerStatuses } from './WorkspaceDetailPage';
@@ -49,6 +50,8 @@ export function ScanPage({ id, notify }: { id: string; go?: (r: Route) => void; 
   }, [id, scanState, scanReload]);
   const current = scan.data;
   const terminal = current && isTerminalScanState(current.state);
+  // Ticking re-render so the elapsed clock advances every second on live scans.
+  useTicker(!terminal);
   async function cancel() { try { await api.cancelScan(id); await scan.reload(); } catch (e) { notify({ kind: 'error', text: message(e) }); } }
   if (scan.loading) return <div className="page"><Loading /></div>;
   if (scan.error) return <div className="page"><ErrorPanel error={scan.error} retry={scan.reload} /></div>;
@@ -56,7 +59,39 @@ export function ScanPage({ id, notify }: { id: string; go?: (r: Route) => void; 
   const headline = terminal ? current.state.replaceAll('_', ' ') : liveHeadline(events, current.state);
   const reportedFindings = events.reduce((total, event) => total + (event.type === 'analyzer.completed' ? event.findings ?? 0 : 0), 0);
   const findingsSoFar = Math.max(current.total_findings ?? 0, reportedFindings);
-  return <div className="page scan-page"><header className="scan-header"><div><p className="eyebrow">Analysis story</p><h1>{headline}</h1><p>Started {date(current.started_at)} · elapsed {elapsed(current.started_at, current.finished_at)}</p></div><div className="scan-header-actions"><span className={`stream-state ${streamState}`} aria-live="polite"><i />{terminal ? 'Saved report' : streamState === 'live' ? 'Live updates' : streamState === 'reconnecting' ? 'Reconnecting' : 'Connecting'}</span>{!terminal && <button type="button" className="button danger" onClick={cancel}>Cancel scan</button>}</div></header><section className="progress-layout"><ScanStageList scan={current} events={events} /><aside className="scan-side"><p className="eyebrow">Results so far</p><h2>{findingsSoFar} findings {terminal ? 'collected' : 'reported so far'}</h2><SeverityCounts scan={current} />{current.error_summary && <div className="inline-warning">{current.error_summary}</div>}<AnalyzerStatuses runs={current.analyzer_runs} /></aside></section>{terminal && (current.fixed_count ?? 0) > 0 && <WhatChanged scanId={id} fixedCount={current.fixed_count ?? 0} />}{terminal && <ReportView scanId={id} notify={notify} />}</div>;
+  return <div className="page scan-page"><header className="scan-header"><div><p className="eyebrow">Analysis story</p><h1>{headline}</h1><p>Started {date(current.started_at)} · elapsed {elapsed(current.started_at, current.finished_at)}</p><ScanProgressBar scan={current} events={events} /></div><div className="scan-header-actions"><span className={`stream-state ${streamState}`} aria-live="polite"><i />{terminal ? 'Saved report' : streamState === 'live' ? 'Live updates' : streamState === 'reconnecting' ? 'Reconnecting' : 'Connecting'}</span>{!terminal && <button type="button" className="button danger" onClick={cancel}>Cancel scan</button>}</div></header><section className="progress-layout"><ScanStageList scan={current} events={events} /><aside className="scan-side"><p className="eyebrow">Results so far</p><h2>{findingsSoFar} findings {terminal ? 'collected' : 'reported so far'}</h2><SeverityCounts scan={current} /><LiveAnalyzerStrip runs={current.analyzer_runs} events={events} />{current.error_summary && <div className="inline-warning">{current.error_summary}</div>}<AnalyzerStatuses runs={current.analyzer_runs} /></aside></section>{terminal && (current.fixed_count ?? 0) > 0 && <WhatChanged scanId={id} fixedCount={current.fixed_count ?? 0} />}{terminal && <ReportView scanId={id} notify={notify} />}</div>;
+}
+
+/** Thin progress bar under the scan headline. Determinate when analyzer runs
+ *  report a known set (finished ÷ total, counting failures as finished); an
+ *  animated indeterminate sweep before that. Terminal scans render the full
+ *  bar in success tone — or danger when nothing completed cleanly. */
+function ScanProgressBar({ scan, events }: { scan: Scan; events: ScanEvent[] }) {
+  const terminal = isTerminalScanState(scan.state);
+  const liveDone = new Set(events.filter((event) => ['analyzer.completed', 'analyzer.failed', 'analyzer.skipped'].includes(event.type)).map((event) => event.analyzer_id ?? event.name));
+  const runs = scan.analyzer_runs ?? [];
+  const total = runs.length || undefined;
+  const doneFromRuns = runs.filter((run) => run.status !== 'running' && run.status !== 'pending').length;
+  const done = terminal ? total ?? 1 : Math.max(doneFromRuns, liveDone.size) || undefined;
+  let state = 'indeterminate';
+  let percent: number | undefined;
+  if (terminal) { state = scan.state === 'failed' ? 'failed' : 'done'; percent = 100; }
+  else if (total && done !== undefined) { state = 'determinate'; percent = Math.min(100, Math.round((done / total) * 100)); }
+  const label = percent !== undefined ? `Scan progress: ${percent}%` : 'Scan in progress';
+  return <div className={`scan-progress ${state}`} role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent ?? undefined} aria-busy={!terminal}><i style={percent !== undefined ? { width: `${percent}%` } : undefined} /></div>;
+}
+
+/** Live per-analyzer pills for the side panel: stream events overlay the
+ *  persisted analyzer_runs so a pill flips to "done" the moment its completion
+ *  event lands, without waiting for the next scan reload. */
+function LiveAnalyzerStrip({ runs, events }: { runs?: AnalyzerRun[]; events: ScanEvent[] }) {
+  const started = new Map<string, boolean>();
+  for (const event of events) {
+    if (event.type === 'analyzer.started') started.set(event.analyzer_id ?? event.name ?? '', true);
+  }
+  const pills = (runs?.length ? runs.map((run) => ({ id: run.analyzer_id, status: run.status })) : [...started.keys()].map((id) => ({ id, status: 'running' })));
+  if (!pills.length) return null;
+  return <ul className="live-analyzers" aria-label="Analyzer progress">{pills.map((pill) => <li key={pill.id}><span className="badge">{pill.id}</span><span className={`state ${pill.status}`}>{pill.status}</span></li>)}</ul>;
 }
 
 /** Compact rows shown before the "<details>" overflow; the endpoint itself caps the list at 100. */
