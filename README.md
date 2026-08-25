@@ -33,9 +33,10 @@
 - **100% Local & Private:** Runs entirely on loopback (`127.0.0.1`). Your code, findings, reports, and logs never leave your device.
 - **Zero-Config Managed Tools:** Automatically installs and sandboxes code analyzers in isolated application directories. No manual `PATH` configuring or Python/Java/Node dependency hassle — and `doctor --fix` self-heals stale rules and interrupted installs.
 - **Multi-Tool Coverage:** Runs **Ruff**, **Biome**, **Semgrep**, and **SonarQube** concurrently to check for lint issues, security SAST vulnerabilities, formatting errors, and code smells — plus built-in **secrets** and **TODO/FIXME** detectors that ship in the binary with nothing extra to install, across 40+ file types from Go and Java to `.env` files, Dockerfiles, and YAML.
-- **Interactive UI Dashboard:** Built-in web app with a home dashboard of global overview cards, real-time scan logs, file-level previews, severity visualizations, rich filtering by tool/rule/severity, severity trends across scan history, and per-finding suppression (with reason) that hides dismissed findings from future scans and gates.
-- **Reports in Every Format:** One-click export to **Markdown**, standalone **HTML**, **SARIF 2.1.0** (VS Code / GitHub code scanning), **CSV**, and **JSON** — or emit **SARIF**, full **JSON** reports, and inline **GitHub Actions annotations** straight from the CLI.
-- **CI Gates, Baselines & Watch Mode:** `--fail-on high+` / `--max-findings N` turn a headless scan into a build gate, `--baseline` (a previous scan ID or SARIF file) excludes known findings so gates start passing on day one, `--jobs N` parallelizes analyzers, `--incremental` rescans only files that changed (`--watch` does this automatically from its second scan onward), a committed `.bluntcodeignore` shares excludes per project, and inline `bluntcode:ignore` comments dismiss false positives at the source. See [docs/ci.md](docs/ci.md) for the full CI guide.
+- **Interactive UI Dashboard:** Built-in web app with a home dashboard of global overview cards, real-time scan logs, file-level previews, severity visualizations, rich filtering by tool/rule/severity, severity trends across scan history, per-finding suppression (with reason) that hides dismissed findings from future scans and gates, **global search across every stored scan**, and a weighted **risk score with trend** on each workspace.
+- **Reports in Every Format:** One-click export to **Markdown**, standalone **HTML**, **SARIF 2.1.0** (VS Code / GitHub code scanning), **CSV**, and **JSON** — or emit **CSV/SARIF/JSON reports**, **GitHub Actions annotations**, and **baselines** straight from the CLI (`--output`, `--save-baseline`).
+- **CI Gates, Baselines & Watch Mode:** `--fail-on high+` / `--max-findings N` turn a headless scan into a build gate, `--gate-analyzer`/`--gate-category` scope the gate to a subset of findings, `--baseline` (a previous scan ID or SARIF file) excludes known findings so gates start passing on day one, `--jobs N` parallelizes analyzers, `--incremental` rescans only files that changed (`--watch` does this automatically from its second scan onward), a committed `.bluntcodeignore` shares excludes per project, and inline `bluntcode:ignore` comments dismiss false positives at the source. See [docs/ci.md](docs/ci.md) for the full CI guide.
+- **History Management:** scan history stays healthy — delete individual scans (cascading to their findings and artifacts) or prune beyond the newest N from the UI or `bluntcode prune --keep N`.
 - **Dark Mode & Keyboard Shortcuts:** Light/dark theme that follows your OS preference, and keyboard-first navigation (`g`+`h/w/t/s` to jump between pages, `/` to search, `?` for the shortcut cheat sheet).
 - **Offline Capable:** Once analyzers are downloaded on initial setup, full scans can run 100% offline without internet access.
 
@@ -198,6 +199,16 @@ Every scan runs in one of three profiles:
 .\bluntcode.exe scan "C:\Projects\my-python-app" --format json
 .\bluntcode.exe scan "C:\Projects\my-python-app" --format sarif > .\baseline.sarif
 .\bluntcode.exe scan "C:\Projects\my-python-app" --format github
+
+# Write documents straight to files: a CSV spreadsheet, or capture the SARIF baseline in one step
+.\bluntcode.exe scan "C:\Projects\my-python-app" --format csv --output findings.csv
+.\bluntcode.exe scan "C:\Projects\my-python-app" --save-baseline .\baseline.sarif
+
+# Scope a CI gate to security findings from semgrep and the built-in secrets detector only
+.\bluntcode.exe scan "C:\Projects\my-python-app" --fail-on high+ --gate-analyzer semgrep,secrets --gate-category security
+
+# Prune old local scan history, keeping the newest 20 reports
+.\bluntcode.exe prune "C:\Projects\my-python-app" --keep 20
 
 # Run up to 2 analyzers concurrently, rescan only files that changed, or keep watching and rescan on file changes
 .\bluntcode.exe scan "C:\Projects\my-python-app" --jobs 2
