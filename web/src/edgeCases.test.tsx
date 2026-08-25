@@ -74,9 +74,10 @@ describe('hostile API fixtures', () => {
     ]);
     const host = await renderAt('/', fetchMock);
     expectClean(host);
-    expect(host.textContent).toContain('No scans yet');
-    expect(host.textContent).toContain('No workspaces yet');
-    expect(host.textContent).toContain('0 of 0 tools ready');
+    // Null workspaces + null scans is the first-run state: the dashboard shows
+    // its onboarding hero instead of the stats/activity sections.
+    expect(host.textContent).toContain('Point Blunt Code at a project');
+    expect(host.textContent).toContain('Add your first workspace');
   });
 
   it('HomePage renders zeros, never NaN, for a summary with missing fields', async () => {

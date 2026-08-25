@@ -60,7 +60,7 @@ describe('global keyboard shortcuts', () => {
     expect(host.textContent).not.toContain('Choose a project folder.');
     await act(async () => { key('g'); key('h'); });
     expect(window.location.pathname).toBe('/');
-    expect(host.textContent).toContain('No workspaces yet');
+    expect(host.textContent).toContain('Point Blunt Code at a project');
   });
 
   it('opens the shortcuts help with ? and closes it with Escape', async () => {

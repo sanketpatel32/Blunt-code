@@ -58,11 +58,11 @@ const summary: ScanSummary = {
   active_scans: 1,
 };
 
-function homeFetchMock(scansPayload: unknown) {
+function homeFetchMock(scansPayload: unknown, workspacesPayload: unknown = { items: [{ id: 'ws-1', name: 'Example API', root_path: 'C:\\code\\example', languages: ['Python'], latest_scan: null }] }) {
   return vi.fn((input: string, init?: RequestInit) => {
     if (input === '/api/v1/scans') return Promise.resolve(json(scansPayload));
     if (input.endsWith('/workspaces') && init?.method === 'POST') return Promise.resolve(json({ id: 'ws-new', name: 'New', root_path: 'C:\\code\\new' }));
-    if (input.endsWith('/workspaces')) return Promise.resolve(json({ items: [] }));
+    if (input.endsWith('/workspaces')) return Promise.resolve(json(workspacesPayload));
     if (input.endsWith('/tools')) return Promise.resolve(json({ items: [] }));
     return Promise.resolve(json({ items: [] }));
   });

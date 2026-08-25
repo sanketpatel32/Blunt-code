@@ -23,12 +23,22 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
   const summary = recent.data?.summary;
   const latestWorkspaceId = scans[0]?.workspace_id;
   const [quickScanning, setQuickScanning] = useState(false);
+  // First run = nothing added and nothing ever scanned; any saved workspace or
+  // history row means the full dashboard has something to show.
+  const firstRun = !workspaces.loading && !workspaces.error && !workspaces.data?.length
+    && !(recent.data?.scans?.length);
   async function quickScan() {
     if (!latestWorkspaceId || quickScanning) return;
     setQuickScanning(true);
     try { const active = await api.startScan(latestWorkspaceId); go({ page: 'scan', id: active.id }); }
     catch (e) { notify({ kind: 'error', text: message(e) }); setQuickScanning(false); }
   }
+  if (firstRun) return <div className="page dashboard-page">
+    <header className="dashboard-heading"><div><h1>Workspaces</h1><p>Run a local scan, then follow every result in one place.</p></div><div className="dashboard-actions"><button type="button" className="button primary" onClick={onAdd}>+ Add workspace</button></div></header>
+    <Empty title="Point Blunt Code at a project" icon={<FolderIcon />} tone="positive" action={<button type="button" className="button primary" onClick={onAdd}>Add your first workspace</button>}>
+      Choose any folder on this computer. Blunt Code scans it locally, keeps the history here, and never changes your source files.
+    </Empty>
+  </div>;
   return <div className="page dashboard-page"><header className="dashboard-heading"><div><h1>Workspaces</h1><p>Run a local scan, then follow every result in one place.</p></div><div className="dashboard-actions"><button type="button" className="button secondary" onClick={() => void quickScan()} disabled={!latestWorkspaceId || quickScanning} title={latestWorkspaceId ? 'Run a scan on the most recently scanned workspace' : undefined}>{quickScanning ? 'Starting scan…' : 'Scan latest workspace'}</button><button type="button" className="button primary" onClick={onAdd}>+ Add workspace</button></div></header>
     <StatsOverview />
     {recent.loading ? <div className="dashboard-summary-loading"><SkeletonCards count={5} /></div> : summary && <section className="summary-grid dashboard-summary" aria-label="Scan activity summary">

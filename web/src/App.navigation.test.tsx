@@ -39,7 +39,7 @@ describe('navigation resilience', () => {
     expect(home).toBeDefined();
     await act(async () => { home!.click(); await Promise.resolve(); await Promise.resolve(); });
     expect(window.location.pathname).toBe('/');
-    expect(host.textContent).toContain('No workspaces yet');
+    expect(host.textContent).toContain('Point Blunt Code at a project');
   });
 
   it('adds About as the last navigation item and routes to the About page', async () => {

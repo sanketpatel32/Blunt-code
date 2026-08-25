@@ -61,7 +61,7 @@ describe('Blunt Code home', () => {
   it('shows a useful empty state when no workspaces exist', async () => {
     const fetchMock = vi.fn((input: string) => Promise.resolve(json(input.endsWith('/workspaces') ? { items: [] } : { items: [] })));
     const host = await render(fetchMock);
-    expect(host.textContent).toContain('No workspaces yet');
+    expect(host.textContent).toContain('Point Blunt Code at a project');
     expect(host.textContent).toContain('Add workspace');
   });
 

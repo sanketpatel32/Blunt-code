@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { Scan, Severity, Tool } from '../types';
 import { languageNames } from '../lib/format';
+import { useCountUp } from '../hooks/useCountUp';
 
 export function ErrorPanel({ error, retry }: { error: string; retry?: () => void }) {
   return <section className="error-panel" role="alert"><h2>Could not load this view</h2><p>{error}</p>{retry && <button type="button" className="button secondary" onClick={retry}>Try again</button>}</section>;
@@ -35,5 +36,6 @@ export function ToolSummary({ tools }: { tools: Tool[] }) {
 }
 
 export function SummaryCard({ label, value, tone }: { label: string; value: number; tone?: string }) {
-  return <article className={`summary-card ${tone ?? ''}`}><strong>{value}</strong><span>{label}</span></article>;
+  const shown = useCountUp(value);
+  return <article className={`summary-card ${tone ?? ''}`}><strong>{shown}</strong><span>{label}</span></article>;
 }
