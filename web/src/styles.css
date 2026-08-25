@@ -31,6 +31,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .app-nav nav a:hover, .app-nav nav a.active { color: var(--color-ink); }
 .app-nav nav a:hover::after, .app-nav nav a.active::after { opacity: 1; transform: scaleX(1); }
 .nav-actions { display: flex; align-items: center; gap: var(--space-md); }
+/* The shortcuts button gets real chrome so it reads as a button like its
+   nav siblings (theme toggle / close app) instead of a floating glyph;
+   token pairs invert with the theme. */
+.icon-button.nav-shortcuts { width: 2.25rem; height: 2.25rem; border: var(--rule) solid var(--color-rule-strong); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-ink); font-size: var(--text-md); font-weight: 700; transition: border-color var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out), background var(--dur-base) var(--ease-out); }
+.icon-button.nav-shortcuts:hover { border-color: var(--color-accent); color: var(--color-accent-strong); }
+@media (hover: hover) { .icon-button.nav-shortcuts:hover { background: var(--color-surface-muted); } }
 .theme-toggle { gap: var(--space-2xs); padding: 0 var(--space-sm); }
 .theme-toggle svg { flex: none; width: 1rem; height: 1rem; }
 .local-signal, .stream-state { display: inline-flex; align-items: center; gap: var(--space-xs); color: var(--color-ink-soft); font: 600 var(--text-xs) var(--font-mono); letter-spacing: .02em; white-space: nowrap; }
