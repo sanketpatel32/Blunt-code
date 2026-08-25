@@ -993,7 +993,8 @@ func writeTopFindings(w io.Writer, findings []analyzers.Finding, n int) {
 	}
 }
 
-func writeScanHuman(w io.Writer, s scanSummary) {	stateLabel := strings.ReplaceAll(s.state, "_", " ")
+func writeScanHuman(w io.Writer, s scanSummary) {
+	stateLabel := strings.ReplaceAll(s.state, "_", " ")
 	reason := ""
 	if s.timedOut {
 		reason = " (aborted: timeout exceeded)"

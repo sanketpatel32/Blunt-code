@@ -341,8 +341,8 @@ func csvHostileCorpus() []analyzers.Finding {
 		},
 		{ // every formula introducer in a different column
 			AnalyzerID: "ruff", RuleID: "=RULE", Severity: analyzers.SeverityCritical, Category: analyzers.CategorySecurity,
-			Title:       `+HYPERLINK("http://evil.example","click me")`,
-			Message:     "=cmd|'/c calc'!A1", RelativePath: "-leading-dash.py",
+			Title:   `+HYPERLINK("http://evil.example","click me")`,
+			Message: "=cmd|'/c calc'!A1", RelativePath: "-leading-dash.py",
 			Remediation: "-2+cmd|'/C calc'!A0", DocumentationURL: "@SUM(1+1)*cmd|'/C calc'!A0",
 		},
 		{AnalyzerID: "ruff", RuleID: "TAB-MSG", Severity: analyzers.SeverityHigh, Category: analyzers.CategorySecurity,
@@ -2231,7 +2231,7 @@ func TestSearchFindingsSpansWorkspacesWithFilters(t *testing.T) {
 	if body.Total != 1 || body.Items[0].RuleID != "aws-key" {
 		t.Fatalf("analyzer filter must be case-insensitive: %#v", body)
 	}
-	body = search("?workspace_id="+beta.ID)
+	body = search("?workspace_id=" + beta.ID)
 	if body.Total != 1 || body.Items[0].ScanID != second.ID {
 		t.Fatalf("workspace scoping: %#v", body)
 	}
@@ -2347,14 +2347,14 @@ func TestWorkspaceRiskScoresLatestCompletedScan(t *testing.T) {
 		finding("ruff", "h2", "d.py", "high", analyzers.SeverityHigh, analyzers.CategoryCorrectness))
 
 	type riskResponse struct {
-		Available     bool             `json:"available"`
-		ScanID        string           `json:"scan_id"`
-		Score         float64          `json:"score"`
-		Grade         string           `json:"grade"`
-		Trend         string           `json:"trend"`
-		PreviousScore float64          `json:"previous_score"`
-		PreviousID    string           `json:"previous_scan_id"`
-		Counts        map[string]int   `json:"counts"`
+		Available     bool           `json:"available"`
+		ScanID        string         `json:"scan_id"`
+		Score         float64        `json:"score"`
+		Grade         string         `json:"grade"`
+		Trend         string         `json:"trend"`
+		PreviousScore float64        `json:"previous_score"`
+		PreviousID    string         `json:"previous_scan_id"`
+		Counts        map[string]int `json:"counts"`
 	}
 	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/workspaces/"+work.ID+"/risk", nil)
 	response = httptest.NewRecorder()
