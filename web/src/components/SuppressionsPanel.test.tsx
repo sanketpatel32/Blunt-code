@@ -46,6 +46,19 @@ async function click(element: Element) {
   await act(async () => { (element as HTMLButtonElement).click(); });
 }
 
+/** Drives the controlled search input with a native input event, the way typing lands in React (the prototype setter bypasses React's value tracking). */
+async function type(host: HTMLElement, value: string) {
+  const input = host.querySelector<HTMLInputElement>('.suppressions-section input');
+  expect(input).not.toBeNull();
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+  await act(async () => {
+    setter?.call(input, value);
+    input?.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+}
+
+const settle = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 200)); });
+
 beforeEach(() => { fetchMock.mockClear(); });
 
 afterEach(async () => {
@@ -99,5 +112,47 @@ describe('SuppressionsSection', () => {
       await act(async () => { await Promise.resolve(); await Promise.resolve(); });
       expect(host.querySelectorAll('.suppression-row')).toHaveLength(2);
     });
+  });
+
+  it('narrows rows only after the search settles and reports a live count', async () => {
+    const host = await render();
+    await type(host, 'FALSE POSITIVE'); // case-insensitive against the reason text
+    expect(host.querySelectorAll('.suppression-row')).toHaveLength(2); // debounce still pending, nothing filtered yet
+    await settle();
+    const rows = [...host.querySelectorAll('.suppression-row')];
+    expect(rows).toHaveLength(1);
+    expect(rows[0].querySelector('.suppression-fingerprint')?.textContent).toContain('a');
+    expect(host.querySelector('.suppressions-count')?.textContent).toBe('1 of 2 suppressions shown');
+  });
+
+  it('matches fingerprint fragments as well as reasons', async () => {
+    const host = await render();
+    await type(host, BETA.slice(0, 6));
+    await settle();
+    const rows = [...host.querySelectorAll('.suppression-row')];
+    expect(rows).toHaveLength(1);
+    expect(rows[0].querySelector('.suppression-fingerprint')?.getAttribute('title')).toBe(BETA);
+  });
+
+  it('restores every row as soon as the search is cleared with Escape', async () => {
+    const host = await render();
+    await type(host, 'zzz-nothing');
+    await settle();
+    expect(host.querySelectorAll('.suppression-row')).toHaveLength(0);
+    await act(async () => {
+      const input = host.querySelector<HTMLInputElement>('.suppressions-section input');
+    await act(async () => { input?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+    // Clearing bypasses the debounce, so the full list is back without waiting.
+    expect(host.querySelectorAll('.suppression-row')).toHaveLength(2);
+    expect(host.querySelector('.suppressions-count')).toBeNull();
+    expect(host.querySelector<HTMLInputElement>('.suppressions-section input')?.value).toBe('');
+  });
+
+  it('keeps a no-match state distinct from the nothing-suppressed empty state', async () => {
+    const host = await render();
+    await type(host, 'zzz-nothing');
+    await settle();
+    expect(host.textContent).toContain('No suppressions match “zzz-nothing”.');
+    expect(host.textContent).not.toContain('Nothing is suppressed.');
   });
 });

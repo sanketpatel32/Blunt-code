@@ -18,3 +18,10 @@
 .trend-tooltip-date { color: var(--color-ink-faint); font: 600 var(--text-xs) var(--font-mono); }
 .trend-tooltip-total { color: var(--color-ink); }
 .trend-tooltip-breakdown { color: var(--color-ink-soft); overflow-wrap: anywhere; }
+
+/* --- Suppressions panel --------------------------------------------------- */
+
+.suppressions-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs) var(--space-md); }
+/* The global .search label is tuned for the tree panel sidebar; relax it here. */
+.suppressions-section .search { margin: 0 0 var(--space-sm); max-width: 24rem; }
+.suppressions-count { margin: 0 0 var(--space-sm); color: var(--color-ink-faint); font: 600 var(--text-xs) var(--font-mono); white-space: nowrap; }
