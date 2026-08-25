@@ -139,8 +139,7 @@ describe('SuppressionsSection', () => {
     await type(host, 'zzz-nothing');
     await settle();
     expect(host.querySelectorAll('.suppression-row')).toHaveLength(0);
-    await act(async () => {
-      const input = host.querySelector<HTMLInputElement>('.suppressions-section input');
+    const input = host.querySelector<HTMLInputElement>('.suppressions-section input');
     await act(async () => { input?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
     // Clearing bypasses the debounce, so the full list is back without waiting.
     expect(host.querySelectorAll('.suppression-row')).toHaveLength(2);
