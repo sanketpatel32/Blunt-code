@@ -5,6 +5,14 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Uninstaller cleans up its shortcut:** the one-line installer creates a Start-menu `Blunt Code.lnk`, but the uninstaller left it behind as a dangling link after removing the app (the README already promised shortcut removal). It now deletes the shortcut and refuses to run while Blunt Code is open, mirroring the installer's guard. Shipped as a clobber-refresh of the v0.5.0 ZIP and installer assets.
+- **Installer output survives `irm | iex` on Windows PowerShell 5.1:** GitHub serves the installer script as `application/octet-stream`, so the ellipsis in "Downloading Blunt Code…" decoded as mojibake; the message is ASCII-only now, and `package.ps1` prints the real installer filename (`install-latest.ps1`) instead of a name that never existed.
+- **README execution-policy fallback** points at `install-latest.ps1` (the actual release asset) instead of an `Install-BluntCode.ps1` file that was never shipped anywhere.
+
 ## [0.5.0] - 2026-08-25
 
 ### Added
