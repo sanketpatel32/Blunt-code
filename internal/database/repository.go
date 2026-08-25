@@ -1,4 +1,4 @@
-package database
+﻿package database
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+"sort"
 	"strings"
 	"time"
 
@@ -475,8 +476,9 @@ type RecentScan struct {
 // known lifecycle state; it is always bound as a SQL parameter, never
 // interpolated.
 type RecentScansFilter struct {
-	Limit int
-	State string
+	 Limit       int
+	 State       string
+	 WorkspaceID string
 }
 
 const (
@@ -497,9 +499,17 @@ func (d *DB) RecentScans(ctx context.Context, filter RecentScansFilter) ([]Recen
 		filter.Limit = MaxRecentScansLimit
 	}
 	where, args := "", []any(nil)
+	conditions := []string{}
 	if filter.State != "" {
-		where = " WHERE scans.state=?"
+		conditions = append(conditions, "scans.state=?")
 		args = append(args, filter.State)
+	}
+	if filter.WorkspaceID != "" {
+		conditions = append(conditions, "scans.workspace_id=?")
+		args = append(args, filter.WorkspaceID)
+	}
+	if len(conditions) > 0 {
+		where = " WHERE " + strings.Join(conditions, " AND ")
 	}
 	var total int
 	if err := d.SQL.QueryRowContext(ctx, `SELECT COUNT(*) FROM scans`+where, args...).Scan(&total); err != nil {
@@ -1179,7 +1189,7 @@ func (d *DB) FindingsPage(ctx context.Context, scan core.Scan, filter FindingFil
 
 // FindingsCSV returns every finding matching the filter with exactly the same
 // matching and ordering rules as FindingsPage, except that suppressed findings
-// are excluded unless the filter explicitly selects status=suppressed — a
+// are excluded unless the filter explicitly selects status=suppressed â€” a
 // dismissed finding never ships in an export. Limit and offset are ignored;
 // the row count is capped at MaxFindingsExportRows.
 func (d *DB) FindingsCSV(ctx context.Context, scan core.Scan, filter FindingFilter) ([]analyzers.Finding, error) {
@@ -1248,13 +1258,13 @@ func (d *DB) FixedFindings(ctx context.Context, scan core.Scan, limit int) (Fixe
 	// buildFindingQuery pointed the other way: previous findings whose
 	// fingerprint no longer exists in the current scan are gone. The analyzer
 	// subquery is the SQL form of SuccessfulAnalyzerIDs for the coverage rule,
-	// and a suppressed fingerprint never reports as fixed — it was dismissed,
+	// and a suppressed fingerprint never reports as fixed â€” it was dismissed,
 	// not resolved.
 	// The fingerprint predicate mirrors the comparison status in
 	// buildFindingQuery pointed the other way: previous findings whose
 	// fingerprint no longer exists in the current scan are gone. The analyzer
 	// subquery is the SQL form of SuccessfulAnalyzerIDs for the coverage rule,
-	// and a suppressed fingerprint never reports as fixed — it was dismissed,
+	// and a suppressed fingerprint never reports as fixed â€” it was dismissed,
 	// not resolved. The NOT IN form materializes the workspace's suppression
 	// set once instead of probing per row (measured: the correlated EXISTS
 	// probe added ~60% to a 20k-row panel).
@@ -1442,4 +1452,273 @@ func (d *DB) AppendReusedFindings(ctx context.Context, scanID, analyzerID string
 func (d *DB) SetScanNote(ctx context.Context, scanID, note string) error {
 	_, err := d.SQL.ExecContext(ctx, `UPDATE scans SET error_summary=? WHERE id=?`, note, scanID)
 	return err
+}
+
+// ValidateTag enforces the workspace tag shape: 1-20 lowercase letters,
+// digits, or hyphens. The same rule is encoded in the workspace_tags table
+// CHECK constraint, so API validation and storage agree.
+func ValidateTag(tag string) error {
+	if len(tag) < 1 || len(tag) > 20 {
+		return fmt.Errorf("tag must be between 1 and 20 characters")
+	}
+	for _, r := range tag {
+		if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-') {
+			return fmt.Errorf("tag may only contain lowercase letters, digits, and hyphens")
+		}
+	}
+	return nil
+}
+
+// GetWorkspaceTags returns the workspace's tags sorted alphabetically.
+func (d *DB) GetWorkspaceTags(ctx context.Context, workspaceID string) ([]string, error) {
+	rows, err := d.SQL.QueryContext(ctx, `SELECT tag FROM workspace_tags WHERE workspace_id=? ORDER BY tag`, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	tags := make([]string, 0)
+	for rows.Next() {
+		var tag string
+		if err := rows.Scan(&tag); err != nil {
+			return nil, err
+		}
+		tags = append(tags, tag)
+	}
+	return tags, rows.Err()
+}
+
+// WorkspaceTagsMap batches one query for many workspaces so list endpoints can
+// attach tags without per-workspace round trips.
+func (d *DB) WorkspaceTagsMap(ctx context.Context, ids []string) (map[string][]string, error) {
+	out := make(map[string][]string, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	placeholders := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	rows, err := d.SQL.QueryContext(ctx, `SELECT workspace_id, tag FROM workspace_tags WHERE workspace_id IN (`+strings.Join(placeholders, ",")+`) ORDER BY workspace_id, tag`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var workspaceID, tag string
+		if err := rows.Scan(&workspaceID, &tag); err != nil {
+			return nil, err
+		}
+		out[workspaceID] = append(out[workspaceID], tag)
+	}
+	return out, rows.Err()
+}
+
+// SetWorkspaceTags atomically replaces the workspace's tag set. Tags are
+// validated, de-duplicated, and stored sorted.
+func (d *DB) SetWorkspaceTags(ctx context.Context, workspaceID string, tags []string) error {
+	if tags == nil {
+		tags = make([]string, 0)
+	}
+	seen := map[string]bool{}
+	normalized := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		tag = strings.ToLower(strings.TrimSpace(tag))
+		if err := ValidateTag(tag); err != nil {
+			return err
+		}
+		if seen[tag] {
+			continue
+		}
+		seen[tag] = true
+		normalized = append(normalized, tag)
+	}
+	sort.Strings(normalized)
+	tx, err := d.SQL.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM workspace_tags WHERE workspace_id=?`, workspaceID); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	for _, tag := range normalized {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO workspace_tags(workspace_id, tag) VALUES(?,?)`, workspaceID, tag); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
+}
+// PruneOldScans keeps the N most recent terminal scans for a workspace and
+// deletes older scans. Non-terminal scans are never deleted. Deletion cascades
+// via foreign keys to findings, metrics, scan_files, scan_file_hashes,
+// scan_hash_meta, and analyzer_runs.
+func (d *DB) PruneOldScans(ctx context.Context, workspaceID string, keep int) (int64, error) {
+	if keep < 1 || keep > 100 {
+		return 0, fmt.Errorf("keep must be between 1 and 100")
+	}
+	rows, err := d.SQL.QueryContext(ctx, `SELECT id FROM scans WHERE workspace_id=? AND state IN ('completed','completed_with_warnings','failed','cancelled','interrupted') ORDER BY started_at DESC, id DESC LIMIT -1 OFFSET ?`, workspaceID, keep)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return 0, err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	placeholders := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	result, err := d.SQL.ExecContext(ctx, `DELETE FROM scans WHERE id IN (`+strings.Join(placeholders, ",")+`)`, args...)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := result.RowsAffected()
+	return n, nil
+}
+
+// DeleteScan removes one scan by ID. Only terminal scans may be deleted; a
+// running scan must be cancelled first. Deletion cascades via foreign keys to
+// findings, metrics, scan_files, scan_file_hashes, scan_hash_meta, and
+// analyzer_runs. The second return is false when no terminal scan has this ID.
+func (d *DB) DeleteScan(ctx context.Context, id string) (bool, error) {
+	result, err := d.SQL.ExecContext(ctx, `DELETE FROM scans WHERE id=? AND state IN ('completed','completed_with_warnings','failed','cancelled','interrupted')`, id)
+	if err != nil {
+		return false, err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+// DefaultSearchPageSize and MaxSearchPageSize bound the cross-workspace
+// findings search served at GET /api/v1/findings/search.
+const (
+	DefaultSearchPageSize = 25
+	MaxSearchPageSize     = 100
+)
+
+// GlobalFindingsFilter controls the cross-workspace findings search. Text
+// matches message, rule id, and path as case-insensitive substrings;
+// severities and analyzer match exactly; suppressed findings stay hidden
+// unless explicitly included.
+type GlobalFindingsFilter struct {
+	Query             string
+	Severities        []string
+	Analyzer          string
+	WorkspaceID       string
+	IncludeSuppressed bool
+	Page              int
+	PageSize          int
+}
+
+// SearchedFinding is a finding enriched with its scan and workspace identity
+// so global results can link back to the report they came from.
+type SearchedFinding struct {
+	analyzers.Finding
+	ScanID      string `json:"scan_id"`
+	WorkspaceID string `json:"workspace_id"`
+}
+
+// SearchFindings runs the cross-workspace findings search: one COUNT plus one
+// paged SELECT joining findings to scans, ordered by severity rank then path
+// and line so the most serious hits surface first regardless of which
+// workspace or analyzer produced them.
+func (d *DB) SearchFindings(ctx context.Context, filter GlobalFindingsFilter) ([]SearchedFinding, int, error) {
+	if filter.Page < 1 {
+		filter.Page = 1
+	}
+	if filter.PageSize <= 0 {
+		filter.PageSize = DefaultSearchPageSize
+	}
+	if filter.PageSize > MaxSearchPageSize {
+		return nil, 0, fmt.Errorf("page_size must be between 1 and %d", MaxSearchPageSize)
+	}
+	if filter.Page > 1 && filter.Page-1 > (math.MaxInt-filter.PageSize)/filter.PageSize {
+		return nil, 0, fmt.Errorf("page is out of range")
+	}
+	for _, severity := range filter.Severities {
+		switch analyzers.Severity(severity) {
+		case analyzers.SeverityCritical, analyzers.SeverityHigh, analyzers.SeverityMedium, analyzers.SeverityLow, analyzers.SeverityInfo:
+		default:
+			return nil, 0, fmt.Errorf("severity must be critical, high, medium, low, or info")
+		}
+	}
+	where := []string{}
+	args := []any{}
+	if filter.WorkspaceID != "" {
+		where = append(where, "scans.workspace_id=?")
+		args = append(args, filter.WorkspaceID)
+	}
+	if !filter.IncludeSuppressed {
+		where = append(where, "NOT EXISTS (SELECT 1 FROM suppressed_findings suppressed WHERE suppressed.workspace_id=scans.workspace_id AND suppressed.fingerprint=findings.fingerprint)")
+	}
+	if len(filter.Severities) == 1 {
+		where = append(where, "LOWER(findings.severity)=LOWER(?)")
+		args = append(args, filter.Severities[0])
+	} else if len(filter.Severities) > 1 {
+		placeholders := make([]string, len(filter.Severities))
+		for i, severity := range filter.Severities {
+			placeholders[i] = "LOWER(?)"
+			args = append(args, severity)
+		}
+		where = append(where, "findings.severity IN ("+strings.Join(placeholders, ",")+")")
+	}
+	if filter.Analyzer != "" {
+		where = append(where, "LOWER(findings.analyzer_id)=LOWER(?)")
+		args = append(args, filter.Analyzer)
+	}
+	if filter.Query != "" {
+		where = append(where, "(LOWER(findings.message) LIKE '%' || LOWER(?) || '%' OR LOWER(COALESCE(findings.rule_id,'')) LIKE '%' || LOWER(?) || '%' OR LOWER(COALESCE(findings.relative_path,'')) LIKE '%' || LOWER(?) || '%')")
+		args = append(args, filter.Query, filter.Query, filter.Query)
+	}
+	whereSQL := ""
+	if len(where) > 0 {
+		whereSQL = " WHERE " + strings.Join(where, " AND ")
+	}
+	var total int
+	if err := d.SQL.QueryRowContext(ctx, "SELECT COUNT(*) FROM findings JOIN scans ON scans.id=findings.scan_id"+whereSQL, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	offset := (filter.Page - 1) * filter.PageSize
+	queryArgs := append(append([]any(nil), args...), filter.PageSize, offset)
+	order := severityRankExpr + " DESC, findings.relative_path ASC, findings.start_line ASC, findings.analyzer_id ASC"
+	rows, err := d.SQL.QueryContext(ctx, "SELECT "+findingColumns+", '', scans.id, scans.workspace_id FROM findings JOIN scans ON scans.id=findings.scan_id"+whereSQL+" ORDER BY "+order+" LIMIT ? OFFSET ?", queryArgs...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	items := make([]SearchedFinding, 0)
+	for rows.Next() {
+		var f analyzers.Finding
+		var severity, category, metadata, status string
+		var scanID, workspaceID string
+		if err := rows.Scan(&f.ID, &f.AnalyzerID, &f.RuleID, &f.Fingerprint, &severity, &category, &f.Title, &f.Message, &f.RelativePath, &f.StartLine, &f.StartColumn, &f.EndLine, &f.EndColumn, &f.Remediation, &f.DocumentationURL, &f.RawSeverity, &metadata, &status, &scanID, &workspaceID); err != nil {
+			return nil, 0, err
+		}
+		f.Severity = analyzers.Severity(severity)
+		f.Category = analyzers.Category(category)
+		_ = json.Unmarshal([]byte(metadata), &f.Metadata)
+		items = append(items, SearchedFinding{Finding: f, ScanID: scanID, WorkspaceID: workspaceID})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	return items, total, nil
 }

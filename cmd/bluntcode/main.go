@@ -43,6 +43,9 @@ func main() {
 		case "scan":
 			runScan(os.Args[2:])
 			return
+		case "prune":
+			runPrune(os.Args[2:])
+			return
 		}
 	}
 	runServer(os.Args[1:])
@@ -68,6 +71,7 @@ func runServer(args []string) {
 		fmt.Fprintln(os.Stderr, "       bluntcode doctor [--json] [--fix]")
 		fmt.Fprintln(os.Stderr, "       bluntcode config [--json]")
 		fmt.Fprintln(os.Stderr, "       bluntcode scan <path> [--profile quick|standard|deep] [--json] [--timeout 30m] [--quiet] [--fail-on high+] [--max-findings N]")
+		fmt.Fprintln(os.Stderr, "       bluntcode prune <path> [--keep N]")
 		os.Exit(2)
 	}
 	// Shared bootstrap (single-instance lock, database, tool service, analyzer

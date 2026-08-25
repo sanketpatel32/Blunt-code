@@ -2087,3 +2087,234 @@ func TestCreateWorkspaceReusesJunctionAndCaseVariants(t *testing.T) {
 		t.Fatalf("stored %d workspaces, want 1", len(list))
 	}
 }
+
+func TestRecentScansWorkspaceFilterScopesFeed(t *testing.T) {
+	s := testServer(t)
+	ctx := context.Background()
+	alpha, err := s.db.CreateWorkspace(ctx, core.Workspace{RootPath: t.TempDir(), Name: "Alpha"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	beta, err := s.db.CreateWorkspace(ctx, core.Workspace{RootPath: t.TempDir(), Name: "Beta"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	completedScan(t, s, alpha.ID, "completed", finding("ruff", "A1", "src/a1.py", "alpha issue", analyzers.SeverityHigh, analyzers.CategoryCorrectness))
+	completedScan(t, s, beta.ID, "completed", finding("ruff", "B1", "src/b1.py", "beta issue", analyzers.SeverityLow, analyzers.CategoryCorrectness))
+
+	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans?workspace_id="+alpha.ID, nil)
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	var body recentScansResponse
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil {
+		t.Fatalf("workspace filter: %d %s", response.Code, response.Body.String())
+	}
+	if body.Total != 1 || len(body.Scans) != 1 || body.Scans[0].WorkspaceID != alpha.ID {
+		t.Fatalf("workspace filter must scope the feed: total=%d items=%#v", body.Total, body.Scans)
+	}
+
+	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans?workspace_id="+alpha.ID+"&state=running", nil)
+	response = httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil || body.Total != 0 || len(body.Scans) != 0 {
+		t.Fatalf("combined workspace+state filter: %d %s", response.Code, response.Body.String())
+	}
+}
+
+func TestDeleteScanRemovesTerminalScanAndCascades(t *testing.T) {
+	s := testServer(t)
+	ctx := context.Background()
+	work, err := s.db.CreateWorkspace(ctx, core.Workspace{RootPath: t.TempDir(), Name: "Deletable"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	terminal := completedScan(t, s, work.ID, "completed", finding("ruff", "R1", "src/a.py", "old issue", analyzers.SeverityLow, analyzers.CategoryCorrectness))
+	active, err := s.db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: "running"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	request := httptest.NewRequest(http.MethodDelete, "http://127.0.0.1/api/v1/scans/"+active.ID, nil)
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusConflict {
+		t.Fatalf("deleting an active scan must conflict: %d %s", response.Code, response.Body.String())
+	}
+
+	var findingsBefore int
+	if err := s.db.SQL.QueryRowContext(ctx, `SELECT COUNT(*) FROM findings WHERE scan_id=?`, terminal.ID).Scan(&findingsBefore); err != nil {
+		t.Fatal(err)
+	}
+	if findingsBefore != 1 {
+		t.Fatalf("fixture expected one finding, got %d", findingsBefore)
+	}
+	request = httptest.NewRequest(http.MethodDelete, "http://127.0.0.1/api/v1/scans/"+terminal.ID, nil)
+	response = httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("deleting a terminal scan: %d %s", response.Code, response.Body.String())
+	}
+	var findingsAfter int
+	if err := s.db.SQL.QueryRowContext(ctx, `SELECT COUNT(*) FROM findings WHERE scan_id=?`, terminal.ID).Scan(&findingsAfter); err != nil {
+		t.Fatal(err)
+	}
+	if findingsAfter != 0 {
+		t.Fatalf("findings must cascade-delete with their scan, got %d", findingsAfter)
+	}
+	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+terminal.ID, nil)
+	response = httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("deleted scan must 404 on read: %d", response.Code)
+	}
+	request = httptest.NewRequest(http.MethodDelete, "http://127.0.0.1/api/v1/scans/"+terminal.ID, nil)
+	response = httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("repeat delete must 404: %d", response.Code)
+	}
+}
+
+func TestSearchFindingsSpansWorkspacesWithFilters(t *testing.T) {
+	s := testServer(t)
+	ctx := context.Background()
+	alpha, err := s.db.CreateWorkspace(ctx, core.Workspace{RootPath: t.TempDir(), Name: "Alpha"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	beta, err := s.db.CreateWorkspace(ctx, core.Workspace{RootPath: t.TempDir(), Name: "Beta"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	suppressMe := finding("semgrep", "py-eval", "app/run.py", "eval of untrusted input", analyzers.SeverityCritical, analyzers.CategorySecurity)
+	first := completedScan(t, s, alpha.ID, "completed",
+		suppressMe,
+		finding("ruff", "E501", "app/run.py", "line too long", analyzers.SeverityLow, analyzers.CategoryStyle))
+	second := completedScan(t, s, beta.ID, "completed",
+		finding("secrets", "aws-key", "cfg/env.ini", "AWS access key looks live", analyzers.SeverityHigh, analyzers.CategorySecurity))
+
+	search := func(query string) searchResponse {
+		t.Helper()
+		request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/findings/search"+query, nil)
+		response := httptest.NewRecorder()
+		s.Handler().ServeHTTP(response, request)
+		if response.Code != http.StatusOK {
+			t.Fatalf("search %q: %d %s", query, response.Code, response.Body.String())
+		}
+		var body searchResponse
+		if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+			t.Fatalf("decode search body: %v", err)
+		}
+		return body
+	}
+
+	body := search("")
+	if body.Total != 3 || len(body.Items) != 3 || body.HasNext {
+		t.Fatalf("unfiltered search totals: %#v", body)
+	}
+	if body.Items[0].Severity != analyzers.SeverityCritical {
+		t.Fatalf("results must lead with the highest severity: %#v", body.Items[0])
+	}
+	if body.Items[0].ScanID != first.ID || body.Items[0].WorkspaceID != alpha.ID {
+		t.Fatalf("results must carry scan/workspace identity: %#v", body.Items[0])
+	}
+
+	body = search("?q=run.py")
+	if body.Total != 2 {
+		t.Fatalf("path substring match: %#v", body)
+	}
+	body = search("?severity=high,critical")
+	if body.Total != 2 {
+		t.Fatalf("severity list match: %#v", body)
+	}
+	body = search("?analyzer=Secrets")
+	if body.Total != 1 || body.Items[0].RuleID != "aws-key" {
+		t.Fatalf("analyzer filter must be case-insensitive: %#v", body)
+	}
+	body = search("?workspace_id="+beta.ID)
+	if body.Total != 1 || body.Items[0].ScanID != second.ID {
+		t.Fatalf("workspace scoping: %#v", body)
+	}
+	body = search("?page=2&page_size=2")
+	if body.Total != 3 || len(body.Items) != 1 || body.HasNext {
+		t.Fatalf("paging window: %#v", body)
+	}
+
+	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/findings/search?page_size=1000", nil)
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("oversized page_size must fail: %d", response.Code)
+	}
+	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/findings/search?severity=bogus", nil)
+	response = httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("unknown severity must fail: %d", response.Code)
+	}
+
+	if _, err := s.db.AddSuppression(ctx, alpha.ID, suppressMe.Fingerprint, ""); err != nil {
+		t.Fatal(err)
+	}
+	body = search("")
+	if body.Total != 2 {
+		t.Fatalf("suppressed finding must drop from default search: total=%d", body.Total)
+	}
+}
+
+type searchResponse struct {
+	Items []struct {
+		analyzers.Finding
+		ScanID      string `json:"scan_id"`
+		WorkspaceID string `json:"workspace_id"`
+	} `json:"items"`
+	Total    int  `json:"total"`
+	Page     int  `json:"page"`
+	PageSize int  `json:"page_size"`
+	HasNext  bool `json:"has_next"`
+}
+
+func TestScanEventsStreamSendsHeartbeats(t *testing.T) {
+	s := testServer(t)
+	ctx := context.Background()
+	work, err := s.db.CreateWorkspace(ctx, core.Workspace{RootPath: t.TempDir(), Name: "Pulse"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scan, err := s.db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: "running"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	prevInterval := sseHeartbeatInterval
+	sseHeartbeatInterval = 25 * time.Millisecond
+	defer func() { sseHeartbeatInterval = prevInterval }()
+
+	server := httptest.NewServer(s.Handler())
+	defer server.Close()
+	streamCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	request, err := http.NewRequestWithContext(streamCtx, http.MethodGet, server.URL+"/api/v1/scans/"+scan.ID+"/events", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := server.Client().Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	scanner := bufio.NewScanner(response.Body)
+	sawConnected, sawPing := false, false
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "event: connected" {
+			sawConnected = true
+		}
+		if line == ": ping" {
+			sawPing = true
+			break
+		}
+	}
+	if !sawConnected || !sawPing {
+		t.Fatalf("stream must open then heartbeat: connected=%v ping=%v", sawConnected, sawPing)
+	}
+}

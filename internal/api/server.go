@@ -1,4 +1,4 @@
-// Package api exposes the local-only HTTP API.
+﻿// Package api exposes the local-only HTTP API.
 package api
 
 import (
@@ -35,6 +35,10 @@ import (
 )
 
 const APIVersion = "v1"
+// sseHeartbeatInterval paces the SSE keep-alive comments written to idle scan
+// event streams. Package-level so tests can shorten it; never mutate outside
+// tests.
+var sseHeartbeatInterval = 15 * time.Second
 
 type Server struct {
 	db         *database.DB
@@ -99,6 +103,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/v1/workspaces/{id}/scans", s.startScan)
 	s.mux.HandleFunc("GET /api/v1/scans", s.recentScans)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}", s.getScan)
+	s.mux.HandleFunc("DELETE /api/v1/scans/{id}", s.deleteScan)
+	s.mux.HandleFunc("GET /api/v1/findings/search", s.searchFindings)
 	s.mux.HandleFunc("POST /api/v1/scans/{id}/cancel", s.cancelScan)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/events", s.scanEvents)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings", s.findings)
@@ -853,7 +859,7 @@ func (s *Server) recentScans(w http.ResponseWriter, r *http.Request) {
 // single lifecycle state.
 func recentScanFilter(r *http.Request) (database.RecentScansFilter, error) {
 	query := r.URL.Query()
-	filter := database.RecentScansFilter{Limit: database.DefaultRecentScansLimit, State: strings.ToLower(strings.TrimSpace(query.Get("state")))}
+	filter := database.RecentScansFilter{Limit: database.DefaultRecentScansLimit, State: strings.ToLower(strings.TrimSpace(query.Get("state"))), WorkspaceID: strings.TrimSpace(query.Get("workspace_id"))}
 	if filter.State != "" && !knownScanState(filter.State) {
 		return filter, fmt.Errorf("state must be a known scan state such as completed or running")
 	}
@@ -963,6 +969,125 @@ func analyzerRuns(runs []reports.Run) []map[string]any {
 		})
 	}
 	return items
+}
+// searchFindings serves the cross-workspace findings search. Every control is
+// optional; empty values mean "no filter". Pagination always applies
+// (page/page_size), matching the web UI's global search page contract.
+func (s *Server) searchFindings(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	filter := database.GlobalFindingsFilter{
+		Query:       strings.TrimSpace(query.Get("q")),
+		Analyzer:    strings.TrimSpace(query.Get("analyzer")),
+		WorkspaceID: strings.TrimSpace(query.Get("workspace_id")),
+	}
+	if raw := strings.TrimSpace(query.Get("severity")); raw != "" {
+		for _, part := range strings.Split(raw, ",") {
+			if value := strings.ToLower(strings.TrimSpace(part)); value != "" {
+				filter.Severities = append(filter.Severities, value)
+			}
+		}
+	}
+	filter.IncludeSuppressed = strings.EqualFold(strings.TrimSpace(query.Get("include_suppressed")), "true")
+	if raw := strings.TrimSpace(query.Get("page")); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 1 {
+			fail(w, 400, "INVALID_SEARCH_QUERY", "page must be a positive integer.")
+			return
+		}
+		filter.Page = value
+	}
+	if raw := strings.TrimSpace(query.Get("page_size")); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 1 || value > database.MaxSearchPageSize {
+			fail(w, 400, "INVALID_SEARCH_QUERY", fmt.Sprintf("page_size must be between 1 and %d.", database.MaxSearchPageSize))
+			return
+		}
+		filter.PageSize = value
+	}
+	items, total, err := s.db.SearchFindings(r.Context(), filter)
+	if err != nil {
+		fail(w, 400, "INVALID_SEARCH_QUERY", err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]any{"items": items, "total": total, "page": filter.Page, "page_size": filter.PageSize, "has_next": (filter.Page-1)*filter.PageSize+len(items) < total})
+}
+// deleteScan removes one terminal scan and everything stored under it
+// (findings, metrics, per-file hashes, analyzer runs). Active scans must be
+// cancelled first; they are rejected with 409 so a delete can never race the
+// analyzer pipeline mid-write.
+func (s *Server) deleteScan(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !validID(id) {
+		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
+		return
+	}
+	scan, err := s.db.Scan(r.Context(), id)
+	if errors.Is(err, sql.ErrNoRows) {
+		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
+		return
+	}
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load scan.")
+		return
+	}
+	if !terminalScanState(scan.State) {
+		writeJSON(w, 409, map[string]any{"error": map[string]string{"code": "SCAN_NOT_TERMINAL", "message": "Cancel this scan before deleting it."}})
+		return
+	}
+	deleted, err := s.db.DeleteScan(r.Context(), id)
+	if err != nil || !deleted {
+		fail(w, 500, "DATABASE_ERROR", "Could not delete scan.")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+// getWorkspaceTags lists the workspace's tags sorted alphabetically.
+func (s *Server) getWorkspaceTags(w http.ResponseWriter, r *http.Request) {
+	work, ok := s.workspace(r)
+	if !ok {
+		fail(w, 404, "WORKSPACE_NOT_FOUND", "Workspace was not found.")
+		return
+	}
+	tags, err := s.db.GetWorkspaceTags(r.Context(), work.ID)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load tags.")
+		return
+	}
+	writeJSON(w, 200, map[string]any{"items": tags})
+}
+
+// putWorkspaceTags atomically replaces the workspace's tag set. Tags are
+// lowercase freeform labels (see database.ValidateTag); an empty set clears
+// every tag.
+func (s *Server) putWorkspaceTags(w http.ResponseWriter, r *http.Request) {
+	work, ok := s.workspace(r)
+	if !ok {
+		fail(w, 404, "WORKSPACE_NOT_FOUND", "Workspace was not found.")
+		return
+	}
+	var input struct {
+		Tags []string `json:"tags"`
+	}
+	if err := decode(r, &input); err != nil {
+		fail(w, 400, "INVALID_JSON", "tags must be a JSON array of strings.")
+		return
+	}
+	for _, tag := range input.Tags {
+		if err := database.ValidateTag(strings.ToLower(strings.TrimSpace(tag))); err != nil {
+			fail(w, 400, "INVALID_TAG", err.Error())
+			return
+		}
+	}
+	if err := s.db.SetWorkspaceTags(r.Context(), work.ID, input.Tags); err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not save tags.")
+		return
+	}
+	tags, err := s.db.GetWorkspaceTags(r.Context(), work.ID)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load tags.")
+		return
+	}
+	writeJSON(w, 200, map[string]any{"items": tags})
 }
 func (s *Server) cancelScan(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
@@ -1159,8 +1284,8 @@ func csvNumber(value int) string {
 
 // findingsJSON exports the scan as the full versioned JSON report document
 // (the same document `bluntcode scan --format json` prints). It follows the
-// findings.csv handler's shape — an attachment regenerated from stored scan
-// data — but serves the complete report model: severity counts, analyzer
+// findings.csv handler's shape â€” an attachment regenerated from stored scan
+// data â€” but serves the complete report model: severity counts, analyzer
 // runs, metrics, and every finding field the other exports surface. Query
 // filters do not apply; the document is always the whole scan.
 func (s *Server) findingsJSON(w http.ResponseWriter, r *http.Request) {
@@ -1731,13 +1856,23 @@ func (s *Server) scanEvents(w http.ResponseWriter, r *http.Request) {
 	defer unsubscribe()
 	fmt.Fprint(w, "event: connected\ndata: {}\n\n")
 	flusher.Flush()
+	// Heartbeat comments keep idle streams alive: some clients and intermediaries
+	// drop silent connections, and the ping doubles as a liveness signal between
+	// scan events. A failed write ends the stream via the request context below.
+	heartbeat := time.NewTicker(sseHeartbeatInterval)
+	defer heartbeat.Stop()
 	for {
 		select {
 		case event := <-ch:
 			body, _ := json.Marshal(event)
 			fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event.Type, body)
 			flusher.Flush()
-		case <-r.Context().Done():
+			case <-heartbeat.C:
+			if _, err := fmt.Fprint(w, ": ping\n\n"); err != nil {
+				return
+			}
+			flusher.Flush()
+	case <-r.Context().Done():
 			return
 		}
 	}
