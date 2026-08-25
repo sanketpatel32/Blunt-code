@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`g a` goes to About:** every destination in the top navigation is now reachable from the keyboard — the shortcuts help gains the `g` `a` row, and the command palette's "Go to About" entry shows the `g a` hint like its siblings.
+
 ### Fixed
+
+- **Add-workspace placeholder shows real Windows paths:** the folder-path field suggested `C:\\Projects\\my-app` with doubled backslashes, because JSX attribute strings are raw text where backslashes are not escapes. It reads `C:\Projects\my-app` now.
+- **Network failures explain themselves:** when a request never reaches the local server (usually because the app window was closed while a tab stayed open), toasts now say the server is unreachable and how to restart it instead of surfacing the browser's raw "Failed to fetch". A repeat of the currently visible toast refreshes it in place rather than stacking identical copies.
 
 - **Uninstaller cleans up its shortcut:** the one-line installer creates a Start-menu `Blunt Code.lnk`, but the uninstaller left it behind as a dangling link after removing the app (the README already promised shortcut removal). It now deletes the shortcut and refuses to run while Blunt Code is open, mirroring the installer's guard. Shipped as a clobber-refresh of the v0.5.0 ZIP and installer assets.
 - **Installer output survives `irm | iex` on Windows PowerShell 5.1:** GitHub serves the installer script as `application/octet-stream`, so the ellipsis in "Downloading Blunt Code…" decoded as mojibake; the message is ASCII-only now, and `package.ps1` prints the real installer filename (`install-latest.ps1`) instead of a name that never existed.
