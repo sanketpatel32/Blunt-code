@@ -1,4 +1,4 @@
-﻿// Package api exposes the local-only HTTP API.
+// Package api exposes the local-only HTTP API.
 package api
 
 import (
@@ -35,6 +35,7 @@ import (
 )
 
 const APIVersion = "v1"
+
 // sseHeartbeatInterval paces the SSE keep-alive comments written to idle scan
 // event streams. Package-level so tests can shorten it; never mutate outside
 // tests.
@@ -99,6 +100,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/v1/workspaces/{id}/suppressions", s.addSuppression)
 	s.mux.HandleFunc("DELETE /api/v1/workspaces/{id}/suppressions/{fingerprint}", s.removeSuppression)
 	s.mux.HandleFunc("GET /api/v1/workspaces/{id}/trends", s.workspaceTrends)
+	s.mux.HandleFunc("GET /api/v1/workspaces/{id}/risk", s.workspaceRisk)
 	s.mux.HandleFunc("GET /api/v1/workspaces/{id}/scans", s.listScans)
 	s.mux.HandleFunc("POST /api/v1/workspaces/{id}/scans", s.startScan)
 	s.mux.HandleFunc("GET /api/v1/scans", s.recentScans)
@@ -876,6 +878,87 @@ func recentScanFilter(r *http.Request) (database.RecentScansFilter, error) {
 	return filter, nil
 }
 
+// riskSeverityWeights weight one finding of each severity for the workspace
+// risk score. The scale is deliberately simple and documented: a critical
+// issue is worth two highs, a high two-and-a-half mediums, so the score moves
+// when the serious tail moves without drowning in low-severity noise.
+var riskSeverityWeights = map[string]float64{
+	"critical": 10,
+	"high":     5,
+	"medium":   2,
+	"low":      1,
+	"info":     0,
+}
+
+// riskGrade buckets a raw score into the A-D letter the UI renders.
+func riskGrade(score float64) string {
+	switch {
+	case score < 5:
+		return "A"
+	case score < 20:
+		return "B"
+	case score < 50:
+		return "C"
+	default:
+		return "D"
+	}
+}
+
+func riskScoreOf(c database.RiskCounts) float64 {
+	score := 0.0
+	score += float64(c.Critical) * riskSeverityWeights["critical"]
+	score += float64(c.High) * riskSeverityWeights["high"]
+	score += float64(c.Medium) * riskSeverityWeights["medium"]
+	score += float64(c.Low) * riskSeverityWeights["low"]
+	return score
+}
+
+// workspaceRisk serves the workspace's weighted risk score computed from its
+// latest completed scan, plus the delta against the previous completed scan
+// so the UI can show whether risk is heading up or down.
+func (s *Server) workspaceRisk(w http.ResponseWriter, r *http.Request) {
+	work, ok := s.workspace(r)
+	if !ok {
+		fail(w, 404, "WORKSPACE_NOT_FOUND", "Workspace was not found.")
+		return
+	}
+	snaps, err := s.db.RecentCompletedSeverityCounts(r.Context(), work.ID, 2)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load risk data.")
+		return
+	}
+	if len(snaps) == 0 {
+		writeJSON(w, 200, map[string]any{"available": false})
+		return
+	}
+	latest := snaps[0]
+	score := riskScoreOf(latest)
+	response := map[string]any{
+		"available": true,
+		"scan_id":   latest.ScanID,
+		"score":     score,
+		"grade":     riskGrade(score),
+		"counts":    map[string]int{"critical": latest.Critical, "high": latest.High, "medium": latest.Medium, "low": latest.Low, "info": latest.Info},
+		"weights":   riskSeverityWeights,
+	}
+	if len(snaps) > 1 {
+		previous := riskScoreOf(snaps[1])
+		trend := "flat"
+		switch {
+		case score > previous:
+			trend = "up"
+		case score < previous:
+			trend = "down"
+		}
+		response["previous_score"] = previous
+		response["previous_scan_id"] = snaps[1].ScanID
+		response["trend"] = trend
+	} else {
+		response["trend"] = "flat"
+	}
+	writeJSON(w, 200, response)
+}
+
 // knownScanState reports whether state belongs to the scan lifecycle: the
 // progression states a scan moves through plus the terminal states covered by
 // terminalScanState.
@@ -970,6 +1053,7 @@ func analyzerRuns(runs []reports.Run) []map[string]any {
 	}
 	return items
 }
+
 // searchFindings serves the cross-workspace findings search. Every control is
 // optional; empty values mean "no filter". Pagination always applies
 // (page/page_size), matching the web UI's global search page contract.
@@ -1011,6 +1095,7 @@ func (s *Server) searchFindings(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, 200, map[string]any{"items": items, "total": total, "page": filter.Page, "page_size": filter.PageSize, "has_next": (filter.Page-1)*filter.PageSize+len(items) < total})
 }
+
 // deleteScan removes one terminal scan and everything stored under it
 // (findings, metrics, per-file hashes, analyzer runs). Active scans must be
 // cancelled first; they are rejected with 409 so a delete can never race the
@@ -1041,6 +1126,7 @@ func (s *Server) deleteScan(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
 // getWorkspaceTags lists the workspace's tags sorted alphabetically.
 func (s *Server) getWorkspaceTags(w http.ResponseWriter, r *http.Request) {
 	work, ok := s.workspace(r)
@@ -1867,12 +1953,12 @@ func (s *Server) scanEvents(w http.ResponseWriter, r *http.Request) {
 			body, _ := json.Marshal(event)
 			fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event.Type, body)
 			flusher.Flush()
-			case <-heartbeat.C:
+		case <-heartbeat.C:
 			if _, err := fmt.Fprint(w, ": ping\n\n"); err != nil {
 				return
 			}
 			flusher.Flush()
-	case <-r.Context().Done():
+		case <-r.Context().Done():
 			return
 		}
 	}

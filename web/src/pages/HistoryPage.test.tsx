@@ -238,7 +238,7 @@ describe('HistoryTable server paging', () => {
     expect(dataRows(host)).toHaveLength(6); // no double slicing of the served page
     expect(host.querySelector('output')!.textContent).toBe('Page 2 of 3');
     expect(host.querySelector('.history-pagination span')?.textContent).toBe('Showing 7–12 of 14 scans');
-    const [previous, next] = [...host.querySelectorAll('.history-pagination button')];
+    const [previous, next] = [...host.querySelectorAll<HTMLButtonElement>('.history-pagination button')];
     await act(async () => { previous.click(); });
     await act(async () => { next.click(); });
     expect(onPage).toHaveBeenNthCalledWith(1, 1);

@@ -97,6 +97,18 @@ export interface SearchFindingsPage {
   has_next: boolean;
 }
 
+/** Weighted risk score from `GET /workspaces/{id}/risk`. Weights: critical 10, high 5, medium 2, low 1. Grade A<5, B<20, C<50, D otherwise. */
+export interface RiskProfile {
+  available: boolean;
+  scan_id?: string;
+  score?: number;
+  grade?: 'A' | 'B' | 'C' | 'D';
+  trend?: 'up' | 'down' | 'flat';
+  previous_score?: number;
+  previous_scan_id?: string;
+  counts?: Record<string, number>;
+}
+
 /** Tool readiness pair on the global overview; the whole field is absent when no tools service is wired into the server. */
 export interface StatsTools {
   total: number;

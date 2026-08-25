@@ -1,4 +1,4 @@
-import type { FindingPage, FindingsQuery, FixedFindingsResponse, GlobalStats, PathOverride, RecentScansResponse, Report, Scan, ScanPage, SearchFindingsPage, SeverityTrendPoint, SourcePreview, Suppression, Tool, TreeNode, Workspace } from './types';
+import type { FindingPage, FindingsQuery, FixedFindingsResponse, GlobalStats, PathOverride, RecentScansResponse, Report, RiskProfile, Scan, ScanPage, SearchFindingsPage, SeverityTrendPoint, SourcePreview, Suppression, Tool, TreeNode, Workspace } from './types';
 
 const PREFIX = '/api/v1';
 
@@ -63,6 +63,8 @@ export const api = {
     const query = new URLSearchParams(Object.entries(params).filter(([, v]) => v));
     return request<SearchFindingsPage>(`/findings/search?${query}`);
   },
+  /** Weighted risk profile for one workspace from its latest completed scans. */
+  risk: (id: string) => request<RiskProfile>(`/workspaces/${encodeURIComponent(id)}/risk`),
   /** Severity trend over completed scan history, oldest first; limit defaults to 20 on the server. */
   trends: async (id: string, limit?: number) => {
     const query = limit ? `?limit=${limit}` : '';

@@ -1,4 +1,4 @@
-﻿package database
+package database
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
-"sort"
+	"sort"
 	"strings"
 	"time"
 
@@ -476,9 +476,9 @@ type RecentScan struct {
 // known lifecycle state; it is always bound as a SQL parameter, never
 // interpolated.
 type RecentScansFilter struct {
-	 Limit       int
-	 State       string
-	 WorkspaceID string
+	Limit       int
+	State       string
+	WorkspaceID string
 }
 
 const (
@@ -565,6 +565,41 @@ const (
 	DefaultSeverityTrendLimit = 20
 	MaxSeverityTrendLimit     = 100
 )
+
+// RiskCounts is the persisted severity split of one completed scan, with the
+// scan identity the risk endpoint reports back.
+type RiskCounts struct {
+	ScanID   string
+	Critical int
+	High     int
+	Medium   int
+	Low      int
+	Info     int
+}
+
+// RecentCompletedSeverityCounts returns up to limit completed scans for one
+// workspace, newest first, carrying their persisted severity columns. Only
+// producing terminal states count (the SeverityTrend rule); failed,
+// cancelled, interrupted, and in-flight scans never feed risk.
+func (d *DB) RecentCompletedSeverityCounts(ctx context.Context, workspaceID string, limit int) ([]RiskCounts, error) {
+	if limit < 1 {
+		limit = 2
+	}
+	rows, err := d.SQL.QueryContext(ctx, `SELECT id,COALESCE(critical_count,0),COALESCE(high_count,0),COALESCE(medium_count,0),COALESCE(low_count,0),COALESCE(info_count,0) FROM scans WHERE workspace_id=? AND state IN ('completed','completed_with_warnings') ORDER BY COALESCE(finished_at,started_at) DESC,id DESC LIMIT ?`, workspaceID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]RiskCounts, 0, limit)
+	for rows.Next() {
+		var c RiskCounts
+		if err := rows.Scan(&c.ScanID, &c.Critical, &c.High, &c.Medium, &c.Low, &c.Info); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
 
 // SeverityTrend returns the newest limit completed scans of one workspace,
 // ordered oldest first so the series reads left-to-right over time. Only the
@@ -1551,6 +1586,7 @@ func (d *DB) SetWorkspaceTags(ctx context.Context, workspaceID string, tags []st
 	}
 	return tx.Commit()
 }
+
 // PruneOldScans keeps the N most recent terminal scans for a workspace and
 // deletes older scans. Non-terminal scans are never deleted. Deletion cascades
 // via foreign keys to findings, metrics, scan_files, scan_file_hashes,
@@ -1607,6 +1643,7 @@ func (d *DB) DeleteScan(ctx context.Context, id string) (bool, error) {
 	}
 	return n > 0, nil
 }
+
 // DefaultSearchPageSize and MaxSearchPageSize bound the cross-workspace
 // findings search served at GET /api/v1/findings/search.
 const (

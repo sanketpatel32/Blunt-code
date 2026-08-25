@@ -2318,3 +2318,72 @@ func TestScanEventsStreamSendsHeartbeats(t *testing.T) {
 		t.Fatalf("stream must open then heartbeat: connected=%v ping=%v", sawConnected, sawPing)
 	}
 }
+
+func TestWorkspaceRiskScoresLatestCompletedScan(t *testing.T) {
+	s := testServer(t)
+	ctx := context.Background()
+	work, err := s.db.CreateWorkspace(ctx, core.Workspace{RootPath: t.TempDir(), Name: "Risky"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	empty, err := s.db.CreateWorkspace(ctx, core.Workspace{RootPath: t.TempDir(), Name: "Pristine"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/workspaces/"+empty.ID+"/risk", nil)
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	var body map[string]any
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil || body["available"] != false {
+		t.Fatalf("workspace without scans must report unavailable risk: %d %s", response.Code, response.Body.String())
+	}
+
+	older := completedScan(t, s, work.ID, "completed",
+		finding("semgrep", "c1", "a.py", "crit", analyzers.SeverityCritical, analyzers.CategorySecurity),
+		finding("semgrep", "c2", "b.py", "crit", analyzers.SeverityCritical, analyzers.CategorySecurity),
+		finding("ruff", "h1", "c.py", "high", analyzers.SeverityHigh, analyzers.CategoryCorrectness))
+	newer := completedScan(t, s, work.ID, "completed_with_warnings",
+		finding("ruff", "h2", "d.py", "high", analyzers.SeverityHigh, analyzers.CategoryCorrectness))
+
+	type riskResponse struct {
+		Available     bool             `json:"available"`
+		ScanID        string           `json:"scan_id"`
+		Score         float64          `json:"score"`
+		Grade         string           `json:"grade"`
+		Trend         string           `json:"trend"`
+		PreviousScore float64          `json:"previous_score"`
+		PreviousID    string           `json:"previous_scan_id"`
+		Counts        map[string]int   `json:"counts"`
+	}
+	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/workspaces/"+work.ID+"/risk", nil)
+	response = httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil {
+		t.Fatalf("risk endpoint: %d %s", response.Code, response.Body.String())
+	}
+	raw, _ := json.Marshal(body)
+	var risk riskResponse
+	if err := json.Unmarshal(raw, &risk); err != nil {
+		t.Fatalf("decode risk body: %v", err)
+	}
+	if !risk.Available || risk.ScanID != newer.ID {
+		t.Fatalf("risk must read the newest completed scan: %#v", risk)
+	}
+	if risk.Score != 5 || risk.PreviousScore != 25 {
+		t.Fatalf("scores: latest=%v previous=%v, want 5 and 25", risk.Score, risk.PreviousScore)
+	}
+	if risk.Grade != "B" || risk.Trend != "down" || risk.PreviousID != older.ID {
+		t.Fatalf("grade/trend/previous mismatch: %#v", risk)
+	}
+	if risk.Counts["critical"] != 0 || risk.Counts["high"] != 1 {
+		t.Fatalf("counts must mirror the latest scan only: %#v", risk.Counts)
+	}
+
+	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/workspaces/not-a-real-id/risk", nil)
+	response = httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("unknown workspace must 404: %d", response.Code)
+	}
+}
