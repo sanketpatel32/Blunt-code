@@ -553,11 +553,13 @@ func TestParseScanFlagsRejectsBadFormatInput(t *testing.T) {
 		args    []string
 		message string
 	}{
-		{"unknown format", []string{"--format", "yaml", `C:\proj`}, "format must be text, json, github, or sarif"},
-		{"github annotations misspelled", []string{"--format", "actions", `C:\proj`}, "format must be text, json, github, or sarif"},
+		{"unknown format", []string{"--format", "yaml", `C:\proj`}, "format must be text, json, github, sarif, or csv"},
+		{"github annotations misspelled", []string{"--format", "actions", `C:\proj`}, "format must be text, json, github, sarif, or csv"},
 		{"json summary combined with report format", []string{"--json", "--format", "json", `C:\proj`}, "--json cannot be combined with --format json"},
 		{"json summary combined with github format", []string{"--json", "--format", "github", `C:\proj`}, "--json cannot be combined with --format github"},
 		{"json summary combined with sarif format", []string{"--json", "--format", "sarif", `C:\proj`}, "--json cannot be combined with --format sarif"},
+		{"output without a document format", []string{"--output", "out.txt", `C:\proj`}, "--output requires a document format"},
+		{"save-baseline in watch mode", []string{"--watch", "--save-baseline", "base.sarif", `C:\proj`}, "--save-baseline cannot be combined with --watch"},
 	}
 	for _, item := range cases {
 		t.Run(item.name, func(t *testing.T) {
@@ -584,7 +586,7 @@ func TestRunScanCommandRejectsBadFormatFlagWithExitCodeTwo(t *testing.T) {
 	if out.Len() != 0 {
 		t.Fatalf("stdout = %q", out.String())
 	}
-	if !strings.Contains(errOut.String(), "format must be text, json, github, or sarif") {
+	if !strings.Contains(errOut.String(), "format must be text, json, github, sarif, or csv") {
 		t.Fatalf("reason missing: %q", errOut.String())
 	}
 }
