@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api';
 import type { PathOverride, TreeNode } from '../types';
+import type { Route } from '../lib/router';
 import type { Notice } from '../lib/notice';
 import { message } from '../lib/notice';
 import { useLoad } from '../hooks/useLoad';
@@ -8,6 +9,7 @@ import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { Empty, ErrorPanel } from '../components/ui';
 import { MagnifierIcon } from '../components/icons';
 import { SkeletonLines } from '../components/skeletons';
+import { WorkspaceContextSidebar } from '../components/WorkspaceContext';
 
 interface RuleDraft { uid: number; rule_type: 'include' | 'exclude'; pattern: string; enabled?: boolean }
 
@@ -15,7 +17,7 @@ interface RuleDraft { uid: number; rule_type: 'include' | 'exclude'; pattern: st
 let ruleUid = 0;
 function nextRuleUid() { ruleUid += 1; return ruleUid; }
 
-export function FilesPage({ id, notify }: { id: string; notify: (n: Notice) => void }) {
+export function FilesPage({ id, go, notify }: { id: string; go?: (r: Route) => void; notify: (n: Notice) => void }) {
   const workspace = useLoad(() => api.workspace(id), [id]);
   const [query, setQuery] = useState('');
   /** Typing stays instant while the tree is only re-filtered once input settles; clearing applies immediately. */
@@ -45,9 +47,9 @@ export function FilesPage({ id, notify }: { id: string; notify: (n: Notice) => v
     window.addEventListener('keydown', jumpToSearch);
     return () => window.removeEventListener('keydown', jumpToSearch);
   }, []);
-  return <div className="page"><header className="page-heading"><div><p className="eyebrow">File selection</p><h1>{workspace.data?.name ?? 'Workspace files'}</h1><code className="workspace-root" title={workspace.data?.root_path}>{workspace.data?.root_path}</code><p>Choose source paths to analyze. Default exclusions protect dependencies and build output.</p></div><div className="action-row"><button type="button" className="button secondary" onClick={() => { setRules({ rules: [] }); setOverrides([]); }}>Reset to defaults</button><button type="button" className="button primary" onClick={save}>Save selection</button></div></header>
+  return <div className="page workspace-page">{go && <WorkspaceContextSidebar id={id} current={{ page: 'files', id }} onNavigate={go} />}<div className="workspace-page-body"><header className="page-heading"><div><p className="eyebrow">File selection</p><h1>{workspace.data?.name ?? 'Workspace files'}</h1><code className="workspace-root" title={workspace.data?.root_path}>{workspace.data?.root_path}</code><p>Choose source paths to analyze. Default exclusions protect dependencies and build output.</p></div><div className="action-row"><button type="button" className="button secondary" onClick={() => { setRules({ rules: [] }); setOverrides([]); }}>Reset to defaults</button><button type="button" className="button primary" onClick={save}>Save selection</button></div></header>
     <section className="file-layout"><div className="tree-panel"><label className="search"><span>Search paths<kbd className="kbd-hint">/</kbd></span><input ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') { setQuery(''); event.currentTarget.blur(); } }} placeholder="src or package.json" /></label><div className="tree-toolbar">{!loadingTree && !treeError && <button type="button" className="text-button" onClick={() => setCollapseSignal((value) => value + 1)}>Collapse all</button>}</div>{loadingTree ? <SkeletonLines lines={6} /> : treeError ? <ErrorPanel error={treeError} retry={loadTree} /> : <FileTree key={treeKey} nodes={nodes} query={debouncedQuery} workspaceId={id} overrides={overrides} onOverrides={setOverrides} collapseSignal={collapseSignal} />}</div><RuleEditor rules={rules.rules} setRules={(items) => setRules({ rules: items })} /></section>
-  </div>;
+  </div></div>;
 }
 
 /** Per-row slice of tree state. The top-level FileTree owns all of it so search can walk every loaded level. */
@@ -118,7 +120,7 @@ function FileTree({ nodes, query, workspaceId, overrides, onOverrides, collapseS
     return count;
   }, [nodes, children]);
   return <>
-    <p className="tree-loaded-count" aria-live="polite">{loadedCount} {loadedCount === 1 ? 'path' : 'paths'} loaded</p>
+    <p className="tree-loaded-count">{loadedCount} {loadedCount === 1 ? 'path' : 'paths'} loaded</p>
     {needle && <div className="tree-search-meta" aria-live="polite"><p><strong>{matches.size}</strong> {matches.size === 1 ? 'matching path' : 'matching paths'}</p><p>Searching loaded folders — expand more to include their contents</p></div>}
     {anyVisible ? <TreeLevel nodes={nodes} state={state} root /> : <Empty title="No matching paths" icon={<MagnifierIcon />}>Try a shorter search.</Empty>}
   </>;

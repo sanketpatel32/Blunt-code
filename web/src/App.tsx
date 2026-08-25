@@ -105,7 +105,8 @@ export function App() {
     {addOpen && <AddWorkspaceDialog onClose={() => setAddOpen(false)} onCreated={(workspace) => { setAddOpen(false); go({ page: 'workspace', id: workspace.id }); }} notify={notify} />}
     {closeOpen && <ConfirmationDialog title="Close Blunt Code?" description="This ends the local app. Any active scan will be cancelled; your workspaces and reports stay saved on this computer." confirmLabel="Close app" busy={closing} onCancel={() => setCloseOpen(false)} onConfirm={() => void closeApp()} />}
     {shortcutsOpen && <ShortcutsDialog onClose={() => setShortcutsOpen(false)} />}
-    <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={paletteCommands} />
+    {/* Mounted only while open so useDialogA11y's mount-time focus move/restore actually runs — an always-mounted palette never receives keyboard focus. */}
+    {paletteOpen && <CommandPalette open onClose={() => setPaletteOpen(false)} commands={paletteCommands} />}
     <AppFooter />
     <ToastStack toasts={toasts} onDismiss={dismiss} />
   </div>;
@@ -119,7 +120,7 @@ function Page({ route, go, notify, onAdd }: { route: Route; go: (r: Route) => vo
     case 'home': return <HomePage go={go} onAdd={onAdd} notify={notify} />;
     case 'workspaces': return <WorkspacesPage go={go} onAdd={onAdd} notify={notify} />;
     case 'workspace': return id ? <WorkspacePage id={id} go={go} notify={notify} /> : <NotFoundPage go={go} />;
-    case 'files': return id ? <FilesPage id={id} notify={notify} /> : <NotFoundPage go={go} />;
+    case 'files': return id ? <FilesPage id={id} go={go} notify={notify} /> : <NotFoundPage go={go} />;
     case 'history': return id ? <HistoryPage workspaceId={id} go={go} /> : <NotFoundPage go={go} />;
     case 'scan': return id ? <ScanPage id={id} notify={notify} /> : <NotFoundPage go={go} />;
     case 'tools': return <ToolsPage notify={notify} />;

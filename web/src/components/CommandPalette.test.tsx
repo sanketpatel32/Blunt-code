@@ -95,3 +95,25 @@ describe('CommandPalette interactions', () => {
     expect(dom.querySelector('.palette-empty')?.textContent).toContain('No matching command');
   });
 });
+
+describe('CommandPalette open/close focus', () => {
+  function ToggleHarness({ items }: { items: Command[] }) {
+    const [open, setOpen] = useState(false);
+    return <>
+      <button type="button" onClick={() => setOpen(true)}>Open palette</button>
+      {open && <CommandPalette open onClose={() => setOpen(false)} commands={items} />}
+    </>;
+  }
+
+  it('moves keyboard focus into the input when opened and restores the trigger on close', () => {
+    const dom = render(<ToggleHarness items={commands} />);
+    const trigger = [...dom.querySelectorAll('button')].find((b) => b.textContent === 'Open palette')!;
+    act(() => { trigger.focus(); trigger.click(); });
+    const input = dom.querySelector<HTMLInputElement>('input');
+    expect(input).not.toBeNull();
+    expect(document.activeElement).toBe(input); // Ctrl+K must land typing in the palette
+    press(input!, 'Escape');
+    expect(dom.querySelector('input[aria-label="Search commands"]')).toBeNull();
+    expect(document.activeElement).toBe(trigger); // focus restored to the opener
+  });
+});

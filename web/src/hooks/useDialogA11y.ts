@@ -58,6 +58,10 @@ export function useDialogA11y({ onClose, busy = false, autoFocusRef }: UseDialog
       const dialog = dialogRef.current;
       if (!dialog || event.defaultPrevented) return;
       if (event.key === 'Escape') {
+        // A dialog stacked on top owns Escape (same rule as the Tab trap below),
+        // so one Escape never tears down both layers at once.
+        const owner = document.activeElement instanceof HTMLElement ? document.activeElement.closest('dialog') : null;
+        if (owner && owner !== dialog) return;
         if (!latest.current.busy) latest.current.onClose();
         return;
       }
