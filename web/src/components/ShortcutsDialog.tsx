@@ -16,6 +16,7 @@ const SHORTCUT_GROUPS: Array<{ title: string; entries: ShortcutEntry[] }> = [
       { keys: ['g', 'w'], description: 'Go to Workspaces' },
       { keys: ['g', 't'], description: 'Go to Tools' },
       { keys: ['g', 's'], description: 'Go to Settings' },
+      { keys: ['g', 'a'], description: 'Go to About' },
     ],
   },
   {

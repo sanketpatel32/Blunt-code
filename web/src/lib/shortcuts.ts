@@ -5,9 +5,9 @@
  */
 
 /** Every key the app reacts to on its own; sequence targets ('h'…) only act after 'g' arms. */
-export type ShortcutKey = 'g' | 'h' | 'w' | 't' | 's' | 'n' | '/' | '?';
+export type ShortcutKey = 'g' | 'h' | 'w' | 't' | 's' | 'a' | 'n' | '/' | '?';
 
-const SHORTCUT_KEYS: ReadonlySet<string> = new Set(['g', 'h', 'w', 't', 's', 'n', '/', '?']);
+const SHORTCUT_KEYS: ReadonlySet<string> = new Set(['g', 'h', 'w', 't', 's', 'a', 'n', '/', '?']);
 
 /**
  * Normalizes a keydown event to one of the app's single-key shortcuts, or null

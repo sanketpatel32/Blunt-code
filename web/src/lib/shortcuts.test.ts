@@ -8,6 +8,7 @@ describe('parseShortcut', () => {
     expect(parseShortcut({ key: 'w' })).toBe('w');
     expect(parseShortcut({ key: 't' })).toBe('t');
     expect(parseShortcut({ key: 's' })).toBe('s');
+    expect(parseShortcut({ key: 'a' })).toBe('a');
     expect(parseShortcut({ key: 'n' })).toBe('n');
     expect(parseShortcut({ key: 'H' })).toBe('h'); // CapsLock or Shift still normalizes
   });
@@ -19,7 +20,7 @@ describe('parseShortcut', () => {
   });
 
   it('returns null for keys that are not shortcuts', () => {
-    expect(parseShortcut({ key: 'a' })).toBeNull();
+    expect(parseShortcut({ key: 'b' })).toBeNull();
     expect(parseShortcut({ key: 'Escape' })).toBeNull();
     expect(parseShortcut({ key: 'Enter' })).toBeNull();
     expect(parseShortcut({ key: 'Tab' })).toBeNull();

@@ -55,12 +55,13 @@ describe('shortcuts help dialog', () => {
     expect(document.getElementById('shortcuts-title')?.textContent).toBe('Keyboard shortcuts');
     expect([...dialog.querySelectorAll('.shortcut-group h3')].map((heading) => heading.textContent)).toEqual(['Navigation', 'Actions', 'Search']);
     const rows = [...dialog.querySelectorAll('.shortcut-row')];
-    expect(rows).toHaveLength(9);
+    expect(rows).toHaveLength(10);
     const descriptions = rows.map((row) => row.querySelector('dd')?.textContent);
     expect(descriptions).toContain('Go to Home');
     expect(descriptions).toContain('Go to Workspaces');
     expect(descriptions).toContain('Go to Tools');
     expect(descriptions).toContain('Go to Settings');
+    expect(descriptions).toContain('Go to About');
     expect(descriptions).toContain('Add a workspace');
     expect(descriptions).toContain('Focus the findings or file search');
     const firstRow = rows[0];

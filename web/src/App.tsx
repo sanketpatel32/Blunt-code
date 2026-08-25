@@ -23,7 +23,7 @@ import { AboutPage } from './pages/AboutPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 
 /** Keys that complete a "g" navigation sequence: g h/w/t/s -> the matching page. */
-const SEQUENCE_TARGETS: Partial<Record<string, Route['page']>> = { h: 'home', w: 'workspaces', t: 'tools', s: 'settings' };
+const SEQUENCE_TARGETS: Partial<Record<string, Route['page']>> = { h: 'home', w: 'workspaces', t: 'tools', s: 'settings', a: 'about' };
 /** How long "g" stays armed waiting for its second key. */
 const SEQUENCE_ARM_MS = 800;
 
@@ -89,7 +89,7 @@ export function App() {
     { id: 'nav-workspaces', label: 'Go to Workspaces', keywords: 'projects', hint: 'g w', run: () => go({ page: 'workspaces' }) },
     { id: 'nav-tools', label: 'Go to Tools', keywords: 'analyzers ruff biome semgrep sonar', hint: 'g t', run: () => go({ page: 'tools' }) },
     { id: 'nav-settings', label: 'Go to Settings', keywords: 'preferences', hint: 'g s', run: () => go({ page: 'settings' }) },
-    { id: 'nav-about', label: 'Go to About', keywords: 'version info', run: () => go({ page: 'about' }) },
+    { id: 'nav-about', label: 'Go to About', keywords: 'version info', hint: 'g a', run: () => go({ page: 'about' }) },
     { id: 'action-add-workspace', label: 'Add workspace', keywords: 'new project folder scan', hint: 'N', run: () => setAddOpen(true) },
     { id: 'action-theme', label: theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme', keywords: 'dark light mode appearance', run: toggleTheme },
     { id: 'action-shortcuts', label: 'Show keyboard shortcuts', keywords: 'help keys', hint: '?', run: () => setShortcutsOpen(true) },
