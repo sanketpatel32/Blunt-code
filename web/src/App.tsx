@@ -8,6 +8,7 @@ import { AppShell, AppFooter } from './components/AppShell';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ToastStack, useToasts } from './components/toasts';
 import { AddWorkspaceDialog, ConfirmationDialog } from './components/dialogs';
+import { CommandPalette, type Command } from './components/CommandPalette';
 import { ShortcutsDialog } from './components/ShortcutsDialog';
 import { useTheme } from './hooks/useTheme';
 import { HomePage } from './pages/HomePage';
@@ -32,6 +33,7 @@ export function App() {
   const [closeOpen, setCloseOpen] = useState(false);
   const [closing, setClosing] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [seqArmed, setSeqArmed] = useState(false);
   const seqTimer = useRef(0);
   const { toasts, notify, dismiss } = useToasts();
@@ -42,6 +44,19 @@ export function App() {
   const disarmSequence = useCallback(() => { if (seqTimer.current) { window.clearTimeout(seqTimer.current); seqTimer.current = 0; } setSeqArmed(false); }, []);
   const armSequence = useCallback(() => { if (seqTimer.current) window.clearTimeout(seqTimer.current); seqTimer.current = window.setTimeout(() => { seqTimer.current = 0; setSeqArmed(false); }, SEQUENCE_ARM_MS); setSeqArmed(true); }, []);
   useEffect(() => () => { if (seqTimer.current) window.clearTimeout(seqTimer.current); }, []);
+  // Ctrl/Cmd+K opens the command palette from anywhere — including inside text
+  // fields and over other dialogs — so it gets its own listener ahead of (and
+  // independent of) the single-key shortcut machinery below.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+      if (event.key.toLowerCase() !== 'k') return;
+      event.preventDefault();
+      setPaletteOpen((open) => !open);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
   // Global shortcuts: sequence navigation, add-workspace, focus search, help dialog.
   // Keystrokes aimed at a field, already handled elsewhere (defaultPrevented), or
   // owned by an open dialog are left alone; the shortcuts help itself stays live
@@ -69,6 +84,16 @@ export function App() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [go, armSequence, disarmSequence]);
+  const paletteCommands: Command[] = [
+    { id: 'nav-home', label: 'Go to Home', keywords: 'dashboard start', hint: 'g h', run: () => go({ page: 'home' }) },
+    { id: 'nav-workspaces', label: 'Go to Workspaces', keywords: 'projects', hint: 'g w', run: () => go({ page: 'workspaces' }) },
+    { id: 'nav-tools', label: 'Go to Tools', keywords: 'analyzers ruff biome semgrep sonar', hint: 'g t', run: () => go({ page: 'tools' }) },
+    { id: 'nav-settings', label: 'Go to Settings', keywords: 'preferences', hint: 'g s', run: () => go({ page: 'settings' }) },
+    { id: 'nav-about', label: 'Go to About', keywords: 'version info', run: () => go({ page: 'about' }) },
+    { id: 'action-add-workspace', label: 'Add workspace', keywords: 'new project folder scan', hint: 'N', run: () => setAddOpen(true) },
+    { id: 'action-theme', label: theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme', keywords: 'dark light mode appearance', run: toggleTheme },
+    { id: 'action-shortcuts', label: 'Show keyboard shortcuts', keywords: 'help keys', hint: '?', run: () => setShortcutsOpen(true) },
+  ];
   return <div className="app-frame">
     <a href="#main-content" className="skip-link">Skip to main content</a>
     <AppShell route={route} onNavigate={go} onAdd={() => setAddOpen(true)} onClose={() => setCloseOpen(true)} theme={theme} onToggleTheme={toggleTheme} onShowShortcuts={() => setShortcutsOpen(true)} seqArmed={seqArmed} />
@@ -80,6 +105,7 @@ export function App() {
     {addOpen && <AddWorkspaceDialog onClose={() => setAddOpen(false)} onCreated={(workspace) => { setAddOpen(false); go({ page: 'workspace', id: workspace.id }); }} notify={notify} />}
     {closeOpen && <ConfirmationDialog title="Close Blunt Code?" description="This ends the local app. Any active scan will be cancelled; your workspaces and reports stay saved on this computer." confirmLabel="Close app" busy={closing} onCancel={() => setCloseOpen(false)} onConfirm={() => void closeApp()} />}
     {shortcutsOpen && <ShortcutsDialog onClose={() => setShortcutsOpen(false)} />}
+    <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={paletteCommands} />
     <AppFooter />
     <ToastStack toasts={toasts} onDismiss={dismiss} />
   </div>;

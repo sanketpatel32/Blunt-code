@@ -11,6 +11,7 @@ const SHORTCUT_GROUPS: Array<{ title: string; entries: ShortcutEntry[] }> = [
   {
     title: 'Navigation',
     entries: [
+      { keys: ['Ctrl', 'K'], description: 'Open the command palette' },
       { keys: ['g', 'h'], description: 'Go to Home' },
       { keys: ['g', 'w'], description: 'Go to Workspaces' },
       { keys: ['g', 't'], description: 'Go to Tools' },
@@ -47,7 +48,7 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }) {
     <div className="dialog-backdrop" role="presentation" onMouseDown={onBackdropMouseDown}>
     <dialog ref={dialogRef} open aria-modal="true" aria-labelledby="shortcuts-title" data-shortcuts-dialog className="shortcuts-dialog"><div className="confirmation-dialog">
       <header><h2 id="shortcuts-title">Keyboard shortcuts</h2><button type="button" className="icon-button" onClick={onClose} aria-label="Close shortcuts help">×</button></header>
-      <p>Sequences start with <kbd className="kbd-hint">g</kbd> then the next key within a moment. Shortcuts pause while you are typing in a field or a dialog is open.</p>
+      <p>Sequences start with <kbd className="kbd-hint">g</kbd> then the next key within a moment. Shortcuts pause while you are typing in a field or a dialog is open — <kbd className="kbd-hint">Ctrl</kbd><kbd className="kbd-hint">K</kbd> works everywhere.</p>
       <div className="shortcut-groups">
         {SHORTCUT_GROUPS.map((group) => <section key={group.title} className="shortcut-group">
           <h3>{group.title}</h3>
