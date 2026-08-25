@@ -1,0 +1,20 @@
+/* Component-scoped additions for the dashboard widgets (severity trend chart,
+   suppressions panel, stats overview). Every rule pairs tokens that invert with
+   the theme, and any motion degrades under prefers-reduced-motion. */
+
+/* --- Severity trend chart ------------------------------------------------- */
+
+/* The tooltip and tick labels are HTML overlays anchored by percentage, because
+   the SVG itself uses preserveAspectRatio="none" (stretched text would distort). */
+.trend-chart-figure { position: relative; }
+
+.trend-chart .trend-bar:focus-visible { outline: .14rem solid var(--color-focus); outline-offset: .12rem; }
+.trend-chart .trend-tick { fill: var(--color-rule-strong); }
+.trend-ticks { display: flex; align-items: baseline; justify-content: space-between; margin-top: var(--space-3xs); color: var(--color-ink-faint); font: 600 var(--text-xs) var(--font-mono); }
+/* The hint line carries no dates anymore (they live on the ticks), so it centers. */
+.trend-section .trend-axis { justify-content: center; }
+
+.trend-tooltip { position: absolute; z-index: 5; display: grid; gap: var(--space-3xs); max-width: min(17rem, 82%); padding: var(--space-2xs) var(--space-xs); border: var(--rule) solid var(--color-rule-strong); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-ink); box-shadow: var(--shadow-nav); font-size: var(--text-xs); pointer-events: none; }
+.trend-tooltip-date { color: var(--color-ink-faint); font: 600 var(--text-xs) var(--font-mono); }
+.trend-tooltip-total { color: var(--color-ink); }
+.trend-tooltip-breakdown { color: var(--color-ink-soft); overflow-wrap: anywhere; }
