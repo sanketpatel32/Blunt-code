@@ -11,6 +11,15 @@ if ($install -eq $local -or $install -eq [IO.Path]::GetPathRoot($install)) {
   throw "Refusing unsafe uninstall directory: $install"
 }
 
+if (Get-Process -Name 'bluntcode' -ErrorAction SilentlyContinue) {
+  throw 'Close Blunt Code before uninstalling.'
+}
+
+# The one-line installer creates this shortcut; a leftover .lnk would point at
+# nothing once the install directory below is gone.
+$shortcut = Join-Path ([Environment]::GetFolderPath('Programs')) 'Blunt Code.lnk'
+if (Test-Path -LiteralPath $shortcut) { Remove-Item -LiteralPath $shortcut -Force }
+
 $current = [Environment]::GetEnvironmentVariable('Path', 'User')
 $parts = @($current -split ';' | Where-Object { $_ -and $_ -ne $install })
 [Environment]::SetEnvironmentVariable('Path', ($parts -join ';'), 'User')
