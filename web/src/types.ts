@@ -5,6 +5,7 @@ export interface Workspace {
   name: string;
   root_path: string;
   languages?: string[];
+  default_profile?: string;
   last_scan_at?: string | null;
   last_opened_at?: string | null;
   latest_scan?: Scan;

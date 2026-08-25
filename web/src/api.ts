@@ -38,6 +38,8 @@ export const api = {
   selectFolder: () => request<{ cancelled: boolean; path?: string }>('/system/select-folder', { method: 'POST' }),
   createWorkspace: (input: { root_path: string; name?: string }) => request<Workspace>('/workspaces', { method: 'POST', body: JSON.stringify(input) }),
   deleteWorkspace: (id: string) => request<void>(`/workspaces/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  /** Rename a workspace and/or change its default scan profile (PATCH). */
+  updateWorkspace: (id: string, patch: { name?: string; default_profile?: string }) => request<Workspace>(`/workspaces/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   discover: (id: string) => request<Workspace>(`/workspaces/${encodeURIComponent(id)}/discover`, { method: 'POST' }),
   tree: async (id: string, path?: string) => {
     const query = path ? `?path=${encodeURIComponent(path)}` : '';
@@ -92,9 +94,9 @@ export const api = {
   stopServer: () => request<{ state: string }>('/system/stop', { method: 'POST' }),
   openFolder: (kind: 'data' | 'reports' | 'logs' | 'tools') => request<void>('/system/open-folder', { method: 'POST', body: JSON.stringify({ kind }) }),
   markdownUrl: (scanId: string) => `${PREFIX}/scans/${encodeURIComponent(scanId)}/report.md`,
-  /** URL for the attachment exports (plain GET navigations, not JSON requests). CSV accepts the same filter/sort params as findings — minus limit/offset — so the file matches the on-screen list. */
-  exportUrl: (scanId: string, format: 'html' | 'sarif' | 'csv', params?: Record<string, string>) => {
-    const base = `${PREFIX}/scans/${encodeURIComponent(scanId)}/${format === 'csv' ? 'findings.csv' : `report.${format}`}`;
+  /** URL for the attachment exports (plain GET navigations, not JSON requests). CSV accepts the same filter/sort params as findings — minus limit/offset — so the file matches the on-screen list. findings.json is the versioned full-report document. */
+  exportUrl: (scanId: string, format: 'html' | 'sarif' | 'csv' | 'json', params?: Record<string, string>) => {
+    const base = `${PREFIX}/scans/${encodeURIComponent(scanId)}/${format === 'csv' ? 'findings.csv' : format === 'json' ? 'findings.json' : `report.${format}`}`;
     if (!params) return base;
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value)).toString();
     return query ? `${base}?${query}` : base;

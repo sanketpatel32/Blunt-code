@@ -159,7 +159,7 @@ describe('SeverityTrendSection states', () => {
     vi.stubGlobal('fetch', fetchMock);
     const host = await render(<SeverityTrendSection workspaceId="ws-1" />);
     await act(async () => {});
-    expect(fetchMock).toHaveBeenCalledWith('/api/v1/workspaces/ws-1/trends', expect.anything());
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/workspaces/ws-1/trends');
     expect(host.innerHTML).toBe('');
   });
 

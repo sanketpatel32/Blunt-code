@@ -101,9 +101,10 @@ export function SeverityTrendChart({ points }: { points: SeverityTrendPoint[] })
   </figure>;
 }
 
-/** Loads the workspace trend series and renders the whole section: skeleton while loading, a quiet inline message on error (never blocking the page), and nothing at all before the first completed scan. */
+/** Loads the workspace trend series and renders the whole section: skeleton while loading, a quiet inline message on error (never blocking the page), and nothing at all before the first completed scan. The range control picks how many scans the server includes (10/20/50/100). */
 export function SeverityTrendSection({ workspaceId }: { workspaceId: string }) {
-  const trends = useLoad(() => api.trends(workspaceId), [workspaceId]);
+  const [range, setRange] = useState(20);
+  const trends = useLoad(() => api.trends(workspaceId, range), [workspaceId, range]);
   if (trends.loading) {
     return <section className="trend-section" aria-busy="true"><div className="section-head"><div><h2>Severity trend</h2><p>Findings by severity over recent scans.</p></div></div><SkeletonLines lines={3} /></section>;
   }
@@ -113,7 +114,7 @@ export function SeverityTrendSection({ workspaceId }: { workspaceId: string }) {
   const points = trends.data ?? [];
   if (!points.length) return null;
   return <section className="trend-section" aria-labelledby="severity-trend-title">
-    <div className="section-head"><div><h2 id="severity-trend-title">Severity trend</h2><p>Findings by severity across the last {points.length} completed {points.length === 1 ? 'scan' : 'scans'}.</p></div></div>
+    <div className="section-head"><div><h2 id="severity-trend-title">Severity trend</h2><p>Findings by severity across the last {points.length} completed {points.length === 1 ? 'scan' : 'scans'}.</p></div><label className="range-picker">Range{' '}<select value={range} onChange={(event) => setRange(Number(event.target.value))} aria-label="Number of scans in the trend chart">{[10, 20, 50, 100].map((value) => <option key={value} value={value}>{value}</option>)}</select></label></div>
     <SeverityTrendChart points={points} />
     <ul className="severity-legend">{SEVERITY_ORDER.map((severity) => <li key={severity}><i className={`seg-${severity}`} aria-hidden="true" />{severity}</li>)}</ul>
     {/* First/last dates moved onto the chart's own ticks; this line is just the reading direction. */}
