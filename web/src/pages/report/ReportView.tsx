@@ -54,6 +54,51 @@ export type SortState = { key: SortKey; dir: SortDir };
  */
 const SORT_DEFAULT_DIR: Record<SortKey, SortDir> = { severity: 'desc', path: 'asc', analyzer: 'asc', status: 'asc' };
 
+const VALID_SORT_KEYS: SortKey[] = ['severity', 'path', 'analyzer', 'status'];
+
+/** Read the shareable report state (filters/sort/page) from the current URL. Unknown values fall back to defaults. */
+function readUrlState(): { filters: FindingFilter; sort: SortState; page: number } {
+  if (typeof window === 'undefined') return { filters: { ...EMPTY_FILTER }, sort: { key: 'severity', dir: 'asc' }, page: 1 };
+  const sp = new URLSearchParams(window.location.search);
+  const filters: FindingFilter = {
+    severity: sp.get('severity') ?? '',
+    category: sp.get('category') ?? '',
+    analyzer: sp.get('tool') ?? sp.get('analyzer') ?? '',
+    rule: sp.get('rule') ?? '',
+    path: sp.get('path') ?? '',
+    status: sp.get('status') ?? '',
+    q: sp.get('q') ?? '',
+  };
+  const rawSort = sp.get('sort');
+  const rawOrder = sp.get('order');
+  let sort: SortState = { key: 'severity', dir: 'asc' };
+  if (rawSort && (VALID_SORT_KEYS as string[]).includes(rawSort)) {
+    const key = rawSort as SortKey;
+    sort = { key, dir: rawOrder === 'asc' || rawOrder === 'desc' ? rawOrder : SORT_DEFAULT_DIR[key] };
+  }
+  let page = 1;
+  const rawPage = Number(sp.get('page'));
+  if (Number.isFinite(rawPage) && rawPage >= 1) page = Math.floor(rawPage);
+  return { filters, sort, page };
+}
+
+/** Serialize the shareable state to a query string; default values are omitted so clean URLs stay clean. */
+function buildUrlSearch(filters: FindingFilter, sort: SortState, page: number): string {
+  const sp = new URLSearchParams();
+  for (const key of ['severity', 'category', 'rule', 'status'] as const) {
+    if (filters[key]) sp.set(key, filters[key]);
+  }
+  if (filters.analyzer) sp.set('analyzer', filters.analyzer);
+  if (filters.path) sp.set('path', filters.path);
+  if (filters.q) sp.set('q', filters.q);
+  if (sort.key !== 'severity' || sort.dir !== 'asc') {
+    sp.set('sort', sort.key);
+    sp.set('order', sort.dir);
+  }
+  if (page !== 1) sp.set('page', String(page));
+  return sp.toString();
+}
+
 /** How long a row's copy button shows its check-mark confirm before reverting; short by design so 25 rows cannot toast-spam. */
 const COPY_CONFIRM_MS = 800;
 
@@ -85,15 +130,40 @@ function CheckIcon() {
 
 export function ReportView({ scanId, notify }: { scanId: string; notify?: (n: Notice) => void }) {
   const report = useLoad(() => api.report(scanId), [scanId]);
-  const [filters, setFilters] = useState<FindingFilter>(EMPTY_FILTER);
+  // Read the shareable URL state exactly once per mount so all three slices
+  // stay mutually consistent even if the address changes mid-render.
+  const [initialUrlState] = useState(readUrlState);
+  const [filters, setFilters] = useState<FindingFilter>(initialUrlState.filters);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [page, setPage] = useState(1);
-  const [sort, setSort] = useState<SortState>({ key: 'severity', dir: 'asc' });
+  const [page, setPage] = useState(initialUrlState.page);
+  const [sort, setSort] = useState<SortState>(initialUrlState.sort);
   const [previewFinding, setPreviewFinding] = useState<Finding>();
   const [suppressing, setSuppressing] = useState<Finding>();
   const debouncedCategory = useDebouncedValue(filters.category, filters.category ? TEXT_FILTER_DELAY_MS : 0);
   const debouncedPath = useDebouncedValue(filters.path, filters.path ? TEXT_FILTER_DELAY_MS : 0);
   const debouncedQ = useDebouncedValue(filters.q, filters.q ? TEXT_FILTER_DELAY_MS : 0);
+  // Keep the URL in sync for shareable report links (filters/sort/page).
+  // Text filters use their debounced values so typing does not spam history;
+  // replaceState keeps back/forward linear. A no-op when nothing changed.
+  useEffect(() => {
+    const urlFilters: FindingFilter = { ...filters, category: debouncedCategory, path: debouncedPath, q: debouncedQ };
+    const qs = buildUrlSearch(urlFilters, sort, page);
+    const current = window.location.search.replace(/^\?/, '');
+    if (qs === current) return;
+    const nextUrl = qs ? `${window.location.pathname}?${qs}${window.location.hash}` : `${window.location.pathname}${window.location.hash}`;
+    window.history.replaceState(null, '', nextUrl);
+  }, [filters, debouncedCategory, debouncedPath, debouncedQ, sort, page]);
+  // Restore filters/sort/page when the user navigates back/forward.
+  useEffect(() => {
+    const onPopState = () => {
+      const next = readUrlState();
+      setFilters(next.filters);
+      setSort(next.sort);
+      setPage(next.page);
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
   const params = useMemo(() => ({ ...filters, category: debouncedCategory, path: debouncedPath, q: debouncedQ, page: String(page), page_size: String(PAGE_SIZE), sort: sort.key, order: sort.dir }), [filters, debouncedCategory, debouncedPath, debouncedQ, page, sort]);
   /** CSV export query: the on-screen filters + sort minus paging, built exactly like the findings request so the file mirrors the list. */
   const csvParams = useMemo(() => Object.fromEntries(Object.entries(params).filter(([key]) => key !== 'page' && key !== 'page_size')), [params]);
