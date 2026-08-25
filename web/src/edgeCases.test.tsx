@@ -132,10 +132,10 @@ describe('hostile API fixtures', () => {
 
   it('HistoryPage survives scans with missing counts, null duration and invalid dates', async () => {
     const fetchMock = routeMock([
-      ['/api/v1/workspaces/ws-1/scans', { scans: [
+      [/^\/api\/v1\/workspaces\/ws-1\/scans\?page=/, { items: [
         { id: 'scan-1', workspace_id: 'ws-1', state: 'completed_with_warnings', started_at: 'not-a-date', finished_at: 'not-a-date', duration_ms: null, analyzer_runs: null },
         { id: 'scan-2', workspace_id: 'ws-1', state: 'paused', profile: 'weird' },
-      ] }],
+      ], total: 2, page: 1, page_size: 6, has_next: false }],
     ]);
     const host = await renderAt('/workspaces/ws-1/scans', fetchMock);
     expectClean(host);

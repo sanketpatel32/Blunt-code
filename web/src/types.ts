@@ -76,6 +76,27 @@ export interface RecentScansResponse {
   summary?: ScanSummary;
 }
 
+/** One server-paged slice of a workspace's scan history (`GET /workspaces/{id}/scans?page=…`). */
+export interface ScanPage {
+  items: Scan[];
+  total: number;
+  page: number;
+  page_size: number;
+  has_next: boolean;
+}
+
+/** A finding from the cross-workspace search, enriched with its origin identity so results can link back to their report. */
+export type SearchedFinding = Finding & { scan_id: string; workspace_id: string };
+
+/** One page of `GET /api/v1/findings/search`. */
+export interface SearchFindingsPage {
+  items: SearchedFinding[];
+  total: number;
+  page: number;
+  page_size: number;
+  has_next: boolean;
+}
+
 /** Tool readiness pair on the global overview; the whole field is absent when no tools service is wired into the server. */
 export interface StatsTools {
   total: number;

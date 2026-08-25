@@ -17,6 +17,7 @@ import { WorkspacePage } from './pages/WorkspaceDetailPage';
 import { FilesPage } from './pages/FilesPage';
 import { HistoryPage } from './pages/HistoryPage';
 import { ScanPage } from './pages/ScanPage';
+import { SearchPage } from './pages/SearchPage';
 import { ToolsPage } from './pages/ToolsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AboutPage } from './pages/AboutPage';
@@ -123,6 +124,7 @@ function Page({ route, go, notify, onAdd }: { route: Route; go: (r: Route) => vo
     case 'files': return id ? <FilesPage id={id} go={go} notify={notify} /> : <NotFoundPage go={go} />;
     case 'history': return id ? <HistoryPage workspaceId={id} go={go} /> : <NotFoundPage go={go} />;
     case 'scan': return id ? <ScanPage id={id} notify={notify} /> : <NotFoundPage go={go} />;
+    case 'search': return <SearchPage go={go} />;
     case 'tools': return <ToolsPage notify={notify} />;
     case 'settings': return <SettingsPage notify={notify} />;
     case 'about': return <AboutPage />;

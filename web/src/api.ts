@@ -1,4 +1,4 @@
-import type { FindingPage, FindingsQuery, FixedFindingsResponse, GlobalStats, PathOverride, RecentScansResponse, Report, Scan, SeverityTrendPoint, SourcePreview, Suppression, Tool, TreeNode, Workspace } from './types';
+import type { FindingPage, FindingsQuery, FixedFindingsResponse, GlobalStats, PathOverride, RecentScansResponse, Report, Scan, ScanPage, SearchFindingsPage, SeverityTrendPoint, SourcePreview, Suppression, Tool, TreeNode, Workspace } from './types';
 
 const PREFIX = '/api/v1';
 
@@ -56,6 +56,13 @@ export const api = {
   },
   saveRules: (id: string, rules: unknown) => request(`/workspaces/${encodeURIComponent(id)}/rules`, { method: 'PUT', body: JSON.stringify(rules) }),
   scans: async (id: string) => list<Scan>(await request<Scan[] | { scans?: Scan[] }>(`/workspaces/${encodeURIComponent(id)}/scans`)),
+  /** Server-paged scan history for one workspace; `page` is 1-based and capped at page_size 100 by the API. */
+  scansPage: (id: string, page: number, pageSize: number) => request<ScanPage>(`/workspaces/${encodeURIComponent(id)}/scans?page=${page}&page_size=${pageSize}`),
+  /** Cross-workspace findings search; empty param values are dropped exactly like the per-scan findings query. */
+  searchFindings: (params: FindingsQuery) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, v]) => v));
+    return request<SearchFindingsPage>(`/findings/search?${query}`);
+  },
   /** Severity trend over completed scan history, oldest first; limit defaults to 20 on the server. */
   trends: async (id: string, limit?: number) => {
     const query = limit ? `?limit=${limit}` : '';

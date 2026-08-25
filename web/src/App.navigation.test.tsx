@@ -45,7 +45,7 @@ describe('navigation resilience', () => {
   it('adds About as the last navigation item and routes to the About page', async () => {
     const host = await renderApp();
     const labels = [...host.querySelectorAll('.app-nav nav a')].map((link) => link.textContent);
-    expect(labels).toEqual(['Home', 'Workspaces', 'Tools', 'Settings', 'About']);
+    expect(labels).toEqual(['Home', 'Workspaces', 'Search', 'Tools', 'Settings', 'About']);
     const about = host.querySelector<HTMLAnchorElement>('.app-nav nav a[href="/about"]');
     expect(about?.textContent).toBe('About');
     await act(async () => { about!.click(); await Promise.resolve(); await Promise.resolve(); });
