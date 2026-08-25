@@ -9,7 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Installer console experience:** the one-line installer now prints stepped progress (`[1/5]` … `[5/5]`: release info, download, checksum verify, install, shortcut) with a live single-line download meter (`4.2 / 11.3 MB (37%)`) that redraws in place when attached to a console and degrades to one coarse line every few MB in redirected/CI logs, plus a version-aware summary ("Installed Blunt Code 0.5.0 to …"). Output stays plain ASCII so piped `irm | iex` sessions on Windows PowerShell 5.1 decode it cleanly.
 - **`g a` goes to About:** every destination in the top navigation is now reachable from the keyboard — the shortcuts help gains the `g` `a` row, and the command palette's "Go to About" entry shows the `g a` hint like its siblings.
+
+### Removed
+
+- **Legacy standalone installer script:** `scripts/install.ps1` (the download-and-run-a-local-copy installer superseded by `install-latest.ps1`) is gone — the `irm … | iex` release-asset one-liner is the single supported PowerShell install path. The README's execution-policy notes no longer walk users through saving and running an installer `.ps1`; they explain that the piped one-liner never touches Execution Policy at all.
 
 ### Fixed
 
