@@ -67,7 +67,7 @@ export function SeverityTrendChart({ points }: { points: SeverityTrendPoint[] })
       onBlur={() => setActive(undefined)}
       onMouseOver={() => setActive(index)}
       onMouseOut={() => setActive(undefined)}
-    ><title>{barLabel(point)}</title>{segments}</g>;
+    >{segments}</g>;
   });
   const newest = points[points.length - 1];
   const previous = points.length > 1 ? points[points.length - 2] : undefined;

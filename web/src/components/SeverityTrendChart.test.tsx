@@ -39,10 +39,10 @@ describe('SeverityTrendChart bars', () => {
     ]} />);
     const bars = [...host.querySelectorAll('.trend-bar')];
     expect(bars).toHaveLength(2);
-    // The DOM order of the title tooltips is the chart's time axis.
-    const titles = bars.map((bar) => bar.querySelector('title')?.textContent ?? '');
-    expect(titles[0]).toContain(date('2026-07-01T12:00:00Z'));
-    expect(titles[1]).toContain(date('2026-07-02T12:00:00Z'));
+    // The DOM order of the bar aria-labels is the chart's time axis.
+    const labels = bars.map((bar) => bar.getAttribute('aria-label') ?? '');
+    expect(labels[0]).toContain(date('2026-07-01T12:00:00Z'));
+    expect(labels[1]).toContain(date('2026-07-02T12:00:00Z'));
     expect(host.querySelectorAll('.trend-baseline')).toHaveLength(1);
   });
 
@@ -77,11 +77,11 @@ describe('SeverityTrendChart bars', () => {
     const svg = host.querySelector('svg');
     expect(svg?.getAttribute('role')).toBe('img');
     expect(svg?.getAttribute('aria-label')).toContain('1 completed scan');
-    const title = host.querySelector('.trend-bar title')?.textContent ?? '';
-    expect(title).toContain(date(finished));
-    expect(title).toContain('4 findings');
-    expect(title).toContain('2 critical, 1 high, 1 medium, 0 low, 0 info');
-    expect(title).toContain('deep');
+    const label = host.querySelector('.trend-bar')?.getAttribute('aria-label') ?? '';
+    expect(label).toContain(date(finished));
+    expect(label).toContain('4 findings');
+    expect(label).toContain('2 critical, 1 high, 1 medium, 0 low, 0 info');
+    expect(label).toContain('deep');
     expect(host.querySelector('figcaption')?.className).toBe('sr-only');
   });
 

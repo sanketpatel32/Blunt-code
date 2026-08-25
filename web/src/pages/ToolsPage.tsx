@@ -20,9 +20,9 @@ const operationVerbs: Record<ToolOperation, string> = { install: 'installed', re
 function ReadinessStrip({ tools, busy }: { tools: Tool[]; busy?: BusyAction }) {
   const ready = tools.filter((tool) => tool.ready).length;
   return <div className="tools-readiness" role="status"><span className={`badge${ready === tools.length ? ' tools-all-ready' : ''}`}>{ready} of {tools.length} ready</span>{tools.filter((tool) => !tool.ready).map((tool) => {
-    const installing = busy !== undefined && busy.tool === tool.id && busy.operation === 'install';
+    const active = busy !== undefined && busy.tool === tool.id ? busy.operation : undefined;
     const name = tool.name?.trim() || tool.id;
-    return <span key={tool.id} className="badge">{installing ? <span className="spinner" aria-hidden="true" /> : <i className="dot not-ready" aria-hidden="true" />}{name} {installing ? 'installing…' : 'not installed'}</span>;
+    return <span key={tool.id} className="badge">{active ? <span className="spinner" aria-hidden="true" /> : <i className="dot not-ready" aria-hidden="true" />}{name} {active ? operationBusyLabels[active].toLowerCase() : 'not installed'}</span>;
   })}</div>;
 }
 
