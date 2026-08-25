@@ -24,7 +24,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .main:focus { outline: none; }
 .app-nav { position: sticky; z-index: 10; top: var(--space-md); display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: var(--space-xl); width: min(52rem, calc(100% - var(--space-2xl))); min-height: 4.5rem; margin: var(--space-md) auto 0; padding: 0 var(--space-lg); border: var(--rule) solid var(--color-rule); border-radius: 999px; background: color-mix(in oklch, var(--color-paper) 90%, transparent); box-shadow: var(--shadow-nav); backdrop-filter: blur(.9rem); }
 .brand { display: inline-flex; align-items: center; gap: var(--space-sm); color: var(--color-ink); font-family: var(--font-display); font-size: var(--text-md); letter-spacing: -.025em; text-decoration: none; white-space: nowrap; }
-.brand span { display: grid; width: 1.9rem; height: 1.9rem; place-items: center; border-radius: var(--radius-sm); background: var(--color-graphite); color: var(--color-accent-ink); font: 700 var(--text-xs) var(--font-mono); letter-spacing: -.08em; }
+.brand .brand-mark { display: block; width: 1.9rem; height: 1.9rem; }
 .app-nav nav { display: flex; align-items: center; gap: var(--space-lg); }
 .app-nav nav a { position: relative; padding: var(--space-xs) 0; color: var(--color-ink-soft); font-size: var(--text-sm); font-weight: 600; text-decoration: none; white-space: nowrap; transition: color var(--dur-base) var(--ease-out); }
 .app-nav nav a::after { position: absolute; right: 0; bottom: 0; left: 0; height: var(--rule); background: var(--color-accent); content: ''; opacity: 0; transform: scaleX(.45); transition: opacity var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-spring); }
@@ -213,9 +213,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .spinner { display: inline-block; width: .8rem; height: .8rem; margin-right: var(--space-2xs); vertical-align: -.08rem; border: .125rem solid var(--color-rule-strong); border-top-color: transparent; border-radius: 50%; animation: scan-spin var(--dur-slow) linear infinite; }
 
 /* Dark-theme surface fixes: these rules pair two tokens that both invert, so the light-mode pairing cannot carry over. */
-:root[data-theme='dark'] .brand span { background: var(--color-accent); }
 :root[data-theme='dark'] .code-preview code.highlight { color: var(--color-accent-ink); }
-
 
 @media (max-width: 56rem) { .app-nav { width: calc(100% - var(--space-xl)); padding: 0 var(--space-md); }.local-signal { display: none; }.theme-toggle { padding: 0 .66rem; }.theme-toggle .theme-toggle-label { display: none; }.page { padding: var(--space-2xl) var(--space-md); }.app-footer { width: calc(100% - 2rem); }.story-hero, .file-layout, .progress-layout, .split-section { grid-template-columns: 1fr; }.workspace-card { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }.workspace-card footer { grid-column: 1 / -1; justify-content: flex-start; }.workspace-analysis { padding-left: 0; border-left: 0; }.summary-grid { grid-template-columns: repeat(3, 1fr); }.filters { grid-template-columns: repeat(3, 1fr); }.filters .filter-search { grid-column: span 3; }.rule-editor { order: -1; } }
 @media (max-width: 42rem) { .app-nav { grid-template-columns: auto 1fr; gap: var(--space-md); }.app-nav nav { order: 3; grid-column: 1 / -1; overflow-x: auto; padding-bottom: var(--space-sm); }.nav-actions { margin-left: auto; }.close-app { display: none; }.findings-section .section-head { position: static; } }

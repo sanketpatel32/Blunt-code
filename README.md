@@ -1,3 +1,5 @@
+<p align="center"><img src="web/public/bluntcode-mark.svg" alt="Blunt Code logo — an accent-blue rounded tile with a bold chevron prompt and cursor" width="96" /></p>
+
 # Blunt Code 🛡️
 
 > **All-in-One Local Code Quality & Security Analyzer for Windows**

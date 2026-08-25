@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <title>Blunt Code</title>
+  <rect width="32" height="32" rx="7.5" fill="#006fe6"/>
+  <g fill="none" stroke="#fbfcfd" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="9.5 8.5 17 16 9.5 23.5"/>
+    <line x1="20.75" y1="23.5" x2="24.25" y2="23.5"/>
+  </g>
+</svg>
