@@ -18,7 +18,7 @@ export function useCountUp(target: number, duration = 480): number {
     const tick = (now: number) => {
       const t = Math.min((now - start) / duration, 1);
       // ease-out cubic: fast start, gentle landing
-      const eased = 1 - Math.pow(1 - t, 3);
+      const eased = 1 - (1 - t) ** 3;
       setDisplay(Math.round(from + (to - from) * eased));
       if (t < 1) raf = requestAnimationFrame(tick);
     };

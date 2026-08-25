@@ -32,13 +32,17 @@ export function CommandPalette({ open, onClose, commands }: { open: boolean; onC
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
-  const listRef = useRef<HTMLUListElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const { dialogRef } = useDialogA11y({ onClose, autoFocusRef: inputRef });
   const results = useMemo(() => filterCommands(commands, query), [commands, query]);
   useEffect(() => { if (open) { setQuery(''); setActiveIndex(0); } }, [open]);
   // Keep the highlight clamped when filtering shrinks the list under it.
   useEffect(() => { if (activeIndex >= results.length) setActiveIndex(Math.max(0, results.length - 1)); }, [results.length, activeIndex]);
-  useEffect(() => { const active = listRef.current?.querySelector<HTMLElement>('[data-active="true"]'); active?.scrollIntoView?.({ block: 'nearest' }); }, [activeIndex]);
+  useEffect(() => {
+    const options = listRef.current?.querySelectorAll<HTMLElement>('[role="option"]');
+    const active = options?.[Math.min(activeIndex, Math.max(0, options.length - 1))];
+    active?.scrollIntoView?.({ block: 'nearest' });
+  }, [activeIndex]);
   if (!open) return null;
   const run = (command: Command) => { onClose(); command.run(); };
   const onKeyDown = (event: React.KeyboardEvent) => {
@@ -46,19 +50,19 @@ export function CommandPalette({ open, onClose, commands }: { open: boolean; onC
     else if (event.key === 'ArrowUp') { event.preventDefault(); setActiveIndex((i) => Math.max(i - 1, 0)); }
     else if (event.key === 'Enter') { event.preventDefault(); if (results[activeIndex]) run(results[activeIndex]); }
   };
-  return <div className="dialog-backdrop palette-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+  return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: backdrop-only dismissal is pointer convenience; keyboard users close via Escape.
+    <div role="presentation" className="dialog-backdrop palette-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <dialog ref={dialogRef} open aria-label="Command palette" className="command-palette">
       <input ref={inputRef} value={query} onChange={(event) => { setQuery(event.target.value); setActiveIndex(0); }} onKeyDown={onKeyDown} placeholder="Type a command…" role="combobox" aria-expanded="true" aria-controls="command-palette-list" aria-activedescendant={results[activeIndex] ? `command-option-${results[activeIndex].id}` : undefined} aria-label="Search commands" spellCheck={false} autoComplete="off" />
-      <ul id="command-palette-list" ref={listRef} role="listbox" aria-label="Commands">
-        {results.map((command, index) => <li key={command.id}>
-          <button type="button" id={`command-option-${command.id}`} role="option" data-active={index === activeIndex} aria-selected={index === activeIndex} onMouseEnter={() => setActiveIndex(index)} onClick={() => run(command)}>
-            <span className="palette-label">{command.label}</span>
-            {command.hint && <kbd>{command.hint}</kbd>}
-          </button>
-        </li>)}
-        {!results.length && <li className="palette-empty" aria-live="polite">No matching command.</li>}
-      </ul>
+      <div id="command-palette-list" ref={listRef} role="listbox" aria-label="Commands">
+        {results.map((command, index) => <button type="button" key={command.id} id={`command-option-${command.id}`} role="option" className="palette-option" data-active={index === activeIndex} aria-selected={index === activeIndex} onMouseEnter={() => setActiveIndex(index)} onClick={() => run(command)}>
+          <span className="palette-label">{command.label}</span>
+          {command.hint && <kbd>{command.hint}</kbd>}
+        </button>)}
+        {!results.length && <p className="palette-empty" aria-live="polite">No matching command.</p>}
+      </div>
       <footer><span><kbd>↑</kbd><kbd>↓</kbd> navigate</span><span><kbd>Enter</kbd> run</span><span><kbd>Esc</kbd> close</span></footer>
     </dialog>
-  </div>;
+  </div>);
 }
