@@ -28,4 +28,4 @@ $hash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvar
 Set-Content -LiteralPath "$archive.sha256" -Value "$hash  $(Split-Path -Leaf $archive)" -NoNewline
 Write-Host "Package: $archive"
 Write-Host "SHA256:  $hash"
-Write-Host "Installer: $(Join-Path $output 'Install-BluntCode.ps1')"
+Write-Host "Installer: $(Join-Path $output 'install-latest.ps1')"

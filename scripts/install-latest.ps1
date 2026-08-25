@@ -52,7 +52,10 @@ New-Item -ItemType Directory -Path $temporary -Force | Out-Null
 try {
   $archivePath = Join-Path $temporary $archive.name
   $checksumPath = Join-Path $temporary $checksum.name
-  Write-Host 'Downloading Blunt Code…'
+  # ASCII only: GitHub serves this script as application/octet-stream, so
+  # Invoke-RestMethod on Windows PowerShell 5.1 decodes it as ANSI and any
+  # non-ASCII character here would print as mojibake.
+  Write-Host 'Downloading Blunt Code...'
   Invoke-WebRequest -Uri $archive.browser_download_url -OutFile $archivePath -Headers $headers
   Invoke-WebRequest -Uri $checksum.browser_download_url -OutFile $checksumPath -Headers $headers
 
