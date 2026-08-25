@@ -15,6 +15,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"time"
 
@@ -78,6 +79,13 @@ type scanConfig struct {
 	// saveBaseline writes the scan's SARIF 2.1.0 document to this path after a
 	// completed scan, one flag instead of a `--format sarif >` shell redirect.
 	saveBaseline string
+	// Gate scoping: when non-empty, only findings from these analyzers or in
+	// these categories feed the CI gate (--gate-analyzer/--gate-category).
+	gateAnalyzers  map[string]bool
+	gateCategories map[string]bool
+	// Watch loop tuning; zero values fall back to the package defaults.
+	watchPoll  time.Duration
+	watchQuiet time.Duration
 	// jobs bounds how many analyzers may run concurrently; 0 (the default)
 	// keeps the sequential execution model.
 	jobs int
@@ -118,6 +126,10 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	incremental := flags.Bool("incremental", false, "reuse the previous completed scan's findings for unchanged files and run analyzers only on changed files (a boolean flag: --incremental, never --incremental <value>); composes with gate, baseline, format, and jobs flags")
 	output := flags.String("output", "", "write the selected document format (json, github, sarif, or csv) to this file instead of stdout; progress stays on stderr")
 	saveBaseline := flags.String("save-baseline", "", "write the scan's SARIF 2.1.0 document to this file after a completed scan (same bytes as --format sarif)")
+	gateAnalyzers := flags.String("gate-analyzer", "", "scope the CI gate to these analyzers only: comma-separated IDs such as semgrep,secrets")
+	gateCategories := flags.String("gate-category", "", "scope the CI gate to these categories only: comma-separated security, correctness, style, performance")
+	watchPollFlag := flags.Duration("watch-poll", 0, "watch mode filesystem poll interval (250ms to 1m; default 2s)")
+	watchQuietFlag := flags.Duration("watch-quiet", 0, "watch mode quiet window before a rescan starts (100ms to 2m; default 1.5s)")
 	watch := flags.Bool("watch", false, "keep running and rescan automatically when workspace files change (polls every 2s; a rescan starts after 1.5s without further changes); gate flags never exit the process; Ctrl+C stops it")
 	flags.Usage = func() {
 		fmt.Fprintln(errOut, scanUsage)
@@ -201,6 +213,36 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	}
 	if cfg.saveBaseline != "" && cfg.watch {
 		return usageError("--save-baseline cannot be combined with --watch: each rescan would overwrite the file; use --format sarif and redirect instead")
+	}
+	parseList := func(raw string) map[string]bool {
+		out := map[string]bool{}
+		for _, part := range strings.Split(raw, ",") {
+			if value := strings.ToLower(strings.TrimSpace(part)); value != "" {
+				out[value] = true
+			}
+		}
+		return out
+	}
+	if ga := strings.TrimSpace(*gateAnalyzers); ga != "" {
+		cfg.gateAnalyzers = parseList(ga)
+	}
+	if gc := strings.TrimSpace(*gateCategories); gc != "" {
+		cfg.gateCategories = parseList(gc)
+	}
+	if *watchPollFlag != 0 {
+		if *watchPollFlag < 250*time.Millisecond || *watchPollFlag > time.Minute {
+			return usageError("watch-poll must be between 250ms and 1m")
+		}
+		cfg.watchPoll = *watchPollFlag
+	}
+	if *watchQuietFlag != 0 {
+		if *watchQuietFlag < 100*time.Millisecond || *watchQuietFlag > 2*time.Minute {
+			return usageError("watch-quiet must be between 100ms and 2m")
+		}
+		cfg.watchQuiet = *watchQuietFlag
+	}
+	if cfg.watch && cfg.watchPoll != 0 && cfg.watchQuiet != 0 && cfg.watchQuiet < cfg.watchPoll/4 {
+		return usageError("watch-quiet should stay at least a quarter of watch-poll so polls can observe the quiet window")
 	}
 	if cfg.timeout <= 0 {
 		return usageError("timeout must be a positive duration such as 5m")
@@ -398,6 +440,13 @@ func runScanCommand(args []string, stdout, stderr io.Writer) int {
 	signal.Notify(interrupt, os.Interrupt)
 	defer signal.Stop(interrupt)
 	if cfg.watch {
+		poll, quiet := cfg.watchPoll, cfg.watchQuiet
+		if poll == 0 {
+			poll = watchPollInterval
+		}
+		if quiet == 0 {
+			quiet = watchQuietWindow
+		}
 		return runWatchLoop(watchEnv{
 			quiet:     cfg.quiet,
 			stderr:    stderr,
@@ -413,7 +462,7 @@ func runScanCommand(args []string, stdout, stderr io.Writer) int {
 				scanCfg.incremental = incremental || cfg.incremental
 				return runSingleScan(app, scanCfg, work, baseline, stdout, stderr, interrupts)
 			},
-		}, watchLoopOptions{pollInterval: watchPollInterval, quietWindow: watchQuietWindow})
+		}, watchLoopOptions{pollInterval: poll, quietWindow: quiet})
 	}
 	return runSingleScan(app, cfg, work, baseline, stdout, stderr, interrupt).code
 }
@@ -556,6 +605,13 @@ func runSingleScan(app *appCore, cfg scanConfig, work core.Workspace, baseline s
 		fmt.Fprintf(stderr, "baseline: %d known finding(s) excluded from gate, %d new finding(s)\n", len(known), len(fresh))
 	} else {
 		gatedFindings = summary.findings
+	}
+	// Gate scoping narrows which findings the gate sees: only the listed
+	// analyzers and/or categories are counted. An empty flag means "all".
+	if len(cfg.gateAnalyzers) > 0 || len(cfg.gateCategories) > 0 {
+		narrowed := scopeGateFindings(gatedFindings, cfg.gateAnalyzers, cfg.gateCategories)
+		fmt.Fprintf(stderr, "gate scope: %d of %d finding(s) match --gate-analyzer/--gate-category\n", len(narrowed), len(gatedFindings))
+		gatedFindings = narrowed
 	}
 	// The CI gate applies only to scans that completed and would otherwise
 	// exit 0; failed, cancelled, and interrupted scans keep their own exit
@@ -870,8 +926,55 @@ func scanAnalyzerDisplayName(id string) string {
 }
 
 // writeScanHuman prints the end-of-scan summary to stdout.
-func writeScanHuman(w io.Writer, s scanSummary) {
-	stateLabel := strings.ReplaceAll(s.state, "_", " ")
+// scopeGateFindings keeps only findings whose analyzer and category pass the
+// gate-scoping allow-lists; a nil/empty set allows everything on that axis.
+func scopeGateFindings(findings []analyzers.Finding, analyzersAllow, categoriesAllow map[string]bool) []analyzers.Finding {
+	if len(analyzersAllow) == 0 && len(categoriesAllow) == 0 {
+		return findings
+	}
+	out := make([]analyzers.Finding, 0, len(findings))
+	for _, f := range findings {
+		if len(analyzersAllow) > 0 && !analyzersAllow[strings.ToLower(f.AnalyzerID)] {
+			continue
+		}
+		if len(categoriesAllow) > 0 && !categoriesAllow[strings.ToLower(string(f.Category))] {
+			continue
+		}
+		out = append(out, f)
+	}
+	return out
+}
+
+// writeTopFindings prints up to n of the most serious findings under the
+// counts so the human summary answers "what should I fix first" without
+// opening the full report. Ordering is severity rank, then path.
+func writeTopFindings(w io.Writer, findings []analyzers.Finding, n int) {
+	if len(findings) == 0 || n <= 0 {
+		return
+	}
+	rank := map[analyzers.Severity]int{analyzers.SeverityCritical: 5, analyzers.SeverityHigh: 4, analyzers.SeverityMedium: 3, analyzers.SeverityLow: 2, analyzers.SeverityInfo: 1}
+	top := make([]analyzers.Finding, len(findings))
+	copy(top, findings)
+	sort.SliceStable(top, func(i, j int) bool {
+		if rank[top[i].Severity] != rank[top[j].Severity] {
+			return rank[top[i].Severity] > rank[top[j].Severity]
+		}
+		return top[i].RelativePath < top[j].RelativePath
+	})
+	fmt.Fprintf(w, "Top findings:\n")
+	for i, f := range top {
+		if i >= n {
+			break
+		}
+		rule := f.RuleID
+		if rule == "" {
+			rule = string(f.Category)
+		}
+		fmt.Fprintf(w, "  %s %s - %s:%d\n", strings.ToUpper(string(f.Severity)), rule, f.RelativePath, f.StartLine)
+	}
+}
+
+func writeScanHuman(w io.Writer, s scanSummary) {	stateLabel := strings.ReplaceAll(s.state, "_", " ")
 	reason := ""
 	if s.timedOut {
 		reason = " (aborted: timeout exceeded)"
@@ -883,6 +986,7 @@ func writeScanHuman(w io.Writer, s scanSummary) {
 		if s.hasPrevious {
 			fmt.Fprintf(w, "Versus previous scan: %d new, %d fixed, %d persistent\n", s.newCount, s.fixedCount, s.persistent)
 		}
+		writeTopFindings(w, s.findings, 3)
 	}
 	for _, run := range s.runs {
 		line := fmt.Sprintf("  %s", scanAnalyzerDisplayName(run.AnalyzerID))

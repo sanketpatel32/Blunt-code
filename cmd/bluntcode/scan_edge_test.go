@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"reflect"
 	"io"
 	"os"
 	"os/exec"
@@ -62,7 +63,7 @@ func TestParseScanFlagsAcceptsFlagsAfterPath(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parse: %v (stderr: %s)", err, errOut.String())
 			}
-			if cfg != item.want {
+			if !reflect.DeepEqual(cfg, item.want) {
 				t.Fatalf("cfg = %#v, want %#v", cfg, item.want)
 			}
 		})
