@@ -25,3 +25,12 @@
 /* The global .search label is tuned for the tree panel sidebar; relax it here. */
 .suppressions-section .search { margin: 0 0 var(--space-sm); max-width: 24rem; }
 .suppressions-count { margin: 0 0 var(--space-sm); color: var(--color-ink-faint); font: 600 var(--text-xs) var(--font-mono); white-space: nowrap; }
+
+/* --- Stats overview --------------------------------------------------------- */
+
+/* Counters tick independently across cards; tabular numerals keep digits from
+   jittering horizontally as values change. */
+.tnum { font-variant-numeric: tabular-nums; }
+/* Skeleton and loaded card bodies share this floor so the swap between them
+   never reflows the dashboard below. */
+.stats-cards { min-height: 7rem; }

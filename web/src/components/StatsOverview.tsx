@@ -25,8 +25,9 @@ function validTimestamp(value?: string) {
 /** The dashboard's global overview (GET /api/v1/stats): workspace, scan, finding, suppression, and tool counters above the activity feed. Loads itself — skeleton while loading, a quiet inline message with retry on error (the rest of the dashboard keeps working), and zeros rather than hidden cards on a fresh install. */
 export function StatsOverview() {
   const stats = useLoad(api.stats, []);
+  // .stats-cards on both bodies gives skeleton and data a shared min-height floor, so the swap never reflows the page.
   if (stats.loading) {
-    return <section className="stats-overview" aria-busy="true"><div className="section-head"><div><h2>Overview</h2><p>Every workspace at a glance.</p></div></div><div className="stats-overview-loading"><SkeletonCards count={5} /></div></section>;
+    return <section className="stats-overview" aria-busy="true"><div className="section-head"><div><h2>Overview</h2><p>Every workspace at a glance.</p></div></div><div className="stats-overview-loading stats-cards"><SkeletonCards count={5} /></div></section>;
   }
   if (stats.error) {
     return <section className="stats-overview"><p className="muted">Overview is unavailable right now. The rest of the dashboard is unaffected. <button type="button" className="text-button" onClick={stats.reload}>Try again</button></p></section>;
@@ -53,12 +54,12 @@ function OverviewCards({ stats }: { stats?: GlobalStats }) {
   const barLabel = `Current findings by severity: ${breakdownLabel(counts)}`;
   return <section className="stats-overview" aria-labelledby="stats-overview-title">
     <div className="section-head"><div><h2 id="stats-overview-title">Overview</h2><p>Every workspace at a glance{generatedAt ? <> · updated <span title={date(generatedAt)}>{relativeTime(generatedAt)}</span></> : ''}</p></div></div>
-    <div className="stats-grid">
-      <article className="summary-card"><strong>{data.workspaces ?? 0}</strong><span>Workspaces</span></article>
-      <article className="summary-card"><strong>{scans.total ?? 0}{running > 0 && <i className="pulse-dot" aria-hidden="true" />}</strong><span>Scans</span><small className="card-split">{completed} completed · {running} running</small></article>
-      <article className="summary-card"><strong>{total}</strong><span>Findings</span><small className="card-split">Latest scan per workspace</small></article>
-      <article className="summary-card"><strong>{data.suppressions ?? 0}</strong><span>Suppressions</span></article>
-      {data.tools && <article className="summary-card"><strong>{data.tools.ready ?? 0}<span className="summary-of"> of {data.tools.total ?? 0}</span></strong><span>Tools ready</span></article>}
+    <div className="stats-grid stats-cards">
+      <article className="summary-card"><strong className="tnum">{data.workspaces ?? 0}</strong><span>Workspaces</span><span className="sr-only">Registered codebases available for scanning.</span></article>
+      <article className="summary-card"><strong className="tnum">{scans.total ?? 0}{running > 0 && <i className="pulse-dot" aria-hidden="true" />}</strong><span>Scans</span><span className="sr-only">Total scans run across every workspace; the split counts completed runs and runs still in progress.</span><small className="card-split">{completed} completed · {running} running</small></article>
+      <article className="summary-card"><strong className="tnum">{total}</strong><span>Findings</span><span className="sr-only">Findings reported by the latest completed scan of each workspace, summed across all severities.</span><small className="card-split">Latest scan per workspace</small></article>
+      <article className="summary-card"><strong className="tnum">{data.suppressions ?? 0}</strong><span>Suppressions</span><span className="sr-only">Finding fingerprints currently hidden from future scans, reports, and the CI gate.</span></article>
+      {data.tools && <article className="summary-card"><strong className="tnum">{data.tools.ready ?? 0}<span className="summary-of"> of {data.tools.total ?? 0}</span></strong><span>Tools ready</span><span className="sr-only">Analyzer tools reporting ready out of everything installed.</span></article>}
     </div>
     <div className="stats-distribution">
       <div className="severity-stack severity-bar" role="img" aria-label={barLabel} title={barLabel}>{total > 0 && SEVERITY_ORDER.filter((severity) => counts[severity] > 0).map((severity) => <i key={severity} className={`seg-${severity}`} style={{ width: segmentWidth(counts[severity], total) }} />)}</div>

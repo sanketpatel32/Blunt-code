@@ -61,21 +61,28 @@ describe('StatsOverview', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/stats', expect.anything());
     const section = host.querySelector('.stats-overview');
     expect(section?.getAttribute('aria-busy')).toBe('true');
+    // The skeleton body carries the same .stats-cards floor as the loaded grid so the swap does not shift layout.
+    expect(host.querySelector('.stats-overview-loading.stats-cards')).not.toBeNull();
     expect(host.querySelectorAll('.stats-overview-loading .skeleton-card').length).toBe(5);
     expect(host.querySelector('.stats-grid')).toBeNull();
   });
 
   it('renders every counter, the scans split, the tools split, and the severity breakdown', async () => {
     const host = await render(vi.fn().mockResolvedValue(json(statsPayload())));
+    expect(host.querySelector('.stats-grid.stats-cards')).not.toBeNull();
     const cards = [...host.querySelectorAll('.stats-grid .summary-card')];
     expect(cards).toHaveLength(5);
+    // textContent includes the sr-only long description that follows each label.
     expect(cards.map((card) => card.textContent)).toEqual([
-      '3Workspaces',
-      '5Scans3 completed · 1 running',
-      '3FindingsLatest scan per workspace',
-      '3Suppressions',
-      '3 of 4Tools ready',
+      '3WorkspacesRegistered codebases available for scanning.',
+      '5ScansTotal scans run across every workspace; the split counts completed runs and runs still in progress.3 completed · 1 running',
+      '3FindingsFindings reported by the latest completed scan of each workspace, summed across all severities.Latest scan per workspace',
+      '3SuppressionsFinding fingerprints currently hidden from future scans, reports, and the CI gate.',
+      '3 of 4Tools readyAnalyzer tools reporting ready out of everything installed.',
     ]);
+    // Every counter renders in tabular numerals and every card explains itself to screen readers.
+    expect(cards.every((card) => card.querySelector('strong')?.className === 'tnum')).toBe(true);
+    expect(cards.every((card) => card.querySelector('.sr-only'))).toBe(true);
     expect(host.querySelector('.stats-grid .summary-card .pulse-dot')).not.toBeNull(); // running > 0 earns the live dot
 
     const bar = host.querySelector<HTMLElement>('.stats-distribution .severity-bar')!;
@@ -116,11 +123,11 @@ describe('StatsOverview', () => {
     const cards = [...host.querySelectorAll('.stats-grid .summary-card')];
     expect(cards).toHaveLength(5); // zeros render, nothing hides
     expect(cards.map((card) => card.textContent)).toEqual([
-      '0Workspaces',
-      '0Scans0 completed · 0 running',
-      '0FindingsLatest scan per workspace',
-      '0Suppressions',
-      '0 of 4Tools ready',
+      '0WorkspacesRegistered codebases available for scanning.',
+      '0ScansTotal scans run across every workspace; the split counts completed runs and runs still in progress.0 completed · 0 running',
+      '0FindingsFindings reported by the latest completed scan of each workspace, summed across all severities.Latest scan per workspace',
+      '0SuppressionsFinding fingerprints currently hidden from future scans, reports, and the CI gate.',
+      '0 of 4Tools readyAnalyzer tools reporting ready out of everything installed.',
     ]);
     expect(host.querySelector('.stats-grid .summary-card .pulse-dot')).toBeNull();
     const bar = host.querySelector<HTMLElement>('.stats-distribution .severity-bar')!;
@@ -140,6 +147,6 @@ describe('StatsOverview', () => {
 
     await act(async () => { findButton(host, 'Try again')!.click(); await Promise.resolve(); await Promise.resolve(); });
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(host.querySelector('.stats-grid .summary-card')?.textContent).toBe('3Workspaces');
+    expect(host.querySelector('.stats-grid .summary-card')?.textContent).toBe('3WorkspacesRegistered codebases available for scanning.');
   });
 });
