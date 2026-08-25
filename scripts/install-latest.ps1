@@ -5,6 +5,10 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# Piped execution (irm | iex): silence download progress and ensure TLS 1.2 on
+# older Windows builds whose .NET defaults predate it.
+$ProgressPreference = 'SilentlyContinue'
+try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch { }
 $repository = 'sanketpatel32/Blunt-code'
 
 function Assert-SafeInstallDir([string]$Path) {

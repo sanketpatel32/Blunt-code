@@ -11,7 +11,7 @@
 - [✨ Key Features](#-key-features)
 - [💻 System Requirements](#-system-requirements)
 - [🚀 Installation Options](#-installation-options)
-  - [Option 1: One-Line PowerShell Installer (Recommended)](#option-1-one-line-powershell-installer-recommended)
+  - [Option 1: One-Line Installer (Recommended)](#option-1-one-line-installer-powershell-or-cmd-recommended)
   - [Option 2: Standalone ZIP Download (Portable)](#option-2-standalone-zip-download-portable)
   - [Option 3: Build from Source](#option-3-build-from-source)
 - [🎯 Quick Start Guide](#-quick-start-guide)
@@ -54,16 +54,23 @@
 
 Choose the method that suits your workflow best:
 
-### Option 1: One-Line PowerShell Installer (Recommended)
+### Option 1: One-Line Installer (PowerShell or cmd) (Recommended)
 
 This automated script downloads the latest release, verifies its SHA-256 checksum, installs Blunt Code to `%LOCALAPPDATA%\Programs\BluntCode`, creates a **Start Menu** shortcut, and launches the app.
 
-1. Open **PowerShell** (Press `Win + R`, type `powershell`, and press `Enter`).
-2. Paste and execute the command:
+**From PowerShell** (Press `Win + R`, type `powershell`, and press `Enter`):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -Command "Invoke-RestMethod -Uri 'https://raw.githubusercontent.com/sanketpatel32/Blunt-code/main/scripts/install-latest.ps1' | Invoke-Expression"
+irm https://github.com/sanketpatel32/Blunt-code/releases/latest/download/install-latest.ps1 | iex
 ```
+
+**From Command Prompt** (Press `Win + R`, type `cmd`, and press `Enter`) — one paste, using the `curl.exe` that ships with Windows 10+:
+
+```bat
+curl -fsSL -o "%TEMP%\install-bluntcode.cmd" https://github.com/sanketpatel32/Blunt-code/releases/latest/download/install.cmd && "%TEMP%\install-bluntcode.cmd"
+```
+
+Both commands fetch the installer attached to the latest GitHub release (never a moving branch), verify the archive checksum before installing, and require no administrator rights.
 
 ---
 
@@ -77,7 +84,7 @@ If you prefer to download and verify files manually without running a web-based 
 
 ```powershell
 # 1. Verify file integrity
-$package = '.\BluntCode-0.4.0-windows-amd64.zip' # Update filename to match download
+$package = '.\BluntCode-0.5.0-windows-amd64.zip' # Update filename to match download
 $expected = (Get-Content "$package.sha256" -Raw).Trim().Split()[0].ToLowerInvariant()
 $actual = (Get-FileHash $package -Algorithm SHA256).Hash.ToLowerInvariant()
 
