@@ -7,6 +7,7 @@ export interface Toast {
   id: number;
   kind: ToastKind;
   text: string;
+  action?: { label: string; onClick: () => void };
 }
 
 /** Auto-dismiss delay per kind; errors linger longest so the code can be read. */
@@ -31,7 +32,7 @@ export function useToasts() {
   const nextId = useRef(0);
   const notify = useCallback((notice: Notice) => {
     if (!notice) return;
-    setToasts((current) => [{ id: nextId.current++, kind: notice.kind, text: notice.text }, ...current].slice(0, MAX_TOASTS));
+    setToasts((current) => [{ id: nextId.current++, kind: notice.kind, text: notice.text, action: notice.action }, ...current].slice(0, MAX_TOASTS));
   }, []);
   const dismiss = useCallback((id: number) => setToasts((current) => current.filter((toast) => toast.id !== id)), []);
   return { toasts, notify, dismiss };
@@ -70,6 +71,7 @@ export function ToastStack({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: 
 
 function ToastItem({ toast, closing, onClose }: { toast: Toast; closing: boolean; onClose: (id: number) => void }) {
   const [entered, setEntered] = useState(false);
+  const [paused, setPaused] = useState(false);
   const hovered = useRef(false);
   const focused = useRef(false);
   const sync = useRef<() => void>(() => {});
@@ -86,7 +88,9 @@ function ToastItem({ toast, closing, onClose }: { toast: Toast; closing: boolean
     const fire = () => { handle = undefined; remaining = 0; finished = true; onCloseRef.current(toast.id); };
     const pause = () => { if (handle === undefined) return; window.clearTimeout(handle); handle = undefined; remaining = Math.max(0, deadline - Date.now()); };
     const resume = () => { if (finished || handle !== undefined || remaining <= 0) return; deadline = Date.now() + remaining; handle = window.setTimeout(fire, remaining); };
-    const run = () => { if (hovered.current || focused.current) pause(); else resume(); };
+    const run = () => {
+      if (hovered.current || focused.current) { pause(); setPaused(true); } else { resume(); setPaused(false); }
+    };
     sync.current = run;
     run();
     return () => { sync.current = () => {}; if (handle !== undefined) window.clearTimeout(handle); };
@@ -98,6 +102,7 @@ function ToastItem({ toast, closing, onClose }: { toast: Toast; closing: boolean
     <div
     className={`toast ${toast.kind}`}
     data-state={entered && !closing ? 'open' : 'closed'}
+    data-paused={paused || undefined}
     role={toast.kind === 'error' ? 'alert' : undefined}
     onMouseEnter={() => { hovered.current = true; sync.current(); }}
     onMouseLeave={() => { hovered.current = false; sync.current(); }}
@@ -109,8 +114,10 @@ function ToastItem({ toast, closing, onClose }: { toast: Toast; closing: boolean
       {coded
         ? <><p className="toast-text">{coded[1]}</p><small className="toast-code">{coded[0]}</small></>
         : <p className="toast-text">{toast.text}</p>}
+      {toast.action && <button type="button" className="text-button toast-action" onClick={() => { toast.action?.onClick(); onClose(toast.id); }}>{toast.action.label}</button>}
     </div>
     <button type="button" className="toast-dismiss" aria-label="Dismiss notification" onClick={() => onClose(toast.id)}>×</button>
+    <i className="toast-lifetime" aria-hidden="true" style={{ animationDuration: `${AUTO_DISMISS_MS[toast.kind]}ms` }} />
   </div>);
 }
 

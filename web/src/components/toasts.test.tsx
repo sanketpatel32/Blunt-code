@@ -116,3 +116,25 @@ describe('toast notifications', () => {
     expect(host.textContent).not.toContain('first toast');
   });
 });
+
+describe('toast actions and lifetime bar', () => {
+  it('renders an inline action that runs its callback and dismisses the toast', async () => {
+    const host = await render();
+    const action = vi.fn();
+    await act(async () => { notify({ kind: 'success', text: 'Scan started.', action: { label: 'View scan', onClick: action } }); });
+    const button = host.querySelector<HTMLButtonElement>('.toast-action')!;
+    expect(button.textContent).toBe('View scan');
+    vi.useFakeTimers();
+    await act(async () => { button.click(); });
+    expect(action).toHaveBeenCalledTimes(1);
+    await act(async () => { vi.advanceTimersByTime(400); }); // exit transition grace
+    expect(host.querySelector('.toast')).toBeNull();
+  });
+
+  it('shows a lifetime bar sized to the auto-dismiss window', async () => {
+    const host = await render();
+    await act(async () => { notify({ kind: 'error', text: 'Something broke.' }); });
+    const bar = host.querySelector<HTMLElement>('.toast-lifetime')!;
+    expect(bar.style.animationDuration).toBe('12000ms');
+  });
+});
