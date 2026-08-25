@@ -20,6 +20,7 @@ export function ScanPage({ id, notify }: { id: string; go?: (r: Route) => void; 
   const [events, setEvents] = useState<ScanEvent[]>([]);
   const eventSeq = useRef(0);
   const [streamState, setStreamState] = useState<'connecting' | 'live' | 'reconnecting'>('connecting');
+  const [streamAttempts, setStreamAttempts] = useState(0);
   const scanState = scan.data?.state;
   const scanReload = scan.reload;
   useEffect(() => {
@@ -38,12 +39,23 @@ export function ScanPage({ id, notify }: { id: string; go?: (r: Route) => void; 
         if (next.type === 'scan.completed' || next.type === 'scan.cancelled') void scanReload();
       } catch { /* Invalid optional event payloads do not interrupt the scan. */ }
     };
+    // Exponential reconnect backoff: 1s, 1.5s, 2.25s … capped at 15s. A
+    // successful open resets the sequence so a healthy stream retries fast
+    // again if it later drops.
+    let attempt = 0;
     const connect = () => {
       setStreamState((state) => state === 'live' ? 'reconnecting' : state);
       source = new EventSource(`/api/v1/scans/${encodeURIComponent(id)}/events`);
       ['scan.started', 'scan.stage', 'analyzer.started', 'analyzer.completed', 'analyzer.failed', 'analyzer.skipped', 'scan.warning', 'scan.completed', 'scan.cancelled'].forEach((type) => { source?.addEventListener(type, receive); });
-      source.addEventListener('connected', () => setStreamState('live'));
-      source.onerror = () => { source?.close(); setStreamState('reconnecting'); retry = window.setTimeout(() => { void scanReload(); connect(); }, 4000); };
+      source.addEventListener('connected', () => { attempt = 0; setStreamAttempts(0); setStreamState('live'); });
+      source.onerror = () => {
+        source?.close();
+        setStreamState('reconnecting');
+        attempt += 1;
+        setStreamAttempts(attempt);
+        const delay = Math.min(15_000, Math.round(1000 * Math.pow(1.5, attempt - 1)));
+        retry = window.setTimeout(() => { void scanReload(); connect(); }, delay);
+      };
     };
     connect();
     return () => { source?.close(); if (retry) window.clearTimeout(retry); };
@@ -59,7 +71,7 @@ export function ScanPage({ id, notify }: { id: string; go?: (r: Route) => void; 
   const headline = terminal ? current.state.replaceAll('_', ' ') : liveHeadline(events, current.state);
   const reportedFindings = events.reduce((total, event) => total + (event.type === 'analyzer.completed' ? event.findings ?? 0 : 0), 0);
   const findingsSoFar = Math.max(current.total_findings ?? 0, reportedFindings);
-  return <div className="page scan-page"><header className="scan-header"><div><p className="eyebrow">Analysis story</p><h1>{headline}</h1><p>Started {date(current.started_at)} · elapsed {elapsed(current.started_at, current.finished_at)}</p><ScanProgressBar scan={current} events={events} /></div><div className="scan-header-actions"><span className={`stream-state ${streamState}`} aria-live="polite"><i />{terminal ? 'Saved report' : streamState === 'live' ? 'Live updates' : streamState === 'reconnecting' ? 'Reconnecting' : 'Connecting'}</span>{!terminal && <button type="button" className="button danger" onClick={cancel}>Cancel scan</button>}</div></header><section className="progress-layout"><ScanStageList scan={current} events={events} /><aside className="scan-side"><p className="eyebrow">Results so far</p><h2>{findingsSoFar} findings {terminal ? 'collected' : 'reported so far'}</h2><SeverityCounts scan={current} /><LiveAnalyzerStrip runs={current.analyzer_runs} events={events} />{current.error_summary && <div className="inline-warning">{current.error_summary}</div>}<AnalyzerStatuses runs={current.analyzer_runs} /></aside></section>{terminal && (current.fixed_count ?? 0) > 0 && <WhatChanged scanId={id} fixedCount={current.fixed_count ?? 0} />}{terminal && <ReportView scanId={id} notify={notify} />}</div>;
+  return <div className="page scan-page"><header className="scan-header"><div><p className="eyebrow">Analysis story</p><h1>{headline}</h1><p>Started {date(current.started_at)} · elapsed {elapsed(current.started_at, current.finished_at)}</p><ScanProgressBar scan={current} events={events} /></div><div className="scan-header-actions"><span className={`stream-state ${streamState}`} aria-live="polite"><i />{terminal ? 'Saved report' : streamState === 'live' ? 'Live updates' : streamState === 'reconnecting' ? `Reconnecting${streamAttempts > 1 ? ` (try ${streamAttempts})` : ''}` : 'Connecting'}</span>{!terminal && <button type="button" className="button danger" onClick={cancel}>Cancel scan</button>}</div></header><section className="progress-layout"><ScanStageList scan={current} events={events} /><aside className="scan-side"><p className="eyebrow">Results so far</p><h2>{findingsSoFar} findings {terminal ? 'collected' : 'reported so far'}</h2><SeverityCounts scan={current} /><LiveAnalyzerStrip runs={current.analyzer_runs} events={events} />{current.error_summary && <div className="inline-warning">{current.error_summary}</div>}<AnalyzerStatuses runs={current.analyzer_runs} /></aside></section>{terminal && (current.fixed_count ?? 0) > 0 && <WhatChanged scanId={id} fixedCount={current.fixed_count ?? 0} />}{terminal && <ReportView scanId={id} notify={notify} />}</div>;
 }
 
 /** Thin progress bar under the scan headline. Determinate when analyzer runs
