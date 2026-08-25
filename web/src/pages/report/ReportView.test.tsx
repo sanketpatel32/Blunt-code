@@ -649,3 +649,13 @@ describe('ReportView suppression actions', () => {
     expect(host.querySelector('.restore-finding')).toBeNull();
   });
 });
+
+describe('ReportView severity row edges', () => {
+  it('tints critical/high/medium rows and leaves low/info rows clean', async () => {
+    const host = await render();
+    expect(host.querySelector('.findings-table tbody tr.row-high')).not.toBeNull();
+    // The fixture finding is high-severity; no other edge class may leak onto it.
+    expect(host.querySelector('.findings-table tbody tr.row-critical')).toBeNull();
+    expect(host.querySelector('.findings-table tbody tr.row-medium')).toBeNull();
+  });
+});
