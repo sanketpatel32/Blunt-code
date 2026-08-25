@@ -83,6 +83,9 @@ type scanConfig struct {
 	// these categories feed the CI gate (--gate-analyzer/--gate-category).
 	gateAnalyzers  map[string]bool
 	gateCategories map[string]bool
+	// githubCap overrides how many annotations are shown per severity level
+	// in the --format github stream (default 10, GitHub's own hard limit).
+	githubCap int
 	// Watch loop tuning; zero values fall back to the package defaults.
 	watchPoll  time.Duration
 	watchQuiet time.Duration
@@ -130,6 +133,7 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	gateCategories := flags.String("gate-category", "", "scope the CI gate to these categories only: comma-separated security, correctness, style, performance")
 	watchPollFlag := flags.Duration("watch-poll", 0, "watch mode filesystem poll interval (250ms to 1m; default 2s)")
 	watchQuietFlag := flags.Duration("watch-quiet", 0, "watch mode quiet window before a rescan starts (100ms to 2m; default 1.5s)")
+	githubCap := flags.Int("github-cap", 10, "max annotations shown per GitHub severity level before a truncation notice (1-50)")
 	watch := flags.Bool("watch", false, "keep running and rescan automatically when workspace files change (polls every 2s; a rescan starts after 1.5s without further changes); gate flags never exit the process; Ctrl+C stops it")
 	flags.Usage = func() {
 		fmt.Fprintln(errOut, scanUsage)
@@ -244,6 +248,10 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	if cfg.watch && cfg.watchPoll != 0 && cfg.watchQuiet != 0 && cfg.watchQuiet < cfg.watchPoll/4 {
 		return usageError("watch-quiet should stay at least a quarter of watch-poll so polls can observe the quiet window")
 	}
+	if *githubCap < 1 || *githubCap > 50 {
+		return usageError("github-cap must be between 1 and 50")
+	}
+	cfg.githubCap = *githubCap
 	if cfg.timeout <= 0 {
 		return usageError("timeout must be a positive duration such as 5m")
 	}
@@ -557,7 +565,7 @@ func runSingleScan(app *appCore, cfg scanConfig, work core.Workspace, baseline s
 		var document []byte
 		switch cfg.format {
 		case scanFormatGitHub:
-			document = reports.GitHubAnnotations(model)
+			document = reports.GitHubAnnotationsWithCap(model, cfg.githubCap)
 		case scanFormatSARIF:
 			document = reports.SARIFBytes(model)
 		case scanFormatCSV:

@@ -46,6 +46,9 @@ func main() {
 		case "prune":
 			runPrune(os.Args[2:])
 			return
+		case "help", "--help", "-h":
+			printHelp(os.Stdout)
+			return
 		}
 	}
 	runServer(os.Args[1:])
@@ -215,3 +218,18 @@ func openBrowser(url string, logger *slog.Logger) {
 	}
 }
 func fatal(err error) { fmt.Fprintln(os.Stderr, "bluntcode:", err); os.Exit(1) }
+
+// printHelp writes the one-line usage of every subcommand. It goes to stdout
+// so `bluntcode help` is pipeline-friendly, unlike the per-command usage
+// errors which stay on stderr.
+func printHelp(w io.Writer) {
+	fmt.Fprintln(w, "Blunt Code "+version+" - local code quality and security analysis for Windows")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "  bluntcode [path] [--no-browser] [--port N]   start the web app (default command)")
+	fmt.Fprintln(w, "  "+scanUsage)
+	fmt.Fprintln(w, "  "+pruneUsage)
+	fmt.Fprintln(w, "  "+doctorUsage)
+	fmt.Fprintln(w, "  "+configUsage)
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Run `bluntcode <command> --help` for the full flags of one subcommand.")
+}

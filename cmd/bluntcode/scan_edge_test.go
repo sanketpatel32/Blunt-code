@@ -43,17 +43,17 @@ func TestParseScanFlagsAcceptsFlagsAfterPath(t *testing.T) {
 		{
 			"flags after path",
 			[]string{`C:\my proj`, "--json", "--profile", "quick", "--timeout", "5m"},
-			scanConfig{path: `C:\my proj`, profile: "quick", json: true, timeout: 5 * time.Minute},
+			scanConfig{path: `C:\my proj`, profile: "quick", json: true, timeout: 5 * time.Minute, githubCap: 10},
 		},
 		{
 			"flags before path",
 			[]string{"--json", "--profile", "quick", "--timeout", "5m", `C:\my proj`},
-			scanConfig{path: `C:\my proj`, profile: "quick", json: true, timeout: 5 * time.Minute},
+			scanConfig{path: `C:\my proj`, profile: "quick", json: true, timeout: 5 * time.Minute, githubCap: 10},
 		},
 		{
 			"flags around path",
 			[]string{"--quiet", `C:\my proj`, "--json"},
-			scanConfig{path: `C:\my proj`, profile: "standard", json: true, timeout: scanDefaultTimeout, quiet: true},
+			scanConfig{path: `C:\my proj`, profile: "standard", json: true, timeout: scanDefaultTimeout, quiet: true, githubCap: 10},
 		},
 	}
 	for _, item := range cases {
