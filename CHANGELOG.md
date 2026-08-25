@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Workspace context sidebar:** the workspace detail page gains a sticky left rail (Overview / Files & rules / Scan history) with `aria-current` section tracking, collapsing under the content on small screens. The same rail now also appears on the Files and Scan history pages so workspace sub-navigation stays persistent across all three views.
+- **First-run dashboard hero:** with zero workspaces and zero scan history the dashboard swaps its stats/activity sections for a single onboarding panel pointing at "Add your first workspace"; any saved workspace or past scan keeps the full dashboard.
+- **Command palette (Ctrl/Cmd+K):** a type-to-filter launcher for navigation and actions — go to Home/Workspaces/Tools/Settings/About, add a workspace, toggle theme, open shortcuts help. Works from anywhere, including inside text fields and over other dialogs; combobox/listbox semantics with arrow navigation, Enter to run, Escape to close; ranked matching puts label prefixes first. Documented in the shortcuts dialog. The palette mounts only while open, so keyboard focus moves into its input on open and restores to the trigger on close.
+- **Live scan progress:** running scans show a determinate progress bar once the analyzer count is known (finished ÷ total) with an indeterminate sweep before that and success/danger tone on completion; the elapsed clock ticks every second while a scan runs; live per-analyzer pills in the results panel flip from stream events without waiting for a reload.
+- **Findings scannability:** the findings toolbar sticks beneath the app nav while scrolling long reports, and critical/high/medium finding rows get severity-tinted leading edges (low/info rows stay clean).
+- **Toast actions and lifetime bar:** notices can carry an inline action button ("View scan"-style) that runs its callback and dismisses; a thin bar mirrors each toast's remaining auto-dismiss time and pauses with it on hover/focus.
+- **History date bands and expandable rows:** scan history groups rows under Today / Yesterday / This week / Earlier band headers (missing or invalid timestamps land in Earlier), and every row has an `aria-expanded` disclosure revealing absolute start/finish times, profile, any error summary as a warning block, and per-analyzer status pills. Row disclosure buttons carry distinct accessible names including the scan's relative time. Bands are computed per page of server-paginated results, so a band header can repeat on the next page when one day spans pages.
+- **Sortable workspaces grid:** Name / Last scan / Findings sort client-side via sortable-header buttons with direction arrows; never-scanned workspaces always sink to the end.
+- **Tools readiness strip:** a "X of Y ready" counter with a chip per not-ready tool sits above the tools table; chips show spinner plus operation copy ("installing…", "repairing…", "updating…") for whichever action is in flight, and rows gained version badges.
+- **About page at-a-glance card:** identity, inline version badge, privacy bullets with line icons, server details, and a Copy version info button with transient inline confirmation.
+- **Contextual 404:** unknown paths shaped like `/workspaces/<id>` or `/scans/<id>` explain that the content may have been removed alongside the usual Home/Workspaces links.
+- **Trend chart tooltips and axes:** severity trend bars are keyboard-focusable and reveal a tooltip (date, total, severity breakdown) on focus and hover, sit on a labeled baseline with first/last date ticks, and the chart carries a trend-direction summary for screen readers. Native SVG titles were removed so hover shows exactly one tooltip.
+- **Suppressions search:** the workspace suppressions panel filters by reason or fingerprint fragment with debounced input, a live result count, and a no-match state distinct from the nothing-suppressed state.
+- **Files page helpers:** the workspace root path renders as a breadcrumb chip under the heading, a loaded-path counter reflects what search actually covers, and Collapse-all folds every open folder without discarding already-fetched children.
+
+### Changed
+
+- **Settings toggles are real switches:** the two general settings use `role="switch"` controls with visible On/Off state instead of text buttons whose labels doubled as state.
+- **Motion polish:** page changes fade-and-rise via a remount-scoped animation, dialogs scale in from 97% with the backdrop fading, and the nav underline lands with spring easing; everything is disabled under `prefers-reduced-motion`.
+- **Stacked-dialog Escape ownership:** when one dialog is opened over another (e.g. the command palette over shortcuts help), Escape closes only the top layer — the ownership rule matches the existing focus-trap behavior.
+- **Quieter assistive tech:** the files tree loaded-count no longer announces through a live region on every folder expansion (search-match counts keep theirs); stats overview numbers render in tabular numerals with screen-reader-only card descriptions and a stable skeleton-swap height.
+
 ## [0.4.0] - 2026-08-24
 
 ### Added
