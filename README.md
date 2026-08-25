@@ -104,7 +104,7 @@ Set-Location .\BluntCode\BluntCode*
 > [!TIP]
 > **PowerShell Execution Policy Note:** If Windows blocks running `.ps1` installer scripts, append `-ExecutionPolicy Bypass` to your PowerShell invocation:
 > ```powershell
-> powershell -ExecutionPolicy Bypass -File .\Install-BluntCode.ps1
+> powershell -ExecutionPolicy Bypass -File .\install-latest.ps1
 > ```
 > This applies solely to that single process execution and does not change your computer-wide security policy.
 
@@ -258,7 +258,7 @@ For the complete data layout, `bluntcode config`, environment overrides, offline
 
 By default, Windows restricts running PowerShell scripts downloaded from the web. You can safely bypass this restriction for the installer by running:
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\Install-BluntCode.ps1
+powershell -ExecutionPolicy Bypass -File .\install-latest.ps1
 ```
 This flag only applies to the installer process and leaves your overall system security policy intact.
 </details>
