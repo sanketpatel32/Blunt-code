@@ -35,7 +35,7 @@ async function renderPage(fetchMock: ReturnType<typeof vi.fn>) {
 
 /** jsdom has no clipboard; inject a stub and return it for call assertions. */
 function stubClipboard() {
-  const writeText = vi.fn(() => Promise.resolve(true));
+  const writeText = vi.fn((_text: string) => Promise.resolve(true));
   Object.defineProperty(window.navigator, 'clipboard', { value: { writeText }, configurable: true });
   return writeText;
 }

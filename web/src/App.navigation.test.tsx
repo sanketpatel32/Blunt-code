@@ -16,7 +16,7 @@ function json(body: unknown, status = 200) {
 }
 
 async function renderApp() {
-  vi.stubGlobal('fetch', vi.fn((input: string) => Promise.resolve(json({ items: [] }))));
+  vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(json({ items: [] }))));
   const host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);

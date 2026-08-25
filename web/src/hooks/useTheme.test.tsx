@@ -26,7 +26,7 @@ function stubMatchMedia(initialMatches: boolean) {
   return {
     emitChange(matches: boolean) {
       dark.matches = matches;
-      listeners.forEach((listener) => listener({ matches } as MediaQueryListEvent));
+      listeners.forEach((listener) => { listener({ matches } as MediaQueryListEvent); });
     },
   };
 }
