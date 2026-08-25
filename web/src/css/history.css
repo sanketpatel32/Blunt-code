@@ -1,0 +1,5 @@
+/* Scan-history page additions. Only theme tokens are used so every rule inverts
+   with the light/dark switch, and any motion stays under the global reduced-motion cap. */
+
+/* Date-band separator rows (Today / Yesterday / …) between scan rows. */
+.history-band-row > .history-band { padding: var(--space-2xs) var(--space-md); color: var(--color-ink-faint); font-weight: 700; letter-spacing: .09em; user-select: none; }
