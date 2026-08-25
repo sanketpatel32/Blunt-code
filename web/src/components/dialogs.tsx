@@ -67,8 +67,10 @@ export function FindingPreviewDialog({ scanId, finding, onClose }: { scanId: str
   const closeRef = useRef<HTMLButtonElement>(null);
   const { dialogRef, onBackdropMouseDown } = useDialogA11y({ onClose, autoFocusRef: closeRef });
   const [copied, setCopied] = useState(false);
+  const [fingerprintCopied, setFingerprintCopied] = useState(false);
   const copyTimer = useRef<number | undefined>(undefined);
-  useEffect(() => () => window.clearTimeout(copyTimer.current), []);
+  const fingerprintTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => { window.clearTimeout(copyTimer.current); window.clearTimeout(fingerprintTimer.current); }, []);
   /** Copies the file:line:col location using the shared clipboard helper; the label confirms briefly instead of raising a toast. */
   const copyLocation = async () => {
     if (!(await copyToClipboard(findingLocation(finding)))) return;
@@ -76,8 +78,16 @@ export function FindingPreviewDialog({ scanId, finding, onClose }: { scanId: str
     window.clearTimeout(copyTimer.current);
     copyTimer.current = window.setTimeout(() => setCopied(false), 2000);
   };
+  /** Copies the stable fingerprint so it can be pasted into suppression tooling or bug reports. */
+  const copyFingerprint = async () => {
+    if (!finding.fingerprint) return;
+    if (!(await copyToClipboard(finding.fingerprint))) return;
+    setFingerprintCopied(true);
+    window.clearTimeout(fingerprintTimer.current);
+    fingerprintTimer.current = window.setTimeout(() => setFingerprintCopied(false), 2000);
+  };
   const data: SourcePreview | undefined = preview.data;
   return (
   // biome-ignore lint/a11y/noStaticElementInteractions: backdrop-only dismissal is pointer convenience; keyboard users close via Escape and the dialog's own Cancel/close button.
-    <div className="dialog-backdrop" role="presentation" onMouseDown={onBackdropMouseDown}><dialog ref={dialogRef} open aria-modal="true" aria-labelledby="source-preview-title" className="code-preview-dialog"><div className="confirmation-dialog"><header><div><h2 id="source-preview-title">Source preview</h2><p className="code-preview-location"><code>{findingLocation(finding)}</code></p></div><button ref={closeRef} type="button" className="icon-button" onClick={onClose} aria-label="Close preview">×</button></header>{preview.loading ? <Loading /> : preview.error ? <ErrorPanel error={preview.error} retry={preview.reload} /> : data ? <><p>{data.note ?? 'Current source near this finding.'}</p><pre className="code-preview">{data.lines.map((line) => <code key={line.number} className={line.number >= (data.highlight_start_line ?? 0) && line.number <= (data.highlight_end_line ?? 0) ? 'highlight' : ''}><span aria-hidden="true">{line.number}</span>{line.text || ' '}</code>)}</pre></> : null}<footer><button type="button" className={`button secondary copy-location${copied ? ' copied' : ''}`} onClick={() => void copyLocation()}>{copied ? 'Copied' : 'Copy location'}</button><button type="button" className="button secondary" onClick={onClose}>Close</button></footer></div></dialog></div>);
+    <div className="dialog-backdrop" role="presentation" onMouseDown={onBackdropMouseDown}><dialog ref={dialogRef} open aria-modal="true" aria-labelledby="source-preview-title" className="code-preview-dialog"><div className="confirmation-dialog"><header><div><h2 id="source-preview-title">Source preview</h2><p className="code-preview-location"><code>{findingLocation(finding)}</code></p></div><button ref={closeRef} type="button" className="icon-button" onClick={onClose} aria-label="Close preview">×</button></header>{preview.loading ? <Loading /> : preview.error ? <ErrorPanel error={preview.error} retry={preview.reload} /> : data ? <><p>{data.note ?? 'Current source near this finding.'}</p><pre className="code-preview">{data.lines.map((line) => <code key={line.number} className={line.number >= (data.highlight_start_line ?? 0) && line.number <= (data.highlight_end_line ?? 0) ? 'highlight' : ''}><span aria-hidden="true">{line.number}</span>{line.text || ' '}</code>)}</pre></> : null}<footer>{finding.fingerprint && <button type="button" className={`button secondary copy-fingerprint${fingerprintCopied ? ' copied' : ''}`} onClick={() => void copyFingerprint()} title="The stable hash used for suppressions and baselines">{fingerprintCopied ? 'Copied' : 'Copy fingerprint'}</button>}<button type="button" className={`button secondary copy-location${copied ? ' copied' : ''}`} onClick={() => void copyLocation()}>{copied ? 'Copied' : 'Copy location'}</button><button type="button" className="button secondary" onClick={onClose}>Close</button></footer></div></dialog></div>);
 }

@@ -41,9 +41,9 @@ export function sortWorkspaces(workspaces: Workspace[], key: WorkspaceSortKey, d
 }
 
 function WorkspaceSortBar({ sort, onSort }: { sort: WorkspaceSort; onSort: (key: WorkspaceSortKey) => void }) {
-  return <div className="workspace-sortbar"><span>Sort</span>{(Object.keys(workspaceSortLabels) as WorkspaceSortKey[]).map((key) => {
+  return <div className="workspace-sortbar" role="group" aria-label="Sort workspaces"><span>Sort</span>{(Object.keys(workspaceSortLabels) as WorkspaceSortKey[]).map((key) => {
     const active = sort.key === key;
-    return <button key={key} type="button" className={`th-sort${active ? ' active' : ''}`} onClick={() => onSort(key)}>{workspaceSortLabels[key]}<span className="sort-arrow" aria-hidden="true">{active ? (sort.dir === 'asc' ? '▲' : '▼') : '↕'}</span>{active && <span className="sr-only"> (sorted {sort.dir === 'asc' ? 'ascending' : 'descending'})</span>}</button>;
+    return <button key={key} type="button" className={`th-sort${active ? ' active' : ''}`} aria-pressed={active} aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined} onClick={() => onSort(key)}>{workspaceSortLabels[key]}<span className="sort-arrow" aria-hidden="true">{active ? (sort.dir === 'asc' ? '▲' : '▼') : '↕'}</span>{active && <span className="sr-only"> (sorted {sort.dir === 'asc' ? 'ascending' : 'descending'})</span>}</button>;
   })}</div>;
 }
 
