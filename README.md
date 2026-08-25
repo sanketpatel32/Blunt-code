@@ -102,11 +102,7 @@ Set-Location .\BluntCode\BluntCode*
 ```
 
 > [!TIP]
-> **PowerShell Execution Policy Note:** If Windows blocks running `.ps1` installer scripts, append `-ExecutionPolicy Bypass` to your PowerShell invocation:
-> ```powershell
-> powershell -ExecutionPolicy Bypass -File .\install-latest.ps1
-> ```
-> This applies solely to that single process execution and does not change your computer-wide security policy.
+> **No Execution Policy changes needed:** the recommended one-line installer pipes the script straight into PowerShell (`irm … | iex`) without saving any `.ps1` file, so Windows' script-execution policy never applies to it. The only script you may ever run from disk is `uninstall.ps1`; if Windows blocks that one, run `powershell -ExecutionPolicy Bypass -File .\uninstall.ps1`.
 
 ---
 
@@ -256,11 +252,7 @@ For the complete data layout, `bluntcode config`, environment overrides, offline
 <summary><b>1. PowerShell script execution is blocked by Windows.</b></summary>
 <br>
 
-By default, Windows restricts running PowerShell scripts downloaded from the web. You can safely bypass this restriction for the installer by running:
-```powershell
-powershell -ExecutionPolicy Bypass -File .\install-latest.ps1
-```
-This flag only applies to the installer process and leaves your overall system security policy intact.
+The recommended one-line installer (`irm … | iex`) never saves a script to disk, so Windows' script-execution policy does not apply to it and there is nothing to bypass. If a locally saved copy of a Blunt Code script (such as `uninstall.ps1`) is ever blocked, run it with `powershell -ExecutionPolicy Bypass -File .\uninstall.ps1` — the flag applies only to that single process and leaves your system-wide policy intact.
 </details>
 
 <details>
