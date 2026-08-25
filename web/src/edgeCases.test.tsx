@@ -233,7 +233,7 @@ describe('hostile API fixtures', () => {
     const host = await renderAt('/settings', fetchMock);
     expectClean(host);
     expect(host.textContent).toContain('Available from local metadata');
-    expect(host.textContent).toContain('Browser opens on launch'); // open_browser default
+    expect(host.querySelector('button[role="switch"][aria-label="Open browser automatically"]')!.getAttribute('aria-checked')).toBe('true'); // open_browser default
   });
 
   it('AboutPage survives empty meta and health payloads', async () => {

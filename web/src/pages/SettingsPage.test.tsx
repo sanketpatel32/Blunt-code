@@ -95,3 +95,28 @@ describe('SettingsPage data folders', () => {
     expect(notify).toHaveBeenCalledWith({ kind: 'success', text: 'Opened the reports folder.' });
   });
 });
+
+describe('SettingsPage toggles', () => {
+  it('renders switches with checked state and saves the flipped value', async () => {
+    const fetchMock = settingsMock();
+    const { host } = await renderPage(fetchMock);
+    const browserSwitch = host.querySelector('button[role="switch"][aria-label="Open browser automatically"]')!;
+    expect(browserSwitch.getAttribute('aria-checked')).toBe('true');
+    expect(host.textContent).toContain('Offline mode');
+    await act(async () => { (browserSwitch as HTMLButtonElement).click(); });
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/settings', expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ open_browser: false }) }));
+  });
+
+  it('reflects offline mode as on when the backend reports it', async () => {
+    const mock = vi.fn((input: string) => {
+      if (input.endsWith('/meta')) return Promise.resolve(json({ data_directory: 'C:\Users\you\BluntCode' }));
+      if (input.endsWith('/settings')) return Promise.resolve(json({ offline: true, open_browser: false }));
+      return Promise.resolve(json({}));
+    });
+    const { host } = await renderPage(mock);
+    const offline = host.querySelector('button[role="switch"][aria-label="Offline mode"]')!;
+    expect(offline.getAttribute('aria-checked')).toBe('true');
+    const browser = host.querySelector('button[role="switch"][aria-label="Open browser automatically"]')!;
+    expect(browser.getAttribute('aria-checked')).toBe('false');
+  });
+});

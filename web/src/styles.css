@@ -252,6 +252,16 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 @keyframes toast-life { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 .toast-action { align-self: flex-start; margin-top: var(--space-2xs); padding: 0; font-size: var(--text-xs); }
 
+/* Loop 7 · settings switches: a real switch control replaces the old text
+   buttons. Track/knob colors pair tokens that invert with the theme; the knob
+   slides with the shared ease-out. */
+.toggle-cell { display: inline-flex; align-items: center; gap: var(--space-xs); }
+.switch { position: relative; display: inline-grid; place-items: center; width: 2.9rem; height: 1.6rem; padding: 0; border: var(--rule) solid var(--color-rule-strong); border-radius: 999px; background: var(--color-surface-muted); transition: background var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease-out); }
+.switch .knob { display: block; width: 1.15rem; height: 1.15rem; border-radius: 50%; background: var(--color-ink-soft); transition: transform var(--dur-base) var(--ease-out), background var(--dur-base) var(--ease-out); transform: translateX(-.55rem); }
+.switch.on { border-color: var(--color-accent); background: color-mix(in oklch, var(--color-accent) 18%, transparent); }
+.switch.on .knob { transform: translateX(.55rem); background: var(--color-accent-strong); }
+.switch-state { min-width: 2rem; color: var(--color-ink-faint); font: 600 var(--text-xs) var(--font-mono); }
+
 /* Scan history status cell: the profile badge rides beside the state pill in
    the same cell, kept subdued so the scan state stays the loudest signal. */
 .history-status { display: flex; align-items: center; gap: var(--space-2xs); min-width: 11rem; }
