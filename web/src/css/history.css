@@ -3,3 +3,15 @@
 
 /* Date-band separator rows (Today / Yesterday / …) between scan rows. */
 .history-band-row > .history-band { padding: var(--space-2xs) var(--space-md); color: var(--color-ink-faint); font-weight: 700; letter-spacing: .09em; user-select: none; }
+
+/* Sortable-header fallback, kept in sync with the global .th-sort rules. */
+.th-sort { display: inline-flex; align-items: center; gap: var(--space-3xs); padding: 0; border: 0; background: transparent; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
+.th-sort:focus-visible { outline: .2rem solid var(--color-focus); outline-offset: .06rem; }
+.th-sort .sort-arrow { color: var(--color-ink-faint); font-size: .75em; }
+.th-sort.active { color: var(--color-ink); }
+.th-sort.active .sort-arrow { color: var(--color-accent-strong); }
+@media (hover: hover) { .th-sort:hover { color: var(--color-ink); }.th-sort:hover .sort-arrow { color: var(--color-ink-soft); }.th-sort.active:hover .sort-arrow { color: var(--color-accent-strong); } }
+
+/* Workspaces sort bar above the card grid. */
+.workspace-sortbar { display: flex; align-items: center; gap: var(--space-md); margin-bottom: var(--space-md); color: var(--color-ink-faint); font-size: var(--text-xs); }
+.workspace-sortbar .th-sort { font: 600 var(--text-xs) var(--font-mono); letter-spacing: .04em; text-transform: uppercase; }
