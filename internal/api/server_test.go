@@ -2426,3 +2426,65 @@ func TestPruneWorkspaceScansEndpoint(t *testing.T) {
 		t.Fatalf("workspace must retain exactly the newest 2 scans, got %d", remaining)
 	}
 }
+
+func TestScanCompareEndpointDiffsAgainstPreviousOrExplicitScan(t *testing.T) {
+	s := testServer(t)
+	ctx := context.Background()
+	work, err := s.db.CreateWorkspace(ctx, core.Workspace{RootPath: t.TempDir(), Name: "Diffed"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	persistent := finding("ruff", "P1", "src/p.py", "still here", analyzers.SeverityMedium, analyzers.CategoryCorrectness)
+	fixed := finding("ruff", "F1", "src/f.py", "now gone", analyzers.SeverityHigh, analyzers.CategorySecurity)
+	fresh := finding("ruff", "N1", ".env", "new leak", analyzers.SeverityCritical, analyzers.CategorySecurity)
+	first := completedScan(t, s, work.ID, "completed", persistent, fixed)
+	second := completedScan(t, s, work.ID, "completed", persistent, fresh)
+
+	get := func(url string) map[string]any {
+		t.Helper()
+		request := httptest.NewRequest(http.MethodGet, url, nil)
+		response := httptest.NewRecorder()
+		s.Handler().ServeHTTP(response, request)
+		if response.Code != http.StatusOK {
+			t.Fatalf("compare %q: %d %s", url, response.Code, response.Body.String())
+		}
+		var body map[string]any
+		if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		return body
+	}
+
+	body := get("http://127.0.0.1/api/v1/scans/" + second.ID + "/compare")
+	if body["available"] != true || body["previous_scan_id"] != first.ID {
+		t.Fatalf("implicit previous resolution: %#v", body["available"])
+	}
+	summary := body["summary"].(map[string]any)
+	if summary["new"].(float64) != 1 || summary["fixed"].(float64) != 1 || summary["persistent"].(float64) != 1 {
+		t.Fatalf("diff summary: %#v", summary)
+	}
+
+	body = get("http://127.0.0.1/api/v1/scans/" + second.ID + "/compare?with=" + first.ID)
+	if body["available"] != true || body["previous_scan_id"] != first.ID {
+		t.Fatalf("explicit with= resolution: %#v", body)
+	}
+
+	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+first.ID+"/compare?with="+second.ID, nil)
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	var reversed map[string]any
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &reversed) != nil {
+		t.Fatalf("reversed compare: %d %s", response.Code, response.Body.String())
+	}
+	rsum := reversed["summary"].(map[string]any)
+	if rsum["fixed"].(float64) != 1 { // fresh from second now counts as fixed when diffing backwards
+		t.Fatalf("reversed diff summary: %#v", rsum)
+	}
+
+	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+second.ID+"/compare?with=nope", nil)
+	response = httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("invalid with id must 400: %d", response.Code)
+	}
+}

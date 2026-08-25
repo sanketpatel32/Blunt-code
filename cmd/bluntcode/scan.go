@@ -54,6 +54,7 @@ const (
 	scanFormatGitHub = "github"
 	scanFormatSARIF  = "sarif"
 	scanFormatCSV    = "csv"
+	scanFormatJSONL  = "jsonl"
 )
 
 // scanConfig is the validated command line of `bluntcode scan`.
@@ -197,8 +198,8 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	if cfg.profile != analyzers.ProfileQuick && cfg.profile != analyzers.ProfileStandard && cfg.profile != analyzers.ProfileDeep {
 		return usageError("profile must be quick, standard, or deep")
 	}
-	if cfg.format != "" && cfg.format != scanFormatText && cfg.format != scanFormatJSON && cfg.format != scanFormatGitHub && cfg.format != scanFormatSARIF && cfg.format != scanFormatCSV {
-		return usageError("format must be text, json, github, sarif, or csv")
+	if cfg.format != "" && cfg.format != scanFormatText && cfg.format != scanFormatJSON && cfg.format != scanFormatGitHub && cfg.format != scanFormatSARIF && cfg.format != scanFormatCSV && cfg.format != scanFormatJSONL {
+		return usageError("format must be text, json, github, sarif, csv, or jsonl")
 	}
 	if cfg.json && cfg.format == scanFormatJSON {
 		return usageError("--json cannot be combined with --format json: --json prints the compact summary, --format json the full report")
@@ -213,7 +214,7 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 		return usageError("--watch cannot be combined with --format github: annotations make no sense in a watch loop; use text, json, or sarif")
 	}
 	if cfg.output != "" && cfg.format != scanFormatJSON && cfg.format != scanFormatGitHub && cfg.format != scanFormatSARIF && cfg.format != scanFormatCSV {
-		return usageError("--output requires a document format: json, github, sarif, or csv")
+		return usageError("--output requires a document format: json, github, sarif, csv, or jsonl")
 	}
 	if cfg.saveBaseline != "" && cfg.watch {
 		return usageError("--save-baseline cannot be combined with --watch: each rescan would overwrite the file; use --format sarif and redirect instead")
@@ -539,7 +540,7 @@ func runSingleScan(app *appCore, cfg scanConfig, work core.Workspace, baseline s
 	summary.state = outcome.finalState
 	// Document formats share one report model; --save-baseline needs the same
 	// model, so it is built once whenever any of them is in play.
-	documentFormats := cfg.format == scanFormatJSON || cfg.format == scanFormatGitHub || cfg.format == scanFormatSARIF || cfg.format == scanFormatCSV
+	documentFormats := cfg.format == scanFormatJSON || cfg.format == scanFormatGitHub || cfg.format == scanFormatSARIF || cfg.format == scanFormatCSV || cfg.format == scanFormatJSONL
 	var model reports.Model
 	if documentFormats || cfg.saveBaseline != "" {
 		built, err := buildScanReportModel(ctx, app.db, work, summary)
@@ -570,6 +571,8 @@ func runSingleScan(app *appCore, cfg scanConfig, work core.Workspace, baseline s
 			document = reports.SARIFBytes(model)
 		case scanFormatCSV:
 			document = reports.CSV(model)
+		case scanFormatJSONL:
+			document = reports.JSONL(model)
 		default:
 			document = reports.JSON(model)
 		}

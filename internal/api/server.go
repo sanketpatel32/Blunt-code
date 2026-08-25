@@ -114,6 +114,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings.csv", s.findingsCSV)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings.json", s.findingsJSON)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/fixed", s.fixedFindings)
+	s.mux.HandleFunc("GET /api/v1/scans/{id}/compare", s.scanCompare)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings/{findingID}/preview", s.findingPreview)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/report", s.report)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/report.md", s.reportMarkdown)
@@ -1432,6 +1433,87 @@ func (s *Server) findingsJSON(w http.ResponseWriter, r *http.Request) {
 // to: findings present in the previous completed scan and gone from this one,
 // with the same coverage-aware rule the report comparison applies. The list is
 // capped for the panel while total_fixed always reports the exact count.
+// scanCompare diffs one scan against another (or its previous completed
+// scan when `with` is omitted) using the same coverage-aware Compare the
+// report model uses: a previous finding counts as fixed only if the analyzer
+// that produced it succeeded in the current scan, and suppressed fingerprints
+// are filtered from both sides before diffing.
+func (s *Server) scanCompare(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !validID(id) {
+		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
+		return
+	}
+	scan, err := s.db.Scan(r.Context(), id)
+	if errors.Is(err, sql.ErrNoRows) {
+		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
+		return
+	}
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load scan.")
+		return
+	}
+	otherID := strings.TrimSpace(r.URL.Query().Get("with"))
+	if otherID == "" {
+		resolved, resolveErr := s.db.PreviousCompletedScanID(r.Context(), scan.WorkspaceID, scan.ID)
+		if errors.Is(resolveErr, sql.ErrNoRows) {
+			writeJSON(w, 200, map[string]any{"available": false, "reason": "no previous completed scan"})
+			return
+		}
+		if resolveErr != nil {
+			fail(w, 500, "DATABASE_ERROR", "Could not resolve the comparison scan.")
+			return
+		}
+		otherID = resolved
+	} else if !validID(otherID) {
+		fail(w, 400, "INVALID_SCAN_ID", "with must be a valid scan ID.")
+		return
+	}
+	other, err := s.db.Scan(r.Context(), otherID)
+	if errors.Is(err, sql.ErrNoRows) {
+		fail(w, 404, "SCAN_NOT_FOUND", "Comparison scan was not found.")
+		return
+	}
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load the comparison scan.")
+		return
+	}
+	if other.WorkspaceID != scan.WorkspaceID {
+		fail(w, 400, "WORKSPACE_MISMATCH", "Both scans must belong to the same workspace.")
+		return
+	}
+	currentFindings, err := s.db.Findings(r.Context(), scan.ID)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load findings.")
+		return
+	}
+	previousFindings, err := s.db.Findings(r.Context(), other.ID)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load the comparison findings.")
+		return
+	}
+	suppressed, err := s.db.SuppressedFingerprints(r.Context(), scan.WorkspaceID)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load suppressions.")
+		return
+	}
+	succeeded, err := s.db.SuccessfulAnalyzerIDs(r.Context(), scan.ID)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load analyzer coverage.")
+		return
+	}
+	cmp := scans.Compare(scans.FilterSuppressed(currentFindings, suppressed), scans.FilterSuppressed(previousFindings, suppressed), succeeded)
+	writeJSON(w, 200, map[string]any{
+		"available":        true,
+		"current_scan_id":  scan.ID,
+		"previous_scan_id": other.ID,
+		"new":              cmp.New,
+		"fixed":            cmp.Fixed,
+		"persistent":       cmp.Persistent,
+		"summary":          map[string]int{"new": len(cmp.New), "fixed": len(cmp.Fixed), "persistent": len(cmp.Persistent)},
+	})
+}
+
 func (s *Server) fixedFindings(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if !validID(id) {

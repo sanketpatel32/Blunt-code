@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from './api';
+import type { Workspace } from './types';
 import { href, parseRoute, type Route } from './lib/router';
 import { isTextEntryTarget, parseShortcut } from './lib/shortcuts';
 import type { Notice } from './lib/notice';
@@ -95,6 +96,23 @@ export function App() {
     { id: 'action-theme', label: theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme', keywords: 'dark light mode appearance', run: toggleTheme },
     { id: 'action-shortcuts', label: 'Show keyboard shortcuts', keywords: 'help keys', hint: '?', run: () => setShortcutsOpen(true) },
   ];
+  // Dynamic workspace entries load lazily the first time the palette opens;
+  // failures degrade to the static list silently (the palette is navigation
+  // sugar, not a report), and no request fires on routes that never open it.
+  const [workspacesForPalette, setWorkspacesForPalette] = useState<Workspace[]>([]);
+  useEffect(() => {
+    if (!paletteOpen || workspacesForPalette.length) return;
+    let cancelled = false;
+    api.workspaces().then((items) => { if (!cancelled) setWorkspacesForPalette(items); }).catch(() => { });
+    return () => { cancelled = true; };
+  }, [paletteOpen, workspacesForPalette.length]);
+  const workspaceCommands: Command[] = workspacesForPalette.map((workspace) => ({
+    id: `nav-workspace-${workspace.id}`,
+    label: `Go to ${workspace.name || 'Untitled workspace'}`,
+    keywords: `${workspace.name} project open`,
+    run: () => go({ page: 'workspace', id: workspace.id }),
+  }));
+  const allPaletteCommands = useMemo(() => [...paletteCommands, ...workspaceCommands], [paletteCommands, workspaceCommands]);
   return <div className="app-frame">
     <a href="#main-content" className="skip-link">Skip to main content</a>
     <AppShell route={route} onNavigate={go} onAdd={() => setAddOpen(true)} onClose={() => setCloseOpen(true)} theme={theme} onToggleTheme={toggleTheme} onShowShortcuts={() => setShortcutsOpen(true)} seqArmed={seqArmed} />
@@ -107,7 +125,7 @@ export function App() {
     {closeOpen && <ConfirmationDialog title="Close Blunt Code?" description="This ends the local app. Any active scan will be cancelled; your workspaces and reports stay saved on this computer." confirmLabel="Close app" busy={closing} onCancel={() => setCloseOpen(false)} onConfirm={() => void closeApp()} />}
     {shortcutsOpen && <ShortcutsDialog onClose={() => setShortcutsOpen(false)} />}
     {/* Mounted only while open so useDialogA11y's mount-time focus move/restore actually runs — an always-mounted palette never receives keyboard focus. */}
-    {paletteOpen && <CommandPalette open onClose={() => setPaletteOpen(false)} commands={paletteCommands} />}
+    {paletteOpen && <CommandPalette open onClose={() => setPaletteOpen(false)} commands={allPaletteCommands} />}
     <AppFooter />
     <ToastStack toasts={toasts} onDismiss={dismiss} />
   </div>;
