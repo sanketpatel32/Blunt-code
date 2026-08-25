@@ -67,6 +67,8 @@ export const api = {
   },
   /** Weighted risk profile for one workspace from its latest completed scans. */
   risk: (id: string) => request<RiskProfile>(`/workspaces/${encodeURIComponent(id)}/risk`),
+  /** Delete every terminal scan beyond the newest `keep` (1..100). Running scans are never touched. */
+  pruneScans: (id: string, keep: number) => request<{ deleted: number; kept: number }>(`/workspaces/${encodeURIComponent(id)}/scans?keep=${keep}`, { method: 'DELETE' }),
   /** Severity trend over completed scan history, oldest first; limit defaults to 20 on the server. */
   trends: async (id: string, limit?: number) => {
     const query = limit ? `?limit=${limit}` : '';

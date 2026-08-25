@@ -2387,3 +2387,42 @@ func TestWorkspaceRiskScoresLatestCompletedScan(t *testing.T) {
 		t.Fatalf("unknown workspace must 404: %d", response.Code)
 	}
 }
+
+func TestPruneWorkspaceScansEndpoint(t *testing.T) {
+	s := testServer(t)
+	ctx := context.Background()
+	work, err := s.db.CreateWorkspace(ctx, core.Workspace{RootPath: t.TempDir(), Name: "Retained"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 4; i++ {
+		completedScan(t, s, work.ID, "completed", finding("ruff", "R", "src/x.py", "issue", analyzers.SeverityLow, analyzers.CategoryStyle))
+	}
+
+	request := httptest.NewRequest(http.MethodDelete, "http://127.0.0.1/api/v1/workspaces/"+work.ID+"/scans?keep=0", nil)
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("keep=0 must be rejected: %d", response.Code)
+	}
+	request = httptest.NewRequest(http.MethodDelete, "http://127.0.0.1/api/v1/workspaces/"+work.ID+"/scans?keep=2", nil)
+	response = httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	var body struct {
+		Deleted int64 `json:"deleted"`
+		Kept    int   `json:"kept"`
+	}
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil {
+		t.Fatalf("prune: %d %s", response.Code, response.Body.String())
+	}
+	if body.Deleted != 2 || body.Kept != 2 {
+		t.Fatalf("prune deleted=%d kept=%d, want 2 and 2", body.Deleted, body.Kept)
+	}
+	var remaining int
+	if err := s.db.SQL.QueryRowContext(ctx, `SELECT COUNT(*) FROM scans WHERE workspace_id=?`, work.ID).Scan(&remaining); err != nil {
+		t.Fatal(err)
+	}
+	if remaining != 2 {
+		t.Fatalf("workspace must retain exactly the newest 2 scans, got %d", remaining)
+	}
+}

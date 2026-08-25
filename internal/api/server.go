@@ -102,6 +102,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/workspaces/{id}/trends", s.workspaceTrends)
 	s.mux.HandleFunc("GET /api/v1/workspaces/{id}/risk", s.workspaceRisk)
 	s.mux.HandleFunc("GET /api/v1/workspaces/{id}/scans", s.listScans)
+	s.mux.HandleFunc("DELETE /api/v1/workspaces/{id}/scans", s.pruneWorkspaceScans)
 	s.mux.HandleFunc("POST /api/v1/workspaces/{id}/scans", s.startScan)
 	s.mux.HandleFunc("GET /api/v1/scans", s.recentScans)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}", s.getScan)
@@ -957,6 +958,29 @@ func (s *Server) workspaceRisk(w http.ResponseWriter, r *http.Request) {
 		response["trend"] = "flat"
 	}
 	writeJSON(w, 200, response)
+}
+
+// pruneWorkspaceScans deletes every terminal scan of the workspace beyond the
+// newest keep (query parameter, 1..100). Running scans are never touched. It
+// backs the history-retention control so old reports stop growing forever.
+func (s *Server) pruneWorkspaceScans(w http.ResponseWriter, r *http.Request) {
+	work, ok := s.workspace(r)
+	if !ok {
+		fail(w, 404, "WORKSPACE_NOT_FOUND", "Workspace was not found.")
+		return
+	}
+	raw := strings.TrimSpace(r.URL.Query().Get("keep"))
+	keep, err := strconv.Atoi(raw)
+	if err != nil || keep < 1 || keep > 100 {
+		fail(w, 400, "INVALID_PRUNE_REQUEST", "keep must be an integer between 1 and 100.")
+		return
+	}
+	deleted, err := s.db.PruneOldScans(r.Context(), work.ID, keep)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not prune scans.")
+		return
+	}
+	writeJSON(w, 200, map[string]any{"deleted": deleted, "kept": keep})
 }
 
 // knownScanState reports whether state belongs to the scan lifecycle: the
