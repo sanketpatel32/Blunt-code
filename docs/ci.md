@@ -167,10 +167,10 @@ flag matters for one-shot CI runs over a warm workspace.
 
 ## A complete GitHub Actions workflow
 
-This mirrors the repository's own dogfood gate (`.github/workflows/ci.yml`):
-build from source, cache the managed tools, isolate CI state by redirecting
-`LOCALAPPDATA` to a workspace-local directory, scan with a gate, and upload
-the generated Markdown report when the gate trips.
+A complete, ready-to-use pipeline: build from source, cache the managed
+tools, isolate CI state by redirecting `LOCALAPPDATA` to a workspace-local
+directory, scan with a gate, and upload the generated Markdown report when
+the gate trips.
 
 ```yaml
 name: CI
