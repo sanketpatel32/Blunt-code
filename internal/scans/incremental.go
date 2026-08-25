@@ -35,7 +35,7 @@ import (
 // bluntCodeVersion mirrors the version stamped into scan snapshots; it is part
 // of the analyzer identity so a new build (with potentially changed
 // normalization) invalidates reuse.
-const bluntCodeVersion = "0.4.0"
+const bluntCodeVersion = "0.5.0"
 
 // scanHashIdentity is the analyzer configuration a set of file hashes was
 // produced under. Any difference between two scans' identities - a changed
