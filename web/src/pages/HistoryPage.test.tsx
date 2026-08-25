@@ -27,7 +27,7 @@ async function renderTable(scans: Scan[]) {
 }
 
 function dataRows(host: HTMLElement) {
-  return [...host.querySelectorAll('tbody tr')].filter((row) => !row.classList.contains('history-band-row'));
+  return [...host.querySelectorAll('tbody tr')].filter((row) => !row.matches('.history-band-row, .history-detail-row'));
 }
 
 function bandHeaders(host: HTMLElement) {
@@ -96,6 +96,68 @@ describe('HistoryTable date bands', () => {
     expect(bands.map((header) => header.colSpan)).toEqual([7, 7, 7, 7]);
     const sequence = [...host.querySelectorAll('tbody tr')].map((row) => row.classList.contains('history-band-row') ? `band:${row.textContent}` : `row:${row.querySelector('.profile-badge')?.textContent}`);
     expect(sequence).toEqual(['band:Today', 'row:now', 'band:Yesterday', 'row:yesterday', 'band:This week', 'row:week', 'band:Earlier', 'row:old']);
+  });
+});
+
+describe('HistoryTable expandable rows', () => {
+  const detailed = (id: string, overrides: Partial<Scan> = {}): Scan => scan({
+    id,
+    state: 'completed_with_warnings',
+    profile: 'deep',
+    started_at: '2026-03-15T09:00:00Z',
+    finished_at: '2026-03-15T09:04:30Z',
+    total_findings: 4,
+    error_summary: 'ruff crashed on generated files',
+    analyzer_runs: [{ analyzer_id: 'biome', status: 'success' }, { analyzer_id: 'ruff', status: 'failed' }],
+    ...overrides,
+  });
+
+  it('reveals a spanning detail strip with timestamps, profile, warning, and analyzer pills on demand', async () => {
+    const { host } = await renderTable([detailed('scan-1'), detailed('scan-2', { error_summary: null, analyzer_runs: [] })]);
+    expect(host.querySelector('.history-detail-row')).toBeNull();
+    const disclose = host.querySelector<HTMLButtonElement>('.history-disclose')!;
+    expect(disclose.getAttribute('aria-expanded')).toBe('false');
+    await act(async () => { disclose.click(); });
+    expect(disclose.getAttribute('aria-expanded')).toBe('true');
+    expect(host.querySelectorAll('.history-detail-row')).toHaveLength(1);
+    const cell = host.querySelector<HTMLTableCellElement>('.history-detail-row td')!;
+    expect(cell.colSpan).toBe(7);
+    const detail = cell.querySelector('.history-detail')!;
+    const meta = detail.textContent!;
+    expect(meta).toContain('Started');
+    expect(meta).toContain('Finished');
+    expect(meta).toContain('deep');
+    expect(detail.querySelector('.inline-warning')?.textContent).toBe('Warning: ruff crashed on generated files');
+    const pills = [...detail.querySelectorAll('.history-analyzers .state')];
+    expect(pills.map((pill) => pill.className)).toEqual(['state success', 'state failed']);
+    expect(pills.map((pill) => pill.textContent)).toEqual(['success', 'failed']);
+  });
+
+  it('toggles closed again without leaving the strip behind', async () => {
+    const { host } = await renderTable([detailed('scan-1')]);
+    const disclose = host.querySelector<HTMLButtonElement>('.history-disclose')!;
+    await act(async () => { disclose.click(); });
+    await act(async () => { disclose.click(); });
+    expect(host.querySelector('.history-detail-row')).toBeNull();
+    expect(disclose.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('omits the warning block and analyzer list when a scan has neither', async () => {
+    const { host } = await renderTable([scan({ id: 'scan-1', state: 'completed' })]);
+    await act(async () => { host.querySelector<HTMLButtonElement>('.history-disclose')!.click(); });
+    const detail = host.querySelector('.history-detail')!;
+    expect(detail.querySelector('.inline-warning')).toBeNull();
+    expect(detail.querySelector('.history-analyzers')).toBeNull();
+    expect(detail.textContent).toContain('Started');
+  });
+
+  it('keeps expansions independent per row', async () => {
+    const { host } = await renderTable([detailed('scan-1'), detailed('scan-2', { error_summary: null, analyzer_runs: [] })]);
+    const [first, second] = [...host.querySelectorAll('.history-disclose')] as HTMLButtonElement[];
+    await act(async () => { first.click(); });
+    expect(first.getAttribute('aria-expanded')).toBe('true');
+    expect(second.getAttribute('aria-expanded')).toBe('false');
+    expect(host.querySelectorAll('.history-detail-row')).toHaveLength(1);
   });
 });
 

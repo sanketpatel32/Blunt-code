@@ -4,7 +4,7 @@ import '../css/history.css';
 import type { Scan } from '../types';
 import type { Route } from '../lib/router';
 import { isTerminalScanState } from '../lib/scanEvents';
-import { compactDuration, date, relativeTime } from '../lib/format';
+import { analyzerName, compactDuration, date, relativeTime } from '../lib/format';
 import { useLoad } from '../hooks/useLoad';
 import { Empty, ErrorPanel } from '../components/ui';
 import { ScanIcon } from '../components/icons';
@@ -69,6 +69,8 @@ function FindingsCell({ scan }: { scan: Scan }) {
 
 export function HistoryTable({ scans, go }: { scans: Scan[]; go: (r: Route) => void }) {
   const [page, setPage] = useState(0);
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const toggleExpanded = (id: string) => setExpanded((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   const pageCount = Math.max(1, Math.ceil(scans.length / historyPageSize));
   const currentPage = Math.min(page, pageCount - 1);
   const first = currentPage * historyPageSize;
@@ -83,6 +85,8 @@ export function HistoryTable({ scans, go }: { scans: Scan[]; go: (r: Route) => v
 
   return <><div className="table-wrap"><table><thead><tr><th scope="col">Date</th><th scope="col">Status</th><th scope="col">Findings</th><th scope="col">New</th><th scope="col">Fixed</th><th scope="col">Duration</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead><tbody>{historyDateBands(visibleScans).map(({ band, scans: banded }) => <Fragment key={band}><tr className="history-band-row"><th className="history-band" colSpan={7} scope="colgroup">{band}</th></tr>{banded.map((scan) => {
     const tone = scan.id === scans[0].id ? scan.state === 'failed' ? 'row-danger' : scan.state === 'completed_with_warnings' ? 'row-warning' : '' : '';
-    return <tr key={scan.id} className={tone || undefined}><td title={date(scan.finished_at ?? scan.started_at)}>{relativeTime(scan.finished_at ?? scan.started_at)}</td><td><div className="history-status"><span className={`state ${scan.state}`}>{scan.state.replaceAll('_', ' ')}</span>{scan.profile && <span className="badge profile-badge">{scan.profile}</span>}</div></td><td><FindingsCell scan={scan} /></td><td>{scan.new_count ?? 0}</td><td>{scan.fixed_count ?? 0}</td><td>{compactDuration(scan.duration_ms)}</td><td><div className="table-actions"><button type="button" className="text-button" onClick={() => go({ page: 'scan', id: scan.id })}>Open report</button>{hasMarkdownExport(scan) && <a className="text-button" href={api.markdownUrl(scan.id)}>Export .md</a>}</div></td></tr>;
+    const isOpen = expanded.has(scan.id);
+    const runs = scan.analyzer_runs ?? [];
+    return <Fragment key={scan.id}><tr className={tone || undefined}><td title={date(scan.finished_at ?? scan.started_at)}><span className="history-date"><button type="button" className="history-disclose" aria-expanded={isOpen} aria-controls={`history-detail-${scan.id}`} aria-label={`${isOpen ? 'Hide' : 'Show'} details for this scan`} onClick={() => toggleExpanded(scan.id)}><span className="disclose-arrow" aria-hidden="true">▸</span></button>{relativeTime(scan.finished_at ?? scan.started_at)}</span></td><td><div className="history-status"><span className={`state ${scan.state}`}>{scan.state.replaceAll('_', ' ')}</span>{scan.profile && <span className="badge profile-badge">{scan.profile}</span>}</div></td><td><FindingsCell scan={scan} /></td><td>{scan.new_count ?? 0}</td><td>{scan.fixed_count ?? 0}</td><td>{compactDuration(scan.duration_ms)}</td><td><div className="table-actions"><button type="button" className="text-button" onClick={() => go({ page: 'scan', id: scan.id })}>Open report</button>{hasMarkdownExport(scan) && <a className="text-button" href={api.markdownUrl(scan.id)}>Export .md</a>}</div></td></tr>{isOpen && <tr className="history-detail-row"><td colSpan={7}><div className="history-detail" id={`history-detail-${scan.id}`}><dl className="history-detail-meta"><div><dt>Started</dt><dd>{date(scan.started_at)}</dd></div><div><dt>Finished</dt><dd>{date(scan.finished_at)}</dd></div>{scan.profile && <div><dt>Profile</dt><dd>{scan.profile}</dd></div>}</dl>{scan.error_summary && <div className="inline-warning">Warning: {scan.error_summary}</div>}{runs.length > 0 && <ul className="history-analyzers">{runs.map((run) => <li key={run.analyzer_id}><span>{analyzerName(run.analyzer_id)}</span><span className={`state ${run.status}`}>{run.status.replaceAll('_', ' ')}</span></li>)}</ul>}</div></td></tr>}</Fragment>;
   })}</Fragment>)}</tbody></table></div><nav className="history-pagination" aria-label="Scan history pagination"><span>Showing {first + 1}–{Math.min(first + historyPageSize, scans.length)} of {scans.length} scans</span><div><button type="button" className="button secondary" onClick={() => setPage(currentPage - 1)} disabled={currentPage === 0}>Previous</button><output aria-live="polite">Page {currentPage + 1} of {pageCount}</output><button type="button" className="button secondary" onClick={() => setPage(currentPage + 1)} disabled={currentPage === pageCount - 1}>Next</button></div></nav></>;
 }
