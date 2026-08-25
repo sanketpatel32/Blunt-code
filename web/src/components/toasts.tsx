@@ -32,7 +32,15 @@ export function useToasts() {
   const nextId = useRef(0);
   const notify = useCallback((notice: Notice) => {
     if (!notice) return;
-    setToasts((current) => [{ id: nextId.current++, kind: notice.kind, text: notice.text, action: notice.action }, ...current].slice(0, MAX_TOASTS));
+    setToasts((current) => {
+      const [newest, ...rest] = current;
+      // A repeat of the visible toast (several loads failing at once) restarts the
+      // existing toast instead of stacking identical copies.
+      if (newest && newest.kind === notice.kind && newest.text === notice.text) {
+        return [{ id: nextId.current++, kind: newest.kind, text: newest.text, action: notice.action ?? newest.action }, ...rest];
+      }
+      return [{ id: nextId.current++, kind: notice.kind, text: notice.text, action: notice.action }, ...current].slice(0, MAX_TOASTS);
+    });
   }, []);
   const dismiss = useCallback((id: number) => setToasts((current) => current.filter((toast) => toast.id !== id)), []);
   return { toasts, notify, dismiss };
