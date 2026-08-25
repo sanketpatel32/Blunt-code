@@ -140,6 +140,23 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .error-panel details pre { max-height: 20rem; margin: var(--space-xs) 0 var(--space-md); padding: var(--space-sm); overflow: auto; border: var(--rule) solid var(--color-rule); border-radius: var(--radius-sm); background: var(--color-surface-muted); color: var(--color-ink-soft); font: var(--text-xs)/1.6 var(--font-mono); text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; }
 .not-found-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-sm); }
 
+/* Loop 1 · workspace sidebar: a left rail listing the sub-pages of a single
+   workspace (overview / files / history). The rail collapses under the page
+   content on small viewports and pairs tokens that invert with the theme. */
+.workspace-page { display: grid; grid-template-columns: minmax(11rem, 13rem) minmax(0, 1fr); gap: var(--space-2xl); }
+.workspace-context { position: sticky; top: var(--space-3xl); align-self: start; padding: var(--space-md) var(--space-sm); border: var(--rule) solid var(--color-rule); border-radius: var(--radius-md); background: var(--color-surface); }
+.workspace-context .eyebrow { margin: 0 0 var(--space-sm); }
+.workspace-context ul { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--space-2xs); }
+.workspace-context-link { display: flex; align-items: center; gap: var(--space-xs); width: 100%; padding: var(--space-xs) var(--space-sm); border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-ink-soft); font-size: var(--text-sm); font-weight: 600; text-align: left; transition: background var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out); }
+.workspace-context-link:hover { background: var(--color-surface-muted); color: var(--color-ink); }
+.workspace-context-link.active { background: color-mix(in oklch, var(--color-accent) 12%, transparent); color: var(--color-accent-strong); }
+.workspace-context-link:focus-visible { outline: .2rem solid var(--color-focus); outline-offset: .06rem; }
+.workspace-context-icon { display: grid; place-items: center; width: 1.1rem; height: 1.1rem; }
+.workspace-context-icon svg { width: 1rem; height: 1rem; }
+.workspace-context-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-context-hint { margin-left: auto; color: var(--color-ink-faint); font: 600 var(--text-xs) var(--font-mono); }
+@media (max-width: 56rem) { .workspace-page { grid-template-columns: 1fr; } .workspace-context { position: static; } }
+
 .summary-grid { display: grid; grid-template-columns: repeat(6, minmax(6rem, 1fr)); gap: var(--space-sm); margin: var(--space-xl) 0 var(--space-2xl); }.summary-card { display: flex; flex-direction: column; gap: var(--space-xs); padding: var(--space-md); border-radius: var(--radius-sm); }.summary-card strong { color: var(--color-ink); font-family: var(--font-display); font-size: var(--text-2xl); letter-spacing: -.05em; }.summary-card span { color: var(--color-ink-soft); font-size: var(--text-xs); }.summary-card.high strong { color: var(--color-danger); }.summary-card.medium strong { color: var(--color-warning); }.split-section { display: grid; grid-template-columns: 1fr 1.25fr; gap: var(--space-2xl); }.analyzers { margin-top: var(--space-lg); }.analyzers h3 { margin: 0 0 var(--space-sm); color: var(--color-ink-soft); font-size: var(--text-sm); }.analyzer-row { display: grid; grid-template-columns: minmax(5.6rem, 1fr) auto; gap: var(--space-sm); padding: var(--space-sm) 0; border-bottom: var(--rule) solid var(--color-rule); color: var(--color-ink); font-size: var(--text-sm); }.analyzer-row small { grid-column: 1 / -1; color: var(--color-ink-soft); }
 /* contain:paint keeps a table wider than its declared min-width (content-driven
    column growth) from leaking into the document's scrollable overflow area,
