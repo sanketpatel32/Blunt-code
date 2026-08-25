@@ -540,3 +540,24 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .suppression-date { color: var(--color-ink-faint); font-size: var(--text-xs); white-space: nowrap; }
 .suppression-row .text-button { flex: none; }
 
+
+/* Accessibility: respect the OS reduce-motion preference by collapsing every
+   animation and transition to an instant state change. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Compact findings density (ReportView toolbar toggle). */
+.finding-list.finding-dense table td, .finding-list.finding-dense table th { padding-top: 0.2rem; padding-bottom: 0.2rem; }
+.finding-list.finding-dense .finding-summary { line-height: 1.3; }
+
+/* Suppression reason quick-picks. */
+.reason-suggestions { display: flex; flex-wrap: wrap; gap: var(--space-xs, 4px); margin-top: -2px; }
+
+/* Profile picker + inline settings editor rows. */
+.profile-picker select, .range-picker select { margin-left: 4px; }
