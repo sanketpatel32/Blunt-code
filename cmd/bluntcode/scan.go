@@ -928,10 +928,21 @@ func scanAnalyzerDisplayName(id string) string {
 // writeScanHuman prints the end-of-scan summary to stdout.
 // scopeGateFindings keeps only findings whose analyzer and category pass the
 // gate-scoping allow-lists; a nil/empty set allows everything on that axis.
+// Both the findings and the allow-list entries are compared lowercased, so
+// --gate-analyzer SEMGREP matches analyzer_id "semgrep".
 func scopeGateFindings(findings []analyzers.Finding, analyzersAllow, categoriesAllow map[string]bool) []analyzers.Finding {
 	if len(analyzersAllow) == 0 && len(categoriesAllow) == 0 {
 		return findings
 	}
+	lower := func(set map[string]bool) map[string]bool {
+		out := make(map[string]bool, len(set))
+		for k := range set {
+			out[strings.ToLower(k)] = true
+		}
+		return out
+	}
+	analyzersAllow = lower(analyzersAllow)
+	categoriesAllow = lower(categoriesAllow)
 	out := make([]analyzers.Finding, 0, len(findings))
 	for _, f := range findings {
 		if len(analyzersAllow) > 0 && !analyzersAllow[strings.ToLower(f.AnalyzerID)] {
