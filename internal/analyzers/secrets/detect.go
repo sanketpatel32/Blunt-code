@@ -46,6 +46,12 @@ const (
 	ruleJWT             = "secrets.jwt"
 	ruleConnectionURI   = "secrets.connection-uri"
 	ruleGenericAssign   = "secrets.generic-assignment"
+	ruleStripeLiveKey   = "secrets.stripe-live-key"
+	ruleOpenAIProject   = "secrets.openai-project-key"
+	ruleOpenAIClassic   = "secrets.openai-classic-key"
+	ruleAnthropicKey    = "secrets.anthropic-api-key"
+	ruleSlackAppToken   = "secrets.slack-app-token"
+	ruleAzureAccountKey = "secrets.azure-storage-account-key"
 )
 
 // Go's regexp (RE2) has no lookaround, so word-boundary enforcement is done in
@@ -69,6 +75,20 @@ var (
 	googleRe     = regexp.MustCompile(`AIza[0-9A-Za-z_-]{35}`)
 	privateKeyRe = regexp.MustCompile(`-----BEGIN (?:RSA |EC |OPENSSH |PGP )?PRIVATE KEY-----`)
 	jwtRe        = regexp.MustCompile(`eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}`)
+	// Stripe live-mode secret and restricted keys only: test-mode keys
+	// (sk_test_/rk_test_) are documentation-safe by convention and stay quiet.
+	stripeLiveRe = regexp.MustCompile(`(?:sk|rk)_live_[A-Za-z0-9]{24,}`)
+	// OpenAI project-scoped keys carry the sk-proj- prefix; classic keys embed
+	// the constant T3BlbkFJ marker between their two payload halves.
+	openAIProjectRe = regexp.MustCompile(`sk-proj-[A-Za-z0-9_-]{40,}`)
+	openaiclassicRe = regexp.MustCompile(`sk-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20,}`)
+	// Anthropic keys are sk-ant- followed by a long tokenish body.
+	anthropicRe = regexp.MustCompile(`sk-ant-[A-Za-z0-9_-]{30,}`)
+	// Slack app-level tokens: xapp-<version>-<app-id>-<issue>-<hex signature>.
+	slackAppRe = regexp.MustCompile(`xapp-[0-9]-[A-Z0-9]{8,}-[0-9]+-[a-f0-9]{20,}`)
+	// Azure storage connection strings embed the base64 account key after
+	// AccountKey=. Group layout: 0-1 whole match, 2-3 the key value.
+	azureKeyRe = regexp.MustCompile(`AccountKey=([A-Za-z0-9+/]{86}==)`)
 	// Group layout: 1 scheme, 2 user, 3 password. The password group must be
 	// non-empty and is additionally screened against placeholder samples like
 	// user:pass@example.com by validateURI.
@@ -98,6 +118,12 @@ var structuredRules = []structuredRule{
 	{id: rulePrivateKeyBlock, kind: "private key block", re: privateKeyRe},
 	{id: ruleJWT, kind: "JSON Web Token", re: jwtRe, left: setTokenish, right: setTokenish},
 	{id: ruleConnectionURI, kind: "connection URI with embedded credentials", re: uriRe, left: setAlnumUnderscore, validate: validateURI},
+	{id: ruleStripeLiveKey, kind: "Stripe live API key", re: stripeLiveRe, left: setAlnumUnderscore, right: setTokenish},
+	{id: ruleOpenAIProject, kind: "OpenAI project API key", re: openAIProjectRe, left: setTokenish, right: setTokenish},
+	{id: ruleOpenAIClassic, kind: "OpenAI API key", re: openaiclassicRe, left: setTokenish, right: setTokenish},
+	{id: ruleAnthropicKey, kind: "Anthropic API key", re: anthropicRe, left: setTokenish, right: setTokenish},
+	{id: ruleSlackAppToken, kind: "Slack app-level token", re: slackAppRe, left: setTokenish, right: setTokenish},
+	{id: ruleAzureAccountKey, kind: "Azure storage account key", re: azureKeyRe, validate: validateAzureKey},
 }
 
 // match is one raw detection. secret never leaves the detector unredacted:
@@ -135,6 +161,13 @@ func validateURI(data []byte, loc []int) bool {
 		return len(password) >= 12
 	}
 	return true
+}
+
+// validateAzureKey rejects placeholder account keys (a run of one repeated
+// base64 character has near-zero Shannon entropy, unlike real 256-bit keys).
+func validateAzureKey(data []byte, loc []int) bool {
+	key := string(data[loc[2]:loc[3]])
+	return !isPlaceholderValue(key) && shannonEntropy(key) >= minEntropyBits
 }
 
 // detect runs every rule over one file's content. Structured rules run first;
