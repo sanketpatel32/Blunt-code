@@ -262,6 +262,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .switch.on .knob { transform: translateX(.55rem); background: var(--color-accent-strong); }
 .switch-state { min-width: 2rem; color: var(--color-ink-faint); font: 600 var(--text-xs) var(--font-mono); }
 
+/* Loop 8 · files page: root-path breadcrumb under the heading, a loaded-paths
+   status line, and the Collapse all toolbar. */
+.workspace-root { display: inline-block; max-width: 100%; margin: var(--space-xs) 0 0; padding: var(--space-3xs) var(--space-xs); overflow: hidden; border: var(--rule) solid var(--color-rule); border-radius: 999px; background: var(--color-surface-muted); color: var(--color-ink-faint); font-size: var(--text-xs); text-overflow: ellipsis; white-space: nowrap; }
+.tree-toolbar { display: flex; align-items: center; justify-content: flex-end; min-height: 1.6rem; }
+.tree-loaded-count { margin: 0 0 var(--space-md); color: var(--color-ink-faint); font: 600 var(--text-xs) var(--font-mono); letter-spacing: .03em; }
+
 /* Scan history status cell: the profile badge rides beside the state pill in
    the same cell, kept subdued so the scan state stays the loudest signal. */
 .history-status { display: flex; align-items: center; gap: var(--space-2xs); min-width: 11rem; }

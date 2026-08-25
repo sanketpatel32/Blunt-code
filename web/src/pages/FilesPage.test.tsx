@@ -166,3 +166,35 @@ describe('FilesPage tree search', () => {
     expect(document.activeElement).not.toBe(search); // blurred
   });
 });
+
+describe('FilesPage tree helpers', () => {
+  it('shows the workspace root path and a loaded-path count', async () => {
+    enqueueChild('src', [{ path: 'src/main.py', name: 'main.py', type: 'file', included: true }]);
+    const host = await render();
+    expect(host.querySelector('.workspace-root')?.textContent).toContain('code');
+    expect(host.querySelector('.workspace-root')?.getAttribute('title')).toBeTruthy();
+    await act(async () => { toggle(host, 'Expand src')!.click(); await flush(); });
+    expect(host.textContent).toContain('3 paths loaded'); // 2 top-level + 1 fetched child
+    expect(host.textContent).toContain('Collapse all');
+  });
+
+  it('collapses every open folder without dropping the loaded children', async () => {
+    enqueueChild('src', [
+      { path: 'src/a.py', name: 'a.py', type: 'file', included: true },
+      { path: 'src/sub', name: 'sub', type: 'directory', included: true },
+    ]);
+    const host = await render();
+    await act(async () => { toggle(host, 'Expand src')!.click(); await flush(); });
+    expect(visiblePaths(host)).toContain('Include src/a.py');
+
+    await act(async () => { [...host.querySelectorAll('button')].find((b) => b.textContent === 'Collapse all')!.click(); });
+    expect(visiblePaths(host)).not.toContain('Include src/a.py'); // folded
+
+    // Re-expanding serves from cache: no second fetch for the same folder.
+    const callsBefore = fetchMock.mock.calls.filter(([input]) => String(input) === '/api/v1/workspaces/ws-1/tree?path=src').length;
+    await act(async () => { toggle(host, 'Expand src')!.click(); await flush(); });
+    expect(visiblePaths(host)).toContain('Include src/a.py');
+    const callsAfter = fetchMock.mock.calls.filter(([input]) => String(input) === '/api/v1/workspaces/ws-1/tree?path=src').length;
+    expect(callsAfter).toBe(callsBefore);
+  });
+});

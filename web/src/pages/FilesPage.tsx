@@ -26,6 +26,8 @@ export function FilesPage({ id, notify }: { id: string; notify: (n: Notice) => v
   const [rules, setRules] = useState<{ rules: RuleDraft[] }>({ rules: [] });
   const [overrides, setOverrides] = useState<PathOverride[]>([]);
   const [treeKey, setTreeKey] = useState(0);
+  /** Bumped by Collapse all; FileTree watches it and folds every open folder without dropping loaded children. */
+  const [collapseSignal, setCollapseSignal] = useState(0);
   const searchRef = useRef<HTMLInputElement>(null);
   const loadTree = useCallback(async () => { setLoadingTree(true); try { setNodes(await api.tree(id)); setTreeError(undefined); } catch (e) { setTreeError(message(e)); } finally { setLoadingTree(false); } }, [id]);
   useEffect(() => { void loadTree(); void Promise.all([api.rules(id), api.pathOverrides(id)]).then(([savedRules, savedOverrides]) => { setRules({ rules: (savedRules as { rules: Array<Omit<RuleDraft, 'uid'>> }).rules.map((rule) => ({ ...rule, uid: nextRuleUid() })) }); setOverrides(savedOverrides); }).catch((e) => notify({ kind: 'error', text: message(e) })); }, [id, loadTree, notify]);
@@ -43,8 +45,8 @@ export function FilesPage({ id, notify }: { id: string; notify: (n: Notice) => v
     window.addEventListener('keydown', jumpToSearch);
     return () => window.removeEventListener('keydown', jumpToSearch);
   }, []);
-  return <div className="page"><header className="page-heading"><div><p className="eyebrow">File selection</p><h1>{workspace.data?.name ?? 'Workspace files'}</h1><p>Choose source paths to analyze. Default exclusions protect dependencies and build output.</p></div><div className="action-row"><button type="button" className="button secondary" onClick={() => { setRules({ rules: [] }); setOverrides([]); }}>Reset to defaults</button><button type="button" className="button primary" onClick={save}>Save selection</button></div></header>
-    <section className="file-layout"><div className="tree-panel"><label className="search"><span>Search paths<kbd className="kbd-hint">/</kbd></span><input ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') { setQuery(''); event.currentTarget.blur(); } }} placeholder="src or package.json" /></label>{loadingTree ? <SkeletonLines lines={6} /> : treeError ? <ErrorPanel error={treeError} retry={loadTree} /> : <FileTree key={treeKey} nodes={nodes} query={debouncedQuery} workspaceId={id} overrides={overrides} onOverrides={setOverrides} />}</div><RuleEditor rules={rules.rules} setRules={(items) => setRules({ rules: items })} /></section>
+  return <div className="page"><header className="page-heading"><div><p className="eyebrow">File selection</p><h1>{workspace.data?.name ?? 'Workspace files'}</h1><code className="workspace-root" title={workspace.data?.root_path}>{workspace.data?.root_path}</code><p>Choose source paths to analyze. Default exclusions protect dependencies and build output.</p></div><div className="action-row"><button type="button" className="button secondary" onClick={() => { setRules({ rules: [] }); setOverrides([]); }}>Reset to defaults</button><button type="button" className="button primary" onClick={save}>Save selection</button></div></header>
+    <section className="file-layout"><div className="tree-panel"><label className="search"><span>Search paths<kbd className="kbd-hint">/</kbd></span><input ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') { setQuery(''); event.currentTarget.blur(); } }} placeholder="src or package.json" /></label><div className="tree-toolbar">{!loadingTree && !treeError && <button type="button" className="text-button" onClick={() => setCollapseSignal((value) => value + 1)}>Collapse all</button>}</div>{loadingTree ? <SkeletonLines lines={6} /> : treeError ? <ErrorPanel error={treeError} retry={loadTree} /> : <FileTree key={treeKey} nodes={nodes} query={debouncedQuery} workspaceId={id} overrides={overrides} onOverrides={setOverrides} collapseSignal={collapseSignal} />}</div><RuleEditor rules={rules.rules} setRules={(items) => setRules({ rules: items })} /></section>
   </div>;
 }
 
@@ -63,12 +65,15 @@ interface TreeState {
   retry: (node: TreeNode) => void;
 }
 
-function FileTree({ nodes, query, workspaceId, overrides, onOverrides }: { nodes: TreeNode[]; query: string; workspaceId: string; overrides: PathOverride[]; onOverrides: (items: PathOverride[]) => void }) {
+function FileTree({ nodes, query, workspaceId, overrides, onOverrides, collapseSignal = 0 }: { nodes: TreeNode[]; query: string; workspaceId: string; overrides: PathOverride[]; onOverrides: (items: PathOverride[]) => void; collapseSignal?: number }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [children, setChildren] = useState<Record<string, TreeNode[]>>({});
   const [loading, setLoading] = useState<Set<string>>(new Set());
   const [failed, setFailed] = useState<Set<string>>(new Set());
   const needle = query.trim().toLowerCase();
+  // Collapse all folds every open folder on demand without unmounting (so
+  // already-fetched children stay cached and re-expand instantly).
+  useEffect(() => { if (collapseSignal > 0) setExpanded(new Set()); }, [collapseSignal]);
   const loadChildren = useCallback(async (path: string) => {
     setLoading((old) => new Set(old).add(path));
     setFailed((old) => { const next = new Set(old); next.delete(path); return next; });
@@ -105,7 +110,15 @@ function FileTree({ nodes, query, workspaceId, overrides, onOverrides }: { nodes
   }, [needle, nodes, children]);
   const anyVisible = needle ? nodes.some((node) => matches.has(node.path) || ancestors.has(node.path)) : nodes.length > 0;
   const state: TreeState = { overrides, onOverrides, children, expanded, loading, failed, needle, matches, ancestors, toggle, retry };
+  /** Loaded rows across every fetched folder; the honest size of what search covers. */
+  const loadedCount = useMemo(() => {
+    let count = 0;
+    const walk = (level: TreeNode[]) => { for (const node of level) { count += 1; walk(children[node.path] ?? []); } };
+    walk(nodes);
+    return count;
+  }, [nodes, children]);
   return <>
+    <p className="tree-loaded-count" aria-live="polite">{loadedCount} {loadedCount === 1 ? 'path' : 'paths'} loaded</p>
     {needle && <div className="tree-search-meta" aria-live="polite"><p><strong>{matches.size}</strong> {matches.size === 1 ? 'matching path' : 'matching paths'}</p><p>Searching loaded folders — expand more to include their contents</p></div>}
     {anyVisible ? <TreeLevel nodes={nodes} state={state} root /> : <Empty title="No matching paths" icon={<MagnifierIcon />}>Try a shorter search.</Empty>}
   </>;
