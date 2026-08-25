@@ -38,7 +38,7 @@ func TestBundledRulepackMinimumRuleCount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const minRules = 20
+	const minRules = 25
 	if len(rules) < minRules {
 		t.Fatalf("bundled rulepack shrank to %d rules, expected at least %d", len(rules), minRules)
 	}

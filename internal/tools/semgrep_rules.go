@@ -12,7 +12,7 @@ import (
 // These rules are authored by Blunt Code, not fetched from the Semgrep registry.
 // Bumped to 2.0.0 when the bundled pack grew from 2 to 20 rules so existing
 // installations re-extract it.
-const SemgrepRulesVersion = "2.0.0"
+const SemgrepRulesVersion = "3.0.0"
 
 // ExtractSemgrepRules writes the bundled local rules atomically into the
 // managed Semgrep directory. A successful scan only needs this local copy.

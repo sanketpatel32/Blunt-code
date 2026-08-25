@@ -201,9 +201,53 @@ rules:
       - metavariable-regex:
           metavariable: $NAME
           regex: "(?i)^(.*_)?(password|passwd|pwd|secret|secrets|token|api_?key|apikey|access_?key|auth_?key|private_?key|client_?secret)(_[a-z0-9]+)*$"
-  - id: blunt-code.javascript.javascript-url-href
+  - id: blunt-code.python.os-popen
+    languages: [python]
+    severity: ERROR
+    message: os.popen() always runs a shell, so interpolated values can inject extra commands. Use subprocess.run() with an argument list.
+    metadata:
+      category: security
+    patterns:
+      - pattern: os.popen(...)
+      - pattern-not: "os.popen(\"...\")"
+  - id: blunt-code.python.tempfile-mktemp
+    languages: [python]
+    severity: WARNING
+    message: tempfile.mktemp() has a race between name generation and file creation, which lets another process capture the path. Use tempfile.NamedTemporaryFile() or mkstemp().
+    metadata:
+      category: security
+    pattern: tempfile.mktemp(...)
+  - id: blunt-code.python.random-for-secrets
+    languages: [python]
+    severity: WARNING
+    message: The random module is not cryptographically secure. Use the secrets module for tokens, keys, and passwords.
+    metadata:
+      category: security
+    pattern-either:
+      - pattern: random.random(...)
+      - pattern: random.randint(...)
+      - pattern: randrange(...)
+      - pattern: random.choice(...)
+  - id: blunt-code.javascript.new-function
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: new Function() compiles a string into executable code, so attacker-controlled input becomes arbitrary code execution. Refactor to call functions directly.
+    metadata:
+      category: security
+    pattern: new Function(...)
+  - id: blunt-code.javascript.postmessage-star-origin
     languages: [javascript, typescript]
     severity: WARNING
+    message: postMessage with the "*" target origin leaks the message to any window. Pass the exact origin you expect.
+    metadata:
+      category: security
+    pattern-either:
+      - pattern: $W.postMessage($DATA, "*")
+      - pattern: $W.postMessage($DATA, "*")
+      - pattern: $W.postMessage($DATA)
+  - id: blunt-code.javascript.javascript-url-href
+    languages: [javascript, typescript]
+    severity: ERROR
     message: Using a javascript URL scheme in href executes script when the link is used, enabling cross-site scripting. Link to a real route or handle the action in an event handler.
     metadata:
       category: security
