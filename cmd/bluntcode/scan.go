@@ -46,15 +46,19 @@ const scanUsage = "usage: bluntcode scan <path> [--profile quick|standard|deep] 
 // prints GitHub Actions workflow-command annotations that the runner turns
 // into inline PR annotations; sarif prints the SARIF 2.1.0 log that
 // GET /api/v1/scans/{id}/report.sarif also serves, so a CI can capture a
-// baseline or feed GitHub code scanning without running the server. The
-// compact summary behind --json stays a separate, unchanged output.
+// baseline or feed GitHub code scanning without running the server; csv and
+// jsonl print the spreadsheet and newline-delimited findings exports;
+// markdown prints the same Markdown document GET /api/v1/scans/{id}/report.md
+// renders. The compact summary behind --json stays a separate, unchanged
+// output.
 const (
-	scanFormatText   = "text"
-	scanFormatJSON   = "json"
-	scanFormatGitHub = "github"
-	scanFormatSARIF  = "sarif"
-	scanFormatCSV    = "csv"
-	scanFormatJSONL  = "jsonl"
+	scanFormatText     = "text"
+	scanFormatJSON     = "json"
+	scanFormatGitHub   = "github"
+	scanFormatSARIF    = "sarif"
+	scanFormatCSV      = "csv"
+	scanFormatJSONL    = "jsonl"
+	scanFormatMarkdown = "markdown"
 )
 
 // scanConfig is the validated command line of `bluntcode scan`.
@@ -74,8 +78,8 @@ type scanConfig struct {
 	// path to a SARIF 2.1.0 file (Blunt Code's own export) or the ID of a
 	// previous scan of the same workspace. Empty disables baseline mode.
 	baseline string
-	// output writes the selected document format (json/github/sarif/csv) to a
-	// file instead of stdout; empty means stdout.
+	// output writes the selected document format (json/github/sarif/csv/
+	// jsonl/markdown) to a file instead of stdout; empty means stdout.
 	output string
 	// saveBaseline writes the scan's SARIF 2.1.0 document to this path after a
 	// completed scan, one flag instead of a `--format sarif >` shell redirect.
@@ -119,7 +123,7 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	flags := flag.NewFlagSet("scan", flag.ContinueOnError)
 	flags.SetOutput(errOut)
 	profile := flags.String("profile", "standard", "scan profile: quick, standard, or deep")
-	format := flags.String("format", "", "stdout report format: text (human summary, the default), json (the full JSON report document), github (GitHub Actions annotations), or sarif (the SARIF 2.1.0 code-scanning document)")
+	format := flags.String("format", "", "stdout report format: text (human summary, the default), json (the full JSON report document), github (GitHub Actions annotations), sarif (the SARIF 2.1.0 code-scanning document), csv, jsonl, or markdown")
 	jsonOut := flags.Bool("json", false, "print a machine-readable JSON summary instead of human text")
 	timeout := flags.Duration("timeout", scanDefaultTimeout, "abort the scan when it exceeds this duration (for example 5m or 90s)")
 	quiet := flags.Bool("quiet", false, "suppress progress lines on stderr; the summary is still printed")
@@ -128,7 +132,7 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	baseline := flags.String("baseline", "", "exclude known findings from the gate: a previous scan ID or the path of a SARIF 2.1.0 file exported by Blunt Code")
 	jobs := flags.Int("jobs", 0, "run at most N analyzers concurrently (positive integer); by default analyzers run one after another")
 	incremental := flags.Bool("incremental", false, "reuse the previous completed scan's findings for unchanged files and run analyzers only on changed files (a boolean flag: --incremental, never --incremental <value>); composes with gate, baseline, format, and jobs flags")
-	output := flags.String("output", "", "write the selected document format (json, github, sarif, or csv) to this file instead of stdout; progress stays on stderr")
+	output := flags.String("output", "", "write the selected document format (json, github, sarif, csv, jsonl, or markdown) to this file instead of stdout; progress stays on stderr")
 	saveBaseline := flags.String("save-baseline", "", "write the scan's SARIF 2.1.0 document to this file after a completed scan (same bytes as --format sarif)")
 	gateAnalyzers := flags.String("gate-analyzer", "", "scope the CI gate to these analyzers only: comma-separated IDs such as semgrep,secrets")
 	gateCategories := flags.String("gate-category", "", "scope the CI gate to these categories only: comma-separated security, correctness, style, performance")
@@ -198,8 +202,8 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	if cfg.profile != analyzers.ProfileQuick && cfg.profile != analyzers.ProfileStandard && cfg.profile != analyzers.ProfileDeep {
 		return usageError("profile must be quick, standard, or deep")
 	}
-	if cfg.format != "" && cfg.format != scanFormatText && cfg.format != scanFormatJSON && cfg.format != scanFormatGitHub && cfg.format != scanFormatSARIF && cfg.format != scanFormatCSV && cfg.format != scanFormatJSONL {
-		return usageError("format must be text, json, github, sarif, csv, or jsonl")
+	if cfg.format != "" && cfg.format != scanFormatText && cfg.format != scanFormatJSON && cfg.format != scanFormatGitHub && cfg.format != scanFormatSARIF && cfg.format != scanFormatCSV && cfg.format != scanFormatJSONL && cfg.format != scanFormatMarkdown {
+		return usageError("format must be text, json, github, sarif, csv, jsonl, or markdown")
 	}
 	if cfg.json && cfg.format == scanFormatJSON {
 		return usageError("--json cannot be combined with --format json: --json prints the compact summary, --format json the full report")
@@ -210,11 +214,14 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	if cfg.json && cfg.format == scanFormatSARIF {
 		return usageError("--json cannot be combined with --format sarif: --json prints the compact summary, --format sarif the SARIF document")
 	}
+	if cfg.json && cfg.format == scanFormatMarkdown {
+		return usageError("--json cannot be combined with --format markdown: --json prints the compact summary, --format markdown the full report")
+	}
 	if cfg.watch && cfg.format == scanFormatGitHub {
 		return usageError("--watch cannot be combined with --format github: annotations make no sense in a watch loop; use text, json, or sarif")
 	}
-	if cfg.output != "" && cfg.format != scanFormatJSON && cfg.format != scanFormatGitHub && cfg.format != scanFormatSARIF && cfg.format != scanFormatCSV {
-		return usageError("--output requires a document format: json, github, sarif, csv, or jsonl")
+	if cfg.output != "" && cfg.format != scanFormatJSON && cfg.format != scanFormatGitHub && cfg.format != scanFormatSARIF && cfg.format != scanFormatCSV && cfg.format != scanFormatJSONL && cfg.format != scanFormatMarkdown {
+		return usageError("--output requires a document format: json, github, sarif, csv, jsonl, or markdown")
 	}
 	if cfg.saveBaseline != "" && cfg.watch {
 		return usageError("--save-baseline cannot be combined with --watch: each rescan would overwrite the file; use --format sarif and redirect instead")
@@ -540,7 +547,7 @@ func runSingleScan(app *appCore, cfg scanConfig, work core.Workspace, baseline s
 	summary.state = outcome.finalState
 	// Document formats share one report model; --save-baseline needs the same
 	// model, so it is built once whenever any of them is in play.
-	documentFormats := cfg.format == scanFormatJSON || cfg.format == scanFormatGitHub || cfg.format == scanFormatSARIF || cfg.format == scanFormatCSV || cfg.format == scanFormatJSONL
+	documentFormats := cfg.format == scanFormatJSON || cfg.format == scanFormatGitHub || cfg.format == scanFormatSARIF || cfg.format == scanFormatCSV || cfg.format == scanFormatJSONL || cfg.format == scanFormatMarkdown
 	var model reports.Model
 	if documentFormats || cfg.saveBaseline != "" {
 		built, err := buildScanReportModel(ctx, app.db, work, summary)
@@ -573,6 +580,8 @@ func runSingleScan(app *appCore, cfg scanConfig, work core.Workspace, baseline s
 			document = reports.CSV(model)
 		case scanFormatJSONL:
 			document = reports.JSONL(model)
+		case scanFormatMarkdown:
+			document = []byte(reports.Markdown(model))
 		default:
 			document = reports.JSON(model)
 		}

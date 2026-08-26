@@ -30,6 +30,9 @@ import (
 
 func testServer(t *testing.T) *Server {
 	t.Helper()
+	// The mutation rate limiter is process-wide; a fresh full bucket per test
+	// keeps one test's request volume from starving later ones.
+	ResetRateLimiter()
 	paths, err := config.NewPaths(t.TempDir())
 	if err != nil {
 		t.Fatal(err)

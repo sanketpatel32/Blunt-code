@@ -684,11 +684,15 @@ func (d *DB) ScanSummary(ctx context.Context) (ScanSummary, error) {
 // GlobalStats holds the cross-workspace overview served at GET /api/v1/stats.
 // Findings mirror the dashboard summary's semantics: the persisted severity
 // split of the single latest completed scan per workspace, so rescanning one
-// project never double-counts its findings.
+// project never double-counts its findings. RiskGrades buckets each
+// workspace's latest completed scan onto its A-D letter (the same weighted
+// scale the workspace risk endpoint uses), so the overview shows how the
+// fleet distributes across grades.
 type GlobalStats struct {
 	Workspaces   int            `json:"workspaces"`
 	Scans        GlobalScans    `json:"scans"`
 	Findings     GlobalFindings `json:"findings"`
+	RiskGrades   map[string]int `json:"risk_grades"`
 	Suppressions int            `json:"suppressions"`
 }
 
@@ -714,8 +718,11 @@ type GlobalFindings struct {
 // ScanSummary pattern: one row of scalar subselects for the counters, then the
 // latest-completed-per-workspace window (ROW_NUMBER over workspace partitions
 // of the producing terminal states, the same recency rule the dashboard
-// summary uses) summed in SQL. No per-workspace queries are issued, and an
-// empty database returns the zero value rather than an error.
+// summary uses) summed in SQL. The risk grades reuse that same window shape,
+// pulling the severity columns of every workspace's latest completed scan and
+// grading them in Go with the weights documented below. No per-workspace
+// queries are issued, and an empty database returns the zero value rather
+// than an error.
 func (d *DB) GlobalStats(ctx context.Context) (GlobalStats, error) {
 	var stats GlobalStats
 	if err := d.SQL.QueryRowContext(ctx, `SELECT
@@ -731,7 +738,52 @@ func (d *DB) GlobalStats(ctx context.Context) (GlobalStats, error) {
 	) latest WHERE recency=1`).Scan(&stats.Findings.Severity.Critical, &stats.Findings.Severity.High, &stats.Findings.Severity.Medium, &stats.Findings.Severity.Low, &stats.Findings.Severity.Info, &stats.Findings.Total); err != nil {
 		return GlobalStats{}, err
 	}
+	stats.RiskGrades = map[string]int{"A": 0, "B": 0, "C": 0, "D": 0}
+	rows, err := d.SQL.QueryContext(ctx, `SELECT latest.critical_count,latest.high_count,latest.medium_count,latest.low_count FROM (
+		SELECT critical_count,high_count,medium_count,low_count,ROW_NUMBER() OVER (PARTITION BY workspace_id ORDER BY COALESCE(finished_at,started_at) DESC,id DESC) AS recency FROM scans WHERE state IN ('completed','completed_with_warnings')
+	) latest WHERE recency=1`)
+	if err != nil {
+		return GlobalStats{}, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var critical, high, medium, low int
+		if err := rows.Scan(&critical, &high, &medium, &low); err != nil {
+			return GlobalStats{}, err
+		}
+		stats.RiskGrades[statsRiskGrade(critical, high, medium, low)]++
+	}
+	if err := rows.Err(); err != nil {
+		return GlobalStats{}, err
+	}
 	return stats, nil
+}
+
+// Risk grade weights: identical to the API risk endpoint's documented scale
+// (a critical is worth two highs, a high two-and-a-half mediums) and to the
+// grade boundaries A<5, B<20, C<50, D beyond. They live here — not imported
+// from the api package — because the api package already depends on this one.
+const (
+	riskGradeWeightCritical = 10
+	riskGradeWeightHigh     = 5
+	riskGradeWeightMedium   = 2
+	riskGradeWeightLow      = 1
+)
+
+// statsRiskGrade maps one scan's persisted severity split onto its A-D letter
+// using the weighted score above.
+func statsRiskGrade(critical, high, medium, low int) string {
+	score := float64(critical*riskGradeWeightCritical + high*riskGradeWeightHigh + medium*riskGradeWeightMedium + low*riskGradeWeightLow)
+	switch {
+	case score < 5:
+		return "A"
+	case score < 20:
+		return "B"
+	case score < 50:
+		return "C"
+	default:
+		return "D"
+	}
 }
 
 type AnalyzerRunInput struct {

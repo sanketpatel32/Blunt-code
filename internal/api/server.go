@@ -71,7 +71,7 @@ func New(db *database.DB, bus *events.Bus, scanService *scans.Service, toolServi
 	s.routes()
 	return s
 }
-func (s *Server) Handler() http.Handler { return securityMiddleware(s.mux) }
+func (s *Server) Handler() http.Handler { return securityMiddleware(rateLimitMiddleware(s.mux)) }
 
 // SetShutdown connects the local stop action to the host application's
 // graceful shutdown lifecycle. It is deliberately supplied by cmd, not HTTP.
@@ -98,6 +98,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("PUT /api/v1/workspaces/{id}/rules", s.putRules)
 	s.mux.HandleFunc("GET /api/v1/workspaces/{id}/suppressions", s.getSuppressions)
 	s.mux.HandleFunc("POST /api/v1/workspaces/{id}/suppressions", s.addSuppression)
+	s.mux.HandleFunc("GET /api/v1/workspaces/{id}/suppressions.csv", s.suppressionsCSV)
+	s.mux.HandleFunc("POST /api/v1/workspaces/{id}/suppressions/import", s.importSuppressions)
 	s.mux.HandleFunc("DELETE /api/v1/workspaces/{id}/suppressions/{fingerprint}", s.removeSuppression)
 	s.mux.HandleFunc("GET /api/v1/workspaces/{id}/trends", s.workspaceTrends)
 	s.mux.HandleFunc("GET /api/v1/workspaces/{id}/risk", s.workspaceRisk)
@@ -113,6 +115,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings", s.findings)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings.csv", s.findingsCSV)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings.json", s.findingsJSON)
+	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings.jsonl", s.findingsJSONL)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/fixed", s.fixedFindings)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/compare", s.scanCompare)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings/{findingID}/preview", s.findingPreview)
@@ -792,6 +795,116 @@ func (s *Server) removeSuppression(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// suppressionsCSVHeader is the fixed export column order of the suppression
+// CSV; it and the row writer below must stay in sync. The import endpoint
+// only requires the fingerprint column, so the header stays importable
+// as-is.
+var suppressionsCSVHeader = []string{"fingerprint", "reason", "created_at"}
+
+// suppressionsCSV exports the workspace's dismissals as a spreadsheet-friendly
+// CSV attachment: UTF-8 BOM for Excel, formula-neutralized cells (the same
+// csvCell transform the findings export applies), and RFC3339 timestamps.
+// The file is a valid input for suppressions/import, so dismissals can move
+// between machines and workspaces.
+func (s *Server) suppressionsCSV(w http.ResponseWriter, r *http.Request) {
+	work, ok := s.workspace(r)
+	if !ok {
+		fail(w, 404, "WORKSPACE_NOT_FOUND", "Workspace was not found.")
+		return
+	}
+	items, err := s.db.Suppressions(r.Context(), work.ID)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load suppressions.")
+		return
+	}
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="bluntcode-workspace-%s-suppressions.csv"`, shortID(work.ID)))
+	_, _ = w.Write([]byte(csvBOM))
+	writer := csv.NewWriter(w)
+	if err := writer.Write(suppressionsCSVHeader); err != nil {
+		s.log.Warn("csv header write failed", "error", err)
+		return
+	}
+	for _, item := range items {
+		if err := writer.Write([]string{
+			csvCell(item.Fingerprint), csvCell(item.Reason), item.CreatedAt.UTC().Format(time.RFC3339),
+		}); err != nil {
+			s.log.Warn("csv row write failed", "error", err)
+			return
+		}
+	}
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		s.log.Warn("csv flush failed", "error", err)
+	}
+}
+
+// importSuppressions bulk-loads dismissal fingerprints from the CSV text the
+// suppressions.csv export produces. Only the fingerprint column is read —
+// reason and created_at are ignored — fingerprints are normalized to
+// lowercase before validation, invalid rows are skipped without failing the
+// whole request, and rows already suppressed (or repeated within the file)
+// are reported as duplicates rather than rewritten.
+func (s *Server) importSuppressions(w http.ResponseWriter, r *http.Request) {
+	work, ok := s.workspace(r)
+	if !ok {
+		fail(w, 404, "WORKSPACE_NOT_FOUND", "Workspace was not found.")
+		return
+	}
+	var input struct {
+		CSV string `json:"csv"`
+	}
+	if err := decode(r, &input); err != nil || strings.TrimSpace(input.CSV) == "" {
+		fail(w, 400, "INVALID_CSV", "csv is required.")
+		return
+	}
+	records, err := csv.NewReader(strings.NewReader(input.CSV)).ReadAll()
+	if err != nil || len(records) == 0 {
+		fail(w, 400, "INVALID_CSV", "The upload is not parseable CSV text.")
+		return
+	}
+	column := -1
+	for index, name := range records[0] {
+		if strings.EqualFold(strings.TrimSpace(name), "fingerprint") {
+			column = index
+			break
+		}
+	}
+	if column < 0 {
+		fail(w, 400, "INVALID_CSV", `The CSV must have a "fingerprint" column.`)
+		return
+	}
+	existing, err := s.db.SuppressedFingerprints(r.Context(), work.ID)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load suppressions.")
+		return
+	}
+	imported, skippedInvalid, duplicate := 0, 0, 0
+	seen := map[string]bool{}
+	for _, row := range records[1:] {
+		if column >= len(row) {
+			skippedInvalid++
+			continue
+		}
+		fingerprint := strings.ToLower(strings.TrimSpace(row[column]))
+		if !validFingerprint(fingerprint) {
+			skippedInvalid++
+			continue
+		}
+		if existing[fingerprint] || seen[fingerprint] {
+			duplicate++
+			continue
+		}
+		if _, err := s.db.AddSuppression(r.Context(), work.ID, fingerprint, ""); err != nil {
+			fail(w, 500, "DATABASE_ERROR", "Could not save suppression.")
+			return
+		}
+		seen[fingerprint] = true
+		imported++
+	}
+	writeJSON(w, 200, map[string]int{"imported": imported, "skipped_invalid": skippedInvalid, "duplicate": duplicate})
+}
+
 // workspaceTrends serves the severity-over-time series for the workspace
 // detail page's trend chart: one point per completed scan, oldest first,
 // carrying the severity counts persisted at completion. Only the producing
@@ -1427,6 +1540,41 @@ func (s *Server) findingsJSON(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="bluntcode-scan-%s-findings.json"`, shortID(scan.ID)))
 	_, _ = w.Write(reports.JSON(model))
+}
+
+// findingsJSONL exports the scan as newline-delimited JSON (reports.JSONL):
+// one self-contained finding object per line for log pipelines and jq-style
+// consumers. Like findings.json it is unfiltered — query filters do not
+// apply, and suppressed fingerprints never enter the report model — so the
+// download always covers the whole scan.
+func (s *Server) findingsJSONL(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !validID(id) {
+		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
+		return
+	}
+	scan, err := s.db.Scan(r.Context(), id)
+	if errors.Is(err, sql.ErrNoRows) {
+		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
+		return
+	}
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load scan.")
+		return
+	}
+	work, err := s.db.Workspace(r.Context(), scan.WorkspaceID)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load report.")
+		return
+	}
+	model, err := s.reportModel(r.Context(), scan, work)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load report.")
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="bluntcode-scan-%s-findings.jsonl"`, shortID(scan.ID)))
+	_, _ = w.Write(reports.JSONL(model))
 }
 
 // fixedFindings lists what the fixed count on the scan report actually refers

@@ -2,6 +2,8 @@ package database
 
 import (
 	"context"
+	"encoding/json"
+	"maps"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -111,6 +113,14 @@ func TestGlobalStatsRollsUpLatestCompletedScanPerWorkspace(t *testing.T) {
 	if stats.Findings.Severity != wantSeverity || stats.Findings.Total != 3 {
 		t.Fatalf("findings must come from Alpha's newest completed scan only: %#v", stats.Findings)
 	}
+	// Risk grades bucket each workspace's latest completed scan with the risk
+	// endpoint's weights: only Alpha has a completed scan, and its newest one
+	// carries 2 critical + 1 medium = 2*10 + 1*2 = 22 points -> grade C.
+	// Beta's failed scan and Gamma's missing history never grade.
+	wantGrades := map[string]int{"A": 0, "B": 0, "C": 1, "D": 0}
+	if !maps.Equal(stats.RiskGrades, wantGrades) {
+		t.Fatalf("risk grades = %#v, want %#v", stats.RiskGrades, wantGrades)
+	}
 
 	// The rollup must stay in lockstep with the dashboard summary's severity
 	// totals; the two endpoints share one notion of "current" findings.
@@ -127,7 +137,9 @@ func TestGlobalStatsRollsUpLatestCompletedScanPerWorkspace(t *testing.T) {
 
 // TestGlobalStatsOnEmptyDatabaseReturnsZeroValue pins the empty-database
 // contract: every counter is the zero value of one fixed struct, never an
-// error, a null map, or a partially-populated payload.
+// error or a partially-populated payload, and the risk-grade map serializes
+// as a fully-initialized object of zeros — never null — so consumers can
+// always index A/B/C/D.
 func TestGlobalStatsOnEmptyDatabaseReturnsZeroValue(t *testing.T) {
 	db, err := Open(context.Background(), filepath.Join(t.TempDir(), "bluntcode.db"))
 	if err != nil {
@@ -138,7 +150,44 @@ func TestGlobalStatsOnEmptyDatabaseReturnsZeroValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stats != (GlobalStats{}) {
-		t.Fatalf("empty database must yield the zero value, got %#v", stats)
+	if stats.Workspaces != 0 || stats.Scans != (GlobalScans{}) || stats.Findings != (GlobalFindings{}) || stats.Suppressions != 0 {
+		t.Fatalf("empty database counters must be zero, got %#v", stats)
+	}
+	if !maps.Equal(stats.RiskGrades, map[string]int{"A": 0, "B": 0, "C": 0, "D": 0}) {
+		t.Fatalf("risk grades must initialize all four keys to zero, got %#v", stats.RiskGrades)
+	}
+	serialized, err := json.Marshal(stats.RiskGrades)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(serialized) != `{"A":0,"B":0,"C":0,"D":0}` {
+		t.Fatalf("risk grades must serialize as an object of zeros, got %s", serialized)
+	}
+}
+
+// TestStatsRiskGradeBoundaries pins the grade buckets against the weighted
+// score: A<5, B<20, C<50, D at 50 or beyond, using critical=10, high=5,
+// medium=2, low=1.
+func TestStatsRiskGradeBoundaries(t *testing.T) {
+	cases := []struct {
+		name                        string
+		critical, high, medium, low int
+		want                        string
+	}{
+		{"no findings is a clean A", 0, 0, 0, 0, "A"},
+		{"a single medium stays A", 0, 0, 1, 0, "A"},
+		{"one high crosses into B", 0, 1, 0, 0, "B"},
+		{"one critical is B", 1, 0, 0, 0, "B"},
+		{"four highs land exactly on C's boundary", 0, 4, 0, 0, "C"},
+		{"two criticals plus a medium match the rollup fixture", 2, 0, 1, 0, "C"},
+		{"five criticals reach D", 5, 0, 0, 0, "D"},
+		{"lows accumulate too", 0, 0, 2, 1, "B"},
+	}
+	for _, item := range cases {
+		t.Run(item.name, func(t *testing.T) {
+			if got := statsRiskGrade(item.critical, item.high, item.medium, item.low); got != item.want {
+				t.Fatalf("statsRiskGrade(%d,%d,%d,%d) = %q, want %q", item.critical, item.high, item.medium, item.low, got, item.want)
+			}
+		})
 	}
 }

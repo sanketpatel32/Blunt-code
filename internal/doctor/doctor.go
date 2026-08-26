@@ -3,8 +3,11 @@ package doctor
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"os"
 	"path/filepath"
@@ -13,6 +16,8 @@ import (
 	"bluntcode/internal/config"
 	"bluntcode/internal/database"
 	"bluntcode/internal/tools"
+
+	_ "modernc.org/sqlite"
 )
 
 type Status string
@@ -64,6 +69,7 @@ func Run(ctx context.Context, options Options) Result {
 	result.add(dataDirectoryCheck(options.Paths))
 	result.add(diskSpaceCheck(options.Paths))
 	result.add(databaseCheck(ctx, options.Paths))
+	result.add(databaseSelfCheck(ctx, options.Paths))
 	result.add(loopbackCheck())
 	result.addTools(options.Tools)
 	if options.Fix {
@@ -127,6 +133,72 @@ func databaseCheck(ctx context.Context, paths config.Paths) Check {
 		return Check{Name: "Database and migrations", Status: StatusFail, Detail: err.Error(), Hard: true}
 	}
 	return Check{Name: "Database and migrations", Status: StatusOK, Detail: fmt.Sprintf("%d migration(s) available", migrationCount), Hard: true}
+}
+
+// databaseSelfCheckDetailLimit caps the PRAGMA quick_check message so one
+// corrupted page cannot flood a diagnostic line.
+const databaseSelfCheckDetailLimit = 120
+
+// databaseSelfCheck asks SQLite itself whether the database file is intact
+// (PRAGMA quick_check). It opens the file read-only — a diagnostic must never
+// create or modify the store it inspects — and reports ok/warn with the
+// pragma message truncated to a sane length. A missing database file is an
+// informational skip, not a failure: it simply means Blunt Code has not been
+// launched yet. The check is never hard, so integrity trouble warns without
+// failing the whole run.
+func databaseSelfCheck(ctx context.Context, paths config.Paths) Check {
+	const name = "Database self-check"
+	if paths.DBPath == "" {
+		return Check{Name: name, Status: StatusWarn, Detail: "database path is not configured", Hard: false}
+	}
+	if _, err := os.Stat(paths.DBPath); errors.Is(err, fs.ErrNotExist) {
+		return Check{Name: name, Status: StatusSkip, Detail: "database file does not exist yet; it is created on first launch", Hard: false}
+	} else if err != nil {
+		return Check{Name: name, Status: StatusWarn, Detail: "could not stat database file: " + err.Error(), Hard: false}
+	}
+	db, err := sql.Open("sqlite", "file:"+filepath.ToSlash(paths.DBPath)+"?mode=ro")
+	if err != nil {
+		return Check{Name: name, Status: StatusWarn, Detail: "open failed: " + err.Error(), Hard: false}
+	}
+	defer db.Close()
+	rows, err := db.QueryContext(ctx, `PRAGMA quick_check`)
+	if err != nil {
+		return Check{Name: name, Status: StatusWarn, Detail: truncateCheckDetail(err.Error(), databaseSelfCheckDetailLimit), Hard: false}
+	}
+	defer rows.Close()
+	var messages []string
+	for rows.Next() {
+		var message string
+		if err := rows.Scan(&message); err != nil {
+			return Check{Name: name, Status: StatusWarn, Detail: truncateCheckDetail(err.Error(), databaseSelfCheckDetailLimit), Hard: false}
+		}
+		messages = append(messages, message)
+		if len(messages) > 8 {
+			break // enough to diagnose; keep the check bounded
+		}
+	}
+	if err := rows.Err(); err != nil || len(messages) == 0 {
+		detail := err
+		if detail == nil {
+			detail = errors.New("quick_check returned no rows")
+		}
+		return Check{Name: name, Status: StatusWarn, Detail: truncateCheckDetail(detail.Error(), databaseSelfCheckDetailLimit), Hard: false}
+	}
+	status := StatusOK
+	if messages[0] != "ok" {
+		status = StatusWarn
+	}
+	return Check{Name: name, Status: status, Detail: truncateCheckDetail(strings.Join(messages, "; "), databaseSelfCheckDetailLimit), Hard: false}
+}
+
+// truncateCheckDetail cuts s to at most limit runes, appending an ellipsis
+// when anything was dropped.
+func truncateCheckDetail(s string, limit int) string {
+	runes := []rune(s)
+	if len(runes) <= limit {
+		return s
+	}
+	return string(runes[:limit]) + "..."
 }
 
 func loopbackCheck() Check {
