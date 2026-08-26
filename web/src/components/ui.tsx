@@ -28,7 +28,8 @@ export function LanguageBadges({ languages }: { languages?: string[] }) {
 
 export function SeverityCounts({ scan }: { scan?: Scan }) {
   const values: Array<[Severity, number | undefined]> = [['critical', scan?.critical_count], ['high', scan?.high_count], ['medium', scan?.medium_count], ['low', scan?.low_count]];
-  return <div className="severity-counts">{values.map(([severity, count]) => <span key={severity} className={severity}>{count ?? 0} <small>{severity}</small></span>)}</div>;
+  // A live critical count breathes so the eye lands on the worst news first.
+  return <div className="severity-counts">{values.map(([severity, count]) => <span key={severity} className={`${severity}${severity === 'critical' && (count ?? 0) > 0 ? ' critical-live' : ''}`}>{count ?? 0} <small>{severity}</small></span>)}</div>;
 }
 
 export function ToolSummary({ tools }: { tools: Tool[] }) {

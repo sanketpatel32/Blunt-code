@@ -577,3 +577,81 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 /* Command palette workspace count note (Loop W5). */
 .command-palette footer .palette-note { margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ============================================================
+   Hallmark · component-scope · genre: modern-minimal · theme: Cobalt (preserved)
+   Interaction layer: 15-loop UI rework. Motion budget per surface ≤ 3
+   primitives · durations 120–320ms · all gated by prefers-reduced-motion.
+   States covered: default · hover · focus-visible · active · disabled ·
+   loading (busy) · success (copy/pop).
+   ============================================================ */
+
+/* L1 — Button system: consistent feel across every variant. */
+.button { transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out); }
+.button:not(:disabled):hover { transform: translateY(-0.06rem); }
+.button:not(:disabled):active { transform: translateY(0.06rem); transition-duration: 60ms; }
+.button:disabled { opacity: 0.55; cursor: progress; }
+.button.danger:not(:disabled):hover { box-shadow: inset 0 0 0 999rem color-mix(in oklch, var(--color-danger) 12%, transparent); }
+
+/* L5 — Copy confirmations pop instead of just recoloring. */
+@keyframes copy-pop { 0% { transform: scale(1); } 40% { transform: scale(1.28); } 100% { transform: scale(1); } }
+.copy-finding.copied svg, .copy-location.copied { animation: copy-pop var(--dur-base) var(--ease-spring); }
+
+/* L6 — Toasts arrive from below with a soft overshoot. */
+@keyframes toast-in { from { opacity: 0; transform: translateY(0.6rem) scale(0.98); } to { opacity: 1; transform: none; } }
+.toast { animation: toast-in var(--dur-base) var(--ease-spring); }
+
+/* L2 — Row hover: keep the reader's place while scanning findings/history. */
+.table-wrap tbody tr { transition: background-color var(--dur-fast) var(--ease-out); }
+.table-wrap tbody tr:hover { background: color-mix(in oklch, var(--color-accent) 5%, transparent); }
+
+/* L3 — Cards answer the question "what can I click?" with a quiet lift. */
+.workspace-card, .summary-card { transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-base) var(--ease-out), border-color var(--dur-fast) var(--ease-out); }
+.workspace-card:hover, .summary-card:hover { transform: translateY(-0.125rem); border-color: color-mix(in oklch, var(--color-accent) 45%, var(--color-rule)); box-shadow: 0 10px 28px oklch(24% 0.02 258 / 0.1); }
+a.workspace-card, a.summary-card { text-decoration: none; }
+
+/* L4 — Nav underline grows from the left edge on hover and persists on active. */
+.app-nav nav a::after { transform: scaleX(0); transform-origin: left center; transition: transform var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out); opacity: 1; }
+.app-nav nav a:hover::after, .app-nav nav a.active::after { transform: scaleX(1); }
+
+/* L7 — Critical counts breathe once per 2.4s so the eye lands there first.
+   Only animates while there is something to see (JS toggles [data-live]). */
+@keyframes critical-breathe { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-danger) 35%, transparent); } 50% { box-shadow: 0 0 0 0.3rem transparent; } }
+.severity-counts .critical.critical-live { border-radius: 50%; animation: critical-breathe 2.4s var(--ease-in-out) infinite; }
+
+/* L8 — Empty states feel considered, not dead-ended. */
+@keyframes icon-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-0.18rem); } }
+.empty .empty-icon svg { animation: icon-float 3.2s var(--ease-in-out) infinite; }
+@keyframes sparkle-twinkle { 0%, 100% { opacity: 0.25; transform: scale(0.85); } 50% { opacity: 1; transform: scale(1.05); } }
+.empty-sparkle.one svg { animation: sparkle-twinkle 2.6s var(--ease-in-out) infinite; }
+.empty-sparkle.two svg { animation: sparkle-twinkle 2.6s var(--ease-in-out) 0.9s infinite; }
+
+/* L9 — Command palette: the active row steps forward instead of just tinting. */
+.command-palette .palette-option { transition: background-color var(--dur-fast) var(--ease-out), padding-left var(--dur-fast) var(--ease-out); border-left: 0.14rem solid transparent; }
+.command-palette .palette-option[data-active='true'] { border-left-color: var(--color-accent); padding-left: calc(var(--space-sm) + 0.1rem); }
+.command-palette kbd { color: var(--color-ink-soft); background: var(--color-surface-muted); }
+
+/* L10 — One focus language everywhere, including custom controls. */
+.th-sort:focus-visible, .workspace-context-link:focus-visible, .palette-option[data-active='true'] button:focus-visible, .switch:focus-visible { outline: 0.14rem solid var(--color-focus); outline-offset: 0.12rem; border-radius: var(--radius-xs, 0.25rem); }
+
+/* L11 — Numbers stop jittering: tabular figures for every counter. */
+.findings-cell, .severity-counts span small, .activity-time, .severity-legend .legend-count, .summary-card strong, .what-changed-headline strong, .tree-loaded-count { font-variant-numeric: tabular-nums; }
+
+/* L12 — The sticky findings header earns a hairline + glass while stuck. */
+.findings-section .section-head { backdrop-filter: blur(6px); background: color-mix(in oklch, var(--color-paper) 86%, transparent); box-shadow: 0 1px 0 var(--color-rule); }
+[data-theme='dark'] .findings-section .section-head { background: color-mix(in oklch, var(--color-paper) 72%, transparent); }
+
+/* L13 — Determinate progress glides between updates; done state pulses once. */
+.scan-progress i { transition: width var(--dur-slow) var(--ease-out); }
+@keyframes scan-done-pulse { 0% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-success) 45%, transparent); } 100% { box-shadow: 0 0 0 0.5rem transparent; } }
+.scan-progress.done { animation: scan-done-pulse 600ms var(--ease-out) 1; }
+
+/* L14 — Dialog content lands in a calm stagger after the shell. */
+.dialog-backdrop dialog > * { animation: dialog-stagger var(--dur-base) var(--ease-out) backwards; }
+.dialog-backdrop dialog > :nth-child(2) { animation-delay: 40ms; }
+.dialog-backdrop dialog > :nth-child(3) { animation-delay: 80ms; }
+@keyframes dialog-stagger { from { opacity: 0; transform: translateY(0.3rem); } to { opacity: 1; transform: none; } }
+
+/* L15 — Dark theme reads native: borders carry depth, shadows recede. */
+[data-theme='dark'] .workspace-card:hover, [data-theme='dark'] .summary-card:hover { box-shadow: 0 10px 28px oklch(0% 0 0 / 0.35); }
+[data-theme='dark'] { --shadow-nav: 0 12px 32px oklch(0% 0 0 / 0.4); --shadow-dialog: 0 24px 72px oklch(0% 0 0 / 0.55); }

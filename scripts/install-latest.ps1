@@ -1,6 +1,14 @@
 [CmdletBinding()]
 param(
   [string]$InstallDir = (Join-Path $env:LOCALAPPDATA 'Programs\BluntCode'),
+  # Pin a specific release (e.g. -Version 0.6.0). Empty means latest.
+  [string]$Version = '',
+  # Quiet mode: only errors and the final result line are printed; implies -NoLaunch.
+  [switch]$Silent,
+  # Additionally create a desktop shortcut next to the Start-menu one.
+  [switch]$DesktopShortcut,
+  # Print what would be installed and exit without changing anything.
+  [switch]$WhatIf,
   [switch]$NoLaunch
 )
 
@@ -11,6 +19,11 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch { }
 $repository = 'sanketpatel32/Blunt-code'
+$script:Quiet = [bool]$Silent
+
+function Write-Info([string]$Text, [string]$Color = 'White') {
+  if (-not $script:Quiet) { Write-Host $Text -ForegroundColor $Color }
+}
 
 function Assert-SafeInstallDir([string]$Path) {
   $full = [IO.Path]::GetFullPath($Path)
@@ -21,20 +34,49 @@ function Assert-SafeInstallDir([string]$Path) {
   return $full
 }
 
-function New-StartMenuShortcut([string]$Executable, [string]$WorkingDirectory) {
-  $programs = [Environment]::GetFolderPath('Programs')
-  $shortcutPath = Join-Path $programs 'Blunt Code.lnk'
+function New-ShellShortcut([string]$Executable, [string]$WorkingDirectory, [string]$ShortcutPath) {
   $shell = New-Object -ComObject WScript.Shell
-  $shortcut = $shell.CreateShortcut($shortcutPath)
+  $shortcut = $shell.CreateShortcut($ShortcutPath)
   $shortcut.TargetPath = $Executable
   $shortcut.WorkingDirectory = $WorkingDirectory
   $shortcut.IconLocation = "$Executable,0"
   $shortcut.Save()
 }
 
+function New-StartMenuShortcut([string]$Executable, [string]$WorkingDirectory) {
+  $programs = [Environment]::GetFolderPath('Programs')
+  New-ShellShortcut -Executable $Executable -WorkingDirectory $WorkingDirectory -ShortcutPath (Join-Path $programs 'Blunt Code.lnk')
+}
+
+function New-DesktopShortcut([string]$Executable, [string]$WorkingDirectory) {
+  $desktop = [Environment]::GetFolderPath('Desktop')
+  New-ShellShortcut -Executable $Executable -WorkingDirectory $WorkingDirectory -ShortcutPath (Join-Path $desktop 'Blunt Code.lnk')
+}
+
 function Write-Step([int]$Number, [int]$Total, [string]$Text) {
+  if ($script:Quiet) { return }
   Write-Host ''
   Write-Host "[$Number/$Total] $Text" -ForegroundColor Cyan
+}
+
+# Installed-version probe: asks the existing bluntcode.exe directly so an
+# upgrade, reinstall, or downgrade is labeled honestly. Any failure reads as
+# an unknown previous version rather than blocking the install.
+function Get-InstalledVersion([string]$Executable) {
+  if (-not (Test-Path -LiteralPath $Executable)) { return '' }
+  try {
+    $out = (& $Executable '--version' 2>$null | Select-Object -First 1)
+    if ($out -match '(\d+\.\d+\.\d+)') { return $Matches[1] }
+  } catch { }
+  return ''
+}
+
+function Compare-Versions([string]$A, [string]$B) {
+  try {
+    $left = [version]$A
+    $right = [version]$B
+    return $left.CompareTo($right)
+  } catch { return 0 }
 }
 
 # Streams $Url to disk behind a single-line progress meter. GitHub serves this
@@ -82,19 +124,63 @@ if ([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
 }
 $install = Assert-SafeInstallDir $InstallDir
 
-Write-Step 1 5 'Fetching the latest release info...'
+# --- Pre-flight checks -------------------------------------------------------
+if (-not [Environment]::Is64BitOperatingSystem) {
+  throw 'Blunt Code publishes 64-bit (amd64) builds only; this operating system is 32-bit.'
+}
+$drive = New-Object IO.DriveInfo((Split-Path -Qualifier $install))
+if ($drive.AvailableFreeSpace -lt 300MB) {
+  throw ('Not enough free disk space on {0}: {1:N0} MB free, at least 300 MB required.' -f $drive.Name, ($drive.AvailableFreeSpace / 1MB))
+}
+if ($Silent) { $NoLaunch = $true }
+
+Write-Step 1 5 'Fetching release info...'
 $headers = @{ Accept = 'application/vnd.github+json'; 'User-Agent' = 'BluntCode-Installer' }
-$release = Invoke-RestMethod -Uri "https://api.github.com/repos/$repository/releases/latest" -Headers $headers
+if ($Version) {
+  $releaseEndpoint = "https://api.github.com/repos/$repository/releases/tags/v$Version"
+} else {
+  $releaseEndpoint = "https://api.github.com/repos/$repository/releases/latest"
+}
+try {
+  $release = Invoke-RestMethod -Uri $releaseEndpoint -Headers $headers
+} catch {
+  if ($Version) {
+    throw "Release v$Version was not found in $repository. Check the version (example: -Version 0.6.0) or drop the flag for the latest."
+  }
+  throw
+}
 $archive = @($release.assets | Where-Object { $_.name -match '^BluntCode-.+-windows-amd64\.zip$' }) | Select-Object -First 1
 if ($null -eq $archive) {
-  throw 'The latest release does not contain a Windows amd64 ZIP.'
+  throw 'The release does not contain a Windows amd64 ZIP.'
 }
 $checksum = @($release.assets | Where-Object { $_.name -eq "$($archive.name).sha256" }) | Select-Object -First 1
 if ($null -eq $checksum) {
-  throw "The latest release is missing $($archive.name).sha256."
+  throw "The release is missing $($archive.name).sha256."
 }
 $version = "$($release.tag_name)".TrimStart('v')
 if (-not $version) { $version = 'latest' }
+
+# --- Upgrade awareness -------------------------------------------------------
+$executable = Join-Path $install 'bluntcode.exe'
+$installedVersion = Get-InstalledVersion $executable
+$actionLabel = 'Installing'
+if ($installedVersion) {
+  switch (Compare-Versions $installedVersion $version) {
+    { $_ -lt 0 } { $actionLabel = "Upgrading $installedVersion ->" ; break }
+    { $_ -eq 0 } { $actionLabel = "Reinstalling $installedVersion" ; break }
+    default { $actionLabel = "DOWNGRADING $installedVersion ->" }
+  }
+}
+
+if ($WhatIf) {
+  Write-Host 'What-if plan (nothing was changed):'
+  Write-Host ("  release      : {0} (tag {1})" -f $archive.name, $release.tag_name)
+  Write-Host ("  size         : {0:N1} MB" -f ($archive.size / 1MB))
+  Write-Host ("  install dir  : {0}" -f $install)
+  Write-Host ("  action       : {0} {1}" -f $actionLabel.TrimEnd(), $version)
+  Write-Host ("  shortcuts    : Start-menu{0}, launch after install: {1}" -f ($(if ($DesktopShortcut) { ' + Desktop' } else { '' })), ($(if ($NoLaunch) { 'no' } else { 'yes' })))
+  exit 0
+}
 
 Write-Step 2 5 "Downloading $($archive.name)"
 $temporary = Join-Path ([IO.Path]::GetTempPath()) ('.bluntcode-install-' + [guid]::NewGuid())
@@ -115,7 +201,7 @@ try {
     throw 'Download checksum mismatch. Nothing was installed.'
   }
 
-  Write-Step 4 5 "Installing to $install"
+  Write-Step 4 5 "$actionLabel $version at $install"
   $running = Get-Process -Name 'bluntcode' -ErrorAction SilentlyContinue
   if ($running) {
     throw 'Close Blunt Code before installing an update.'
@@ -141,26 +227,36 @@ try {
       Remove-Item -LiteralPath $backup -Recurse -Force
     }
   } catch {
+    # Rollback: restore the previous installation whenever the swap left the
+    # target directory missing, so an interrupted upgrade never strands the
+    # user without a working copy.
     if (-not (Test-Path -LiteralPath $install) -and (Test-Path -LiteralPath $backup)) {
       Move-Item -LiteralPath $backup -Destination $install
+      Write-Warning 'Installation failed; your previous Blunt Code copy was restored.'
     }
     throw
   }
 
-  Write-Step 5 5 'Creating the Start-menu shortcut...'
-  $executable = Join-Path $install 'bluntcode.exe'
+  Write-Step 5 5 'Creating shortcuts...'
   try {
     New-StartMenuShortcut -Executable $executable -WorkingDirectory $install
+    if ($DesktopShortcut) {
+      New-DesktopShortcut -Executable $executable -WorkingDirectory $install
+    }
   } catch {
-    Write-Warning "Installed Blunt Code, but could not create its Start-menu shortcut: $($_.Exception.Message)"
+    Write-Warning "Installed Blunt Code, but could not create every shortcut: $($_.Exception.Message)"
   }
 
-  Write-Host ''
-  Write-Host "Installed Blunt Code $version to $install" -ForegroundColor Green
-  Write-Host 'Your reports and settings stay in %LOCALAPPDATA%\BluntCode.'
-  if (-not $NoLaunch) {
-    Write-Host 'Launching Blunt Code...'
-    Start-Process -FilePath $executable -WorkingDirectory $install
+  if ($Silent) {
+    Write-Output "Installed Blunt Code $version to $install"
+  } else {
+    Write-Host ''
+    Write-Host "Installed Blunt Code $version to $install" -ForegroundColor Green
+    Write-Host 'Your reports and settings stay in %LOCALAPPDATA%\BluntCode.'
+    if (-not $NoLaunch) {
+      Write-Host 'Launching Blunt Code...'
+      Start-Process -FilePath $executable -WorkingDirectory $install
+    }
   }
 } finally {
   if (Test-Path -LiteralPath $temporary) {
