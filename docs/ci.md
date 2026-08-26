@@ -116,7 +116,9 @@ flags.
 | `json` | The full versioned JSON report document (`bluntcode/scan-report`, schema version 1) — the same bytes `GET /api/v1/scans/{id}/findings.json` serves |
 | `sarif` | The SARIF 2.1.0 log — byte-for-byte the serialization `GET /api/v1/scans/{id}/report.sarif` serves; feeds GitHub code scanning and the baseline round-trip |
 | `csv` | The findings spreadsheet — UTF-8 BOM, same columns and formula-neutralization as `GET /api/v1/scans/{id}/findings.csv` |
-| `github` | GitHub Actions workflow-command annotations (see below) |
+| markdown | The full rendered Markdown report (the same bytes the workspace reports folder receives) |
+| jsonl | Newline-delimited JSON findings — one object per line in export order, ready for log pipelines and jq |
+| github | GitHub Actions workflow-command annotations (see below) |
 
 `--json` (without `--format`) is a different, compact machine summary and
 cannot be combined with `--format json`, `github`, or `sarif`.

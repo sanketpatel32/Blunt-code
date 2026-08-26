@@ -37,6 +37,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Scan comparison endpoint:** `GET /api/v1/scans/{id}/compare?with=<scan-id>` diffs two scans with the same coverage-aware new/fixed/persistent semantics as reports (implicit previous-completed resolution when `with` is omitted, suppressed fingerprints filtered from both sides).
+- **JSONL everywhere:** `--format jsonl` on headless scans and a matching `GET /api/v1/scans/{id}/findings.jsonl` download render findings as newline-delimited JSON (export ordering, derived status per row) for log pipelines and `jq`.
+- **Markdown CLI format:** `--format markdown` prints the full rendered report to stdout or `--output`.
+- **Suppression round-trip:** `GET /workspaces/{id}/suppressions.csv` exports dismissed fingerprints (BOM, formula-neutralized) and `POST .../suppressions/import` re-ingests that CSV with per-row accounting (`imported` / `skipped_invalid` / `duplicate`).
+- **API mutation rate limiting:** state-changing requests pass a token bucket (30 capacity, 30/min refill); exhausted callers get `429 RATE_LIMITED` with `Retry-After`.
+- **Doctor database self-check:** `bluntcode doctor` runs SQLite `PRAGMA quick_check` and surfaces ok/warn status (absent database is an informational skip).
+- **Risk-grade distribution:** `GET /api/v1/stats` now includes `risk_grades` counting A/B/C/D across every workspace's latest completed scan.
+- **Report duration chips:** analyzer runs render as success/failed chips with durations in the report header.
+- **Workspace tags surface:** cards show up to three tag chips (+N overflow) and the page gains a case-insensitive *Filter by tag* input.
+- **Risk badges:** workspace cards display each workspace's A–D grade when the API provides one.
+- **Suppressions CSV export:** the suppressions panel downloads its rows as a BOM'd, RFC-4180-safe spreadsheet.
+- **Palette indexing note:** the command palette footer reports how many workspaces its dynamic entries cover.
+- **Table accessibility:** every data table gained an sr-only caption describing its contents.
+
+### Added
+
 - **Installer console experience:** the one-line installer now prints stepped progress (`[1/5]` … `[5/5]`: release info, download, checksum verify, install, shortcut) with a live single-line download meter (`4.2 / 11.3 MB (37%)`) that redraws in place when attached to a console and degrades to one coarse line every few MB in redirected/CI logs, plus a version-aware summary ("Installed Blunt Code 0.5.0 to …"). Output stays plain ASCII so piped `irm | iex` sessions on Windows PowerShell 5.1 decode it cleanly.
 - **`g a` goes to About:** every destination in the top navigation is now reachable from the keyboard — the shortcuts help gains the `g` `a` row, and the command palette's "Go to About" entry shows the `g a` hint like its siblings.
 

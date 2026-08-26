@@ -139,3 +139,16 @@ scans for that workspace. The same pruning is available headlessly as
 every stored scan on this computer, filtered by text (`q` over message/rule/
 path), comma-separated severities, analyzer, workspace, and optionally
 including suppressed findings; results are paged and severity-ranked.
+
+## API hardening and suppression round-trip
+
+State-changing API requests (POST/PUT/PATCH/DELETE) pass a token-bucket rate
+limiter — 30-request bursts refilled at 30 per minute. Exhausted callers
+receive `429 RATE_LIMITED` with a `Retry-After` header; reads are never
+limited.
+
+Dismissed findings leave no dead ends: `GET /api/v1/workspaces/{id}/
+suppressions.csv` exports the workspace's suppression list (UTF-8 BOM,
+formula-neutralized), and `POST /api/v1/workspaces/{id}/suppressions/import`
+accepts that CSV back — invalid rows are counted as `skipped_invalid`,
+already-known fingerprints as `duplicate`, and everything else is imported.
