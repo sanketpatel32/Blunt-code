@@ -264,3 +264,10 @@ describe('HistoryTable server paging', () => {
     expect(host.textContent).not.toContain('No scans yet');
   });
 });
+
+describe('HistoryTable accessibility caption (Loop W6)', () => {
+  it('names the history table for screen readers', async () => {
+    const { host } = await renderTable([scan({ id: 's1', state: 'completed' })]);
+    expect(host.querySelector('table caption')?.textContent).toBe('Scan history for this workspace');
+  });
+});

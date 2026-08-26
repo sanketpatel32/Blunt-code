@@ -104,7 +104,7 @@ export function HistoryTable({ scans, go, paging }: { scans: Scan[]; go: (r: Rou
 
   if (!scans.length && !windowTotal) return <Empty title="No scans yet" icon={<ScanIcon />}>Analyze this workspace to create the first report.</Empty>;
 
-  return <><div className="table-wrap"><table><thead><tr><th scope="col">Date</th><th scope="col">Status</th><th scope="col">Findings</th><th scope="col">New</th><th scope="col">Fixed</th><th scope="col">Duration</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead><tbody>{historyDateBands(visibleScans).map(({ band, scans: banded }) => <Fragment key={band}><tr className="history-band-row"><th className="history-band" colSpan={7} scope="colgroup">{band}</th></tr>{banded.map((scan) => {
+  return <><div className="table-wrap"><table><caption className="sr-only">Scan history for this workspace</caption><thead><tr><th scope="col">Date</th><th scope="col">Status</th><th scope="col">Findings</th><th scope="col">New</th><th scope="col">Fixed</th><th scope="col">Duration</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead><tbody>{historyDateBands(visibleScans).map(({ band, scans: banded }) => <Fragment key={band}><tr className="history-band-row"><th className="history-band" colSpan={7} scope="colgroup">{band}</th></tr>{banded.map((scan) => {
     const tone = scan.id === scans[0].id ? scan.state === 'failed' ? 'row-danger' : scan.state === 'completed_with_warnings' ? 'row-warning' : '' : '';
     const isOpen = expanded.has(scan.id);
     const runs = scan.analyzer_runs ?? [];

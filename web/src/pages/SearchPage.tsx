@@ -81,7 +81,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
       : state.error ? <ErrorPanel error={state.error} retry={state.reload} />
         : total === 0 ? <Empty title="No matching findings" icon={<MagnifierIcon />}>Run a scan or loosen the filters — only scans already stored on this computer are searched.</Empty>
           : <>
-            <div className="table-wrap"><table className="search-results"><thead><tr><th scope="col">Severity</th><th scope="col">Finding</th><th scope="col">Location</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead><tbody>
+            <div className="table-wrap"><table className="search-results"><caption className="sr-only">Global search results</caption><thead><tr><th scope="col">Severity</th><th scope="col">Finding</th><th scope="col">Location</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead><tbody>
               {items.map((finding: SearchedFinding) => <tr key={`${finding.scan_id}:${finding.id}`}>
                 <td><span className={`severity ${finding.severity}`}>{finding.severity}</span></td>
                 <td className="finding-summary">{finding.title ? <strong>{finding.title}</strong> : null}<span>{finding.message}</span>{finding.rule_id ? <code className="badge">{finding.rule_id}</code> : null}</td>

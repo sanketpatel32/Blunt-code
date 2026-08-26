@@ -65,6 +65,7 @@ describe('SearchPage', () => {
     expect(host.querySelector('.severity.critical')?.textContent).toBe('critical');
     const links = [...host.querySelectorAll<HTMLAnchorElement>('a')].filter((a) => a.textContent === 'Open report');
     expect(links.map((a) => a.getAttribute('href'))).toEqual(['/scans/scan-9', '/scans/scan-3']);
+    expect(host.querySelector('table caption')?.textContent).toBe('Global search results'); // Loop W6
   });
 
   it('shows the empty state when nothing matches', async () => {

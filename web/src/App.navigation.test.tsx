@@ -15,8 +15,8 @@ function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
-async function renderApp() {
-  vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(json({ items: [] }))));
+async function renderApp(fetchMock?: ReturnType<typeof vi.fn>) {
+  vi.stubGlobal('fetch', fetchMock ?? vi.fn(() => Promise.resolve(json({ items: [] }))));
   const host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);
@@ -60,5 +60,31 @@ describe('navigation resilience', () => {
     expect(skip?.textContent).toBe('Skip to main content');
     expect(host.querySelector('a')).toBe(skip);
     expect(host.querySelector('main#main-content')).not.toBeNull();
+  });
+
+  it('appends lazily loaded workspace entries (labels starting "Go to ") behind the static commands when the palette opens', async () => {
+    const fetchMock = vi.fn((input: string) => {
+      if (input.endsWith('/api/v1/workspaces')) {
+        return Promise.resolve(json({ workspaces: [
+          { id: 'ws-alpha', name: 'Alpha', root_path: 'C:\\code\\alpha' },
+          { id: 'ws-beta', name: 'Beta', root_path: 'C:\\code\\beta' },
+        ] }));
+      }
+      return Promise.resolve(json({ items: [] }));
+    });
+    const host = await renderApp(fetchMock);
+    expect(host.querySelector('.command-palette')).toBeNull(); // closed until Ctrl+K
+
+    await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true, cancelable: true })); });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); }); // let the lazy workspace load settle
+    const options = [...host.querySelectorAll('[role="option"] .palette-label')].map((option) => option.textContent);
+    // Static commands stay first; the two workspace entries follow them.
+    expect(options[0]).toBe('Go to Home');
+    for (const label of ['Go to Alpha', 'Go to Beta']) {
+      expect(options).toContain(label);
+      expect(options.indexOf(label)).toBeGreaterThan(options.indexOf('Go to Home'));
+    }
+    // Count hint appears once the lazy load completes.
+    expect(host.querySelector('.palette-note')?.textContent).toBe('2 workspaces indexed');
   });
 });

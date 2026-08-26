@@ -5,6 +5,10 @@ export interface Workspace {
   name: string;
   root_path: string;
   languages?: string[];
+  /** Free-form project labels shown as chips on the workspaces page; the API omits the field until tagging ships server-side. */
+  tags?: string[];
+  /** Weighted risk rollup mirroring RiskProfile's grade bands; optional because no endpoint populates it yet — render defensively. */
+  risk?: { grade: 'A' | 'B' | 'C' | 'D'; score: number };
   default_profile?: string;
   last_scan_at?: string | null;
   last_opened_at?: string | null;

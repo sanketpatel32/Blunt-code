@@ -125,7 +125,7 @@ export function App() {
     {closeOpen && <ConfirmationDialog title="Close Blunt Code?" description="This ends the local app. Any active scan will be cancelled; your workspaces and reports stay saved on this computer." confirmLabel="Close app" busy={closing} onCancel={() => setCloseOpen(false)} onConfirm={() => void closeApp()} />}
     {shortcutsOpen && <ShortcutsDialog onClose={() => setShortcutsOpen(false)} />}
     {/* Mounted only while open so useDialogA11y's mount-time focus move/restore actually runs — an always-mounted palette never receives keyboard focus. */}
-    {paletteOpen && <CommandPalette open onClose={() => setPaletteOpen(false)} commands={allPaletteCommands} />}
+    {paletteOpen && <CommandPalette open onClose={() => setPaletteOpen(false)} commands={allPaletteCommands} note={workspacesForPalette.length ? `${workspacesForPalette.length} workspace${workspacesForPalette.length === 1 ? '' : 's'} indexed` : undefined} />}
     <AppFooter />
     <ToastStack toasts={toasts} onDismiss={dismiss} />
   </div>;
