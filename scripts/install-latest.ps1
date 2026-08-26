@@ -207,15 +207,27 @@ try {
   Write-Step 4 5 "$actionLabel $version at $install"
   $running = Get-Process -Name 'bluntcode' -ErrorAction SilentlyContinue
   if ($running) {
+    # Auto-close instead of hard-failing: try graceful CloseMainWindow, wait,
+    # then force-kill. This makes `irm | iex` idempotent — reinstalling 0.6.0
+    # over 0.6.0 no longer throws at line 203 when the app is still in the tray.
+    Write-Host 'Blunt Code is running — closing it for install...' -ForegroundColor Yellow
+    foreach ($p in $running) { try { $null = $p.CloseMainWindow() } catch {} }
     $waited = 0
-    while ($running -and $waited -lt $WaitForCloseSeconds) {
+    $grace = if ($WaitForCloseSeconds -gt 0) { $WaitForCloseSeconds } else { 8 }
+    while ($running -and $waited -lt $grace) {
       Start-Sleep -Seconds 1
       $waited += 1
       $running = Get-Process -Name 'bluntcode' -ErrorAction SilentlyContinue
     }
+    if ($running) {
+      Write-Host 'Still running — force-closing...' -ForegroundColor Yellow
+      foreach ($p in $running) { try { Stop-Process -InputObject $p -Force -ErrorAction SilentlyContinue } catch {} }
+      Start-Sleep -Seconds 1
+      $running = Get-Process -Name 'bluntcode' -ErrorAction SilentlyContinue
+    }
   }
   if ($running) {
-    throw 'Close Blunt Code before installing an update.'
+    throw 'Close Blunt Code before installing an update. Still running after auto-close attempt — open Task Manager -> End task bluntcode.exe, then re-run. Tip: `irm ...install-latest.ps1 | iex` now auto-closes after 8s; for in-app updates use `-WaitForCloseSeconds 30`.'
   }
 
   $staging = Join-Path $temporary 'staging'

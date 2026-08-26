@@ -11,9 +11,15 @@ if ($install -eq $local -or $install -eq [IO.Path]::GetPathRoot($install)) {
   throw "Refusing unsafe uninstall directory: $install"
 }
 
-if (Get-Process -Name 'bluntcode' -ErrorAction SilentlyContinue) {
-  throw 'Close Blunt Code before uninstalling.'
+$running = Get-Process -Name 'bluntcode' -ErrorAction SilentlyContinue
+if ($running) {
+  Write-Host 'Blunt Code is running — closing it for uninstall...' -ForegroundColor Yellow
+  foreach ($p in $running) { try { $null = $p.CloseMainWindow() } catch {} }
+  $waited = 0
+  while ($running -and $waited -lt 5) { Start-Sleep -Seconds 1; $waited += 1; $running = Get-Process -Name 'bluntcode' -ErrorAction SilentlyContinue }
+  if ($running) { foreach ($p in $running) { try { Stop-Process -InputObject $p -Force -ErrorAction SilentlyContinue } catch {} }; Start-Sleep -Seconds 1; $running = Get-Process -Name 'bluntcode' -ErrorAction SilentlyContinue }
 }
+if ($running) { throw 'Close Blunt Code before uninstalling. Still running — Task Manager -> End task bluntcode.exe.' }
 
 # The one-line installer creates this shortcut; a leftover .lnk would point at
 # nothing once the install directory below is gone.
