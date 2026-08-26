@@ -121,8 +121,8 @@ describe('SeverityTrendChart tooltips and axes', () => {
     expect(tooltip?.textContent).toContain('4 findings');
     expect(tooltip?.textContent).toContain('2 critical');
     expect(host.querySelector('.trend-bar.is-active')).toBe(bar);
-    // The overlay is anchored over its own slot: bar 2 of 2 centers at 75% of the viewBox.
-    expect((host.querySelector('.trend-tooltip') as HTMLElement).style.left).toBe('75%');
+    // The overlay is anchored over its own slot: bar 2 of 2 centers at 56.25% of the centered 8-slot viewBox.
+    expect((host.querySelector('.trend-tooltip') as HTMLElement).style.left).toBe('56.25%');
     await act(async () => { bar.dispatchEvent(new MouseEvent('mouseout', { bubbles: true })); });
     expect(host.querySelector('.trend-tooltip')).toBeNull();
   });

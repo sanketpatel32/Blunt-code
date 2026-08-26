@@ -11,15 +11,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **In-app updates:** the About page gains an **Updates** card — see the installed version, check GitHub releases for a newer one, and update without leaving the app (`GET /api/v1/update/check`, `POST /api/v1/update/apply`). Applying stages the official installer detached and stops the app so the installer can swap the binary; offline mode blocks both endpoints with `UPDATE_OFFLINE`.
 - **Installer v2:** `install-latest.ps1` supports `-Version x.y.z` pins, `-Silent`, `-DesktopShortcut`, `-WhatIf` dry-run plans, 64-bit/disk pre-flight checks, honest upgrade/reinstall/downgrade labels (asks the installed exe), automatic rollback if the install swap fails, and `-WaitForCloseSeconds` for the in-app updater handoff.
+- **Scan comparison endpoint:** `GET /api/v1/scans/{id}/compare?with=<scan-id>` diffs two scans with the same coverage-aware new/fixed/persistent semantics as reports (implicit previous-completed resolution when `with` is omitted, suppressed fingerprints filtered from both sides).
+- **JSONL everywhere:** `--format jsonl` on headless scans and a matching `GET /api/v1/scans/{id}/findings.jsonl` download render findings as newline-delimited JSON (export ordering, derived status per row) for log pipelines and `jq`.
+- **Markdown CLI format:** `--format markdown` prints the full rendered report to stdout or `--output`.
+- **Suppression round-trip:** `GET /workspaces/{id}/suppressions.csv` exports dismissed fingerprints (BOM, formula-neutralized) and `POST .../suppressions/import` re-ingests that CSV with per-row accounting (`imported` / `skipped_invalid` / `duplicate`).
+- **API mutation rate limiting:** state-changing requests pass a token bucket (30 capacity, 30/min refill); exhausted callers get `429 RATE_LIMITED` with `Retry-After`.
+- **Doctor database self-check:** `bluntcode doctor` runs SQLite `PRAGMA quick_check` and surfaces ok/warn status (absent database is an informational skip).
+- **Risk-grade distribution:** `GET /api/v1/stats` now includes `risk_grades` counting A/B/C/D across every workspace's latest completed scan.
+- **Report duration chips:** analyzer runs render as success/failed chips with durations in the report header.
+- **Workspace tags surface:** cards show up to three tag chips (+N overflow) and the page gains a case-insensitive *Filter by tag* input.
+- **Risk badges:** workspace cards display each workspace's A–D grade when the API provides one.
+- **Suppressions CSV export:** the suppressions panel downloads its rows as a BOM'd, RFC-4180-safe spreadsheet.
+- **Palette indexing note:** the command palette footer reports how many workspaces its dynamic entries cover.
+- **Table accessibility:** every data table gained an sr-only caption describing its contents.
+- **Installer console experience:** the one-line installer now prints stepped progress (`[1/5]` … `[5/5]`: release info, download, checksum verify, install, shortcut) with a live single-line download meter (`4.2 / 11.3 MB (37%)`) that redraws in place when attached to a console and degrades to one coarse line every few MB in redirected/CI logs, plus a version-aware summary ("Installed Blunt Code 0.5.0 to …"). Output stays plain ASCII so piped `irm | iex` sessions on Windows PowerShell 5.1 decode it cleanly.
+- **`g a` goes to About:** every destination in the top navigation is now reachable from the keyboard — the shortcuts help gains the `g` `a` row, and the command palette's "Go to About" entry shows the `g a` hint like its siblings.
 
 ### Changed
 
 - **UI interaction layer:** 15 polish loops — button press/busy feel, table-row hover tint, card lift, sliding nav underline, copy-pop confirmation, toast entrance, breathing critical counts, floating empty states, command-palette active step, unified focus rings, tabular numerals, sticky glass filter heads, gliding progress fills, staggered dialog entrances, native-feeling dark elevation.
 - Packaging default version bumped to 0.6.0.
 
+### Removed
+
+- **Legacy standalone installer script:** `scripts/install.ps1` (the download-and-run-a-local-copy installer superseded by `install-latest.ps1`) is gone — the `irm … | iex` release-asset one-liner is the single supported PowerShell install path. The README's execution-policy notes no longer walk users through saving and running an installer `.ps1`; they explain that the piped one-liner never touches Execution Policy at all.
+
 ### Fixed
 
 - `.gitattributes` now forces LF for the bundled semgrep rulepack so checkouts never corrupt it (test previously failed with "must keep LF line endings").
+- **Header pill no longer overflows:** at common desktop widths the *Add workspace* button spilled past the nav pill's rounded border, because the pill was hard-capped at 52rem while its contents (brand, six nav links, four action buttons) need ~65rem. The pill now hugs its content (`fit-content`, still viewport-capped with a 52rem floor), a measured slimming ladder sheds the theme label, *Close app*, and the shortcuts button as the viewport narrows, and the nav links scroll as a last-resort safety net instead of pushing buttons out of the pill.
+- **Add-workspace placeholder shows real Windows paths:** the folder-path field suggested `C:\\Projects\\my-app` with doubled backslashes, because JSX attribute strings are raw text where backslashes are not escapes. It reads `C:\Projects\my-app` now.
+- **Network failures explain themselves:** when a request never reaches the local server (usually because the app window was closed while a tab stayed open), toasts now say the server is unreachable and how to restart it instead of surfacing the browser's raw "Failed to fetch". A repeat of the currently visible toast refreshes it in place rather than stacking identical copies.
+- **Uninstaller cleans up its shortcut:** the one-line installer creates a Start-menu `Blunt Code.lnk`, but the uninstaller left it behind as a dangling link after removing the app (the README already promised shortcut removal). It now deletes the shortcut and refuses to run while Blunt Code is open, mirroring the installer's guard. Shipped as a clobber-refresh of the v0.5.0 ZIP and installer assets.
+- **Installer output survives `irm | iex` on Windows PowerShell 5.1:** GitHub serves the installer script as `application/octet-stream`, so the ellipsis in "Downloading Blunt Code…" decoded as mojibake; the message is ASCII-only now, and `package.ps1` prints the real installer filename (`install-latest.ps1`) instead of a name that never existed.
+- **README execution-policy fallback** points at `install-latest.ps1` (the actual release asset) instead of an `Install-BluntCode.ps1` file that was never shipped anywhere.
 
 ## [0.6.0] - 2026-08-26
 
@@ -48,43 +73,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Workspace sort controls expose `aria-sort`/`aria-pressed` state, matching the report table's accessibility.
 - The finding preview dialog gains a **Copy fingerprint** action for suppression tooling and bug reports.
-
-## [Unreleased]
-
-### Added
-
-- **Scan comparison endpoint:** `GET /api/v1/scans/{id}/compare?with=<scan-id>` diffs two scans with the same coverage-aware new/fixed/persistent semantics as reports (implicit previous-completed resolution when `with` is omitted, suppressed fingerprints filtered from both sides).
-- **JSONL everywhere:** `--format jsonl` on headless scans and a matching `GET /api/v1/scans/{id}/findings.jsonl` download render findings as newline-delimited JSON (export ordering, derived status per row) for log pipelines and `jq`.
-- **Markdown CLI format:** `--format markdown` prints the full rendered report to stdout or `--output`.
-- **Suppression round-trip:** `GET /workspaces/{id}/suppressions.csv` exports dismissed fingerprints (BOM, formula-neutralized) and `POST .../suppressions/import` re-ingests that CSV with per-row accounting (`imported` / `skipped_invalid` / `duplicate`).
-- **API mutation rate limiting:** state-changing requests pass a token bucket (30 capacity, 30/min refill); exhausted callers get `429 RATE_LIMITED` with `Retry-After`.
-- **Doctor database self-check:** `bluntcode doctor` runs SQLite `PRAGMA quick_check` and surfaces ok/warn status (absent database is an informational skip).
-- **Risk-grade distribution:** `GET /api/v1/stats` now includes `risk_grades` counting A/B/C/D across every workspace's latest completed scan.
-- **Report duration chips:** analyzer runs render as success/failed chips with durations in the report header.
-- **Workspace tags surface:** cards show up to three tag chips (+N overflow) and the page gains a case-insensitive *Filter by tag* input.
-- **Risk badges:** workspace cards display each workspace's A–D grade when the API provides one.
-- **Suppressions CSV export:** the suppressions panel downloads its rows as a BOM'd, RFC-4180-safe spreadsheet.
-- **Palette indexing note:** the command palette footer reports how many workspaces its dynamic entries cover.
-- **Table accessibility:** every data table gained an sr-only caption describing its contents.
-
-### Added
-
-- **Installer console experience:** the one-line installer now prints stepped progress (`[1/5]` … `[5/5]`: release info, download, checksum verify, install, shortcut) with a live single-line download meter (`4.2 / 11.3 MB (37%)`) that redraws in place when attached to a console and degrades to one coarse line every few MB in redirected/CI logs, plus a version-aware summary ("Installed Blunt Code 0.5.0 to …"). Output stays plain ASCII so piped `irm | iex` sessions on Windows PowerShell 5.1 decode it cleanly.
-- **`g a` goes to About:** every destination in the top navigation is now reachable from the keyboard — the shortcuts help gains the `g` `a` row, and the command palette's "Go to About" entry shows the `g a` hint like its siblings.
-
-### Removed
-
-- **Legacy standalone installer script:** `scripts/install.ps1` (the download-and-run-a-local-copy installer superseded by `install-latest.ps1`) is gone — the `irm … | iex` release-asset one-liner is the single supported PowerShell install path. The README's execution-policy notes no longer walk users through saving and running an installer `.ps1`; they explain that the piped one-liner never touches Execution Policy at all.
-
-### Fixed
-
-- **Header pill no longer overflows:** at common desktop widths the *Add workspace* button spilled past the nav pill's rounded border, because the pill was hard-capped at 52rem while its contents (brand, six nav links, four action buttons) need ~65rem. The pill now hugs its content (`fit-content`, still viewport-capped with a 52rem floor), a measured slimming ladder sheds the theme label, *Close app*, and the shortcuts button as the viewport narrows, and the nav links scroll as a last-resort safety net instead of pushing buttons out of the pill.
-- **Add-workspace placeholder shows real Windows paths:** the folder-path field suggested `C:\\Projects\\my-app` with doubled backslashes, because JSX attribute strings are raw text where backslashes are not escapes. It reads `C:\Projects\my-app` now.
-- **Network failures explain themselves:** when a request never reaches the local server (usually because the app window was closed while a tab stayed open), toasts now say the server is unreachable and how to restart it instead of surfacing the browser's raw "Failed to fetch". A repeat of the currently visible toast refreshes it in place rather than stacking identical copies.
-
-- **Uninstaller cleans up its shortcut:** the one-line installer creates a Start-menu `Blunt Code.lnk`, but the uninstaller left it behind as a dangling link after removing the app (the README already promised shortcut removal). It now deletes the shortcut and refuses to run while Blunt Code is open, mirroring the installer's guard. Shipped as a clobber-refresh of the v0.5.0 ZIP and installer assets.
-- **Installer output survives `irm | iex` on Windows PowerShell 5.1:** GitHub serves the installer script as `application/octet-stream`, so the ellipsis in "Downloading Blunt Code…" decoded as mojibake; the message is ASCII-only now, and `package.ps1` prints the real installer filename (`install-latest.ps1`) instead of a name that never existed.
-- **README execution-policy fallback** points at `install-latest.ps1` (the actual release asset) instead of an `Install-BluntCode.ps1` file that was never shipped anywhere.
 
 ## [0.5.0] - 2026-08-25
 

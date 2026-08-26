@@ -38,8 +38,11 @@ export function SeverityTrendChart({ points }: { points: SeverityTrendPoint[] })
   if (!points.length) return null;
   const maxTotal = Math.max(...points.map((point) => point.total), 1);
   const scale = (CHART_HEIGHT - BASELINE_HEIGHT) / maxTotal;
-  const width = points.length * BAR_SLOT;
+  const MIN_SLOTS = 8;
+  const displaySlots = Math.max(points.length, MIN_SLOTS);
+  const width = displaySlots * BAR_SLOT;
   const baseline = CHART_HEIGHT - BASELINE_HEIGHT;
+  const offset = ((displaySlots - points.length) * BAR_SLOT) / 2;
   // Where each stacked bar tops out in viewBox units; clean scans sit on the baseline.
   const stackTops = points.map((point) => {
     let top = baseline;
@@ -48,7 +51,7 @@ export function SeverityTrendChart({ points }: { points: SeverityTrendPoint[] })
   });
   const bars = points.map((point, index) => {
     const counts = countsOf(point);
-    const x = index * BAR_SLOT + (BAR_SLOT - BAR_WIDTH) / 2;
+    const x = offset + index * BAR_SLOT + (BAR_SLOT - BAR_WIDTH) / 2;
     let top = baseline;
     const segments = SEVERITY_ORDER.filter((severity) => counts[severity] > 0).map((severity) => {
       const height = Math.max(1, counts[severity] * scale);
@@ -81,7 +84,7 @@ export function SeverityTrendChart({ points }: { points: SeverityTrendPoint[] })
   const tooltip = (() => {
     if (activeIndex === undefined) return null;
     const point = points[activeIndex];
-    const leftPct = Math.min(90, Math.max(10, (((activeIndex * BAR_SLOT + BAR_SLOT / 2) / width) * 100)));
+    const leftPct = Math.min(90, Math.max(10, (((offset + activeIndex * BAR_SLOT + BAR_SLOT / 2) / width) * 100)));
     return <div className="trend-tooltip" aria-hidden="true" style={{ left: `${leftPct}%`, top: `${(stackTops[activeIndex] / CHART_HEIGHT) * 100}%` }}>
       <span className="trend-tooltip-date">{date(point.finished_at)}</span>
       <strong className="trend-tooltip-total">{point.total} {point.total === 1 ? 'finding' : 'findings'}</strong>
@@ -91,9 +94,9 @@ export function SeverityTrendChart({ points }: { points: SeverityTrendPoint[] })
   return <figure className="trend-chart-figure">
     <svg className="trend-chart" viewBox={`0 0 ${width} ${CHART_HEIGHT}`} preserveAspectRatio="none" role="img" aria-label={summary}>
       {bars}
-      <rect className="trend-baseline" x="0" y={baseline} width={width} height={1} />
-      <rect className="trend-tick" x="0" y={baseline - TICK_HEIGHT} width={1} height={TICK_HEIGHT} />
-      <rect className="trend-tick" x={width - 1} y={baseline - TICK_HEIGHT} width={1} height={TICK_HEIGHT} />
+      <rect className="trend-baseline" x={offset} y={baseline} width={points.length * BAR_SLOT} height={1} />
+      <rect className="trend-tick" x={offset} y={baseline - TICK_HEIGHT} width={1} height={TICK_HEIGHT} />
+      <rect className="trend-tick" x={offset + points.length * BAR_SLOT - 1} y={baseline - TICK_HEIGHT} width={1} height={TICK_HEIGHT} />
     </svg>
     <div className="trend-ticks" aria-hidden="true"><span>{date(points[0].finished_at)}</span><span>{date(newest.finished_at)}</span></div>
     {tooltip}

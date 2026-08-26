@@ -1,11 +1,10 @@
-/* Tools page readiness strip: an "X of Y ready" counter plus one chip per tool
-   that cannot run yet (installing chips carry the shared spinner, which the
-   global prefers-reduced-motion block already stills). Every tone pairs theme
-   tokens defined for both light and dark, so chips invert with the switch. */
+/* Premium — tools page */
+
 .tools-readiness { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); margin-bottom: var(--space-md); }
-.tools-readiness .badge { gap: var(--space-2xs); }
-.tools-readiness .tools-all-ready { border-color: var(--color-success); color: var(--color-success); }
+.tools-readiness .badge { gap: var(--space-2xs); padding: var(--space-xs) var(--space-sm); font-weight: 700; }
+.tools-readiness .tools-all-ready { border-color: color-mix(in oklch, var(--color-success) 35%, var(--color-rule)); background: var(--color-success-soft); color: var(--color-success); }
 .tools-readiness .spinner { width: .7rem; height: .7rem; margin-right: 0; }
 .tools-readiness .dot { margin-right: 0; }
-.tool-table .table-actions { align-items: center; justify-content: flex-end; }
-.tool-version { max-width: 14rem; overflow: hidden; text-overflow: ellipsis; }
+.tool-table .table-actions { align-items: center; justify-content: flex-end; gap: var(--space-xs); }
+.tool-table .table-actions .text-button { padding: var(--space-2xs) var(--space-xs); border-radius: var(--radius-sm); font-size: var(--text-xs); }
+.tool-version { max-width: 14rem; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
