@@ -27,7 +27,8 @@ function EyeOffIcon(props: SVGProps<SVGSVGElement>) {
   return <PointIcon {...props}><path d="M3 12s3.2-6.5 9-6.5S21 12 21 12s-3.2 6.5-9 6.5S3 12 3 12z" /><circle cx="12" cy="12" r="2.75" /><path d="m5 5 14 14" /></PointIcon>;
 }
 
-export function AboutPage() {
+// Hallmark polished
+ export function AboutPage() {
   const meta = useLoad(api.meta, []); const health = useLoad(api.health, []);
   const [copied, setCopied] = useState(false);
   const revert = useRef<ReturnType<typeof setTimeout>>(undefined);

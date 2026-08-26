@@ -38,7 +38,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
     catch (e) { notify({ kind: 'error', text: message(e) }); setQuickScanning(false); }
   }
   if (firstRun) return <div className="page dashboard-page">
-    <header className="dashboard-heading"><div><h1>Workspaces</h1><p>Run a local scan, then follow every result in one place.</p></div><div className="dashboard-actions"><Button onClick={onAdd}>+ Add workspace</Button></div></header>
+    <header className="dashboard-heading"><div><p className="eyebrow">Dashboard</p><h1>Workspaces</h1><p>Run a local scan, then follow every result in one place.</p></div><div className="dashboard-actions"><Button onClick={onAdd}>+ Add workspace</Button></div></header>
     <Empty title="Point Blunt Code at a project" icon={<FolderIcon />} tone="positive" action={<Button onClick={onAdd}>Add your first workspace</Button>}>
       Choose any folder on this computer. Blunt Code scans it locally, keeps the history here, and never changes your source files.
     </Empty>
