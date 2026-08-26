@@ -62,6 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Header pill no longer overflows:** at common desktop widths the *Add workspace* button spilled past the nav pill's rounded border, because the pill was hard-capped at 52rem while its contents (brand, six nav links, four action buttons) need ~65rem. The pill now hugs its content (`fit-content`, still viewport-capped with a 52rem floor), a measured slimming ladder sheds the theme label, *Close app*, and the shortcuts button as the viewport narrows, and the nav links scroll as a last-resort safety net instead of pushing buttons out of the pill.
 - **Add-workspace placeholder shows real Windows paths:** the folder-path field suggested `C:\\Projects\\my-app` with doubled backslashes, because JSX attribute strings are raw text where backslashes are not escapes. It reads `C:\Projects\my-app` now.
 - **Network failures explain themselves:** when a request never reaches the local server (usually because the app window was closed while a tab stayed open), toasts now say the server is unreachable and how to restart it instead of surfacing the browser's raw "Failed to fetch". A repeat of the currently visible toast refreshes it in place rather than stacking identical copies.
 
