@@ -7,8 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-08-26
+
 ### Added
 
+- **shadcn clean UI — 10-loop iterative rebuild:** Tailwind 3.4 + `clsx`/`tailwind-merge`/`cva` foundation (`web/tailwind.config.js`, `postcss.config.js`, `src/lib/utils.ts:1` `cn()`), new primitives `Button`/`Card`/`Badge`/`Input`/`Table`/`Dialog`/`Skeleton`/`Separator` under `src/components/ui/*` (Radix Dialog/Slot + lucide-react) — app shell glass nav, card lift, badge tokens (`oklch` mix), table hover tint `color-mix(in oklch, var(--color-accent) 4%)`, dialogs with `Input`+`Button outline/destructive`, toasts spring + lifetime bar, skeletons shimmer `220%` — build `1869 modules`, tests `31 suites 259 pass`.
 - **In-app updates:** the About page gains an **Updates** card — see the installed version, check GitHub releases for a newer one, and update without leaving the app (`GET /api/v1/update/check`, `POST /api/v1/update/apply`). Applying stages the official installer detached and stops the app so the installer can swap the binary; offline mode blocks both endpoints with `UPDATE_OFFLINE`.
 - **Installer v2:** `install-latest.ps1` supports `-Version x.y.z` pins, `-Silent`, `-DesktopShortcut`, `-WhatIf` dry-run plans, 64-bit/disk pre-flight checks, honest upgrade/reinstall/downgrade labels (asks the installed exe), automatic rollback if the install swap fails, and `-WaitForCloseSeconds` for the in-app updater handoff.
 - **Scan comparison endpoint:** `GET /api/v1/scans/{id}/compare?with=<scan-id>` diffs two scans with the same coverage-aware new/fixed/persistent semantics as reports (implicit previous-completed resolution when `with` is omitted, suppressed fingerprints filtered from both sides).
@@ -29,11 +32,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **UI interaction layer:** 15 polish loops — button press/busy feel, table-row hover tint, card lift, sliding nav underline, copy-pop confirmation, toast entrance, breathing critical counts, floating empty states, command-palette active step, unified focus rings, tabular numerals, sticky glass filter heads, gliding progress fills, staggered dialog entrances, native-feeling dark elevation.
-- Packaging default version bumped to 0.6.0.
+- **UI interaction layer:** 10-loop shadcn rebuild + prior 15 polish loops — button press/busy feel, table-row hover tint, card lift, sliding nav underline, copy-pop confirmation, toast entrance, breathing critical counts, floating empty states, command-palette active step, unified focus rings, tabular numerals, sticky glass filter heads, gliding progress fills, staggered dialog entrances, native-feeling dark elevation, shadcn glass nav + pill badges.
+- Packaging default version bumped to 0.7.0.
 
 ### Removed
 
+- **GitHub Actions workflow:** `.github/workflows/ci.yml` deleted — CI gated locally via `go vet`/`go test`/`npm test` + self-scan dogfood; no remote runner required. `.github/` removed from repo.
 - **Legacy standalone installer script:** `scripts/install.ps1` (the download-and-run-a-local-copy installer superseded by `install-latest.ps1`) is gone — the `irm … | iex` release-asset one-liner is the single supported PowerShell install path. The README's execution-policy notes no longer walk users through saving and running an installer `.ps1`; they explain that the piped one-liner never touches Execution Policy at all.
 
 ### Fixed
