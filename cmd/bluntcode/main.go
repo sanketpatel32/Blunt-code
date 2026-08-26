@@ -46,6 +46,12 @@ func main() {
 		case "prune":
 			runPrune(os.Args[2:])
 			return
+		case "agent":
+			os.Exit(runAgent(os.Args[2:], os.Stdout, os.Stderr))
+			return
+		case "llm", "llms":
+			os.Exit(runLLM(os.Args[2:], os.Stdout, os.Stderr))
+			return
 		case "help", "--help", "-h":
 			printHelp(os.Stdout)
 			return
@@ -75,6 +81,8 @@ func runServer(args []string) {
 		fmt.Fprintln(os.Stderr, "       bluntcode config [--json]")
 		fmt.Fprintln(os.Stderr, "       bluntcode scan <path> [--profile quick|standard|deep] [--json] [--timeout 30m] [--quiet] [--fail-on high+] [--max-findings N]")
 		fmt.Fprintln(os.Stderr, "       bluntcode prune <path> [--keep N]")
+		fmt.Fprintln(os.Stderr, "       bluntcode agent [--help] | bluntcode agent docs | bluntcode agent scan <path> [scan flags]")
+		fmt.Fprintln(os.Stderr, "       bluntcode llm | bluntcode llms")
 		os.Exit(2)
 	}
 	// Shared bootstrap (single-instance lock, database, tool service, analyzer
@@ -230,6 +238,9 @@ func printHelp(w io.Writer) {
 	fmt.Fprintln(w, "  "+pruneUsage)
 	fmt.Fprintln(w, "  "+doctorUsage)
 	fmt.Fprintln(w, "  "+configUsage)
+	fmt.Fprintln(w, "  "+agentUsage+"   agent helper (docs + scan with --json --quiet)")
+	fmt.Fprintln(w, "  "+llmUsage)
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Run `bluntcode <command> --help` for the full flags of one subcommand.")
+	fmt.Fprintln(w, "Agents: see llm.txt / llms.txt or run `bluntcode agent docs` (also `bluntcode llm`).")
 }

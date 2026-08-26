@@ -1,344 +1,234 @@
-<p align="center"><img src="web/public/bluntcode-mark.svg" alt="Blunt Code logo — an accent-blue rounded tile with a bold chevron prompt and cursor" width="96" /></p>
+<p align="center">
+  <img src="web/public/bluntcode-mark.svg" alt="Blunt Code" width="84" />
+</p>
 
-# Blunt Code 🛡️
+<h1 align="center">Blunt Code</h1>
+<p align="center"><strong>Local code quality & security — no cloud, no account, no telemetry.</strong><br/>Ruff · Biome · Semgrep · SonarQube · Secrets · TODO — one loopback app for Windows.</p>
 
-> **All-in-One Local Code Quality & Security Analyzer for Windows**
+<p align="center">
+  <a href="https://github.com/sanketpatel32/Blunt-code/releases"><img src="https://img.shields.io/github/v/release/sanketpatel32/Blunt-code?label=version&color=1a1a1e" alt="release" /></a>
+  <img src="https://img.shields.io/badge/platform-Windows%2010%2F11-0a66ff" alt="platform" />
+  <img src="https://img.shields.io/badge/privacy-100%25%20local-0a6522" alt="privacy" />
+  <img src="https://img.shields.io/badge/license-MIT-8a8a8a" alt="license" />
+  <img src="https://img.shields.io/badge/UI-shadcn%20%2B%20Tailwind-111827" alt="ui" />
+</p>
 
-**Blunt Code** is a desktop application for Windows that runs deep code analysis on your local software projects and aggregates findings into a single, unified report. It features an interactive, modern web interface that runs 100% locally on your computer—requiring **no cloud accounts, no API keys, and no pre-installed linters or language runtimes**.
-
----
-
-## 📌 Table of Contents
-
-- [✨ Key Features](#-key-features)
-- [💻 System Requirements](#-system-requirements)
-- [🚀 Installation Options](#-installation-options)
-  - [Option 1: One-Line Installer (Recommended)](#option-1-one-line-installer-powershell-or-cmd-recommended)
-  - [Option 2: Standalone ZIP Download (Portable)](#option-2-standalone-zip-download-portable)
-  - [Option 3: Build from Source](#option-3-build-from-source)
-- [🎯 Quick Start Guide](#-quick-start-guide)
-- [🛠️ Managed Analyzers & Languages](#️-managed-analyzers--languages)
-- [🖥️ Command-Line Interface (CLI)](#️-command-line-interface-cli)
-- [📁 Data Storage & Privacy](#-data-storage--privacy)
-- [📚 Documentation](#-documentation)
-- [❓ Troubleshooting & FAQ](#-troubleshooting--faq)
-- [🗑️ Uninstalling](#️-uninstalling)
-- [🤝 Contributing](#-contributing)
-- [📜 License](#-license)
+<p align="center">
+  <a href="#-install-in-30-seconds">Install</a> ·
+  <a href="#-quick-start">Quick start</a> ·
+  <a href="#-cli">CLI</a> ·
+  <a href="docs/ci.md">CI guide</a> ·
+  <a href="docs/configuration.md">Config</a> ·
+  <a href="CHANGELOG.md">Changelog</a>
+</p>
 
 ---
 
-## ✨ Key Features
+### What's new in 0.7.0 — shadcn clean UI
 
-- **100% Local & Private:** Runs entirely on loopback (`127.0.0.1`). Your code, findings, reports, and logs never leave your device.
-- **Zero-Config Managed Tools:** Automatically installs and sandboxes code analyzers in isolated application directories. No manual `PATH` configuring or Python/Java/Node dependency hassle — and `doctor --fix` self-heals stale rules and interrupted installs.
-- **Multi-Tool Coverage:** Runs **Ruff**, **Biome**, **Semgrep**, and **SonarQube** concurrently to check for lint issues, security SAST vulnerabilities, formatting errors, and code smells — plus built-in **secrets** and **TODO/FIXME** detectors that ship in the binary with nothing extra to install, across 40+ file types from Go and Java to `.env` files, Dockerfiles, and YAML.
-- **Interactive UI Dashboard:** Built-in web app with a home dashboard of global overview cards, real-time scan logs, file-level previews, severity visualizations, rich filtering by tool/rule/severity, severity trends across scan history, per-finding suppression (with reason) that hides dismissed findings from future scans and gates, **global search across every stored scan**, and a weighted **risk score with trend** on each workspace.
-- **Reports in Every Format:** One-click export to **Markdown**, standalone **HTML**, **SARIF 2.1.0** (VS Code / GitHub code scanning), **CSV**, and **JSON** — or emit **CSV/SARIF/JSON reports**, **GitHub Actions annotations**, and **baselines** straight from the CLI (`--output`, `--save-baseline`).
-- **CI Gates, Baselines & Watch Mode:** `--fail-on high+` / `--max-findings N` turn a headless scan into a build gate, `--gate-analyzer`/`--gate-category` scope the gate to a subset of findings, `--baseline` (a previous scan ID or SARIF file) excludes known findings so gates start passing on day one, `--jobs N` parallelizes analyzers, `--incremental` rescans only files that changed (`--watch` does this automatically from its second scan onward), a committed `.bluntcodeignore` shares excludes per project, and inline `bluntcode:ignore` comments dismiss false positives at the source. See [docs/ci.md](docs/ci.md) for the full CI guide.
-- **History Management:** scan history stays healthy — delete individual scans (cascading to their findings and artifacts) or prune beyond the newest N from the UI or `bluntcode prune --keep N`.
-- **Dark Mode & Keyboard Shortcuts:** Light/dark theme that follows your OS preference, and keyboard-first navigation (`g`+`h/w/t/s` to jump between pages, `/` to search, `?` for the shortcut cheat sheet).
-- **Offline Capable:** Once analyzers are downloaded on initial setup, full scans can run 100% offline without internet access.
+Tailwind 3.4 · Radix Dialog/Slot · CVA · lucide-react. Ten iterative loops: glass nav `backdrop-blur(16px)`, pill badges `oklch`, table hover `color-mix(in oklch, accent 4%)`, spring toasts with lifetime bar, shimmer skeletons, staggered dialogs. **1869 modules · 259 tests passing · `—` placeholders never `NaN`.**
+
+> Previous `0.6.0` shipped global search, risk scores, scan pruning, workspace tags, CSV/SARIF/JSONL exports, and gated CI. See [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
-## 💻 System Requirements
+## Why Blunt Code
 
-| Requirement | Specification |
-| :--- | :--- |
-| **Operating System** | Windows 10 or Windows 11 (64-bit / amd64) |
-| **User Rights** | Standard user account (Administrator privileges **not** required) |
-| **Network** | Internet connection required **only on first run** to download managed analyzer tools |
-| **Dependencies** | **None!** Global Python, Java, or Node.js installations are **not required** |
+| Without it | With Blunt Code |
+|---|---|
+| Four linters, four installs, four `PATH` fights | One `bluntcode.exe` — tools sandboxed under `%LOCALAPPDATA%\BluntCode\tools`, never touches global `PATH` |
+| Findings scattered across terminals | One report: Markdown / HTML / SARIF / CSV / JSON, filterable by tool · rule · severity · path |
+| Cloud gate that ships your source | `127.0.0.1` only. SQLite + reports stay on disk. Offline mode after first download |
+| "Fix later" that never sticks | `bluntcode:ignore` at the source, fingerprint suppressions, `.bluntcodeignore` committed with the repo |
 
 ---
 
-## 🚀 Installation Options
+## Features
 
-Choose the method that suits your workflow best:
+**Private by design** — loopback server, zero telemetry, SQLite at `%LOCALAPPDATA%\BluntCode\bluntcode.db`.
 
-### Option 1: One-Line Installer (PowerShell or cmd) (Recommended)
+**Batteries included** — Ruff (Python), Biome (JS/TS + React domain auto-detect), Semgrep (20-rule pack), SonarQube (polyglot), plus in-binary **secrets** (AWS, GitHub, Slack, JWT, Stripe, OpenAI, Anthropic, Azure) and **TODO/FIXME** trackers across 40+ file types (Go, Java, Kotlin, C#, PHP, Rust, Swift, YAML, TOML, `.env`, Dockerfile, PEM…).
 
-This automated script downloads the latest release, verifies its SHA-256 checksum, installs Blunt Code to `%LOCALAPPDATA%\Programs\BluntCode`, creates a **Start Menu** shortcut, and launches the app.
+**Dashboard that actually helps** — global overview cards (`/api/v1/stats`), recent activity feed with severity dots, risk grades `A–D` (critical×10/high×5/med×2/low×1) with trend, severity distribution bars, stacked history, and suppressions panel (search by reason/fingerprint).
 
-**From PowerShell** (Press `Win + R`, type `powershell`, and press `Enter`):
+**Workspaces that scale** — up to 3 tag chips `+N` overflow, `Filter by tag` debounced 200ms, sort by Name / Last scan / Findings, `Filter by tag` + `Sort` stay in sync, 51→2 queries optimisation at 50 workspaces.
 
+**Reports you can use** — sticky filter toolbar, severity-tinted row edges, removable chips, toggles `page`/`page_size` (50 rows), `—` placeholders for missing data, hostile-corpus HTML-escaped.
+
+**CLI built for CI** — `bluntcode scan <path> --profile quick|standard|deep --fail-on high+ --max-findings 50 --baseline ./last.sarif --format sarif|jsonl|markdown|github --output findings.csv --jobs 2 --incremental --watch`, exit `0/1/2/130`.
+
+> Full flags: `bluntcode help` · CI recipe: [docs/ci.md](docs/ci.md)
+
+---
+
+## System requirements
+
+| | |
+|---|---|
+| **OS** | Windows 10 / 11 64-bit (amd64) |
+| **Rights** | Standard user — no admin |
+| **Network** | Online only first run (tools download). Offline after |
+| **Deps** | None — no global Python/Java/Node required |
+
+---
+
+## Install in 30 seconds
+
+### One-line installer (recommended)
+
+PowerShell (`Win+R` → `powershell`):
 ```powershell
 irm https://github.com/sanketpatel32/Blunt-code/releases/latest/download/install-latest.ps1 | iex
 ```
-
-**From Command Prompt** (Press `Win + R`, type `cmd`, and press `Enter`) — one paste, using the `curl.exe` that ships with Windows 10+:
-
+Cmd (`Win+R` → `cmd`):
 ```bat
 curl -fsSL -o "%TEMP%\install-bluntcode.cmd" https://github.com/sanketpatel32/Blunt-code/releases/latest/download/install.cmd && "%TEMP%\install-bluntcode.cmd"
 ```
+Installs to `%LOCALAPPDATA%\Programs\BluntCode`, verifies SHA-256, creates Start Menu shortcut, launches app. No admin.
 
-Both commands fetch the installer attached to the latest GitHub release (never a moving branch), verify the archive checksum before installing, and require no administrator rights.
+**Options** `install-latest.ps1 -Version 0.7.0 -Silent -DesktopShortcut -WhatIf -WaitForCloseSeconds 30`
 
----
+### Portable ZIP
 
-### Option 2: Standalone ZIP Download (Portable)
-
-If you prefer to download and verify files manually without running a web-based script:
-
-1. Open the [Latest Release Page](https://github.com/sanketpatel32/Blunt-code/releases/latest).
-2. Download `BluntCode-<version>-windows-amd64.zip` and `BluntCode-<version>-windows-amd64.zip.sha256`.
-3. Open **PowerShell** in your download folder and run:
-
+1. Download `BluntCode-0.7.0-windows-amd64.zip` + `.sha256` from [Releases](https://github.com/sanketpatel32/Blunt-code/releases/latest)
+2. Verify & run:
 ```powershell
-# 1. Verify file integrity
-$package = '.\BluntCode-0.5.0-windows-amd64.zip' # Update filename to match download
-$expected = (Get-Content "$package.sha256" -Raw).Trim().Split()[0].ToLowerInvariant()
-$actual = (Get-FileHash $package -Algorithm SHA256).Hash.ToLowerInvariant()
-
-if ($actual -ne $expected) {
-    throw 'Checksum mismatch! Download may be corrupted or modified.'
-}
-Write-Host 'SHA256 verified successfully!' -ForegroundColor Green
-
-# 2. Extract and launch
-Expand-Archive $package -DestinationPath .\BluntCode -Force
-Set-Location .\BluntCode\BluntCode*
-.\bluntcode.exe
+$pkg='.\BluntCode-0.7.0-windows-amd64.zip'
+if((Get-FileHash $pkg -Algorithm SHA256).Hash -ne (Get-Content "$pkg.sha256").Split()[0]){throw 'checksum mismatch'}
+Expand-Archive $pkg -DestinationPath .\BluntCode -Force; .\BluntCode\BluntCode*\bluntcode.exe
 ```
+> `irm | iex` never saves a `.ps1`, so ExecutionPolicy doesn't apply. For a saved `uninstall.ps1`: `powershell -ExecutionPolicy Bypass -File .\uninstall.ps1`.
 
-> [!TIP]
-> **No Execution Policy changes needed:** the recommended one-line installer pipes the script straight into PowerShell (`irm … | iex`) without saving any `.ps1` file, so Windows' script-execution policy never applies to it. The only script you may ever run from disk is `uninstall.ps1`; if Windows blocks that one, run `powershell -ExecutionPolicy Bypass -File .\uninstall.ps1`.
+### From source
 
----
-
-### Option 3: Build from Source
-
-For developers and contributors who wish to compile Blunt Code from source:
-
-**Prerequisites:**
-- [Go 1.26 or higher](https://go.dev/dl/)
-- [Node.js 18 or higher](https://nodejs.org/) with `npm`
-
+Requires Go 1.26+ and Node 18+:
 ```powershell
-# Clone the repository
-git clone https://github.com/sanketpatel32/Blunt-code.git
-Set-Location Blunt-code
-
-# Build frontend & embed into Go binary
-.\scripts\build.ps1
-
-# Run the compiled binary
-.\bluntcode.exe
+git clone https://github.com/sanketpatel32/Blunt-code.git; cd Blunt-code
+.\scripts\build.ps1; .\bluntcode.exe
 ```
 
 ---
 
-## 🎯 Quick Start Guide
+## Quick start
 
-Using Blunt Code takes less than two minutes:
+1. **Launch** from Start Menu or `bluntcode.exe` → opens `http://127.0.0.1:<port>` automatically
+2. **Add workspace** → pick a project folder
+3. **Files & rules** (optional) → exclude `dist/`, `vendor/`, or add `.bluntcodeignore` to commit excludes
+4. **Run scan** → first run downloads tools, next runs instant; progress bar `finished/total` + live analyzer pills
+5. **Inspect** → click a finding → source preview with highlight, **Copy location/fingerprint**
+6. **Export** → Markdown / HTML / SARIF / CSV (filters honoured) / JSON — or `Scan history → Prune history --keep 20`
 
-1. **Launch the App:** Start Blunt Code from your Start Menu or by running `bluntcode.exe`. The app starts a loopback server on `127.0.0.1` and opens your browser automatically.
-2. **Add Workspace:** Click **Add workspace** on the main screen and choose your project folder.
-3. **Configure File Exclusions (Optional):** Click **Configure files** to exclude build outputs, vendor directories, or binary files.
-4. **Run Scan:** Click **Run scan**.
-   > *Note: On the first scan, Blunt Code will download managed analyzers. Subsequent scans run locally and instantly.*
-5. **Inspect & Preview:** View issues grouped by analyzer. Click any finding to inspect line numbers and source code snippets.
-6. **Export Report:** Click **Export** and pick a format — **Markdown** (saved to your local reports folder), or **HTML** / **SARIF** / **CSV** (downloaded instantly, CSV honors your active filters).
-
----
-
-## 🛠️ Managed Analyzers & Languages
-
-Blunt Code isolates and manages analyzer binaries in `%LOCALAPPDATA%\BluntCode\tools`. They never alter your global `PATH`.
-
-| Analyzer | Languages Covered | What It Checks |
-| :--- | :--- | :--- |
-| **Ruff** | Python | Ultra-fast Python linting, syntax errors, and style violations. |
-| **Biome** | JavaScript, TypeScript | Code formatting, correctness, performance, and modern syntax checks. |
-| **Semgrep** | Python, JavaScript, TypeScript | Local security SAST rules, vulnerability patterns, and security risks. |
-| **SonarQube** | Polyglot (Project-wide) | Deep code quality, security hotspots, code smells, and structural metrics. |
-
-### Scan Profiles
-
-Every scan runs in one of three profiles:
-
-| Profile | Analyzers | Best For |
-| :--- | :--- | :--- |
-| **Quick** | Ruff + Biome only | Fast feedback between edits. |
-| **Standard** | All four analyzers | The everyday default. |
-| **Deep** | All four analyzers, with Ruff widened to an extended rule set (`E,W,F,B,SIM,C4,RET,ARG,PLR`) | Thorough pre-release or nightly audits — catches style, bugbear, simplification, comprehension, and refactoring issues on top of the standard checks. |
+Keyboard: `g h/w/t/s/a` navigate · `n` add workspace · `/` search · `?` help · `Ctrl+K` command palette.
 
 ---
 
-## 🖥️ Command-Line Interface (CLI)
-
-`bluntcode.exe` supports CLI arguments and flags for headless execution, custom ports, or system diagnostics:
+## CLI
 
 ```powershell
-# Open Blunt Code with a specific project folder loaded
-.\bluntcode.exe "C:\Projects\my-python-app"
-
-# Start the server on port 52160 without launching a web browser window
-.\bluntcode.exe --no-browser --port 52160
-
-# Run local system diagnostics
-.\bluntcode.exe doctor
-
-# Output diagnostic results in structured JSON (useful for troubleshooting)
-.\bluntcode.exe doctor --json
-
-# Run one headless scan (no browser, no server) and print a summary
-.\bluntcode.exe scan "C:\Projects\my-python-app" --profile quick
-
-# Machine-readable JSON summary for CI pipelines (progress still goes to stderr)
-.\bluntcode.exe scan "C:\Projects\my-python-app" --json --quiet --timeout 10m
-
-# CI gate: fail the build (exit 1) on high+ severity findings or more than 50 total
-.\bluntcode.exe scan "C:\Projects\my-python-app" --fail-on high+ --max-findings 50
-
-# Gate against a baseline (previous scan ID or exported SARIF) so pre-existing findings don't fail the build
-.\bluntcode.exe scan "C:\Projects\my-python-app" --fail-on high+ --baseline .\last-scan.sarif
-
-# Full JSON report on stdout, a SARIF file for baselines / code-scanning uploads, or GitHub Actions annotations for PR checks
-.\bluntcode.exe scan "C:\Projects\my-python-app" --format json
-.\bluntcode.exe scan "C:\Projects\my-python-app" --format sarif > .\baseline.sarif
-.\bluntcode.exe scan "C:\Projects\my-python-app" --format github
-
-# Write documents straight to files: a CSV spreadsheet, or capture the SARIF baseline in one step
-.\bluntcode.exe scan "C:\Projects\my-python-app" --format csv --output findings.csv
-.\bluntcode.exe scan "C:\Projects\my-python-app" --save-baseline .\baseline.sarif
-
-# Scope a CI gate to security findings from semgrep and the built-in secrets detector only
-.\bluntcode.exe scan "C:\Projects\my-python-app" --fail-on high+ --gate-analyzer semgrep,secrets --gate-category security
-
-# Prune old local scan history, keeping the newest 20 reports
-.\bluntcode.exe prune "C:\Projects\my-python-app" --keep 20
-
-# Run up to 2 analyzers concurrently, rescan only files that changed, or keep watching and rescan on file changes
-.\bluntcode.exe scan "C:\Projects\my-python-app" --jobs 2
-.\bluntcode.exe scan "C:\Projects\my-python-app" --incremental
-.\bluntcode.exe scan "C:\Projects\my-python-app" --watch
-
-# Show the effective configuration (resolved paths, overrides, managed tool versions)
-.\bluntcode.exe config
-
-# Diagnose the local installation, repairing mechanical problems (stale rules, interrupted installs)
-.\bluntcode.exe doctor --fix
+bluntcode "C:\Projects\my-app" --no-browser --port 52160
+bluntcode doctor              # diagnostics
+bluntcode doctor --json --fix # self-heal stale rules / interrupted installs
+bluntcode scan "C:\my-app" --profile quick --json --quiet --timeout 10m
+bluntcode scan "C:\my-app" --fail-on high+ --max-findings 50 --baseline .\baseline.sarif
+bluntcode scan "C:\my-app" --format github   # PR annotations (error/warning/notice)
+bluntcode scan "C:\my-app" --format csv --output findings.csv --save-baseline baseline.sarif
+bluntcode scan "C:\my-app" --gate-analyzer semgrep,secrets --gate-category security
+bluntcode prune "C:\my-app" --keep 20
+bluntcode scan "C:\my-app" --jobs 2 --incremental --watch
+bluntcode config              # resolved paths, overrides, tool versions
 ```
 
-`bluntcode scan` exits with code `0` when the scan completes (warnings included), `1` when it fails, is cancelled, or a `--fail-on`/`--max-findings` gate trips, `2` for usage errors, and `130` after Ctrl+C — so CI pipelines can gate on it directly. With `--baseline`, the gate only counts findings that are new since the baseline. For the full CI guide — baselines, output formats, GitHub Actions annotations, and a ready-to-use workflow — see [docs/ci.md](docs/ci.md).
+`--fail-on` gates **new** findings only when `--baseline` is set. See [docs/ci.md](docs/ci.md).
+
+### 🤖 For AI agents
+
+Blunt Code ships `llm.txt` / `llms.txt` ([llmstxt.org](https://llmstxt.org)) and `bluntcode agent` helpers — all machine-readable, no browser needed.
+
+```powershell
+bluntcode llm                  # cat llm.txt (same as llms.txt)
+bluntcode agent docs           # same — agent guide to stdout
+bluntcode agent scan "C:\my-app" --profile quick --fail-on high+  # forces --json --quiet, progress on stderr
+```
+
+`llm.txt` lives at repo root and at `http://127.0.0.1:<port>/llm.txt` when UI is running, plus embedded in binary (`go:embed llm.txt`). See `llm.txt:1` for full JSON schemas, API endpoints, exit codes, and PowerShell examples.
 
 ---
 
-## 📁 Data Storage & Privacy
+## Analyzers & profiles
 
-Blunt Code is designed from the ground up for **complete data privacy**:
+| Analyzer | Languages | Checks |
+|---|---|---|
+| **Ruff** | Python | Lint, style, bugbear, `SIM/C4/RET/ARG/PLR` in Deep |
+| **Biome** 2.5.6 | JS/TS, React auto-domain | Format, correctness, React hooks |
+| **Semgrep** | Python, JS/TS | 20-rule security pack (injection, deserialization, secrets, `postMessage`) |
+| **SonarQube** | Polyglot project-wide | Code smells, hotspots, metrics (cold boot ≤10 min, `BLUNTCODE_SONAR_STARTUP_TIMEOUT`) |
+| **Secrets** (built-in) | 40+ types inc. `.env`/Dockerfile/YAML | AWS, GitHub, Slack, JWT, Stripe, OpenAI, Anthropic, Azure |
+| **TODO** (built-in) | Code & config where comments exist | `TODO/FIXME/HACK/XXX/BUG` with owner `TODO(jane):` |
 
-- **Strict Loopback Binding:** The server listens only on `127.0.0.1`.
-- **Zero Telemetry:** No user metrics, project code, or telemetry are ever sent to external cloud servers.
-- **Local Application Data:** All databases, logs, tools, and reports stay on your local drive.
+**Profiles** · Quick `Ruff+Biome` · Standard `+Semgrep+SonarQube` · Deep `+Ruff extended`
 
-```text
+Ignore at source: `// bluntcode:ignore` or `// bluntcode:ignore secrets.aws-access-key-id reason: test key` · or suppress by fingerprint with reason (500 chars) · or `.bluntcodeignore` patterns (`dir/**`, `**/name`, basename, `#` comments, 1000/64 KiB cap).
+
+---
+
+## Data & privacy
+
+```
 %LOCALAPPDATA%\BluntCode
-├── bluntcode.db       # SQLite database (workspaces, scan history, findings)
-├── reports\           # Generated Markdown scan reports
-├── logs\              # Redacted diagnostic log files
-└── tools\             # Sandboxed managed tool binaries (Ruff, Biome, Semgrep, SonarQube)
+├── bluntcode.db      # workspaces, scans, findings (SQLite, PRAGMA quick_check in doctor)
+├── reports\          # Markdown reports
+├── logs\             # redacted diagnostics
+└── tools\            # ruff, biome, semgrep, sonarqube (manifest-hashed)
 ```
 
-For the complete data layout, `bluntcode config`, environment overrides, offline mode, and scan profiles, see [docs/configuration.md](docs/configuration.md).
+Loopback only (`127.0.0.1`), no account, no telemetry. Open folders from **Settings → Data folders**. Full layout: [docs/configuration.md](docs/configuration.md).
 
 ---
 
-## 📚 Documentation
+## Documentation
 
-- [docs/ci.md](docs/ci.md) — CI guide: headless scans, exit codes, `--fail-on`/`--max-findings` gates, baselines, output formats (text/JSON/SARIF/GitHub annotations), and a complete GitHub Actions workflow.
-- [docs/ignoring-findings.md](docs/ignoring-findings.md) — Inline `bluntcode:ignore` comments, fingerprint-based suppressions, external-tool ignores, and `.bluntcodeignore` patterns.
-- [docs/configuration.md](docs/configuration.md) — Data layout, `bluntcode config`, `BLUNTCODE_SONAR_STARTUP_TIMEOUT`, offline mode, and scan profiles.
-- [docs/architecture.md](docs/architecture.md) — How the Go backend, analyzer boundary, and React UI fit together.
-- [docs/analyzers.md](docs/analyzers.md) — How managed analyzers are pinned, sandboxed, and invoked.
-- [docs/privacy.md](docs/privacy.md) and [docs/release.md](docs/release.md) — Privacy guarantees and the release checklist.
+- [CI](docs/ci.md) · [Ignoring findings](docs/ignoring-findings.md) · [Configuration](docs/configuration.md) · [Architecture](docs/architecture.md) · [Analyzers](docs/analyzers.md) · [Privacy](docs/privacy.md) · [Release](docs/release.md)
 
 ---
 
-## ❓ Troubleshooting & FAQ
+## Troubleshooting
 
-<details>
-<summary><b>1. PowerShell script execution is blocked by Windows.</b></summary>
-<br>
+<details><summary>PowerShell blocks a saved script</summary>
 
-The recommended one-line installer (`irm … | iex`) never saves a script to disk, so Windows' script-execution policy does not apply to it and there is nothing to bypass. If a locally saved copy of a Blunt Code script (such as `uninstall.ps1`) is ever blocked, run it with `powershell -ExecutionPolicy Bypass -File .\uninstall.ps1` — the flag applies only to that single process and leaves your system-wide policy intact.
+`irm | iex` doesn't save a file → no policy check. For `uninstall.ps1`: `powershell -ExecutionPolicy Bypass -File .\uninstall.ps1`.
 </details>
-
-<details>
-<summary><b>2. Why is the initial scan taking longer than expected?</b></summary>
-<br>
-
-The very first time an analyzer (like SonarQube or Semgrep) runs, Blunt Code downloads its sandboxed binary package and initializes the local server environment. Subsequent scans use the pre-booted local setup and complete much faster.
-</details>
-
-<details>
-<summary><b>3. How do I enable Offline Mode?</b></summary>
-<br>
-
-Once managed tools are installed during your first scan, open **Settings** in the Blunt Code web interface and toggle **Offline mode** ON. Blunt Code will perform scans using only local assets without making external network requests.
-</details>
-
-<details>
-<summary><b>4. Error: "Only one Blunt Code process can use the data directory."</b></summary>
-<br>
-
-Blunt Code locks its SQLite database to prevent data corruption. If another instance is running in the background, close it via Task Manager or run:
-```powershell
-.\bluntcode.exe doctor
-```
-to inspect active local processes.
-</details>
-
-<details>
-<summary><b>5. Where are my reports, logs, and analyzer tools stored?</b></summary>
-<br>
-
-All Blunt Code data lives under `%LOCALAPPDATA%\BluntCode` (see the layout in [📁 Data Storage & Privacy](#-data-storage--privacy)). The easiest way to get there: open **Settings** in the Blunt Code web interface and use the **Data folders** buttons to launch the data, reports, logs, or tools folder directly in Windows Explorer.
-</details>
+<details><summary>First scan slow</summary>Downloads sandboxed tools & warms SonarQube. Next scans use local cache and `--incremental` (hash `SHA-256` per file, persisted, invalidated on analyzer/profile/version change).</details>
+<details><summary>Offline mode</summary>Settings → Offline mode ON after first scan. Built-ins held offline, gated by flag.</details>
+<details><summary>"Only one process can use the data directory"</summary>SQLite lock. Close other instance or `bluntcode doctor` to inspect.</details>
+<details><summary>Where are reports?</summary>Settings → Data folders → Reports/Logs/Tools/DB, or `bluntcode config`.</details>
 
 ---
 
-## 🗑️ Uninstalling
-
-To uninstall Blunt Code, use the included PowerShell uninstallation script:
+## Uninstall
 
 ```powershell
-# Standard Uninstall (Removes app executable & shortcut; keeps your saved scan database & reports)
-Set-Location "$env:LOCALAPPDATA\Programs\BluntCode"
-.\uninstall.ps1
-
-# Full Cleanup Uninstall (Removes app AND deletes all local scan databases, logs, and settings)
-.\uninstall.ps1 -RemoveData
+cd "$env:LOCALAPPDATA\Programs\BluntCode"
+.\uninstall.ps1              # keep DB & reports
+.\uninstall.ps1 -RemoveData  # full wipe
 ```
+Installer auto-cleans Start Menu shortcut and refuses while app is running.
 
 ---
 
-## 🤝 Contributing
-
-Contributions, bug reports, and feature requests are welcome!
+## Contributing
 
 ```powershell
-# Run backend tests
-go test ./...
-
-# Run web UI tests & build check
-Set-Location web
-npm test
-npm run build
-Set-Location ..
-
-# Package a release zip & checksum
-.\scripts\package.ps1 -Version 0.4.0
+go test ./...                # Go vet/build/tests
+cd web; npm test; npm run build
+.\scripts\package.ps1 -Version 0.7.0
 ```
 
-For guidelines on coding standards and codebase architecture, see [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/architecture.md](docs/architecture.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md) · [docs/architecture.md](docs/architecture.md) — shadcn tokens live in `web/src/tokens.css` (`--color-paper/ink/accent`, `--radius-*`, `--shadow-*`), components in `web/src/components/ui/*`.
 
 ---
 
-## 📜 License
+## License
 
-This project is licensed under the **MIT License**. See [LICENSE](LICENSE) for details.
-Managed third-party analyzers retain their respective open-source licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+MIT — see [LICENSE](LICENSE). Third-party analyzers keep their licenses — see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
+<p align="center"><sub>Built for Windows. Audited for hostile corpora, tabular-nums, sticky glass headers, and 0 horizontal scroll at 320px.</sub></p>

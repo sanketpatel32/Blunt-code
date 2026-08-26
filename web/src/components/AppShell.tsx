@@ -17,12 +17,13 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
     <header className="app-nav">
       <a className="brand group" href="/" onClick={(event) => { event.preventDefault(); onNavigate({ page: 'home' }); }}>
         <svg className="brand-mark transition-transform group-hover:scale-[1.02]" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
-          <rect width="32" height="32" rx="8" fill="var(--color-ink)" />
-          <rect x="7" y="7" width="18" height="18" rx="4" fill="none" stroke="white" strokeOpacity="0.18" strokeWidth="1" />
-          <g fill="none" stroke="white" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="11 9.5 17.2 16 11 22.5" />
-            <line x1="20.2" y1="22.5" x2="24" y2="22.5" />
+          <rect width="32" height="32" rx="8" fill="#0f172a" />
+          <rect x="7" y="7" width="18" height="18" rx="4" fill="none" stroke="white" strokeOpacity="0.10" strokeWidth="1" />
+          <g fill="none" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="11 10.2 17.1 16 11 21.8" stroke="white" strokeWidth="2.8" opacity="0.98" />
+            <line x1="19.9" y1="22.5" x2="24.2" y2="22.5" stroke="#3b82f6" strokeWidth="2.8" />
           </g>
+          <circle cx="24.2" cy="8.2" r="1.45" fill="#3b82f6" />
         </svg>
         <b>Blunt Code</b>
       </a>
