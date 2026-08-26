@@ -45,6 +45,20 @@ const githubAnnotationCap = 10
 // output is LF-only with a single trailing newline. Like every export,
 // suppressed findings never reach the model in the first place.
 func GitHubAnnotations(m Model) []byte {
+	return githubAnnotations(m, githubAnnotationCap)
+}
+
+// GitHubAnnotationsWithCap renders the annotation stream with a custom
+// per-type display cap (GitHub's own hard limit is 10 per type per step; the
+// cap here only decides how many are *shown* before the truncation notice).
+func GitHubAnnotationsWithCap(m Model, cap int) []byte {
+	if cap < 1 {
+		cap = githubAnnotationCap
+	}
+	return githubAnnotations(m, cap)
+}
+
+func githubAnnotations(m Model, annotationCap int) []byte {
 	findings := sortedFindingsJSON(m.Findings)
 	levels := make([]string, len(findings))
 	counts := map[string]int{"error": 0, "warning": 0, "notice": 0}
@@ -54,12 +68,12 @@ func GitHubAnnotations(m Model) []byte {
 	}
 	// A truncation notice is emitted exactly when any type overflows the
 	// display cap; reserve one notice slot for it in that case.
-	noticeCap := githubAnnotationCap
-	truncated := counts["error"] > githubAnnotationCap || counts["warning"] > githubAnnotationCap || counts["notice"] > githubAnnotationCap
+	noticeCap := annotationCap
+	truncated := counts["error"] > annotationCap || counts["warning"] > annotationCap || counts["notice"] > annotationCap
 	if truncated {
-		noticeCap = githubAnnotationCap - 1
+		noticeCap = annotationCap - 1
 	}
-	caps := map[string]int{"error": githubAnnotationCap, "warning": githubAnnotationCap, "notice": noticeCap}
+	caps := map[string]int{"error": annotationCap, "warning": annotationCap, "notice": noticeCap}
 	// Selection: per overflowing type keep the top findings by severity, then
 	// path — the candidates are already in the export's (path, line, rule)
 	// order, so a stable sort on severity alone yields exactly that tiebreak.

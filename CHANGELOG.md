@@ -5,7 +5,51 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-08-26
+
+### Added
+
+- **Global findings search:** `GET /api/v1/findings/search` queries every stored scan at once (text across message/rule/path, severity lists, analyzer, workspace scoping, suppression-aware) and a new **Search** page renders ranked results with links back to each originating report.
+- **Workspace risk score:** `GET /workspaces/{id}/risk` weighs the latest completed scan (critical ×10, high ×5, medium ×2, low ×1) into an A–D grade with a trend delta against the previous scan; the workspace dashboard shows it as a card.
+- **Scan deletion & retention:** `DELETE /scans/{id}` removes one terminal scan with full cascade (409 while still running), `DELETE /workspaces/{id}/scans?keep=N` prunes beyond the newest N, and a **Prune history** control on the workspace page drives it.
+- **Workspace tags:** freeform lowercase labels per workspace (`GET/PUT /workspaces/{id}/tags`, migration 006) embedded in workspace JSON.
+- **CLI output files:** `--format csv` (UTF-8 BOM, formula-neutralizing, identical to the API export), `--output FILE` for any document format, and `--save-baseline FILE` to capture the SARIF baseline in one step.
+- **Scoped CI gates:** `--gate-analyzer semgrep,secrets` and `--gate-category security` narrow which findings feed `--fail-on`/`--max-findings`, with a stderr scope report.
+- **Watch tuning:** `--watch-poll` (250ms–1m) and `--watch-quiet` (100ms–2m) override the watch loop timing with sanity checks.
+- **`bluntcode help`:** stdout usage for every subcommand.
+- **GitHub annotation cap:** `--github-cap 1..50` overrides how many annotations show per severity before the truncation notice (default stays 10).
+- **Richer secret detection:** six new detectors — Stripe live keys, OpenAI project and classic keys, Anthropic keys, Slack app-level tokens, Azure storage account keys — with placeholder rejection and entropy floors.
+- **TODO attribution:** `TODO(jane):` and `FIXME(APPS-123)` markers now count as debt and carry the owner/ticket through the finding message.
+
+### Changed
+
+- **Semgrep rulepack v3.0.0** grows to 25 bundled rules: `os.popen`, `tempfile.mktemp` races, `random` used for secrets, `new Function` execution, and `postMessage("*")` origin leaks. The version bump invalidates incremental-reuse caches exactly like an analyzer upgrade.
+- **Shareable report URLs:** the report view syncs filters/sort/page to the address bar and hydrates from it on load plus back/forward navigation.
+- **Server-paged history:** `GET /workspaces/{id}/scans?page&page_size` returns bounded windows with totals; the history page pages server-side instead of loading every scan.
+- **Resilient UI plumbing:** `useLoad` ignores stale responses after dependency changes; live scan streams reconnect with exponential backoff (1s→15s) and surface the retry count.
+
+### Fixed
+
+- Workspace sort controls expose `aria-sort`/`aria-pressed` state, matching the report table's accessibility.
+- The finding preview dialog gains a **Copy fingerprint** action for suppression tooling and bug reports.
+
 ## [Unreleased]
+
+### Added
+
+- **Scan comparison endpoint:** `GET /api/v1/scans/{id}/compare?with=<scan-id>` diffs two scans with the same coverage-aware new/fixed/persistent semantics as reports (implicit previous-completed resolution when `with` is omitted, suppressed fingerprints filtered from both sides).
+- **JSONL everywhere:** `--format jsonl` on headless scans and a matching `GET /api/v1/scans/{id}/findings.jsonl` download render findings as newline-delimited JSON (export ordering, derived status per row) for log pipelines and `jq`.
+- **Markdown CLI format:** `--format markdown` prints the full rendered report to stdout or `--output`.
+- **Suppression round-trip:** `GET /workspaces/{id}/suppressions.csv` exports dismissed fingerprints (BOM, formula-neutralized) and `POST .../suppressions/import` re-ingests that CSV with per-row accounting (`imported` / `skipped_invalid` / `duplicate`).
+- **API mutation rate limiting:** state-changing requests pass a token bucket (30 capacity, 30/min refill); exhausted callers get `429 RATE_LIMITED` with `Retry-After`.
+- **Doctor database self-check:** `bluntcode doctor` runs SQLite `PRAGMA quick_check` and surfaces ok/warn status (absent database is an informational skip).
+- **Risk-grade distribution:** `GET /api/v1/stats` now includes `risk_grades` counting A/B/C/D across every workspace's latest completed scan.
+- **Report duration chips:** analyzer runs render as success/failed chips with durations in the report header.
+- **Workspace tags surface:** cards show up to three tag chips (+N overflow) and the page gains a case-insensitive *Filter by tag* input.
+- **Risk badges:** workspace cards display each workspace's A–D grade when the API provides one.
+- **Suppressions CSV export:** the suppressions panel downloads its rows as a BOM'd, RFC-4180-safe spreadsheet.
+- **Palette indexing note:** the command palette footer reports how many workspaces its dynamic entries cover.
+- **Table accessibility:** every data table gained an sr-only caption describing its contents.
 
 ### Added
 

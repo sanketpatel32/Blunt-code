@@ -2,7 +2,7 @@ import { href, type Route } from '../lib/router';
 import type { Theme } from '../hooks/useTheme';
 
 export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleTheme, onShowShortcuts, seqArmed = false }: { route: Route; onNavigate: (route: Route) => void; onAdd: () => void; onClose: () => void; theme: Theme; onToggleTheme: () => void; onShowShortcuts?: () => void; seqArmed?: boolean }) {
-  const items: Array<[Route, string]> = [[{ page: 'home' }, 'Home'], [{ page: 'workspaces' }, 'Workspaces'], [{ page: 'tools' }, 'Tools'], [{ page: 'settings' }, 'Settings'], [{ page: 'about' }, 'About']];
+  const items: Array<[Route, string]> = [[{ page: 'home' }, 'Home'], [{ page: 'workspaces' }, 'Workspaces'], [{ page: 'search' }, 'Search'], [{ page: 'tools' }, 'Tools'], [{ page: 'settings' }, 'Settings'], [{ page: 'about' }, 'About']];
   return <header className="app-nav">
     <a className="brand" href="/" onClick={(event) => { event.preventDefault(); onNavigate({ page: 'home' }); }}><svg className="brand-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><rect width="32" height="32" rx="7.5" fill="var(--color-accent)" /><g fill="none" stroke="var(--color-accent-ink)" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="9.5 8.5 17 16 9.5 23.5" /><line x1="20.75" y1="23.5" x2="24.25" y2="23.5" /></g></svg><b>Blunt Code</b></a>
     <nav aria-label="Main navigation">{items.map(([next, label]) => <a key={label} href={href(next)} className={route.page === next.page ? 'active' : ''} onClick={(event) => { event.preventDefault(); onNavigate(next); }}>{label}</a>)}</nav>

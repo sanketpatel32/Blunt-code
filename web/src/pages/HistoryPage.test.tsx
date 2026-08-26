@@ -222,3 +222,52 @@ describe('HistoryTable scan rows', () => {
     expect(go).toHaveBeenCalledWith({ page: 'scan', id: 'scan-1' });
   });
 });
+
+describe('HistoryTable server paging', () => {
+  const basePaging = (overrides: Partial<import('./HistoryPage').HistoryPaging> = {}): import('./HistoryPage').HistoryPaging => ({
+    page: 1, pageSize: 6, total: 8, hasNext: true, onPage: vi.fn(), ...overrides,
+  });
+
+  it('renders the server slice untouched and drives onPage instead of slicing locally', async () => {
+    const onPage = vi.fn();
+    const scans = Array.from({ length: 6 }, (_, index) => scan({ id: `s${index}`, state: 'completed', finished_at: '2026-03-15T10:00:00Z' }));
+    const host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+    await act(async () => { root.render(<HistoryTable scans={scans} go={vi.fn()} paging={basePaging({ page: 2, total: 14, hasNext: true, onPage })} />); });
+    expect(dataRows(host)).toHaveLength(6); // no double slicing of the served page
+    expect(host.querySelector('output')!.textContent).toBe('Page 2 of 3');
+    expect(host.querySelector('.history-pagination span')?.textContent).toBe('Showing 7–12 of 14 scans');
+    const [previous, next] = [...host.querySelectorAll<HTMLButtonElement>('.history-pagination button')];
+    await act(async () => { previous.click(); });
+    await act(async () => { next.click(); });
+    expect(onPage).toHaveBeenNthCalledWith(1, 1);
+    expect(onPage).toHaveBeenNthCalledWith(2, 3);
+  });
+
+  it('disables Previous on the first page and Next when the server reports no further pages', async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+    await act(async () => { root.render(<HistoryTable scans={[scan({ id: 's0', state: 'completed' })]} go={vi.fn()} paging={basePaging({ page: 1, total: 13, hasNext: false })} />); });
+    const buttons = [...host.querySelectorAll<HTMLButtonElement>('.history-pagination button')];
+    expect(buttons[0].disabled).toBe(true);
+    expect(buttons[1].disabled).toBe(true);
+  });
+
+  it('shows the empty state only when the whole history is empty, not on a transient over-range page', async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+    await act(async () => { root.render(<HistoryTable scans={[]} go={vi.fn()} paging={basePaging({ page: 4, total: 18, hasNext: false })} />); });
+    expect(host.querySelector('.history-pagination')).not.toBeNull();
+    expect(host.textContent).not.toContain('No scans yet');
+  });
+});
+
+describe('HistoryTable accessibility caption (Loop W6)', () => {
+  it('names the history table for screen readers', async () => {
+    const { host } = await renderTable([scan({ id: 's1', state: 'completed' })]);
+    expect(host.querySelector('table caption')?.textContent).toBe('Scan history for this workspace');
+  });
+});

@@ -27,8 +27,10 @@ export function filterCommands(commands: Command[], query: string): Command[] {
 
 /** Ctrl/Cmd+K launcher: type to filter, arrows to move, Enter to run.
  *  Focus lives in the input the whole time; the list is plain buttons driven by
- *  aria-activedescendant so screen readers announce the highlighted command. */
-export function CommandPalette({ open, onClose, commands }: { open: boolean; onClose: () => void; commands: Command[] }) {
+ *  aria-activedescendant so screen readers announce the highlighted command.
+ *  `note` is an optional passive status line in the footer (e.g. how many
+ *  workspace entries were lazily loaded) — purely informational, never focusable. */
+export function CommandPalette({ open, onClose, commands, note }: { open: boolean; onClose: () => void; commands: Command[]; note?: string }) {
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -62,7 +64,7 @@ export function CommandPalette({ open, onClose, commands }: { open: boolean; onC
         </button>)}
         {!results.length && <p className="palette-empty" aria-live="polite">No matching command.</p>}
       </div>
-      <footer><span><kbd>↑</kbd><kbd>↓</kbd> navigate</span><span><kbd>Enter</kbd> run</span><span><kbd>Esc</kbd> close</span></footer>
+      <footer><span><kbd>↑</kbd><kbd>↓</kbd> navigate</span><span><kbd>Enter</kbd> run</span><span><kbd>Esc</kbd> close</span>{note && <span className="palette-note">{note}</span>}</footer>
     </dialog>
   </div>);
 }

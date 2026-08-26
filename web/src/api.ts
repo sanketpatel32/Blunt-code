@@ -1,4 +1,4 @@
-import type { FindingPage, FindingsQuery, FixedFindingsResponse, GlobalStats, PathOverride, RecentScansResponse, Report, Scan, SeverityTrendPoint, SourcePreview, Suppression, Tool, TreeNode, Workspace } from './types';
+import type { FindingPage, FindingsQuery, FixedFindingsResponse, GlobalStats, PathOverride, RecentScansResponse, Report, RiskProfile, Scan, ScanPage, SearchFindingsPage, SeverityTrendPoint, SourcePreview, Suppression, Tool, TreeNode, Workspace } from './types';
 
 const PREFIX = '/api/v1';
 
@@ -38,6 +38,8 @@ export const api = {
   selectFolder: () => request<{ cancelled: boolean; path?: string }>('/system/select-folder', { method: 'POST' }),
   createWorkspace: (input: { root_path: string; name?: string }) => request<Workspace>('/workspaces', { method: 'POST', body: JSON.stringify(input) }),
   deleteWorkspace: (id: string) => request<void>(`/workspaces/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  /** Rename a workspace and/or change its default scan profile (PATCH). */
+  updateWorkspace: (id: string, patch: { name?: string; default_profile?: string }) => request<Workspace>(`/workspaces/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   discover: (id: string) => request<Workspace>(`/workspaces/${encodeURIComponent(id)}/discover`, { method: 'POST' }),
   tree: async (id: string, path?: string) => {
     const query = path ? `?path=${encodeURIComponent(path)}` : '';
@@ -56,6 +58,17 @@ export const api = {
   },
   saveRules: (id: string, rules: unknown) => request(`/workspaces/${encodeURIComponent(id)}/rules`, { method: 'PUT', body: JSON.stringify(rules) }),
   scans: async (id: string) => list<Scan>(await request<Scan[] | { scans?: Scan[] }>(`/workspaces/${encodeURIComponent(id)}/scans`)),
+  /** Server-paged scan history for one workspace; `page` is 1-based and capped at page_size 100 by the API. */
+  scansPage: (id: string, page: number, pageSize: number) => request<ScanPage>(`/workspaces/${encodeURIComponent(id)}/scans?page=${page}&page_size=${pageSize}`),
+  /** Cross-workspace findings search; empty param values are dropped exactly like the per-scan findings query. */
+  searchFindings: (params: FindingsQuery) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, v]) => v));
+    return request<SearchFindingsPage>(`/findings/search?${query}`);
+  },
+  /** Weighted risk profile for one workspace from its latest completed scans. */
+  risk: (id: string) => request<RiskProfile>(`/workspaces/${encodeURIComponent(id)}/risk`),
+  /** Delete every terminal scan beyond the newest `keep` (1..100). Running scans are never touched. */
+  pruneScans: (id: string, keep: number) => request<{ deleted: number; kept: number }>(`/workspaces/${encodeURIComponent(id)}/scans?keep=${keep}`, { method: 'DELETE' }),
   /** Severity trend over completed scan history, oldest first; limit defaults to 20 on the server. */
   trends: async (id: string, limit?: number) => {
     const query = limit ? `?limit=${limit}` : '';
@@ -83,9 +96,9 @@ export const api = {
   stopServer: () => request<{ state: string }>('/system/stop', { method: 'POST' }),
   openFolder: (kind: 'data' | 'reports' | 'logs' | 'tools') => request<void>('/system/open-folder', { method: 'POST', body: JSON.stringify({ kind }) }),
   markdownUrl: (scanId: string) => `${PREFIX}/scans/${encodeURIComponent(scanId)}/report.md`,
-  /** URL for the attachment exports (plain GET navigations, not JSON requests). CSV accepts the same filter/sort params as findings — minus limit/offset — so the file matches the on-screen list. */
-  exportUrl: (scanId: string, format: 'html' | 'sarif' | 'csv', params?: Record<string, string>) => {
-    const base = `${PREFIX}/scans/${encodeURIComponent(scanId)}/${format === 'csv' ? 'findings.csv' : `report.${format}`}`;
+  /** URL for the attachment exports (plain GET navigations, not JSON requests). CSV accepts the same filter/sort params as findings — minus limit/offset — so the file matches the on-screen list. findings.json is the versioned full-report document. */
+  exportUrl: (scanId: string, format: 'html' | 'sarif' | 'csv' | 'json', params?: Record<string, string>) => {
+    const base = `${PREFIX}/scans/${encodeURIComponent(scanId)}/${format === 'csv' ? 'findings.csv' : format === 'json' ? 'findings.json' : `report.${format}`}`;
     if (!params) return base;
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value)).toString();
     return query ? `${base}?${query}` : base;

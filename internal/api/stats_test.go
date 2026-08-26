@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"sort"
@@ -110,6 +111,13 @@ func TestGlobalStatsServesOverview(t *testing.T) {
 	if body.Findings.Severity != (database.SeverityCounts{Critical: 2, Medium: 1}) || body.Findings.Total != 3 {
 		t.Fatalf("findings must come from Alpha's newest completed scan only: %#v", body.Findings)
 	}
+	// Alpha's newest completed scan (2 critical + 1 medium = 22 weighted
+	// points) grades C; Beta's failed scan and Gamma's missing history never
+	// grade, so every workspace lands in exactly one bucket.
+	wantGrades := map[string]int{"A": 0, "B": 0, "C": 1, "D": 0}
+	if !maps.Equal(body.RiskGrades, wantGrades) {
+		t.Fatalf("risk grades = %#v, want %#v", body.RiskGrades, wantGrades)
+	}
 	if body.Tools != nil {
 		t.Fatalf("tools section must be omitted when no tools service is wired: %#v", body.Tools)
 	}
@@ -120,8 +128,17 @@ func TestGlobalStatsServesOverview(t *testing.T) {
 	// The shape is fixed: exactly these top-level keys, and the severity
 	// block carries exactly the five fixed severity names.
 	keys := topLevelKeys(t, response.Body.Bytes())
-	if !equalKeys(keys, []string{"findings", "generated_at", "scans", "suppressions", "workspaces"}) {
+	if !equalKeys(keys, []string{"findings", "generated_at", "risk_grades", "scans", "suppressions", "workspaces"}) {
 		t.Fatalf("top-level keys = %v", keys)
+	}
+	var riskBlock struct {
+		RiskGrades map[string]int `json:"risk_grades"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &riskBlock); err != nil {
+		t.Fatalf("invalid risk_grades block: %v", err)
+	}
+	if !maps.Equal(riskBlock.RiskGrades, map[string]int{"A": 0, "B": 0, "C": 1, "D": 0}) {
+		t.Fatalf("serialized risk_grades = %#v", riskBlock.RiskGrades)
 	}
 	var findingsBlock struct {
 		Findings struct {
@@ -171,7 +188,7 @@ func TestGlobalStatsIncludesToolReadiness(t *testing.T) {
 	if body.Tools == nil || body.Tools.Total != 4 || body.Tools.Ready != 0 {
 		t.Fatalf("tools section must count every known tool and the ready ones: %#v", body.Tools)
 	}
-	if keys := topLevelKeys(t, response.Body.Bytes()); !equalKeys(keys, []string{"findings", "generated_at", "scans", "suppressions", "tools", "workspaces"}) {
+	if keys := topLevelKeys(t, response.Body.Bytes()); !equalKeys(keys, []string{"findings", "generated_at", "risk_grades", "scans", "suppressions", "tools", "workspaces"}) {
 		t.Fatalf("top-level keys = %v", keys)
 	}
 }

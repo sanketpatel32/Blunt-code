@@ -12,8 +12,23 @@ import { SkeletonTable } from '../components/skeletons';
 import { WorkspaceContextSidebar } from '../components/WorkspaceContext';
 
 export function HistoryPage({ workspaceId, go }: { workspaceId: string; go: (r: Route) => void }) {
-  const state = useLoad(() => api.scans(workspaceId), [workspaceId]);
-  return <div className="page workspace-page"><WorkspaceContextSidebar id={workspaceId} current={{ page: 'history', id: workspaceId }} onNavigate={go} /><div className="workspace-page-body"><header className="page-heading"><div><p className="eyebrow">Scan history</p><h1>Previous analyses</h1><p>Reports and findings are stored only on this computer.</p></div></header>{state.loading ? <SkeletonTable rows={6} cols={7} /> : state.error ? <ErrorPanel error={state.error} retry={state.reload} /> : <HistoryTable scans={state.data ?? []} go={go} />}</div></div>;
+  const [page, setPage] = useState(1);
+  const state = useLoad(() => api.scansPage(workspaceId, page, historyPageSize), [workspaceId, page]);
+  // A deletion or retention prune can leave the current page number beyond
+  // the (shrunk) history; fall back to the first page instead of a blank table.
+  useEffect(() => {
+    if (state.data && state.data.items.length === 0 && state.data.total > 0 && page > 1) setPage(1);
+  }, [state.data, page]);
+  return <div className="page workspace-page"><WorkspaceContextSidebar id={workspaceId} current={{ page: 'history', id: workspaceId }} onNavigate={go} /><div className="workspace-page-body"><header className="page-heading"><div><p className="eyebrow">Scan history</p><h1>Previous analyses</h1><p>Reports and findings are stored only on this computer.</p></div></header>{state.loading ? <SkeletonTable rows={6} cols={7} /> : state.error ? <ErrorPanel error={state.error} retry={state.reload} /> : <HistoryTable scans={state.data?.items ?? []} go={go} paging={{ page, pageSize: historyPageSize, total: state.data?.total ?? 0, hasNext: state.data?.has_next ?? false, onPage: setPage }} />}</div></div>;
+}
+
+/** Server-side paging contract handed to HistoryTable by HistoryPage. When absent the table falls back to slicing the given array client-side. */
+export interface HistoryPaging {
+  page: number;
+  pageSize: number;
+  total: number;
+  hasNext: boolean;
+  onPage: (page: number) => void;
 }
 
 const historyPageSize = 6;
@@ -68,26 +83,31 @@ function FindingsCell({ scan }: { scan: Scan }) {
   return <div className="findings-cell"><span className="findings-total">{total}</span>{barTotal > 0 ? <div className="severity-bar" role="img" aria-label={breakdown} title={breakdown}>{barSeverities.filter((severity) => counts[severity] > 0).map((severity) => <i key={severity} className={`bar-${severity}`} style={{ width: segmentWidth(counts[severity], barTotal) }} />)}</div> : <div className="severity-bar" role="img" aria-label={breakdown} title={breakdown} />}</div>;
 }
 
-export function HistoryTable({ scans, go }: { scans: Scan[]; go: (r: Route) => void }) {
-  const [page, setPage] = useState(0);
+export function HistoryTable({ scans, go, paging }: { scans: Scan[]; go: (r: Route) => void; paging?: HistoryPaging }) {
+  const [clientPage, setClientPage] = useState(0);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const toggleExpanded = (id: string) => setExpanded((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
-  const pageCount = Math.max(1, Math.ceil(scans.length / historyPageSize));
-  const currentPage = Math.min(page, pageCount - 1);
-  const first = currentPage * historyPageSize;
-  const visibleScans = scans.slice(first, first + historyPageSize);
+  // Server mode pages through the workspace's full history via the API and
+  // renders exactly the slice it returned; legacy mode slices the given array.
+  const serverMode = !!paging;
+  const pageSize = serverMode ? paging!.pageSize : historyPageSize;
+  const pageCount = serverMode ? Math.max(1, Math.ceil((paging!.total || scans.length) / paging!.pageSize)) : Math.max(1, Math.ceil(scans.length / historyPageSize));
+  const currentPage = serverMode ? Math.min(paging!.page, pageCount) : Math.min(clientPage, pageCount - 1);
+  const first = serverMode ? (paging!.page - 1) * paging!.pageSize : currentPage * historyPageSize;
+  const visibleScans = serverMode ? scans : scans.slice(first, first + historyPageSize);
+  const windowTotal = serverMode ? paging!.total : scans.length;
 
-  // Reset pagination whenever a different scan set loads (a new scan always
-  // changes the newest id, so it captures exactly the interesting changes).
+  // Reset client pagination whenever a different scan set loads (a new scan
+  // always changes the newest id, so it captures exactly the interesting changes).
   const newestScanId = scans[0]?.id;
-  useEffect(() => { if (newestScanId !== undefined) setPage(0); }, [newestScanId]);
+  useEffect(() => { if (!serverMode && newestScanId !== undefined) setClientPage(0); }, [newestScanId, serverMode]);
 
-  if (!scans.length) return <Empty title="No scans yet" icon={<ScanIcon />}>Analyze this workspace to create the first report.</Empty>;
+  if (!scans.length && !windowTotal) return <Empty title="No scans yet" icon={<ScanIcon />}>Analyze this workspace to create the first report.</Empty>;
 
-  return <><div className="table-wrap"><table><thead><tr><th scope="col">Date</th><th scope="col">Status</th><th scope="col">Findings</th><th scope="col">New</th><th scope="col">Fixed</th><th scope="col">Duration</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead><tbody>{historyDateBands(visibleScans).map(({ band, scans: banded }) => <Fragment key={band}><tr className="history-band-row"><th className="history-band" colSpan={7} scope="colgroup">{band}</th></tr>{banded.map((scan) => {
+  return <><div className="table-wrap"><table><caption className="sr-only">Scan history for this workspace</caption><thead><tr><th scope="col">Date</th><th scope="col">Status</th><th scope="col">Findings</th><th scope="col">New</th><th scope="col">Fixed</th><th scope="col">Duration</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead><tbody>{historyDateBands(visibleScans).map(({ band, scans: banded }) => <Fragment key={band}><tr className="history-band-row"><th className="history-band" colSpan={7} scope="colgroup">{band}</th></tr>{banded.map((scan) => {
     const tone = scan.id === scans[0].id ? scan.state === 'failed' ? 'row-danger' : scan.state === 'completed_with_warnings' ? 'row-warning' : '' : '';
     const isOpen = expanded.has(scan.id);
     const runs = scan.analyzer_runs ?? [];
-    return <Fragment key={scan.id}><tr className={tone || undefined}><td title={date(scan.finished_at ?? scan.started_at)}><span className="history-date"><button type="button" className="history-disclose" aria-expanded={isOpen} aria-controls={`history-detail-${scan.id}`} aria-label={`${isOpen ? 'Hide' : 'Show'} details for the scan from ${relativeTime(scan.finished_at ?? scan.started_at)}`} onClick={() => toggleExpanded(scan.id)}><span className="disclose-arrow" aria-hidden="true">▸</span></button>{relativeTime(scan.finished_at ?? scan.started_at)}</span></td><td><div className="history-status"><span className={`state ${scan.state}`}>{scan.state.replaceAll('_', ' ')}</span>{scan.profile && <span className="badge profile-badge">{scan.profile}</span>}</div></td><td><FindingsCell scan={scan} /></td><td>{scan.new_count ?? 0}</td><td>{scan.fixed_count ?? 0}</td><td>{compactDuration(scan.duration_ms)}</td><td><div className="table-actions"><button type="button" className="text-button" onClick={() => go({ page: 'scan', id: scan.id })}>Open report</button>{hasMarkdownExport(scan) && <a className="text-button" href={api.markdownUrl(scan.id)}>Export .md</a>}</div></td></tr>{isOpen && <tr className="history-detail-row"><td colSpan={7}><div className="history-detail" id={`history-detail-${scan.id}`}><dl className="history-detail-meta"><div><dt>Started</dt><dd>{date(scan.started_at)}</dd></div><div><dt>Finished</dt><dd>{date(scan.finished_at)}</dd></div>{scan.profile && <div><dt>Profile</dt><dd>{scan.profile}</dd></div>}</dl>{scan.error_summary && <div className="inline-warning">Warning: {scan.error_summary}</div>}{runs.length > 0 && <ul className="history-analyzers">{runs.map((run) => <li key={run.analyzer_id}><span>{analyzerName(run.analyzer_id)}</span><span className={`state ${run.status}`}>{run.status.replaceAll('_', ' ')}</span></li>)}</ul>}</div></td></tr>}</Fragment>;
-  })}</Fragment>)}</tbody></table></div><nav className="history-pagination" aria-label="Scan history pagination"><span>Showing {first + 1}–{Math.min(first + historyPageSize, scans.length)} of {scans.length} scans</span><div><button type="button" className="button secondary" onClick={() => setPage(currentPage - 1)} disabled={currentPage === 0}>Previous</button><output aria-live="polite">Page {currentPage + 1} of {pageCount}</output><button type="button" className="button secondary" onClick={() => setPage(currentPage + 1)} disabled={currentPage === pageCount - 1}>Next</button></div></nav></>;
+    return <Fragment key={scan.id}><tr className={tone || undefined}><td title={date(scan.finished_at ?? scan.started_at)}><span className="history-date"><button type="button" className="history-disclose" aria-expanded={isOpen} aria-controls={`history-detail-${scan.id}`} aria-label={`${isOpen ? 'Hide' : 'Show'} details for the scan from ${relativeTime(scan.finished_at ?? scan.started_at)}`} onClick={() => toggleExpanded(scan.id)}><span className="disclose-arrow" aria-hidden="true">▸</span></button>{relativeTime(scan.finished_at ?? scan.started_at)}</span></td><td><div className="history-status"><span className={`state ${scan.state}`}>{scan.state.replaceAll('_', ' ')}</span>{scan.profile && <span className="badge profile-badge">{scan.profile}</span>}</div></td><td><FindingsCell scan={scan} /></td><td>{scan.new_count ?? 0}</td><td>{scan.fixed_count ?? 0}</td><td>{compactDuration(scan.duration_ms)}</td><td><div className="table-actions"><button type="button" className="text-button" onClick={() => go({ page: 'scan', id: scan.id })}>Open report</button>{hasMarkdownExport(scan) && <><a className="text-button" href={api.markdownUrl(scan.id)}>Export .md</a><a className="text-button" href={api.exportUrl(scan.id, 'sarif')}>SARIF</a><a className="text-button" href={api.exportUrl(scan.id, 'html')}>HTML</a><a className="text-button" href={api.exportUrl(scan.id, 'json')}>JSON</a></>}</div></td></tr>{isOpen && <tr className="history-detail-row"><td colSpan={7}><div className="history-detail" id={`history-detail-${scan.id}`}><dl className="history-detail-meta"><div><dt>Started</dt><dd>{date(scan.started_at)}</dd></div><div><dt>Finished</dt><dd>{date(scan.finished_at)}</dd></div>{scan.profile && <div><dt>Profile</dt><dd>{scan.profile}</dd></div>}</dl>{scan.error_summary && <div className="inline-warning">Warning: {scan.error_summary}</div>}{runs.length > 0 && <ul className="history-analyzers">{runs.map((run) => <li key={run.analyzer_id}><span>{analyzerName(run.analyzer_id)}</span><span className={`state ${run.status}`}>{run.status.replaceAll('_', ' ')}</span></li>)}</ul>}</div></td></tr>}</Fragment>;
+  })}</Fragment>)}</tbody></table></div><nav className="history-pagination" aria-label="Scan history pagination"><span>Showing {windowTotal ? first + 1 : 0}–{Math.min(first + pageSize, windowTotal)} of {windowTotal} scans</span><div><button type="button" className="button secondary" onClick={() => serverMode ? paging!.onPage(paging!.page - 1) : setClientPage(currentPage - 1)} disabled={serverMode ? paging!.page <= 1 : currentPage === 0}>Previous</button><output aria-live="polite">Page {serverMode ? paging!.page : currentPage + 1} of {pageCount}</output><button type="button" className="button secondary" onClick={() => serverMode ? paging!.onPage(paging!.page + 1) : setClientPage(currentPage + 1)} disabled={serverMode ? !paging!.hasNext : currentPage >= pageCount - 1}>Next</button></div></nav></>;
 }

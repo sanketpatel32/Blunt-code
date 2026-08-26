@@ -62,11 +62,12 @@ var markerRe = regexp.MustCompile(`\b(TODO|FIXME|HACK|XXX|BUG)\b`)
 // needs. The message never carries the raw line beyond the marker and its
 // trailing comment text.
 type match struct {
-	rule    string
-	marker  string
-	line    int // 1-based line of the marker
-	column  int // 1-based rune column of the marker
-	message string
+	rule        string
+	marker      string
+	line        int    // 1-based line of the marker
+	column      int    // 1-based rune column of the marker
+	attribution string // optional "(owner)" or "(TICKET-123)" suffix, without parens
+	message     string
 }
 
 // detect runs the marker scan over one file's content, line by line. A marker
@@ -94,40 +95,73 @@ func detect(data []byte) []match {
 }
 
 // detectLine reports every qualifying marker occurrence on one line; each
-// occurrence yields exactly one match.
+// occurrence yields exactly one match. Markers may carry an attribution
+// suffix — `TODO(jane):` or `FIXME(APPS-123) fix` — which is captured on the
+// match and flows into the finding message verbatim.
 func detectLine(lineNo int, line []byte) []match {
 	var out []match
 	for _, loc := range markerRe.FindAllIndex(line, -1) {
 		marker := string(line[loc[0]:loc[1]])
-		if !followerCountsAsDebt(line, loc[1]) {
+		attribution, debt := followerCountsAsDebt(line, loc[1])
+		if !debt {
 			continue
 		}
 		out = append(out, match{
-			rule:    rulesByMarker[marker],
-			marker:  marker,
-			line:    lineNo,
-			column:  runeColumn(line, loc[0]),
-			message: messageFor(line, loc[0]),
+			rule:        rulesByMarker[marker],
+			marker:      marker,
+			line:        lineNo,
+			column:      runeColumn(line, loc[0]),
+			attribution: attribution,
+			message:     messageFor(line, loc[0]),
 		})
 	}
 	return out
 }
 
-// followerCountsAsDebt accepts the tracked-marker shapes: a colon (TODO:), // bluntcode:ignore
-// whitespace before more text (TODO refactor), or nothing at all (a bare TODO // bluntcode:ignore
-// at the end of the line). Anything else — punctuation like `TODO.` or
-// `TODO(name)` — means the word appeared without the marker convention, so it
-// is not counted. A marker inside a string literal can still match; that is
-// accepted noise for a line-oriented scan.
-func followerCountsAsDebt(line []byte, markerEnd int) bool {
+// followerCountsAsDebt accepts the tracked-marker shapes: a colon (TODO:),
+// whitespace before more text (TODO refactor), nothing at all (a bare TODO at
+// the end of the line), or an attribution suffix in parentheses followed by a
+// colon/whitespace/end (`TODO(jane):`, `BUG(APPS-12) crash`). The returned
+// string carries the attribution content without its parentheses. Anything
+// else — punctuation like `TODO.` or an unterminated/empty `(…)` — means the
+// word appeared without the marker convention, so it is not counted. A marker
+// inside a string literal can still match; that is accepted noise for a
+// line-oriented scan.
+func followerCountsAsDebt(line []byte, markerEnd int) (string, bool) {
 	if markerEnd >= len(line) {
-		return true
+		return "", true
 	}
 	switch line[markerEnd] {
 	case ':', ' ', '\t':
-		return true
+		return "", true
+	case '(':
+		close := -1
+		for i := markerEnd + 1; i < len(line); i++ {
+			if line[i] == ')' {
+				close = i
+				break
+			}
+		}
+		if close < 0 || close == markerEnd+1 || close-markerEnd-1 > 64 {
+			return "", false
+		}
+		for _, c := range line[markerEnd+1 : close] {
+			valid := c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' ||
+				c == '-' || c == '_' || c == '.' || c == ' '
+			if !valid {
+				return "", false
+			}
+		}
+		if close+1 < len(line) {
+			switch line[close+1] {
+			case ':', ' ', '\t':
+				return string(line[markerEnd+1 : close]), true
+			}
+			return "", false
+		}
+		return string(line[markerEnd+1 : close]), true
 	}
-	return false
+	return "", false
 }
 
 // messageFor builds the finding text: the marker plus the comment text after

@@ -26,10 +26,10 @@ type statsResponse struct {
 }
 
 // globalStats serves the dashboard's global overview: workspace, scan, and
-// suppression counters plus the latest-completed-per-workspace severity rollup.
-// Every database figure comes from GlobalStats' two aggregate queries (no
-// per-workspace loops), and tool readiness is folded in only when a tools
-// service is wired into the server.
+// suppression counters plus the latest-completed-per-workspace severity rollup
+// and its A-D risk-grade distribution. Every database figure comes from
+// GlobalStats' aggregate queries (no per-workspace loops), and tool readiness
+// is folded in only when a tools service is wired into the server.
 func (s *Server) globalStats(w http.ResponseWriter, r *http.Request) {
 	stats, err := s.db.GlobalStats(r.Context())
 	if err != nil {

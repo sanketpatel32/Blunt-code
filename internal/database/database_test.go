@@ -749,7 +749,9 @@ func seedPerfScan(t *testing.T, db *DB, workspaceID, scanID, state string, seq i
 	}
 }
 
-func perfPath(i int) string  { return fmt.Sprintf("src/pkg%02d/mod%03d/file%04d.ts", i%12, i%140, i%9000) }
+func perfPath(i int) string {
+	return fmt.Sprintf("src/pkg%02d/mod%03d/file%04d.ts", i%12, i%140, i%9000)
+}
 func perfMessage(i int) string {
 	base := fmt.Sprintf("Finding %06d: implicit string concatenation inside a loop can degrade into quadratic behavior; build the parts once outside the loop and reuse the buffer across iterations of the surrounding scope for better throughput.", i)
 	if i%25 == 0 {
@@ -1015,7 +1017,7 @@ func TestLargeVolumeDashboardQueries(t *testing.T) {
 			case s%97 == 0:
 				state = "running"
 			}
-			counts := [5]int{s % 7 + 1, s % 11 + 1, s % 13 + 1, s % 17 + 1, s % 19 + 1}
+			counts := [5]int{s%7 + 1, s%11 + 1, s%13 + 1, s%17 + 1, s%19 + 1}
 			seedPerfScan(t, db, work.ID, fmt.Sprintf("dash-%02d-%03d", w, s), state, seq, counts, perfSnapshotJSON(work.ID, seq))
 			seq++
 			if state == "completed" || state == "completed_with_warnings" {

@@ -112,13 +112,27 @@ flags.
 
 | Format | What it prints |
 | :--- | :--- |
-| `text` (default) | The human summary: severity counts, new/fixed/persistent versus the previous scan, per-analyzer results, report path |
+| `text` (default) | The human summary: severity counts, new/fixed/persistent versus the previous scan, the most serious findings, per-analyzer results, report path |
 | `json` | The full versioned JSON report document (`bluntcode/scan-report`, schema version 1) — the same bytes `GET /api/v1/scans/{id}/findings.json` serves |
 | `sarif` | The SARIF 2.1.0 log — byte-for-byte the serialization `GET /api/v1/scans/{id}/report.sarif` serves; feeds GitHub code scanning and the baseline round-trip |
-| `github` | GitHub Actions workflow-command annotations (see below) |
+| `csv` | The findings spreadsheet — UTF-8 BOM, same columns and formula-neutralization as `GET /api/v1/scans/{id}/findings.csv` |
+| markdown | The full rendered Markdown report (the same bytes the workspace reports folder receives) |
+| jsonl | Newline-delimited JSON findings — one object per line in export order, ready for log pipelines and jq |
+| github | GitHub Actions workflow-command annotations (see below) |
 
 `--json` (without `--format`) is a different, compact machine summary and
 cannot be combined with `--format json`, `github`, or `sarif`.
+
+**Writing documents to files:** `--output FILE` redirects any document format
+(`json`, `github`, `sarif`, `csv`) to a file while progress stays on stderr,
+and `--save-baseline FILE` writes the SARIF baseline after any completed scan —
+`--save-baseline baseline.sarif` is exactly `--format sarif > baseline.sarif`
+without the shell redirect.
+
+**Scoped gates:** `--gate-analyzer semgrep,secrets` and/or
+`--gate-category security` count only matching findings toward
+`--fail-on`/`--max-findings`. The scope is reported on stderr together with
+the gate result so a tripped build explains what it counted.
 
 In `--watch` mode, the `json` and `sarif` formats emit one complete,
 newline-separated document per rescan; `--format github` is rejected in

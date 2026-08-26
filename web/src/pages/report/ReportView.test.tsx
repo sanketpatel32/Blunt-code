@@ -659,3 +659,38 @@ describe('ReportView severity row edges', () => {
     expect(host.querySelector('.findings-table tbody tr.row-medium')).toBeNull();
   });
 });
+
+describe('ReportView analyzer duration chips (Loop W1)', () => {
+  it('renders one chip per analyzer run with compact durations and outcome classes', async () => {
+    await fetchMock.withImplementation((input: string) => {
+      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan: { ...scan, analyzer_runs: [{ analyzer_id: 'ruff', status: 'succeeded', version: '0.6.9', duration_ms: 1500 }, { analyzer_id: 'biome', status: 'failed', message: 'binary not found', duration_ms: 40 }] }, warnings: [], findings: [finding] }));
+      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json(findingsPage()));
+      return Promise.resolve(json({ items: [] }));
+    }, async () => {
+      const host = await render();
+      const chips = [...host.querySelectorAll('.analyzer-run-chip')];
+      expect(chips.map((chip) => chip.textContent)).toEqual(['Ruff1.5s', 'Biome40ms']);
+      expect(chips[0]!.className).toContain('state success');
+      expect(chips[1]!.className).toContain('failed');
+      expect(chips[0]!.getAttribute('title')).toContain('0.6.9'); // version rides along as hover context
+    });
+  });
+
+  it('omits the chip row entirely when the scan carried no analyzer runs', async () => {
+    await fetchMock.withImplementation((input: string) => {
+      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan: { ...scan, analyzer_runs: [] }, warnings: [], findings: [finding] }));
+      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json(findingsPage()));
+      return Promise.resolve(json({ items: [] }));
+    }, async () => {
+      const host = await render();
+      expect(host.querySelector('.analyzer-run-chips')).toBeNull();
+    });
+  });
+});
+
+describe('ReportView table accessibility (Loop W6)', () => {
+  it('names the findings table for screen readers', async () => {
+    const host = await render();
+    expect(host.querySelector('.findings-table caption')?.textContent).toBe('Findings matching the current filters');
+  });
+});

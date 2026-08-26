@@ -70,6 +70,24 @@ func TestStructuredDetection(t *testing.T) {
 		{"jwt near-miss two segments", "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0", nil},
 		{"jwt near-miss missing header prefix", "hbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c", nil},
 		{"jwt near-miss embedded in word", "x" + jwt, nil},
+		// Stripe live keys.
+		{"stripe secret live positive", `STRIPE_KEY = "sk_live_` + strings.Repeat("a1B2c3D4", 4) + `"`, []string{ruleStripeLiveKey}},
+		{"stripe restricted live positive", "rk_live_" + strings.Repeat("Zz9Yy8Xx", 4), []string{ruleStripeLiveKey}},
+		{"stripe near-miss truncated", `key = "sk_live_` + strings.Repeat("a1B2c3D4", 2) + "a1B" + `"`, nil},
+		{"stripe test mode stays quiet", `key = "sk_test_` + strings.Repeat("a1B2c3D4", 4) + `"`, nil},
+		// OpenAI project keys.
+		{"openai project positive", `OPENAI_API_KEY = "sk-proj-` + strings.Repeat("a1B2c3D4e5f6G7h8", 3) + `"`, []string{ruleOpenAIProject}},
+		{"openai project near-miss truncated", `k = "sk-proj-` + strings.Repeat("a1B2c3D4e5f6G7h8", 2) + `"`, nil},
+		// OpenAI classic keys (embedded T3BlbkFJ marker).
+		{"openai classic positive", `k = "sk-` + strings.Repeat("a1B2c3D4e5f6g7h8i9j0", 1) + "T3BlbkFJ" + strings.Repeat("Zz9Yy8Xx7Ww6Vv5Uu4Tt", 1) + `"`, []string{ruleOpenAIClassic}},
+		{"openai classic near-miss missing marker", `k = "sk-` + strings.Repeat("a1B2c3D4e5f6g7h8i9j0", 2) + `AbCd"`, nil},
+		// Anthropic keys.
+		{"anthropic positive", `ANTHROPIC_KEY = "sk-ant-` + strings.Repeat("a1B2-", 8) + `"`, []string{ruleAnthropicKey}},
+		{"anthropic near-miss truncated", `k = "sk-ant-` + strings.Repeat("a1B2-", 5) + `"`, nil},
+		// Slack app-level tokens.
+		{"slack app token positive", `bot = "xapp-1-A1B2C3D4E5F6-1234567890123-abcdef0123456789abcdef"`, []string{ruleSlackAppToken}},
+		{"slack app token near-miss bad version", `b = "xapp-v-A1B2C3D4E5F6-1234567890123-abcdef0123456789abcdef"`, nil},
+		{"slack app token near-miss short signature", `b = "xapp-1-A1B2C3D4E5F6-1234567890123-abc123"`, nil},
 		// Connection URIs with credentials.
 		{"uri postgresql positive", `DATABASE_URL = "postgresql://deploy:hV9kLm2Qr7@db.example.com/prod"`, []string{ruleConnectionURI}},
 		{"uri redis positive", "redis://default:S3cr3tSup3r@redis.internal:6379", []string{ruleConnectionURI}},
@@ -78,6 +96,10 @@ func TestStructuredDetection(t *testing.T) {
 		{"uri https positive", "https://deploy:Hunt3r2Hunter@ci.example.com/job/1", []string{ruleConnectionURI}},
 		{"uri near-miss no password", "postgres://application@db.internal", nil},
 		{"uri near-miss placeholder pass", "postgres://user:pass@example.com", nil},
+		// Azure storage account keys.
+		{"azure account key positive", `connection="DefaultEndpointsProtocol=https;AccountName=prod;AccountKey=` + strings.Repeat("a1B2c3D4e5", 8) + "abcdef" + `=="`, []string{ruleAzureAccountKey}},
+		{"azure account key near-miss truncated", `c="AccountKey=` + strings.Repeat("a1B2c3D4e5", 8) + "ab" + `=="`, nil},
+		{"azure account key placeholder rejected", `c="AccountKey=` + strings.Repeat("A", 86) + `=="`, nil},
 		{"uri near-miss placeholder password", "postgres://user:password@example.com", nil},
 		{"uri near-miss no credentials", "http://localhost:8080/health", nil},
 		{"uri near-miss unsupported scheme", "ftp://user:secretpw@files.example.com", nil},

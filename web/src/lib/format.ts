@@ -53,7 +53,26 @@ export function elapsed(start?: string | null, end?: string | null) {
   return compactDuration(Math.max(0, ms));
 }
 
-export const languageNames: Record<string, string> = { javascript: 'JavaScript', python: 'Python', typescript: 'TypeScript' };
+/** Display labels for the languages discovery classifies (see internal/discovery). Keys mirror the Go extension table. */
+export const languageNames: Record<string, string> = {
+  go: 'Go', golang: 'Go', mod: 'Go Module',
+  javascript: 'JavaScript', jsx: 'JSX', mjs: 'JavaScript', cjs: 'JavaScript',
+  typescript: 'TypeScript', tsx: 'TSX', mts: 'TypeScript', cts: 'TypeScript',
+  python: 'Python', pyi: 'Python Stub',
+  java: 'Java', kotlin: 'Kotlin', scala: 'Scala', groovy: 'Groovy',
+  c: 'C', h: 'C Header', cpp: 'C++', cc: 'C++', cxx: 'C++', hpp: 'C++ Header', hh: 'C++ Header',
+  csharp: 'C#', cs: 'C#', razor: 'Razor', fs: 'F#', vb: 'VB.NET',
+  ruby: 'Ruby', php: 'PHP', perl: 'Perl', lua: 'Lua', r: 'R', swift: 'Swift',
+  dart: 'Dart', rust: 'Rust', ex: 'Elixir', exs: 'Elixir Script', erl: 'Erlang',
+  haskell: 'Haskell', hs: 'Haskell', clojure: 'Clojure', clj: 'Clojure',
+  shell: 'Shell', bash: 'Bash', zsh: 'Zsh', ps1: 'PowerShell', psm1: 'PowerShell Module', bat: 'Batch', cmd: 'Batch Script',
+  sql: 'SQL', graphql: 'GraphQL', gql: 'GraphQL', proto: 'Protobuf',
+  html: 'HTML', htm: 'HTML', vue: 'Vue', svelte: 'Svelte', astro: 'Astro',
+  css: 'CSS', scss: 'SCSS', sass: 'Sass', less: 'Less',
+  json: 'JSON', jsonc: 'JSONC', json5: 'JSON5', yaml: 'YAML', yml: 'YAML',
+  toml: 'TOML', xml: 'XML', ini: 'INI', cfg: 'Config', conf: 'Config',
+  env: 'Environment File', properties: 'Properties', tf: 'Terraform', dockerfile: 'Dockerfile',
+};
 
 export const analyzerDisplayNames: Record<string, string> = { biome: 'Biome', ruff: 'Ruff', semgrep: 'Semgrep', sonarqube: 'SonarQube' };
 

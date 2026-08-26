@@ -15,6 +15,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"time"
 
@@ -45,13 +46,19 @@ const scanUsage = "usage: bluntcode scan <path> [--profile quick|standard|deep] 
 // prints GitHub Actions workflow-command annotations that the runner turns
 // into inline PR annotations; sarif prints the SARIF 2.1.0 log that
 // GET /api/v1/scans/{id}/report.sarif also serves, so a CI can capture a
-// baseline or feed GitHub code scanning without running the server. The
-// compact summary behind --json stays a separate, unchanged output.
+// baseline or feed GitHub code scanning without running the server; csv and
+// jsonl print the spreadsheet and newline-delimited findings exports;
+// markdown prints the same Markdown document GET /api/v1/scans/{id}/report.md
+// renders. The compact summary behind --json stays a separate, unchanged
+// output.
 const (
-	scanFormatText   = "text"
-	scanFormatJSON   = "json"
-	scanFormatGitHub = "github"
-	scanFormatSARIF  = "sarif"
+	scanFormatText     = "text"
+	scanFormatJSON     = "json"
+	scanFormatGitHub   = "github"
+	scanFormatSARIF    = "sarif"
+	scanFormatCSV      = "csv"
+	scanFormatJSONL    = "jsonl"
+	scanFormatMarkdown = "markdown"
 )
 
 // scanConfig is the validated command line of `bluntcode scan`.
@@ -71,6 +78,22 @@ type scanConfig struct {
 	// path to a SARIF 2.1.0 file (Blunt Code's own export) or the ID of a
 	// previous scan of the same workspace. Empty disables baseline mode.
 	baseline string
+	// output writes the selected document format (json/github/sarif/csv/
+	// jsonl/markdown) to a file instead of stdout; empty means stdout.
+	output string
+	// saveBaseline writes the scan's SARIF 2.1.0 document to this path after a
+	// completed scan, one flag instead of a `--format sarif >` shell redirect.
+	saveBaseline string
+	// Gate scoping: when non-empty, only findings from these analyzers or in
+	// these categories feed the CI gate (--gate-analyzer/--gate-category).
+	gateAnalyzers  map[string]bool
+	gateCategories map[string]bool
+	// githubCap overrides how many annotations are shown per severity level
+	// in the --format github stream (default 10, GitHub's own hard limit).
+	githubCap int
+	// Watch loop tuning; zero values fall back to the package defaults.
+	watchPoll  time.Duration
+	watchQuiet time.Duration
 	// jobs bounds how many analyzers may run concurrently; 0 (the default)
 	// keeps the sequential execution model.
 	jobs int
@@ -100,7 +123,7 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	flags := flag.NewFlagSet("scan", flag.ContinueOnError)
 	flags.SetOutput(errOut)
 	profile := flags.String("profile", "standard", "scan profile: quick, standard, or deep")
-	format := flags.String("format", "", "stdout report format: text (human summary, the default), json (the full JSON report document), github (GitHub Actions annotations), or sarif (the SARIF 2.1.0 code-scanning document)")
+	format := flags.String("format", "", "stdout report format: text (human summary, the default), json (the full JSON report document), github (GitHub Actions annotations), sarif (the SARIF 2.1.0 code-scanning document), csv, jsonl, or markdown")
 	jsonOut := flags.Bool("json", false, "print a machine-readable JSON summary instead of human text")
 	timeout := flags.Duration("timeout", scanDefaultTimeout, "abort the scan when it exceeds this duration (for example 5m or 90s)")
 	quiet := flags.Bool("quiet", false, "suppress progress lines on stderr; the summary is still printed")
@@ -109,6 +132,13 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	baseline := flags.String("baseline", "", "exclude known findings from the gate: a previous scan ID or the path of a SARIF 2.1.0 file exported by Blunt Code")
 	jobs := flags.Int("jobs", 0, "run at most N analyzers concurrently (positive integer); by default analyzers run one after another")
 	incremental := flags.Bool("incremental", false, "reuse the previous completed scan's findings for unchanged files and run analyzers only on changed files (a boolean flag: --incremental, never --incremental <value>); composes with gate, baseline, format, and jobs flags")
+	output := flags.String("output", "", "write the selected document format (json, github, sarif, csv, jsonl, or markdown) to this file instead of stdout; progress stays on stderr")
+	saveBaseline := flags.String("save-baseline", "", "write the scan's SARIF 2.1.0 document to this file after a completed scan (same bytes as --format sarif)")
+	gateAnalyzers := flags.String("gate-analyzer", "", "scope the CI gate to these analyzers only: comma-separated IDs such as semgrep,secrets")
+	gateCategories := flags.String("gate-category", "", "scope the CI gate to these categories only: comma-separated security, correctness, style, performance")
+	watchPollFlag := flags.Duration("watch-poll", 0, "watch mode filesystem poll interval (250ms to 1m; default 2s)")
+	watchQuietFlag := flags.Duration("watch-quiet", 0, "watch mode quiet window before a rescan starts (100ms to 2m; default 1.5s)")
+	githubCap := flags.Int("github-cap", 10, "max annotations shown per GitHub severity level before a truncation notice (1-50)")
 	watch := flags.Bool("watch", false, "keep running and rescan automatically when workspace files change (polls every 2s; a rescan starts after 1.5s without further changes); gate flags never exit the process; Ctrl+C stops it")
 	flags.Usage = func() {
 		fmt.Fprintln(errOut, scanUsage)
@@ -168,12 +198,12 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	if len(positional) != 1 {
 		return usageError("exactly one workspace path is required")
 	}
-	cfg := scanConfig{path: positional[0], profile: *profile, json: *jsonOut, format: *format, timeout: *timeout, quiet: *quiet, baseline: *baseline, jobs: *jobs, incremental: *incremental, watch: *watch}
+	cfg := scanConfig{path: positional[0], profile: *profile, json: *jsonOut, format: *format, timeout: *timeout, quiet: *quiet, baseline: *baseline, jobs: *jobs, incremental: *incremental, watch: *watch, output: *output, saveBaseline: *saveBaseline}
 	if cfg.profile != analyzers.ProfileQuick && cfg.profile != analyzers.ProfileStandard && cfg.profile != analyzers.ProfileDeep {
 		return usageError("profile must be quick, standard, or deep")
 	}
-	if cfg.format != "" && cfg.format != scanFormatText && cfg.format != scanFormatJSON && cfg.format != scanFormatGitHub && cfg.format != scanFormatSARIF {
-		return usageError("format must be text, json, github, or sarif")
+	if cfg.format != "" && cfg.format != scanFormatText && cfg.format != scanFormatJSON && cfg.format != scanFormatGitHub && cfg.format != scanFormatSARIF && cfg.format != scanFormatCSV && cfg.format != scanFormatJSONL && cfg.format != scanFormatMarkdown {
+		return usageError("format must be text, json, github, sarif, csv, jsonl, or markdown")
 	}
 	if cfg.json && cfg.format == scanFormatJSON {
 		return usageError("--json cannot be combined with --format json: --json prints the compact summary, --format json the full report")
@@ -184,9 +214,52 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	if cfg.json && cfg.format == scanFormatSARIF {
 		return usageError("--json cannot be combined with --format sarif: --json prints the compact summary, --format sarif the SARIF document")
 	}
+	if cfg.json && cfg.format == scanFormatMarkdown {
+		return usageError("--json cannot be combined with --format markdown: --json prints the compact summary, --format markdown the full report")
+	}
 	if cfg.watch && cfg.format == scanFormatGitHub {
 		return usageError("--watch cannot be combined with --format github: annotations make no sense in a watch loop; use text, json, or sarif")
 	}
+	if cfg.output != "" && cfg.format != scanFormatJSON && cfg.format != scanFormatGitHub && cfg.format != scanFormatSARIF && cfg.format != scanFormatCSV && cfg.format != scanFormatJSONL && cfg.format != scanFormatMarkdown {
+		return usageError("--output requires a document format: json, github, sarif, csv, jsonl, or markdown")
+	}
+	if cfg.saveBaseline != "" && cfg.watch {
+		return usageError("--save-baseline cannot be combined with --watch: each rescan would overwrite the file; use --format sarif and redirect instead")
+	}
+	parseList := func(raw string) map[string]bool {
+		out := map[string]bool{}
+		for _, part := range strings.Split(raw, ",") {
+			if value := strings.ToLower(strings.TrimSpace(part)); value != "" {
+				out[value] = true
+			}
+		}
+		return out
+	}
+	if ga := strings.TrimSpace(*gateAnalyzers); ga != "" {
+		cfg.gateAnalyzers = parseList(ga)
+	}
+	if gc := strings.TrimSpace(*gateCategories); gc != "" {
+		cfg.gateCategories = parseList(gc)
+	}
+	if *watchPollFlag != 0 {
+		if *watchPollFlag < 250*time.Millisecond || *watchPollFlag > time.Minute {
+			return usageError("watch-poll must be between 250ms and 1m")
+		}
+		cfg.watchPoll = *watchPollFlag
+	}
+	if *watchQuietFlag != 0 {
+		if *watchQuietFlag < 100*time.Millisecond || *watchQuietFlag > 2*time.Minute {
+			return usageError("watch-quiet must be between 100ms and 2m")
+		}
+		cfg.watchQuiet = *watchQuietFlag
+	}
+	if cfg.watch && cfg.watchPoll != 0 && cfg.watchQuiet != 0 && cfg.watchQuiet < cfg.watchPoll/4 {
+		return usageError("watch-quiet should stay at least a quarter of watch-poll so polls can observe the quiet window")
+	}
+	if *githubCap < 1 || *githubCap > 50 {
+		return usageError("github-cap must be between 1 and 50")
+	}
+	cfg.githubCap = *githubCap
 	if cfg.timeout <= 0 {
 		return usageError("timeout must be a positive duration such as 5m")
 	}
@@ -383,6 +456,13 @@ func runScanCommand(args []string, stdout, stderr io.Writer) int {
 	signal.Notify(interrupt, os.Interrupt)
 	defer signal.Stop(interrupt)
 	if cfg.watch {
+		poll, quiet := cfg.watchPoll, cfg.watchQuiet
+		if poll == 0 {
+			poll = watchPollInterval
+		}
+		if quiet == 0 {
+			quiet = watchQuietWindow
+		}
 		return runWatchLoop(watchEnv{
 			quiet:     cfg.quiet,
 			stderr:    stderr,
@@ -398,7 +478,7 @@ func runScanCommand(args []string, stdout, stderr io.Writer) int {
 				scanCfg.incremental = incremental || cfg.incremental
 				return runSingleScan(app, scanCfg, work, baseline, stdout, stderr, interrupts)
 			},
-		}, watchLoopOptions{pollInterval: watchPollInterval, quietWindow: watchQuietWindow})
+		}, watchLoopOptions{pollInterval: poll, quietWindow: quiet})
 	}
 	return runSingleScan(app, cfg, work, baseline, stdout, stderr, interrupt).code
 }
@@ -465,35 +545,66 @@ func runSingleScan(app *appCore, cfg scanConfig, work core.Workspace, baseline s
 		return scanRunResult{code: 1}
 	}
 	summary.state = outcome.finalState
-	switch {
-	case cfg.format == scanFormatJSON || cfg.format == scanFormatGitHub || cfg.format == scanFormatSARIF:
-		model, err := buildScanReportModel(ctx, app.db, work, summary)
+	// Document formats share one report model; --save-baseline needs the same
+	// model, so it is built once whenever any of them is in play.
+	documentFormats := cfg.format == scanFormatJSON || cfg.format == scanFormatGitHub || cfg.format == scanFormatSARIF || cfg.format == scanFormatCSV || cfg.format == scanFormatJSONL || cfg.format == scanFormatMarkdown
+	var model reports.Model
+	if documentFormats || cfg.saveBaseline != "" {
+		built, err := buildScanReportModel(ctx, app.db, work, summary)
 		if err != nil {
 			fmt.Fprintf(stderr, "bluntcode scan: could not load report: %v\n", err)
 			return scanRunResult{code: 1}
 		}
-		// All three document formats share the report model and go to stdout;
-		// the annotation stream especially must stay on stdout because that is
-		// the only stream GitHub Actions scans for workflow commands. The SARIF
-		// bytes are the exact serialization GET /api/v1/scans/{id}/report.sarif
-		// serves (reports.SARIFBytes), so `--format sarif > baseline.sarif`
-		// round-trips through --baseline without the server. Every document
-		// ends with its own single LF, so in --watch mode each rescan emits one
-		// complete, newline-separated document, mirroring the json format. The
-		// gate and baseline summaries below keep writing to stderr, so the
-		// formats compose with the CI flags without interleaving.
-		document := reports.JSON(model)
-		if cfg.format == scanFormatGitHub {
-			document = reports.GitHubAnnotations(model)
-		}
-		if cfg.format == scanFormatSARIF {
+		model = built
+	}
+	switch {
+	case documentFormats:
+		// All four document formats share the report model and go to stdout
+		// (or to --output); the annotation stream especially must stay on
+		// stdout because that is the only stream GitHub Actions scans for
+		// workflow commands. The SARIF bytes are the exact serialization GET
+		// /api/v1/scans/{id}/report.sarif serves (reports.SARIFBytes), so
+		// `--format sarif > baseline.sarif` round-trips through --baseline
+		// without the server. Every document ends with its own single LF, so
+		// in --watch mode each rescan emits one complete, newline-separated
+		// document, mirroring the json format. The gate and baseline summaries
+		// below keep writing to stderr, so the formats compose with the CI
+		// flags without interleaving.
+		var document []byte
+		switch cfg.format {
+		case scanFormatGitHub:
+			document = reports.GitHubAnnotationsWithCap(model, cfg.githubCap)
+		case scanFormatSARIF:
 			document = reports.SARIFBytes(model)
+		case scanFormatCSV:
+			document = reports.CSV(model)
+		case scanFormatJSONL:
+			document = reports.JSONL(model)
+		case scanFormatMarkdown:
+			document = []byte(reports.Markdown(model))
+		default:
+			document = reports.JSON(model)
 		}
-		if _, err := stdout.Write(document); err != nil {
+		if cfg.output != "" {
+			if err := os.WriteFile(cfg.output, document, 0o600); err != nil {
+				fmt.Fprintf(stderr, "bluntcode scan: could not write %s: %v\n", cfg.output, err)
+				return scanRunResult{code: 1}
+			}
+			fmt.Fprintf(stderr, "report written to %s\n", cfg.output)
+		} else if _, err := stdout.Write(document); err != nil {
 			fmt.Fprintf(stderr, "bluntcode scan: could not write report: %v\n", err)
 			return scanRunResult{code: 1}
 		}
-	case cfg.json:
+	}
+	if cfg.saveBaseline != "" && summary.state == "completed" {
+		if err := os.WriteFile(cfg.saveBaseline, reports.SARIFBytes(model), 0o600); err != nil {
+			fmt.Fprintf(stderr, "bluntcode scan: could not write baseline %s: %v\n", cfg.saveBaseline, err)
+			return scanRunResult{code: 1}
+		}
+		fmt.Fprintf(stderr, "baseline written to %s\n", cfg.saveBaseline)
+	}
+	switch {
+	case !documentFormats && cfg.json:
 		if err := writeScanJSON(stdout, summary); err != nil {
 			fmt.Fprintf(stderr, "bluntcode scan: could not write summary: %v\n", err)
 			return scanRunResult{code: 1}
@@ -514,6 +625,13 @@ func runSingleScan(app *appCore, cfg scanConfig, work core.Workspace, baseline s
 		fmt.Fprintf(stderr, "baseline: %d known finding(s) excluded from gate, %d new finding(s)\n", len(known), len(fresh))
 	} else {
 		gatedFindings = summary.findings
+	}
+	// Gate scoping narrows which findings the gate sees: only the listed
+	// analyzers and/or categories are counted. An empty flag means "all".
+	if len(cfg.gateAnalyzers) > 0 || len(cfg.gateCategories) > 0 {
+		narrowed := scopeGateFindings(gatedFindings, cfg.gateAnalyzers, cfg.gateCategories)
+		fmt.Fprintf(stderr, "gate scope: %d of %d finding(s) match --gate-analyzer/--gate-category\n", len(narrowed), len(gatedFindings))
+		gatedFindings = narrowed
 	}
 	// The CI gate applies only to scans that completed and would otherwise
 	// exit 0; failed, cancelled, and interrupted scans keep their own exit
@@ -828,6 +946,65 @@ func scanAnalyzerDisplayName(id string) string {
 }
 
 // writeScanHuman prints the end-of-scan summary to stdout.
+// scopeGateFindings keeps only findings whose analyzer and category pass the
+// gate-scoping allow-lists; a nil/empty set allows everything on that axis.
+// Both the findings and the allow-list entries are compared lowercased, so
+// --gate-analyzer SEMGREP matches analyzer_id "semgrep".
+func scopeGateFindings(findings []analyzers.Finding, analyzersAllow, categoriesAllow map[string]bool) []analyzers.Finding {
+	if len(analyzersAllow) == 0 && len(categoriesAllow) == 0 {
+		return findings
+	}
+	lower := func(set map[string]bool) map[string]bool {
+		out := make(map[string]bool, len(set))
+		for k := range set {
+			out[strings.ToLower(k)] = true
+		}
+		return out
+	}
+	analyzersAllow = lower(analyzersAllow)
+	categoriesAllow = lower(categoriesAllow)
+	out := make([]analyzers.Finding, 0, len(findings))
+	for _, f := range findings {
+		if len(analyzersAllow) > 0 && !analyzersAllow[strings.ToLower(f.AnalyzerID)] {
+			continue
+		}
+		if len(categoriesAllow) > 0 && !categoriesAllow[strings.ToLower(string(f.Category))] {
+			continue
+		}
+		out = append(out, f)
+	}
+	return out
+}
+
+// writeTopFindings prints up to n of the most serious findings under the
+// counts so the human summary answers "what should I fix first" without
+// opening the full report. Ordering is severity rank, then path.
+func writeTopFindings(w io.Writer, findings []analyzers.Finding, n int) {
+	if len(findings) == 0 || n <= 0 {
+		return
+	}
+	rank := map[analyzers.Severity]int{analyzers.SeverityCritical: 5, analyzers.SeverityHigh: 4, analyzers.SeverityMedium: 3, analyzers.SeverityLow: 2, analyzers.SeverityInfo: 1}
+	top := make([]analyzers.Finding, len(findings))
+	copy(top, findings)
+	sort.SliceStable(top, func(i, j int) bool {
+		if rank[top[i].Severity] != rank[top[j].Severity] {
+			return rank[top[i].Severity] > rank[top[j].Severity]
+		}
+		return top[i].RelativePath < top[j].RelativePath
+	})
+	fmt.Fprintf(w, "Top findings:\n")
+	for i, f := range top {
+		if i >= n {
+			break
+		}
+		rule := f.RuleID
+		if rule == "" {
+			rule = string(f.Category)
+		}
+		fmt.Fprintf(w, "  %s %s - %s:%d\n", strings.ToUpper(string(f.Severity)), rule, f.RelativePath, f.StartLine)
+	}
+}
+
 func writeScanHuman(w io.Writer, s scanSummary) {
 	stateLabel := strings.ReplaceAll(s.state, "_", " ")
 	reason := ""
@@ -841,6 +1018,7 @@ func writeScanHuman(w io.Writer, s scanSummary) {
 		if s.hasPrevious {
 			fmt.Fprintf(w, "Versus previous scan: %d new, %d fixed, %d persistent\n", s.newCount, s.fixedCount, s.persistent)
 		}
+		writeTopFindings(w, s.findings, 3)
 	}
 	for _, run := range s.runs {
 		line := fmt.Sprintf("  %s", scanAnalyzerDisplayName(run.AnalyzerID))

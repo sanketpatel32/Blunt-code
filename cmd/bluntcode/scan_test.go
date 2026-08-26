@@ -525,9 +525,11 @@ func TestParseScanFlagsFormatFlag(t *testing.T) {
 		{"json selects the full report document", []string{"--format", "json", `C:\proj`}, "json", false},
 		{"github selects the annotation stream", []string{"--format", "github", `C:\proj`}, "github", false},
 		{"sarif selects the SARIF code-scanning document", []string{"--format", "sarif", `C:\proj`}, "sarif", false},
+		{"markdown selects the report document", []string{"--format", "markdown", `C:\proj`}, "markdown", false},
 		{"format after the path works", []string{`C:\proj`, "--format", "json"}, "json", false},
 		{"github format after the path works", []string{`C:\proj`, "--format", "github"}, "github", false},
 		{"sarif format after the path works", []string{`C:\proj`, "--format", "sarif"}, "sarif", false},
+		{"markdown format after the path works", []string{`C:\proj`, "--format", "markdown"}, "markdown", false},
 		{"json summary flag still accepted with text format", []string{"--json", "--format", "text", `C:\proj`}, "text", true},
 	}
 	for _, item := range cases {
@@ -553,11 +555,14 @@ func TestParseScanFlagsRejectsBadFormatInput(t *testing.T) {
 		args    []string
 		message string
 	}{
-		{"unknown format", []string{"--format", "yaml", `C:\proj`}, "format must be text, json, github, or sarif"},
-		{"github annotations misspelled", []string{"--format", "actions", `C:\proj`}, "format must be text, json, github, or sarif"},
+		{"unknown format", []string{"--format", "yaml", `C:\proj`}, "format must be text, json, github, sarif, csv, jsonl, or markdown"},
+		{"github annotations misspelled", []string{"--format", "actions", `C:\proj`}, "format must be text, json, github, sarif, csv, jsonl, or markdown"},
 		{"json summary combined with report format", []string{"--json", "--format", "json", `C:\proj`}, "--json cannot be combined with --format json"},
 		{"json summary combined with github format", []string{"--json", "--format", "github", `C:\proj`}, "--json cannot be combined with --format github"},
 		{"json summary combined with sarif format", []string{"--json", "--format", "sarif", `C:\proj`}, "--json cannot be combined with --format sarif"},
+		{"json summary combined with markdown format", []string{"--json", "--format", "markdown", `C:\proj`}, "--json cannot be combined with --format markdown"},
+		{"output without a document format", []string{"--output", "out.txt", `C:\proj`}, "--output requires a document format"},
+		{"save-baseline in watch mode", []string{"--watch", "--save-baseline", "base.sarif", `C:\proj`}, "--save-baseline cannot be combined with --watch"},
 	}
 	for _, item := range cases {
 		t.Run(item.name, func(t *testing.T) {
@@ -584,8 +589,29 @@ func TestRunScanCommandRejectsBadFormatFlagWithExitCodeTwo(t *testing.T) {
 	if out.Len() != 0 {
 		t.Fatalf("stdout = %q", out.String())
 	}
-	if !strings.Contains(errOut.String(), "format must be text, json, github, or sarif") {
+	if !strings.Contains(errOut.String(), "format must be text, json, github, sarif, csv, jsonl, or markdown") {
 		t.Fatalf("reason missing: %q", errOut.String())
+	}
+}
+
+// TestParseScanFlagsMarkdownFormat pins the markdown document format: it
+// parses alone and composes with --output like the other document formats,
+// while --json --format markdown stays rejected for consistency with json,
+// github, and sarif (the compact summary and the full report would collide).
+func TestParseScanFlagsMarkdownFormat(t *testing.T) {
+	var errOut bytes.Buffer
+	cfg, err := parseScanFlags([]string{"--format", "markdown", "--output", "report.md", `C:\proj`}, &errOut)
+	if err != nil {
+		t.Fatalf("parse: %v (stderr: %s)", err, errOut.String())
+	}
+	if cfg.format != "markdown" || cfg.output != "report.md" {
+		t.Fatalf("format/output = %q/%q, want markdown/report.md", cfg.format, cfg.output)
+	}
+	var rejectOut bytes.Buffer
+	if _, err := parseScanFlags([]string{"--json", "--format", "markdown", `C:\proj`}, &rejectOut); err == nil {
+		t.Fatal("--json --format markdown must be rejected")
+	} else if !strings.Contains(err.Error(), "--json cannot be combined with --format markdown") {
+		t.Fatalf("rejection reason = %q", err.Error())
 	}
 }
 

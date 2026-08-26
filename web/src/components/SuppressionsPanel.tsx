@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../api';
 import type { Suppression } from '../types';
 import type { Notice } from '../lib/notice';
@@ -22,6 +22,17 @@ function matchesSearch(suppression: Suppression, needle: string) {
   return `${suppression.reason ?? ''} ${suppression.fingerprint}`.toLowerCase().includes(needle);
 }
 
+/** Minimal RFC-4180 quoting: only fields containing a comma, quote, or newline need wrapping, and embedded quotes double up. */
+function csvField(value: string) {
+  return /[",\n\r]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
+}
+
+/** Whole-file CSV of the loaded suppressions. The \ufeff BOM keeps Excel and friends reading the UTF-8 hex/reasons correctly. */
+export function suppressionsCsv(rows: Suppression[]): string {
+  const lines = [['fingerprint', 'reason', 'created_at'], ...rows.map((row) => [row.fingerprint, row.reason ?? '', row.created_at])];
+  return `\ufeff${lines.map((line) => line.map(csvField).join(',')).join('\n')}`;
+}
+
 /**
  * Workspace-level suppression management (sits under the severity trend):
  * every fingerprint dismissed from any scan, newest context first, each with a
@@ -35,6 +46,21 @@ export function SuppressionsSection({ workspaceId, notify }: { workspaceId: stri
   // Clearing applies immediately (delay 0); typing settles before the list re-filters.
   const debouncedQuery = useDebouncedValue(query, query ? SEARCH_DEBOUNCE_MS : 0);
   const [restoring, setRestoring] = useState<string>();
+  // Loop W4 · client-side CSV export: one object URL per loaded suppression set,
+  // revoked whenever it is replaced or the panel unmounts so nothing leaks.
+  // Environments without blob URL support (jsdom, hardened browsers) keep the
+  // disabled fallback button instead of crashing the panel.
+  const [csvUrl, setCsvUrl] = useState<string>();
+  const rows = suppressions.data;
+  const blobUrlsSupported = typeof URL.createObjectURL === 'function' && typeof URL.revokeObjectURL === 'function';
+  useEffect(() => {
+    if (!rows?.length || !blobUrlsSupported) return;
+    const url = URL.createObjectURL(new Blob([suppressionsCsv(rows)], { type: 'text/csv;charset=utf-8' }));
+    setCsvUrl(url);
+    return () => {
+      if (typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(url);
+    };
+  }, [rows, blobUrlsSupported]);
   const restore = async (fingerprint: string) => {
     setRestoring(fingerprint);
     try {
@@ -59,24 +85,28 @@ export function SuppressionsSection({ workspaceId, notify }: { workspaceId: stri
   const visible = needle ? items.filter((suppression) => matchesSearch(suppression, needle)) : items;
   return <section className="suppressions-section" aria-labelledby="suppressions-title">
     {header}
-    {items.length > 0 && <div className="suppressions-toolbar">
-      <label className="search"><span>Search suppressions</span><input type="search" value={query} placeholder="Reason or fingerprint" onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setQuery(''); }} /></label>
-      {needle !== '' && <p className="suppressions-count" role="status">{visible.length} of {items.length} {items.length === 1 ? 'suppression' : 'suppressions'} shown</p>}
-    </div>}
+    <div className="suppressions-toolbar">
+      {items.length > 0 && <label className="search"><span>Search suppressions</span><input type="search" value={query} placeholder="Reason or fingerprint" onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setQuery(''); }} /></label>}
+      {needle !== '' && items.length > 0 && <p className="suppressions-count" role="status">{visible.length} of {items.length} {items.length === 1 ? 'suppression' : 'suppressions'} shown</p>}
+      {/* The anchor carries the pre-built blob URL as a plain download; with zero rows it degrades to a disabled button instead of an inert link. */}
+      {csvUrl
+        ? <a className="button secondary suppressions-export" href={csvUrl} download="suppressions.csv" title={`Download all ${items.length} suppressions as CSV`}>Export CSV</a>
+        : <button type="button" className="button secondary suppressions-export" disabled>Export CSV</button>}
+    </div>
     {items.length === 0
       ? <p className="muted">Nothing is suppressed. Use “Suppress…” on a finding in any scan report to hide it from future scans.</p>
       : visible.length
-        ? <ul className="suppressions-list">{visible.map((suppression) => <SuppressionRow suppression={suppression} busy={restoring === suppression.fingerprint} key={suppression.fingerprint} onRestore={restore} />)}</ul>
+        ? <div className="table-wrap suppressions-table"><table><caption className="sr-only">Dismissed findings for this workspace</caption><thead><tr><th scope="col">Fingerprint</th><th scope="col">Reason</th><th scope="col">Suppressed</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead><tbody>{visible.map((suppression) => <SuppressionRow suppression={suppression} busy={restoring === suppression.fingerprint} key={suppression.fingerprint} onRestore={restore} />)}</tbody></table></div>
         : <p className="muted">No suppressions match “{needle}”. Clear the search to see all {items.length}.</p>}
   </section>;
 }
 
 function SuppressionRow({ suppression, busy, onRestore }: { suppression: Suppression; busy: boolean; onRestore: (fingerprint: string) => void }) {
   const short = shortFingerprint(suppression.fingerprint);
-  return <li className="suppression-row">
-    <code className="suppression-fingerprint" title={suppression.fingerprint}>{short}</code>
-    <span className="suppression-reason">{suppression.reason || 'No reason given'}</span>
-    <time className="suppression-date" dateTime={suppression.created_at}>{date(suppression.created_at)}</time>
-    <button type="button" className="text-button" aria-label={`Restore ${short}`} title={`Stop hiding ${suppression.fingerprint}`} disabled={busy} onClick={() => void onRestore(suppression.fingerprint)}>{busy ? 'Restoring…' : 'Restore'}</button>
-  </li>;
+  return <tr className="suppression-row">
+    <td><code className="suppression-fingerprint" title={suppression.fingerprint}>{short}</code></td>
+    <td className="suppression-reason">{suppression.reason || 'No reason given'}</td>
+    <td><time className="suppression-date" dateTime={suppression.created_at}>{date(suppression.created_at)}</time></td>
+    <td><button type="button" className="text-button" aria-label={`Restore ${short}`} title={`Stop hiding ${suppression.fingerprint}`} disabled={busy} onClick={() => void onRestore(suppression.fingerprint)}>{busy ? 'Restoring…' : 'Restore'}</button></td>
+  </tr>;
 }

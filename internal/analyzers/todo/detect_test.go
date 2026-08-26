@@ -53,7 +53,13 @@ func TestMarkerDetection(t *testing.T) {
 		{"mixed case Todo", "// Todo: sentence start", nil},
 		{"mixed case Bug", "// Bug: prose", nil},
 		// Follower must be a colon, whitespace, or end of line.
-		{"todo followed by parenthesis", "// TODO(name): attribution style", nil},
+		{"todo attribution positive", "// TODO(name): attribution style", []string{ruleTODO}},
+		{"todo attribution ticket id", "x := 1 // FIXME(APPS-123) crash on empty payload", []string{ruleFIXME}},
+		{"todo attribution bare at end of line", "// TODO(jane doe)", []string{ruleTODO}},
+		{"todo attribution near-miss empty parens", "// TODO(): nothing", nil},
+		{"todo attribution near-miss unclosed", "// TODO(named never closed", nil},
+		{"todo attribution near-miss bad char", "// TODO(we@ird): nope", nil},
+		{"todo attribution near-miss missing follower", "// TODO(name). punctuation ends it", nil},
 		{"todo followed by period", "// TODO.", nil},
 		{"todo followed by hyphen", "// TODO-maybe", nil},
 		// A marker inside a string literal is accepted noise: the scan is

@@ -5,6 +5,11 @@ export interface Workspace {
   name: string;
   root_path: string;
   languages?: string[];
+  /** Free-form project labels shown as chips on the workspaces page; the API omits the field until tagging ships server-side. */
+  tags?: string[];
+  /** Weighted risk rollup mirroring RiskProfile's grade bands; optional because no endpoint populates it yet — render defensively. */
+  risk?: { grade: 'A' | 'B' | 'C' | 'D'; score: number };
+  default_profile?: string;
   last_scan_at?: string | null;
   last_opened_at?: string | null;
   latest_scan?: Scan;
@@ -74,6 +79,39 @@ export interface RecentScansResponse {
   scans: RecentScanItem[];
   total: number;
   summary?: ScanSummary;
+}
+
+/** One server-paged slice of a workspace's scan history (`GET /workspaces/{id}/scans?page=…`). */
+export interface ScanPage {
+  items: Scan[];
+  total: number;
+  page: number;
+  page_size: number;
+  has_next: boolean;
+}
+
+/** A finding from the cross-workspace search, enriched with its origin identity so results can link back to their report. */
+export type SearchedFinding = Finding & { scan_id: string; workspace_id: string };
+
+/** One page of `GET /api/v1/findings/search`. */
+export interface SearchFindingsPage {
+  items: SearchedFinding[];
+  total: number;
+  page: number;
+  page_size: number;
+  has_next: boolean;
+}
+
+/** Weighted risk score from `GET /workspaces/{id}/risk`. Weights: critical 10, high 5, medium 2, low 1. Grade A<5, B<20, C<50, D otherwise. */
+export interface RiskProfile {
+  available: boolean;
+  scan_id?: string;
+  score?: number;
+  grade?: 'A' | 'B' | 'C' | 'D';
+  trend?: 'up' | 'down' | 'flat';
+  previous_score?: number;
+  previous_scan_id?: string;
+  counts?: Record<string, number>;
 }
 
 /** Tool readiness pair on the global overview; the whole field is absent when no tools service is wired into the server. */

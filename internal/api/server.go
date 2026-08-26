@@ -36,6 +36,11 @@ import (
 
 const APIVersion = "v1"
 
+// sseHeartbeatInterval paces the SSE keep-alive comments written to idle scan
+// event streams. Package-level so tests can shorten it; never mutate outside
+// tests.
+var sseHeartbeatInterval = 15 * time.Second
+
 type Server struct {
 	db         *database.DB
 	bus        *events.Bus
@@ -66,7 +71,7 @@ func New(db *database.DB, bus *events.Bus, scanService *scans.Service, toolServi
 	s.routes()
 	return s
 }
-func (s *Server) Handler() http.Handler { return securityMiddleware(s.mux) }
+func (s *Server) Handler() http.Handler { return securityMiddleware(rateLimitMiddleware(s.mux)) }
 
 // SetShutdown connects the local stop action to the host application's
 // graceful shutdown lifecycle. It is deliberately supplied by cmd, not HTTP.
@@ -93,18 +98,26 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("PUT /api/v1/workspaces/{id}/rules", s.putRules)
 	s.mux.HandleFunc("GET /api/v1/workspaces/{id}/suppressions", s.getSuppressions)
 	s.mux.HandleFunc("POST /api/v1/workspaces/{id}/suppressions", s.addSuppression)
+	s.mux.HandleFunc("GET /api/v1/workspaces/{id}/suppressions.csv", s.suppressionsCSV)
+	s.mux.HandleFunc("POST /api/v1/workspaces/{id}/suppressions/import", s.importSuppressions)
 	s.mux.HandleFunc("DELETE /api/v1/workspaces/{id}/suppressions/{fingerprint}", s.removeSuppression)
 	s.mux.HandleFunc("GET /api/v1/workspaces/{id}/trends", s.workspaceTrends)
+	s.mux.HandleFunc("GET /api/v1/workspaces/{id}/risk", s.workspaceRisk)
 	s.mux.HandleFunc("GET /api/v1/workspaces/{id}/scans", s.listScans)
+	s.mux.HandleFunc("DELETE /api/v1/workspaces/{id}/scans", s.pruneWorkspaceScans)
 	s.mux.HandleFunc("POST /api/v1/workspaces/{id}/scans", s.startScan)
 	s.mux.HandleFunc("GET /api/v1/scans", s.recentScans)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}", s.getScan)
+	s.mux.HandleFunc("DELETE /api/v1/scans/{id}", s.deleteScan)
+	s.mux.HandleFunc("GET /api/v1/findings/search", s.searchFindings)
 	s.mux.HandleFunc("POST /api/v1/scans/{id}/cancel", s.cancelScan)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/events", s.scanEvents)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings", s.findings)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings.csv", s.findingsCSV)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings.json", s.findingsJSON)
+	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings.jsonl", s.findingsJSONL)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/fixed", s.fixedFindings)
+	s.mux.HandleFunc("GET /api/v1/scans/{id}/compare", s.scanCompare)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings/{findingID}/preview", s.findingPreview)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/report", s.report)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/report.md", s.reportMarkdown)
@@ -782,6 +795,116 @@ func (s *Server) removeSuppression(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// suppressionsCSVHeader is the fixed export column order of the suppression
+// CSV; it and the row writer below must stay in sync. The import endpoint
+// only requires the fingerprint column, so the header stays importable
+// as-is.
+var suppressionsCSVHeader = []string{"fingerprint", "reason", "created_at"}
+
+// suppressionsCSV exports the workspace's dismissals as a spreadsheet-friendly
+// CSV attachment: UTF-8 BOM for Excel, formula-neutralized cells (the same
+// csvCell transform the findings export applies), and RFC3339 timestamps.
+// The file is a valid input for suppressions/import, so dismissals can move
+// between machines and workspaces.
+func (s *Server) suppressionsCSV(w http.ResponseWriter, r *http.Request) {
+	work, ok := s.workspace(r)
+	if !ok {
+		fail(w, 404, "WORKSPACE_NOT_FOUND", "Workspace was not found.")
+		return
+	}
+	items, err := s.db.Suppressions(r.Context(), work.ID)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load suppressions.")
+		return
+	}
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="bluntcode-workspace-%s-suppressions.csv"`, shortID(work.ID)))
+	_, _ = w.Write([]byte(csvBOM))
+	writer := csv.NewWriter(w)
+	if err := writer.Write(suppressionsCSVHeader); err != nil {
+		s.log.Warn("csv header write failed", "error", err)
+		return
+	}
+	for _, item := range items {
+		if err := writer.Write([]string{
+			csvCell(item.Fingerprint), csvCell(item.Reason), item.CreatedAt.UTC().Format(time.RFC3339),
+		}); err != nil {
+			s.log.Warn("csv row write failed", "error", err)
+			return
+		}
+	}
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		s.log.Warn("csv flush failed", "error", err)
+	}
+}
+
+// importSuppressions bulk-loads dismissal fingerprints from the CSV text the
+// suppressions.csv export produces. Only the fingerprint column is read —
+// reason and created_at are ignored — fingerprints are normalized to
+// lowercase before validation, invalid rows are skipped without failing the
+// whole request, and rows already suppressed (or repeated within the file)
+// are reported as duplicates rather than rewritten.
+func (s *Server) importSuppressions(w http.ResponseWriter, r *http.Request) {
+	work, ok := s.workspace(r)
+	if !ok {
+		fail(w, 404, "WORKSPACE_NOT_FOUND", "Workspace was not found.")
+		return
+	}
+	var input struct {
+		CSV string `json:"csv"`
+	}
+	if err := decode(r, &input); err != nil || strings.TrimSpace(input.CSV) == "" {
+		fail(w, 400, "INVALID_CSV", "csv is required.")
+		return
+	}
+	records, err := csv.NewReader(strings.NewReader(input.CSV)).ReadAll()
+	if err != nil || len(records) == 0 {
+		fail(w, 400, "INVALID_CSV", "The upload is not parseable CSV text.")
+		return
+	}
+	column := -1
+	for index, name := range records[0] {
+		if strings.EqualFold(strings.TrimSpace(name), "fingerprint") {
+			column = index
+			break
+		}
+	}
+	if column < 0 {
+		fail(w, 400, "INVALID_CSV", `The CSV must have a "fingerprint" column.`)
+		return
+	}
+	existing, err := s.db.SuppressedFingerprints(r.Context(), work.ID)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load suppressions.")
+		return
+	}
+	imported, skippedInvalid, duplicate := 0, 0, 0
+	seen := map[string]bool{}
+	for _, row := range records[1:] {
+		if column >= len(row) {
+			skippedInvalid++
+			continue
+		}
+		fingerprint := strings.ToLower(strings.TrimSpace(row[column]))
+		if !validFingerprint(fingerprint) {
+			skippedInvalid++
+			continue
+		}
+		if existing[fingerprint] || seen[fingerprint] {
+			duplicate++
+			continue
+		}
+		if _, err := s.db.AddSuppression(r.Context(), work.ID, fingerprint, ""); err != nil {
+			fail(w, 500, "DATABASE_ERROR", "Could not save suppression.")
+			return
+		}
+		seen[fingerprint] = true
+		imported++
+	}
+	writeJSON(w, 200, map[string]int{"imported": imported, "skipped_invalid": skippedInvalid, "duplicate": duplicate})
+}
+
 // workspaceTrends serves the severity-over-time series for the workspace
 // detail page's trend chart: one point per completed scan, oldest first,
 // carrying the severity counts persisted at completion. Only the producing
@@ -853,7 +976,7 @@ func (s *Server) recentScans(w http.ResponseWriter, r *http.Request) {
 // single lifecycle state.
 func recentScanFilter(r *http.Request) (database.RecentScansFilter, error) {
 	query := r.URL.Query()
-	filter := database.RecentScansFilter{Limit: database.DefaultRecentScansLimit, State: strings.ToLower(strings.TrimSpace(query.Get("state")))}
+	filter := database.RecentScansFilter{Limit: database.DefaultRecentScansLimit, State: strings.ToLower(strings.TrimSpace(query.Get("state"))), WorkspaceID: strings.TrimSpace(query.Get("workspace_id"))}
 	if filter.State != "" && !knownScanState(filter.State) {
 		return filter, fmt.Errorf("state must be a known scan state such as completed or running")
 	}
@@ -868,6 +991,110 @@ func recentScanFilter(r *http.Request) (database.RecentScansFilter, error) {
 		filter.Limit = value
 	}
 	return filter, nil
+}
+
+// riskSeverityWeights weight one finding of each severity for the workspace
+// risk score. The scale is deliberately simple and documented: a critical
+// issue is worth two highs, a high two-and-a-half mediums, so the score moves
+// when the serious tail moves without drowning in low-severity noise.
+var riskSeverityWeights = map[string]float64{
+	"critical": 10,
+	"high":     5,
+	"medium":   2,
+	"low":      1,
+	"info":     0,
+}
+
+// riskGrade buckets a raw score into the A-D letter the UI renders.
+func riskGrade(score float64) string {
+	switch {
+	case score < 5:
+		return "A"
+	case score < 20:
+		return "B"
+	case score < 50:
+		return "C"
+	default:
+		return "D"
+	}
+}
+
+func riskScoreOf(c database.RiskCounts) float64 {
+	score := 0.0
+	score += float64(c.Critical) * riskSeverityWeights["critical"]
+	score += float64(c.High) * riskSeverityWeights["high"]
+	score += float64(c.Medium) * riskSeverityWeights["medium"]
+	score += float64(c.Low) * riskSeverityWeights["low"]
+	return score
+}
+
+// workspaceRisk serves the workspace's weighted risk score computed from its
+// latest completed scan, plus the delta against the previous completed scan
+// so the UI can show whether risk is heading up or down.
+func (s *Server) workspaceRisk(w http.ResponseWriter, r *http.Request) {
+	work, ok := s.workspace(r)
+	if !ok {
+		fail(w, 404, "WORKSPACE_NOT_FOUND", "Workspace was not found.")
+		return
+	}
+	snaps, err := s.db.RecentCompletedSeverityCounts(r.Context(), work.ID, 2)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load risk data.")
+		return
+	}
+	if len(snaps) == 0 {
+		writeJSON(w, 200, map[string]any{"available": false})
+		return
+	}
+	latest := snaps[0]
+	score := riskScoreOf(latest)
+	response := map[string]any{
+		"available": true,
+		"scan_id":   latest.ScanID,
+		"score":     score,
+		"grade":     riskGrade(score),
+		"counts":    map[string]int{"critical": latest.Critical, "high": latest.High, "medium": latest.Medium, "low": latest.Low, "info": latest.Info},
+		"weights":   riskSeverityWeights,
+	}
+	if len(snaps) > 1 {
+		previous := riskScoreOf(snaps[1])
+		trend := "flat"
+		switch {
+		case score > previous:
+			trend = "up"
+		case score < previous:
+			trend = "down"
+		}
+		response["previous_score"] = previous
+		response["previous_scan_id"] = snaps[1].ScanID
+		response["trend"] = trend
+	} else {
+		response["trend"] = "flat"
+	}
+	writeJSON(w, 200, response)
+}
+
+// pruneWorkspaceScans deletes every terminal scan of the workspace beyond the
+// newest keep (query parameter, 1..100). Running scans are never touched. It
+// backs the history-retention control so old reports stop growing forever.
+func (s *Server) pruneWorkspaceScans(w http.ResponseWriter, r *http.Request) {
+	work, ok := s.workspace(r)
+	if !ok {
+		fail(w, 404, "WORKSPACE_NOT_FOUND", "Workspace was not found.")
+		return
+	}
+	raw := strings.TrimSpace(r.URL.Query().Get("keep"))
+	keep, err := strconv.Atoi(raw)
+	if err != nil || keep < 1 || keep > 100 {
+		fail(w, 400, "INVALID_PRUNE_REQUEST", "keep must be an integer between 1 and 100.")
+		return
+	}
+	deleted, err := s.db.PruneOldScans(r.Context(), work.ID, keep)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not prune scans.")
+		return
+	}
+	writeJSON(w, 200, map[string]any{"deleted": deleted, "kept": keep})
 }
 
 // knownScanState reports whether state belongs to the scan lifecycle: the
@@ -963,6 +1190,128 @@ func analyzerRuns(runs []reports.Run) []map[string]any {
 		})
 	}
 	return items
+}
+
+// searchFindings serves the cross-workspace findings search. Every control is
+// optional; empty values mean "no filter". Pagination always applies
+// (page/page_size), matching the web UI's global search page contract.
+func (s *Server) searchFindings(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	filter := database.GlobalFindingsFilter{
+		Query:       strings.TrimSpace(query.Get("q")),
+		Analyzer:    strings.TrimSpace(query.Get("analyzer")),
+		WorkspaceID: strings.TrimSpace(query.Get("workspace_id")),
+	}
+	if raw := strings.TrimSpace(query.Get("severity")); raw != "" {
+		for _, part := range strings.Split(raw, ",") {
+			if value := strings.ToLower(strings.TrimSpace(part)); value != "" {
+				filter.Severities = append(filter.Severities, value)
+			}
+		}
+	}
+	filter.IncludeSuppressed = strings.EqualFold(strings.TrimSpace(query.Get("include_suppressed")), "true")
+	if raw := strings.TrimSpace(query.Get("page")); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 1 {
+			fail(w, 400, "INVALID_SEARCH_QUERY", "page must be a positive integer.")
+			return
+		}
+		filter.Page = value
+	}
+	if raw := strings.TrimSpace(query.Get("page_size")); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 1 || value > database.MaxSearchPageSize {
+			fail(w, 400, "INVALID_SEARCH_QUERY", fmt.Sprintf("page_size must be between 1 and %d.", database.MaxSearchPageSize))
+			return
+		}
+		filter.PageSize = value
+	}
+	items, total, err := s.db.SearchFindings(r.Context(), filter)
+	if err != nil {
+		fail(w, 400, "INVALID_SEARCH_QUERY", err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]any{"items": items, "total": total, "page": filter.Page, "page_size": filter.PageSize, "has_next": (filter.Page-1)*filter.PageSize+len(items) < total})
+}
+
+// deleteScan removes one terminal scan and everything stored under it
+// (findings, metrics, per-file hashes, analyzer runs). Active scans must be
+// cancelled first; they are rejected with 409 so a delete can never race the
+// analyzer pipeline mid-write.
+func (s *Server) deleteScan(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !validID(id) {
+		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
+		return
+	}
+	scan, err := s.db.Scan(r.Context(), id)
+	if errors.Is(err, sql.ErrNoRows) {
+		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
+		return
+	}
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load scan.")
+		return
+	}
+	if !terminalScanState(scan.State) {
+		writeJSON(w, 409, map[string]any{"error": map[string]string{"code": "SCAN_NOT_TERMINAL", "message": "Cancel this scan before deleting it."}})
+		return
+	}
+	deleted, err := s.db.DeleteScan(r.Context(), id)
+	if err != nil || !deleted {
+		fail(w, 500, "DATABASE_ERROR", "Could not delete scan.")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// getWorkspaceTags lists the workspace's tags sorted alphabetically.
+func (s *Server) getWorkspaceTags(w http.ResponseWriter, r *http.Request) {
+	work, ok := s.workspace(r)
+	if !ok {
+		fail(w, 404, "WORKSPACE_NOT_FOUND", "Workspace was not found.")
+		return
+	}
+	tags, err := s.db.GetWorkspaceTags(r.Context(), work.ID)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load tags.")
+		return
+	}
+	writeJSON(w, 200, map[string]any{"items": tags})
+}
+
+// putWorkspaceTags atomically replaces the workspace's tag set. Tags are
+// lowercase freeform labels (see database.ValidateTag); an empty set clears
+// every tag.
+func (s *Server) putWorkspaceTags(w http.ResponseWriter, r *http.Request) {
+	work, ok := s.workspace(r)
+	if !ok {
+		fail(w, 404, "WORKSPACE_NOT_FOUND", "Workspace was not found.")
+		return
+	}
+	var input struct {
+		Tags []string `json:"tags"`
+	}
+	if err := decode(r, &input); err != nil {
+		fail(w, 400, "INVALID_JSON", "tags must be a JSON array of strings.")
+		return
+	}
+	for _, tag := range input.Tags {
+		if err := database.ValidateTag(strings.ToLower(strings.TrimSpace(tag))); err != nil {
+			fail(w, 400, "INVALID_TAG", err.Error())
+			return
+		}
+	}
+	if err := s.db.SetWorkspaceTags(r.Context(), work.ID, input.Tags); err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not save tags.")
+		return
+	}
+	tags, err := s.db.GetWorkspaceTags(r.Context(), work.ID)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load tags.")
+		return
+	}
+	writeJSON(w, 200, map[string]any{"items": tags})
 }
 func (s *Server) cancelScan(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
@@ -1159,8 +1508,8 @@ func csvNumber(value int) string {
 
 // findingsJSON exports the scan as the full versioned JSON report document
 // (the same document `bluntcode scan --format json` prints). It follows the
-// findings.csv handler's shape — an attachment regenerated from stored scan
-// data — but serves the complete report model: severity counts, analyzer
+// findings.csv handler's shape â€” an attachment regenerated from stored scan
+// data â€” but serves the complete report model: severity counts, analyzer
 // runs, metrics, and every finding field the other exports surface. Query
 // filters do not apply; the document is always the whole scan.
 func (s *Server) findingsJSON(w http.ResponseWriter, r *http.Request) {
@@ -1193,10 +1542,126 @@ func (s *Server) findingsJSON(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(reports.JSON(model))
 }
 
+// findingsJSONL exports the scan as newline-delimited JSON (reports.JSONL):
+// one self-contained finding object per line for log pipelines and jq-style
+// consumers. Like findings.json it is unfiltered — query filters do not
+// apply, and suppressed fingerprints never enter the report model — so the
+// download always covers the whole scan.
+func (s *Server) findingsJSONL(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !validID(id) {
+		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
+		return
+	}
+	scan, err := s.db.Scan(r.Context(), id)
+	if errors.Is(err, sql.ErrNoRows) {
+		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
+		return
+	}
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load scan.")
+		return
+	}
+	work, err := s.db.Workspace(r.Context(), scan.WorkspaceID)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load report.")
+		return
+	}
+	model, err := s.reportModel(r.Context(), scan, work)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load report.")
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="bluntcode-scan-%s-findings.jsonl"`, shortID(scan.ID)))
+	_, _ = w.Write(reports.JSONL(model))
+}
+
 // fixedFindings lists what the fixed count on the scan report actually refers
 // to: findings present in the previous completed scan and gone from this one,
 // with the same coverage-aware rule the report comparison applies. The list is
 // capped for the panel while total_fixed always reports the exact count.
+// scanCompare diffs one scan against another (or its previous completed
+// scan when `with` is omitted) using the same coverage-aware Compare the
+// report model uses: a previous finding counts as fixed only if the analyzer
+// that produced it succeeded in the current scan, and suppressed fingerprints
+// are filtered from both sides before diffing.
+func (s *Server) scanCompare(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !validID(id) {
+		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
+		return
+	}
+	scan, err := s.db.Scan(r.Context(), id)
+	if errors.Is(err, sql.ErrNoRows) {
+		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
+		return
+	}
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load scan.")
+		return
+	}
+	otherID := strings.TrimSpace(r.URL.Query().Get("with"))
+	if otherID == "" {
+		resolved, resolveErr := s.db.PreviousCompletedScanID(r.Context(), scan.WorkspaceID, scan.ID)
+		if errors.Is(resolveErr, sql.ErrNoRows) {
+			writeJSON(w, 200, map[string]any{"available": false, "reason": "no previous completed scan"})
+			return
+		}
+		if resolveErr != nil {
+			fail(w, 500, "DATABASE_ERROR", "Could not resolve the comparison scan.")
+			return
+		}
+		otherID = resolved
+	} else if !validID(otherID) {
+		fail(w, 400, "INVALID_SCAN_ID", "with must be a valid scan ID.")
+		return
+	}
+	other, err := s.db.Scan(r.Context(), otherID)
+	if errors.Is(err, sql.ErrNoRows) {
+		fail(w, 404, "SCAN_NOT_FOUND", "Comparison scan was not found.")
+		return
+	}
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load the comparison scan.")
+		return
+	}
+	if other.WorkspaceID != scan.WorkspaceID {
+		fail(w, 400, "WORKSPACE_MISMATCH", "Both scans must belong to the same workspace.")
+		return
+	}
+	currentFindings, err := s.db.Findings(r.Context(), scan.ID)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load findings.")
+		return
+	}
+	previousFindings, err := s.db.Findings(r.Context(), other.ID)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load the comparison findings.")
+		return
+	}
+	suppressed, err := s.db.SuppressedFingerprints(r.Context(), scan.WorkspaceID)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load suppressions.")
+		return
+	}
+	succeeded, err := s.db.SuccessfulAnalyzerIDs(r.Context(), scan.ID)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load analyzer coverage.")
+		return
+	}
+	cmp := scans.Compare(scans.FilterSuppressed(currentFindings, suppressed), scans.FilterSuppressed(previousFindings, suppressed), succeeded)
+	writeJSON(w, 200, map[string]any{
+		"available":        true,
+		"current_scan_id":  scan.ID,
+		"previous_scan_id": other.ID,
+		"new":              cmp.New,
+		"fixed":            cmp.Fixed,
+		"persistent":       cmp.Persistent,
+		"summary":          map[string]int{"new": len(cmp.New), "fixed": len(cmp.Fixed), "persistent": len(cmp.Persistent)},
+	})
+}
+
 func (s *Server) fixedFindings(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if !validID(id) {
@@ -1731,11 +2196,21 @@ func (s *Server) scanEvents(w http.ResponseWriter, r *http.Request) {
 	defer unsubscribe()
 	fmt.Fprint(w, "event: connected\ndata: {}\n\n")
 	flusher.Flush()
+	// Heartbeat comments keep idle streams alive: some clients and intermediaries
+	// drop silent connections, and the ping doubles as a liveness signal between
+	// scan events. A failed write ends the stream via the request context below.
+	heartbeat := time.NewTicker(sseHeartbeatInterval)
+	defer heartbeat.Stop()
 	for {
 		select {
 		case event := <-ch:
 			body, _ := json.Marshal(event)
 			fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event.Type, body)
+			flusher.Flush()
+		case <-heartbeat.C:
+			if _, err := fmt.Fprint(w, ": ping\n\n"); err != nil {
+				return
+			}
 			flusher.Flush()
 		case <-r.Context().Done():
 			return
