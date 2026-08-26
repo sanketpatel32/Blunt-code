@@ -1,0 +1,5 @@
+# The bundled semgrep rulepack is byte-compared against LF endings in tests;
+# autocrlf must never rewrite it on checkout.
+internal/analyzers/semgrep/rules/*.yaml text eol=lf
+# Shell/PowerShell scripts stay LF so hashed release assets are reproducible.
+*.sh text eol=lf

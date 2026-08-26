@@ -94,6 +94,9 @@ export const api = {
   tools: async () => list<Tool>(await request<Tool[] | { tools?: Tool[] }>('/tools')),
   toolAction: (id: string, action: 'install' | 'repair' | 'update') => request<Tool>(`/tools/${encodeURIComponent(id)}/${action}`, { method: 'POST' }),
   stopServer: () => request<{ state: string }>('/system/stop', { method: 'POST' }),
+  /** In-app updater: check GitHub releases, then hand off to the staged installer. */
+  checkUpdate: () => request<{ current: string; latest: string; available: boolean; release_url: string; release_notes: string }>('/update/check'),
+  applyUpdate: () => request<{ started: boolean; staged_at: string }>('/update/apply', { method: 'POST' }),
   openFolder: (kind: 'data' | 'reports' | 'logs' | 'tools') => request<void>('/system/open-folder', { method: 'POST', body: JSON.stringify({ kind }) }),
   markdownUrl: (scanId: string) => `${PREFIX}/scans/${encodeURIComponent(scanId)}/report.md`,
   /** URL for the attachment exports (plain GET navigations, not JSON requests). CSV accepts the same filter/sort params as findings — minus limit/offset — so the file matches the on-screen list. findings.json is the versioned full-report document. */

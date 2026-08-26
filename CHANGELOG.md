@@ -5,6 +5,22 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **In-app updates:** the About page gains an **Updates** card — see the installed version, check GitHub releases for a newer one, and update without leaving the app (`GET /api/v1/update/check`, `POST /api/v1/update/apply`). Applying stages the official installer detached and stops the app so the installer can swap the binary; offline mode blocks both endpoints with `UPDATE_OFFLINE`.
+- **Installer v2:** `install-latest.ps1` supports `-Version x.y.z` pins, `-Silent`, `-DesktopShortcut`, `-WhatIf` dry-run plans, 64-bit/disk pre-flight checks, honest upgrade/reinstall/downgrade labels (asks the installed exe), automatic rollback if the install swap fails, and `-WaitForCloseSeconds` for the in-app updater handoff.
+
+### Changed
+
+- **UI interaction layer:** 15 polish loops — button press/busy feel, table-row hover tint, card lift, sliding nav underline, copy-pop confirmation, toast entrance, breathing critical counts, floating empty states, command-palette active step, unified focus rings, tabular numerals, sticky glass filter heads, gliding progress fills, staggered dialog entrances, native-feeling dark elevation.
+- Packaging default version bumped to 0.6.0.
+
+### Fixed
+
+- `.gitattributes` now forces LF for the bundled semgrep rulepack so checkouts never corrupt it (test previously failed with "must keep LF line endings").
+
 ## [0.6.0] - 2026-08-26
 
 ### Added

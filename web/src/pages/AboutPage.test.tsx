@@ -84,3 +84,55 @@ describe('AboutPage at-a-glance card', () => {
     expect(copyButton(host).textContent).toBe('Copy version info');
   });
 });
+
+describe('AboutPage updates card', () => {
+  function updateFetch(options: { available: boolean; fail?: boolean }) {
+    return vi.fn((input: string, init?: RequestInit) => {
+      if (input.endsWith('/meta')) return Promise.resolve(json({ version: '1.2.3', api_version: 'v1', os: 'windows', architecture: 'amd64' }));
+      if (input.endsWith('/health')) return Promise.resolve(json({ status: 'ready' }));
+      if (input.endsWith('/update/check')) {
+        if (options.fail) return Promise.resolve(new Response(JSON.stringify({ error: { code: 'UPDATE_OFFLINE', message: 'Offline mode is enabled.' } }), { status: 409, headers: { 'Content-Type': 'application/json' } }));
+        return Promise.resolve(json({ current: '1.2.3', latest: '2.0.0', available: options.available, release_url: 'https://example.com/release', release_notes: 'Faster scans.' }));
+      }
+      if (input.endsWith('/update/apply')) return Promise.resolve(json({ started: true, staged_at: 'C:\\temp\\x' }));
+      if (input.endsWith('/system/stop')) return Promise.resolve(json({ state: 'stopping' }));
+      return Promise.resolve(json({}));
+    });
+  }
+
+  async function clickButton(host: HTMLElement, label: string) {
+    const button = [...host.querySelectorAll('button')].find((candidate) => candidate.textContent === label);
+    expect(button).toBeDefined();
+    await act(async () => { button!.click(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
+  }
+
+  it('reports up to date after a check', async () => {
+    const fetchMock = updateFetch({ available: false });
+    const host = await renderPage(fetchMock);
+    await clickButton(host, 'Check for updates');
+    expect(host.textContent).toContain('You are on the latest release (2.0.0)');
+    expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith('/update/check'))).toBe(true);
+  });
+
+  it('offers the update and hands off to the installer before stopping', async () => {
+    const fetchMock = updateFetch({ available: true });
+    const host = await renderPage(fetchMock);
+    await clickButton(host, 'Check for updates');
+    expect(host.textContent).toContain('v2.0.0 is available');
+    expect([...host.querySelectorAll('a')].some((link) => link.textContent === 'Release notes')).toBe(true);
+    await clickButton(host, 'Update now');
+    const calls = fetchMock.mock.calls.map(([input, init]) => ({ url: String(input), method: (init as RequestInit | undefined)?.method }));
+    expect(calls.filter((call) => call.url.endsWith('/update/apply')).length).toBe(1);
+    // The stop call is part of the handoff: the installer waits for our exit.
+    expect(calls.some((call) => call.url.endsWith('/system/stop') && call.method === 'POST')).toBe(true);
+    expect(host.textContent).toContain('Installer launched');
+  });
+
+  it('surfaces offline and network failures with a retry', async () => {
+    const host = await renderPage(updateFetch({ available: false, fail: true }));
+    await clickButton(host, 'Check for updates');
+    expect(host.textContent).toContain('Offline mode is enabled.');
+    await clickButton(host, 'Try again');
+    expect(host.textContent).toContain('Offline mode is enabled.');
+  });
+});

@@ -9,6 +9,9 @@ param(
   [switch]$DesktopShortcut,
   # Print what would be installed and exit without changing anything.
   [switch]$WhatIf,
+  # Seconds to wait for a running Blunt Code to exit before refusing. Used by
+  # the in-app updater, which closes the app right after launching us.
+  [int]$WaitForCloseSeconds = 0,
   [switch]$NoLaunch
 )
 
@@ -203,6 +206,14 @@ try {
 
   Write-Step 4 5 "$actionLabel $version at $install"
   $running = Get-Process -Name 'bluntcode' -ErrorAction SilentlyContinue
+  if ($running) {
+    $waited = 0
+    while ($running -and $waited -lt $WaitForCloseSeconds) {
+      Start-Sleep -Seconds 1
+      $waited += 1
+      $running = Get-Process -Name 'bluntcode' -ErrorAction SilentlyContinue
+    }
+  }
   if ($running) {
     throw 'Close Blunt Code before installing an update.'
   }

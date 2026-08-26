@@ -43,5 +43,66 @@ export function AboutPage() {
     clearTimeout(revert.current);
     revert.current = setTimeout(() => setCopied(false), 1500);
   }
-  return <div className="page narrow"><header className="page-heading"><div><p className="eyebrow">About</p><h1>Blunt Code</h1><p>A local-first static analysis application for Windows.</p></div></header><section className="about-card"><h2>Local by default <span className="badge">{meta.data?.version ? `v${meta.data.version}` : 'Version unknown'}</span></h2><p>Analyzes selected files on this computer and combines results from local analysis tools.</p><ul className="about-points" style={{ display: 'grid', gap: 'var(--space-xs)', margin: 'var(--space-lg) 0 0', padding: 0, listStyle: 'none' }}><li className="local-signal"><MonitorIcon />Local-only analysis</li><li className="local-signal"><PersonSlashIcon />No account required</li><li className="local-signal"><EyeOffIcon />No telemetry</li></ul><dl><dt>Server</dt><dd>{serverStatus}</dd><dt>API version</dt><dd>{meta.data?.api_version ?? 'Unknown'}</dd><dt>Platform</dt><dd>{platform || 'Unknown'}</dd></dl><p aria-live="polite" style={{ margin: 'var(--space-xl) 0 0' }}><button type="button" className="button secondary" onClick={() => void copyVersionInfo()}>{copied ? 'Copied' : 'Copy version info'}</button></p></section></div>;
+  return <div className="page narrow"><header className="page-heading"><div><p className="eyebrow">About</p><h1>Blunt Code</h1><p>A local-first static analysis application for Windows.</p></div></header><section className="about-card"><h2>Local by default <span className="badge">{meta.data?.version ? `v${meta.data.version}` : 'Version unknown'}</span></h2><p>Analyzes selected files on this computer and combines results from local analysis tools.</p><ul className="about-points" style={{ display: 'grid', gap: 'var(--space-xs)', margin: 'var(--space-lg) 0 0', padding: 0, listStyle: 'none' }}><li className="local-signal"><MonitorIcon />Local-only analysis</li><li className="local-signal"><PersonSlashIcon />No account required</li><li className="local-signal"><EyeOffIcon />No telemetry</li></ul><dl><dt>Server</dt><dd>{serverStatus}</dd><dt>API version</dt><dd>{meta.data?.api_version ?? 'Unknown'}</dd><dt>Platform</dt><dd>{platform || 'Unknown'}</dd></dl><p aria-live="polite" style={{ margin: 'var(--space-xl) 0 0' }}><button type="button" className="button secondary" onClick={() => void copyVersionInfo()}>{copied ? 'Copied' : 'Copy version info'}</button></p></section><UpdateCard version={meta.data?.version ?? ''} /></div>;
+}
+
+type UpdateState =
+  | { phase: 'idle' }
+  | { phase: 'checking' }
+  | { phase: 'current'; latest: string }
+  | { phase: 'available'; latest: string; releaseUrl: string; notes: string }
+  | { phase: 'applying'; latest: string; notes: string }
+  | { phase: 'error'; message: string };
+
+/**
+ * In-app updater. The check respects offline mode server-side; applying stages
+ * the official installer detached, then stops this app so the installer can
+ * swap the binary (it waits for our exit via -WaitForCloseSeconds).
+ */
+const NEWLINE = '\n';
+
+function UpdateCard({ version }: { version: string }) {
+  const [state, setState] = useState<UpdateState>({ phase: 'idle' });
+  async function check() {
+    setState({ phase: 'checking' });
+    try {
+      const result = await api.checkUpdate();
+      setState(result.available
+        ? { phase: 'available', latest: result.latest, releaseUrl: result.release_url, notes: result.release_notes }
+        : { phase: 'current', latest: result.latest });
+    } catch (error) {
+      setState({ phase: 'error', message: error instanceof Error ? error.message : 'Could not check for updates.' });
+    }
+  }
+  async function apply() {
+    if (state.phase !== 'available') return;
+    setState({ phase: 'applying', latest: state.latest, notes: state.notes });
+    try {
+      await api.applyUpdate();
+      // The installer waits up to 60s for this app to exit before touching
+      // anything, so stopping here is part of the handoff, not an accident.
+      await api.stopServer().catch(() => undefined);
+    } catch (error) {
+      setState({ phase: 'error', message: error instanceof Error ? error.message : 'Could not start the updater.' });
+    }
+  }
+  return <section className="about-card" aria-label="Updates" style={{ marginTop: 'var(--space-lg)' }}>
+    <h2>Updates {version ? <span className="badge">v{version} installed</span> : null}</h2>
+    <p>Checks GitHub releases for a newer Blunt Code. Updating downloads the official installer and restarts the app; your data stays local.</p>
+    <div aria-live="polite">
+      {state.phase === 'idle' && <p style={{ margin: 'var(--space-md) 0 0' }}><button type="button" className="button" onClick={() => void check()} disabled={!version}>Check for updates</button></p>}
+      {state.phase === 'checking' && <p className="muted" style={{ margin: 'var(--space-md) 0 0' }}>Checking GitHub releases...</p>}
+      {state.phase === 'current' && <p style={{ margin: 'var(--space-md) 0 0' }}>You are on the latest release ({state.latest}). <button type="button" className="button secondary" onClick={() => void check()}>Check again</button></p>}
+      {(state.phase === 'available' || state.phase === 'applying') && <div style={{ margin: 'var(--space-md) 0 0', display: 'grid', gap: 'var(--space-sm)' }}>
+        <p><strong>v{state.latest} is available.</strong>{state.notes ? <span className="muted"> {state.notes.split(NEWLINE).find((line: string) => line.trim()) ?? ''}</span> : null}</p>
+        {state.phase === 'available'
+          ? <p style={{ display: 'flex', gap: 'var(--space-sm)', flexWrap: 'wrap' }}>
+            <button type="button" className="button" onClick={() => void apply()}>Update now</button>
+            <a className="button secondary" href={state.releaseUrl} target="_blank" rel="noreferrer">Release notes</a>
+          </p>
+          : <p className="muted">Installer launched. Blunt Code will close; installation finishes on its own.</p>}
+      </div>}
+      {state.phase === 'error' && <p style={{ margin: 'var(--space-md) 0 0' }} role="alert">{state.message} <button type="button" className="button secondary" onClick={() => void check()}>Try again</button></p>}
+    </div>
+  </section>;
 }
