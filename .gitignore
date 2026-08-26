@@ -1,12 +1,41 @@
-# Build outputs and local application data
+# --- Build outputs -----------------------------------------------------------
 bluntcode.exe
+*.exe.test
 dist/
 web/dist/
-web/node_modules/
-coverage/
-.bluntcode/
 
-# Test/editor noise
-*.test.db
-*.log
+# --- Go ----------------------------------------------------------------------
+# Test binaries, coverage profiles, pprof dumps.
+*.test
+*.out
+*.prof
+
+# --- Web / frontend ----------------------------------------------------------
+web/node_modules/
+# Incremental build cache from "tsc -b".
+*.tsbuildinfo
+coverage/
+*.lcov
+
+# --- Secrets & environment ---------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# --- Local app data & tooling state ------------------------------------------
+.bluntcode/
+.bluntcode-install-*
+.bluntcode-backup-*
+bc-install-test-*
+graphify-out/
+.hallmark/
+blunt-work/
+
+# --- OS / editor noise -------------------------------------------------------
 .DS_Store
+Thumbs.db
+desktop.ini
+~$*
+*.log
+*.tmp
+*.swp
