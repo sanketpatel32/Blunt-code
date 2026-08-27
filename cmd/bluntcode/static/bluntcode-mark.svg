@@ -1,8 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img">
   <title>Blunt Code</title>
-  <rect width="32" height="32" rx="7.5" fill="#006fe6"/>
-  <g fill="none" stroke="#fbfcfd" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
-    <polyline points="9.5 8.5 17 16 9.5 23.5"/>
-    <line x1="20.75" y1="23.5" x2="24.25" y2="23.5"/>
+  <rect width="32" height="32" rx="8" fill="#0f172a"/>
+  <rect x="7" y="7" width="18" height="18" rx="4" fill="none" stroke="white" stroke-opacity="0.10" stroke-width="1"/>
+  <!-- subtle inner depth -->
+  <rect x="7" y="7" width="18" height="18" rx="4" fill="none" stroke="white" stroke-opacity="0.04" stroke-width="6"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <!-- chevron > -->
+    <polyline points="11 10.2 17.1 16 11 21.8" stroke="white" stroke-width="2.8" opacity="0.98"/>
+    <!-- cursor _  accent blue #006FE6 -->
+    <line x1="19.9" y1="22.5" x2="24.2" y2="22.5" stroke="#3b82f6" stroke-width="2.8"/>
   </g>
+  <!-- accent dot -->
+  <circle cx="24.2" cy="8.2" r="1.6" fill="#3b82f6" opacity="0.95"/>
 </svg>

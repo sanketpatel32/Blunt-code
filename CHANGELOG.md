@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-08-27
+
+### Added
+
+- **Versioning ship rule:** `AGENTS.md` now mandates **bump version on every shipment** — `cmd/bluntcode/main.go` `const version`, `web/package.json` (+ `web/package-lock.json`), `scripts/package.ps1` `$Version`, `CHANGELOG.md` promotion, commit + `git tag -a vX.Y.Z` + `git push origin main` + `git push origin vX.Y.Z` + `gh release create` via `scripts/package.ps1 -Version X.Y.Z`.
+
+### Changed
+
+- Packaging default version bumped to 0.7.1.
+- Project `AGENTS.md` created at repo root with graphify + versioning rules (global `C:\Users\sanpa\AGENTS.md` updated).
+
 ## [0.7.0] - 2026-08-26
 
 ### Added
