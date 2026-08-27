@@ -2,6 +2,7 @@ import { href, type Route } from '../lib/router';
 import type { Theme } from '../hooks/useTheme';
 import { Button } from './ui/button';
 import { HelpCircle, Moon, Sun, Plus, Languages } from 'lucide-react';
+import { NotificationsCenter } from './NotificationsCenter';
 import { cn } from '../lib/utils';
 import { LOCALES, useT } from '../lib/i18n';
 
@@ -13,6 +14,7 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
     [{ page: 'search' }, t('nav.search')],
     [{ page: 'tools' }, t('nav.tools')],
     [{ page: 'pentest' }, t('nav.pentest')],
+    [{ page: 'rules' }, 'Rules'],
     [{ page: 'settings' }, t('nav.settings')],
     [{ page: 'about' }, t('nav.about')],
   ];
@@ -51,6 +53,7 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
             {LOCALES.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
           </select>
         </label>
+        <NotificationsCenter />
         <Button variant="outline" size="icon" className="nav-shortcuts rounded-[var(--radius-button)] h-[2.15rem] w-[2.15rem] border-[var(--color-rule)] hover:border-[var(--color-rule-strong)]" onClick={() => onShowShortcuts?.()} title={t('common.shortcuts')} aria-label={t('common.shortcuts')}>
           <HelpCircle className="h-4 w-4" />
         </Button>

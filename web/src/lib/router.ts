@@ -1,4 +1,4 @@
-export type Route = { page: 'home' | 'workspaces' | 'workspace' | 'files' | 'history' | 'scan' | 'search' | 'tools' | 'pentest' | 'settings' | 'about' | 'not-found'; id?: string };
+export type Route = { page: 'home' | 'workspaces' | 'workspace' | 'files' | 'history' | 'scan' | 'search' | 'tools' | 'pentest' | 'rules' | 'settings' | 'about' | 'not-found'; id?: string };
 
 export function parseRoute(pathname = window.location.pathname): Route {
   const segments = pathname.split('/').filter(Boolean);
@@ -8,7 +8,7 @@ export function parseRoute(pathname = window.location.pathname): Route {
   if (segments[0] === 'workspaces' && segments[1]) return { page: 'workspace', id: segments[1] };
   if (segments[0] === 'workspaces') return { page: 'workspaces' };
   if (segments[0] === 'scans' && segments[1]) return { page: 'scan', id: segments[1] };
-  if (segments[0] === 'tools' || segments[0] === 'pentest' || segments[0] === 'settings' || segments[0] === 'about') return { page: segments[0] };
+  if (segments[0] === 'tools' || segments[0] === 'pentest' || segments[0] === 'rules' || segments[0] === 'settings' || segments[0] === 'about') return { page: segments[0] };
   if (segments[0] === 'findings') return { page: 'search' };
   return { page: 'not-found' };
 }

@@ -12,6 +12,7 @@ import { ErrorPanel, Loading, SeverityCounts } from '../components/ui';
 import { SkeletonLines } from '../components/skeletons';
 import { AnalyzerStatuses } from './WorkspaceDetailPage';
 import { ReportView } from './report/ReportView';
+import { pushNotification } from '../lib/notifications';
 import { analyzerMeta, categoryColor, CATEGORY_LABELS } from '../lib/analyzerCatalog';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 
@@ -38,7 +39,7 @@ export function ScanPage({ id, notify }: { id: string; go?: (r: Route) => void; 
         const next: ScanEvent = { ...data, type: envelope.type ?? event.type, at: Date.now(), seq: eventSeq.current++ };
         setEvents((old) => [...old.slice(-23), next]);
         setStreamState('live');
-        if (next.type === 'scan.completed' || next.type === 'scan.cancelled') void scanReload();
+        if (next.type === 'scan.completed') { try { pushNotification({ title: 'Scan completed', message: `Scan ${id.slice(0,8)} finished`, kind: 'success' }); } catch {} void scanReload(); } else if (next.type === 'scan.cancelled') void scanReload();
       } catch { /* Invalid optional event payloads do not interrupt the scan. */ }
     };
     // Exponential reconnect backoff: 1s, 1.5s, 2.25s … capped at 15s. A

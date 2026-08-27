@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-08-27
+
+### Added
+- **AI Auto-Fix Panel:** per-finding AI fix suggestions (Before/Fix diff, copy, regenerate, confidence badge, disclaimer) in ReportView sheet drawer (`web/src/components/AutoFixPanel.tsx`, `lib/aiFix.ts`, `Sparkles` icon).
+- **Analytics Charts:** 3 hand-rolled SVG charts (findings over time line-area, severity donut, language coverage bars) + `MiniSparkline` sparkline in workspace table + `chartData` helpers (`AnalyticsCharts.tsx`, `HomePage.tsx`, `WorkspaceDetailPage.tsx`).
+- **Comments & Notifications:** per-finding comment thread (localStorage `bluntcode.comments.*`, avatar, relativeTime, ⌘+Enter) + bell `NotificationsCenter` dropdown with unread badge (`AppShell.tsx`, `CommentsPanel.tsx`, `notifications.ts`, push on `scan.completed`).
+- **Rule Studio + Templates:** custom rule YAML editor (live preview, localStorage `bluntcode.customRules`, enable toggle) + 6 workspace templates (Python FastAPI, TS React, Go CLI, Java Spring, Pentest Lab, Full Hack Suite) with languages/analyzers chips, `Rules` route/nav, template prefill (`RuleStudioPage.tsx`, `WorkspaceTemplates.tsx`, `router.ts`).
+- **Dependency Graph + Jira Export:** SVG force graph (zoom/pan/drag, tooltip, reduced-motion) below trends (`DependencyGraph.tsx`), Jira CSV export + per-finding “Jira ↗” link in ReportView ExportMenu + FindingsTable (`JiraExport.tsx`, `lib/csv.ts`).
+
+### Changed
+- Chunk 574 kB (code-split warning) — additive features, no breaking routes, all 259 tests green.
+
+
 ## [0.8.0] - 2026-08-27
 
 ### Added

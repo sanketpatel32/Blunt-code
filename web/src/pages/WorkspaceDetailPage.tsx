@@ -11,10 +11,14 @@ import { ScanIcon } from '../components/icons';
 import { SkeletonCards, SkeletonTable } from '../components/skeletons';
 import { SeverityTrendSection } from '../components/SeverityTrendChart';
 import { SuppressionsSection } from '../components/SuppressionsPanel';
+import { DependencyGraph } from '../components/DependencyGraph';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../components/ui/accordion';
 import { ConfirmationDialog } from '../components/dialogs';
 import { WorkspaceContextSidebar } from '../components/WorkspaceContext';
 import { HistoryTable } from './HistoryPage';
 import { analyzerMeta, categoryColor, CATEGORY_LABELS } from '../lib/analyzerCatalog';
+import { AnalyticsCharts } from '../components/AnalyticsCharts';
+import { languageCoverageFromLanguages, severityCountsFromSummary, trendPointsFromScans } from '../lib/chartData';
 
 export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) => void; notify: (n: Notice) => void }) {
   const workspace = useLoad(() => api.workspace(id), [id]);
@@ -45,7 +49,20 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
     {pruneOpen && <form className="settings-editor" onSubmit={(event) => { event.preventDefault(); void prune(); }} aria-label="Prune scan history"><label>Keep newest<input type="number" min={1} max={100} value={pruneKeep} onChange={(event) => setPruneKeep(Number(event.target.value))} /></label><div className="editor-actions"><button type="submit" className="button primary" disabled={pruning}>Delete older scans</button><button type="button" className="button secondary" onClick={() => setPruneOpen(false)}>Cancel</button></div></form>}
     {editing && <form className="settings-editor" onSubmit={(event) => { event.preventDefault(); saveSettings(); }} aria-label="Workspace settings"><label>Name<input value={nameDraft} onChange={(event) => setNameDraft(event.target.value)} maxLength={80} /></label><label>Default profile<select value={profileDraft} onChange={(event) => setProfileDraft(event.target.value)}>{['quick', 'standard', 'deep'].map((value) => <option key={value} value={value}>{value}</option>)}</select></label><div className="editor-actions"><button type="submit" className="button primary" disabled={savingSettings}>Save</button><button type="button" className="button secondary" onClick={() => setEditing(false)}>Cancel</button></div></form>}
     {!latest && scans.loading ? <SkeletonCards count={6} /> : <section className="summary-grid" aria-label="Latest scan summary"><RiskCard risk={risk.data} /><SummaryCard label="Critical + high" value={(latest?.critical_count ?? 0) + (latest?.high_count ?? 0)} tone="high" /><SummaryCard label="Medium" value={latest?.medium_count ?? 0} tone="medium" /><SummaryCard label="Low + info" value={(latest?.low_count ?? 0) + (latest?.info_count ?? 0)} /><SummaryCard label="Total findings" value={latest?.total_findings ?? 0} /><SummaryCard label="New since last scan" value={latest?.new_count ?? 0} /><SummaryCard label="Fixed since last scan" value={latest?.fixed_count ?? 0} /></section>}
+    <AnalyticsCharts
+      trends={trendPointsFromScans(scans.data ?? [])}
+      severityCounts={severityCountsFromSummary({ critical_count: latest?.critical_count, high_count: latest?.high_count, medium_count: latest?.medium_count, low_count: latest?.low_count, info_count: latest?.info_count })}
+      languages={languageCoverageFromLanguages(item.languages)}
+    />
     <SeverityTrendSection workspaceId={id} />
+    <Accordion type="single" collapsible className="mt-2 rounded-[var(--radius-card)] border border-[var(--color-rule)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] px-4">
+      <AccordionItem value="dependency-graph">
+        <AccordionTrigger className="text-sm font-semibold">Dependency graph</AccordionTrigger>
+        <AccordionContent>
+          <DependencyGraph languages={item.languages} />
+        </AccordionContent>
+      </AccordionItem>
+    </Accordion>
     <SuppressionsSection workspaceId={id} notify={notify} />
     <section className="split-section"><div><h2>Latest analysis</h2>{latest ? <><p className="muted">{latest.state.replaceAll('_', ' ')} · {date(latest.finished_at ?? latest.started_at)}</p>{latest.error_summary && <div className="inline-warning">Warning: {latest.error_summary}</div>}<AnalyzerStatuses runs={latest.analyzer_runs} /></> : <Empty title="Ready when you are" icon={<ScanIcon />}>Run the first scan to get a combined report.</Empty>}</div><div><h2>Scan history</h2>{scans.loading ? <SkeletonTable rows={4} cols={10} /> : scans.error ? <ErrorPanel error={scans.error} retry={scans.reload} /> : <HistoryTable scans={scans.data ?? []} go={go} />}</div></section>
   {deleteOpen && <ConfirmationDialog title="Remove this workspace?" description="This removes the saved workspace, file rules, and local scan history from Blunt Code. Your project files will not be changed." confirmLabel="Remove workspace" busy={deleting} onCancel={() => setDeleteOpen(false)} onConfirm={remove} />}</div></div>;

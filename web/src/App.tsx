@@ -23,6 +23,7 @@ import { SearchPage } from './pages/SearchPage';
 import { ToolsPage } from './pages/ToolsPage';
 import { PentestPage } from './pages/PentestPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { RuleStudioPage } from './pages/RuleStudioPage';
 import { AboutPage } from './pages/AboutPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 
@@ -152,6 +153,7 @@ function Page({ route, go, notify, onAdd }: { route: Route; go: (r: Route) => vo
     case 'search': return <SearchPage go={go} />;
     case 'tools': return <ToolsPage notify={notify} />;
     case 'pentest': return <PentestPage go={go} />;
+    case 'rules': return <RuleStudioPage />;
     case 'settings': return <SettingsPage notify={notify} />;
     case 'about': return <AboutPage />;
     case 'not-found': return <NotFoundPage go={go} />;

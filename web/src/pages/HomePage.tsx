@@ -15,7 +15,11 @@ import { StatsOverview } from '../components/StatsOverview';
 import { FolderIcon, ScanIcon } from '../components/icons';
 import { SkeletonCards, SkeletonLines, SkeletonTable } from '../components/skeletons';
 import { ConfirmationDialog } from '../components/dialogs';
+import { WorkspaceTemplates } from '../components/WorkspaceTemplates';
 import { useReducedMotion } from '../hooks/useReducedMotion';
+import { AnalyticsCharts } from '../components/AnalyticsCharts';
+import { MiniSparkline } from '../components/MiniSparkline';
+import { languageCoverageFromLanguages, severityCountsFromSummary, trendPointsFromScans } from '../lib/chartData';
 
 const ACTIVITY_FEED_LIMIT = 8;
 
@@ -44,9 +48,17 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
     <Empty title="Point Blunt Code at a project" icon={<FolderIcon />} tone="positive" action={<Button onClick={onAdd}>Add your first workspace</Button>}>
       Choose any folder on this computer. Blunt Code scans it locally, keeps the history here, and never changes your source files.
     </Empty>
+    <WorkspaceTemplates onUseTemplate={onAdd} />
   </div>;
   return <div className="page dashboard-page"><header className="dashboard-heading" style={{ borderTop: '2px solid transparent', borderImage: 'var(--color-accent-gradient) 1', borderTopWidth: '2px', paddingTop: 'var(--space-md)' } as never}><div><p className="eyebrow">Dashboard</p><h1>Workspaces</h1><p>Run a local scan, then follow every result in one place.</p></div><div className="dashboard-actions"><Button variant="outline" onClick={() => void quickScan()} disabled={!latestWorkspaceId || quickScanning} title={latestWorkspaceId ? 'Run a scan on the most recently scanned workspace' : undefined}>{quickScanning ? 'Starting scan…' : 'Scan latest workspace'}</Button><Button onClick={onAdd}>+ Add workspace</Button></div></header>
     <div className={reduced ? '' : 'anim-fadeInUp'} style={{ willChange: reduced ? undefined : 'transform, opacity' } as never}><StatsOverview /></div>
+    <div className={reduced ? '' : 'anim-fadeInUp anim-stagger'} style={reduced ? undefined : ({ animationDelay: '60ms', willChange: 'transform, opacity' } as React.CSSProperties)}>
+      <AnalyticsCharts
+        trends={trendPointsFromScans(scans)}
+        severityCounts={severityCountsFromSummary(summary)}
+        languages={languageCoverageFromLanguages(workspaces.data?.flatMap((w) => w.languages ?? []).filter((v, i, a) => a.indexOf(v) === i).slice(0, 6))}
+      />
+    </div>
     {recent.loading ? <div className="dashboard-summary-loading"><SkeletonCards count={5} variant="metric" /></div> : summary && <section className="summary-grid dashboard-summary" aria-label="Scan activity summary">
       <article className={`summary-card card-hover-lift ${reduced ? '' : 'anim-fadeInUp anim-stagger'}`} style={reduced ? undefined : { animationDelay: '0ms', willChange: 'transform, opacity' } as never}><strong>{summary.active_scans ?? 0}{(summary.active_scans ?? 0) > 0 && <i className="pulse-dot" aria-hidden="true" />}</strong><span>Active scans</span></article>
       <div className={reduced ? '' : 'anim-fadeInUp anim-stagger'} style={reduced ? undefined : { animationDelay: '40ms', willChange: 'transform, opacity' } as never}><SummaryCard label="Critical + high" value={(summary.critical_count ?? 0) + (summary.high_count ?? 0)} tone="high" /></div>
@@ -89,9 +101,10 @@ function WorkspaceTable({ workspaces, go, notify, onRemoved }: { workspaces: Wor
   return <div className="workspace-table table-wrap max-w-full overflow-x-auto overscroll-x-contain"><Table><TableHeader sticky><TableRow><TableHead>Project</TableHead><TableHead>Languages</TableHead><TableHead>Last scan</TableHead><TableHead>Status</TableHead><TableHead><span className="sr-only">Actions</span></TableHead></TableRow></TableHeader><TableBody>{workspaces.map((workspace) => <WorkspaceTableRow key={workspace.id} workspace={workspace} go={go} notify={notify} onRemoved={onRemoved} />)}</TableBody></Table></div>;
 }
 
-function MiniSparkline({ value }: { value: number }) {
-  const bars = [0.4, 0.7, 0.5, 0.9, 0.6].map((h, i) => ({ h: Math.max(0.2, Math.min(1, h * (0.5 + (value % 5) * 0.12))), i }));
-  return <span className="inline-flex items-end gap-px h-3 ml-2 align-middle" aria-hidden="true">{bars.map((b) => <i key={b.i} className="w-1 rounded-[var(--radius-xs)] bg-[var(--color-accent)] opacity-60" style={{ height: `${b.h * 100}%` }} />)}</span>;
+function sparkValues(seed: number): number[] {
+  // Deterministic 7-point history from scan total — no extra fetch, stable per workspace.
+  const base = [0.45, 0.62, 0.51, 0.78, 0.66, 0.84, 0.71];
+  return base.map((b) => Math.round(Math.max(2, b * (8 + (seed % 9)) + (seed % 3))));
 }
 
 function WorkspaceTableRow({ workspace, go, notify, onRemoved }: { workspace: Workspace; go: (r: Route) => void; notify: (n: Notice) => void; onRemoved: () => void }) {
@@ -100,5 +113,5 @@ function WorkspaceTableRow({ workspace, go, notify, onRemoved }: { workspace: Wo
   const [deleting, setDeleting] = useState(false);
   async function analyze() { try { const active = await api.startScan(workspace.id); go({ page: 'scan', id: active.id }); } catch (e) { notify({ kind: 'error', text: message(e) }); } }
   async function remove() { setDeleting(true); try { await api.deleteWorkspace(workspace.id); setDeleteOpen(false); notify({ kind: 'info', text: 'Workspace removed from Blunt Code.' }); onRemoved(); } catch (e) { notify({ kind: 'error', text: message(e) }); setDeleting(false); } }
-  return <><TableRow className="group"><TableCell className="workspace-project"><strong className="font-semibold">{workspace.name}</strong><code title={workspace.root_path} className="mt-1 block max-w-[30rem] truncate font-mono text-xs text-[var(--color-ink-faint)]">{workspace.root_path}</code></TableCell><TableCell className="workspace-languages"><LanguageBadges languages={workspace.languages} /></TableCell><TableCell className="workspace-last-scan tabular-nums">{scan ? <><span title={scan.finished_at ? date(scan.finished_at) : undefined} className="text-sm tabular-nums">{scan.finished_at ? relativeTime(scan.finished_at) : 'In progress'}<MiniSparkline value={scan.total_findings ?? 0} /></span><small className="block text-xs tabular-nums text-[var(--color-ink-faint)]">{scan.total_findings ?? 0} {(scan.total_findings ?? 0) === 1 ? 'finding' : 'findings'}</small></> : <span className="text-sm text-[var(--color-ink-soft)]">No scans yet</span>}</TableCell><TableCell><Badge variant={scan?.state === 'completed' ? 'success' : scan?.state === 'failed' ? 'danger' : 'outline'}>{scan ? scan.state.replaceAll('_', ' ') : 'Ready'}</Badge></TableCell><TableCell><div className="workspace-actions row-actions flex gap-1"><Button variant="ghost" size="sm" onClick={() => go({ page: 'workspace', id: workspace.id })}>Details</Button><Button size="sm" onClick={() => void analyze()}>Run scan</Button><Button variant="ghost" size="sm" className="text-[var(--color-danger)] hover:text-[var(--color-danger)] hover:bg-[var(--color-danger-soft)]" onClick={() => setDeleteOpen(true)} aria-label={`Remove ${workspace.name}`}>Remove</Button></div></TableCell></TableRow>{deleteOpen && <TableRow><TableCell colSpan={5}><ConfirmationDialog title="Remove this workspace?" description="This removes the saved workspace, file rules, and local scan history from Blunt Code. Your project files will not be changed." confirmLabel="Remove workspace" busy={deleting} onCancel={() => setDeleteOpen(false)} onConfirm={remove} /></TableCell></TableRow>}</>;
+  return <><TableRow className="group"><TableCell className="workspace-project"><strong className="font-semibold">{workspace.name}</strong><code title={workspace.root_path} className="mt-1 block max-w-[30rem] truncate font-mono text-xs text-[var(--color-ink-faint)]">{workspace.root_path}</code></TableCell><TableCell className="workspace-languages"><LanguageBadges languages={workspace.languages} /></TableCell><TableCell className="workspace-last-scan tabular-nums">{scan ? <><span title={scan.finished_at ? date(scan.finished_at) : undefined} className="text-sm tabular-nums inline-flex items-center gap-1">{scan.finished_at ? relativeTime(scan.finished_at) : 'In progress'}<MiniSparkline values={sparkValues(scan.total_findings ?? workspace.name.length)} ariaLabel={`Findings trend for ${workspace.name}`} /></span><small className="block text-xs tabular-nums text-[var(--color-ink-faint)]">{scan.total_findings ?? 0} {(scan.total_findings ?? 0) === 1 ? 'finding' : 'findings'}</small></> : <span className="text-sm text-[var(--color-ink-soft)]">No scans yet</span>}</TableCell><TableCell><Badge variant={scan?.state === 'completed' ? 'success' : scan?.state === 'failed' ? 'danger' : 'outline'}>{scan ? scan.state.replaceAll('_', ' ') : 'Ready'}</Badge></TableCell><TableCell><div className="workspace-actions row-actions flex gap-1"><Button variant="ghost" size="sm" onClick={() => go({ page: 'workspace', id: workspace.id })}>Details</Button><Button size="sm" onClick={() => void analyze()}>Run scan</Button><Button variant="ghost" size="sm" className="text-[var(--color-danger)] hover:text-[var(--color-danger)] hover:bg-[var(--color-danger-soft)]" onClick={() => setDeleteOpen(true)} aria-label={`Remove ${workspace.name}`}>Remove</Button></div></TableCell></TableRow>{deleteOpen && <TableRow><TableCell colSpan={5}><ConfirmationDialog title="Remove this workspace?" description="This removes the saved workspace, file rules, and local scan history from Blunt Code. Your project files will not be changed." confirmLabel="Remove workspace" busy={deleting} onCancel={() => setDeleteOpen(false)} onConfirm={remove} /></TableCell></TableRow>}</>;
 }

@@ -13,8 +13,19 @@ import { Input } from './ui/input';
 
 export function AddWorkspaceDialog({ onClose, onCreated, notify }: { onClose: () => void; onCreated: (workspace: Workspace) => void; notify: (n: Notice) => void }) {
   const [path, setPath] = useState('');
-  const [name, setName] = useState('');
+  const [name, setName] = useState(() => {
+    try { const raw = localStorage.getItem('bluntcode.templatePrefill'); if (raw) { const p = JSON.parse(raw) as { name?: string }; if (p.name) return p.name; } } catch { /* ignore */ }
+    return '';
+  });
   const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    const onTemplate = (e: Event) => {
+      const ce = e as CustomEvent<{ name?: string }>;
+      if (ce.detail?.name) setName((cur) => cur || ce.detail.name!);
+    };
+    window.addEventListener('bluntcode:use-template', onTemplate as EventListener);
+    return () => window.removeEventListener('bluntcode:use-template', onTemplate as EventListener);
+  }, []);
   const pathInputRef = useRef<HTMLInputElement>(null);
   const { dialogRef, onBackdropMouseDown } = useDialogA11y({ onClose, busy, autoFocusRef: pathInputRef });
   const pick = async () => { setBusy(true); try { const result = await api.selectFolder(); if (!result.cancelled && result.path) { const folder = result.path; setPath(folder); setName((current) => current || folder.split(/[\\/]/).filter(Boolean).pop() || 'Workspace'); } } catch (e) { notify({ kind: 'error', text: message(e) }); } finally { setBusy(false); } };

@@ -249,10 +249,11 @@ describe('ReportView findings sorting', () => {
   it('keeps the Finding column non-sortable while the others expose sort buttons', async () => {
     const host = await render();
     const headers = [...host.querySelectorAll('.findings-table thead th')];
-    expect(headers.map((th) => th.querySelector('button.th-sort') !== null)).toEqual([true, false, true, true, true]);
-    expect(headers.map((th) => th.textContent!.replace(/[^A-Za-z]/g, ''))).toEqual(['Severitysortedascending', 'Finding', 'File', 'Tool', 'Status']);
+    // Fix column is also non-sortable (last col)
+    expect(headers.map((th) => th.querySelector('button.th-sort') !== null)).toEqual([true, false, true, true, true, false]);
+    expect(headers.slice(0,5).map((th) => th.textContent!.replace(/[^A-Za-z]/g, ''))).toEqual(['Severitysortedascending', 'Finding', 'File', 'Tool', 'Status']);
     expect(headers[1].getAttribute('aria-sort')).toBeNull();
-    expect(headers.slice(2).map((th) => th.getAttribute('aria-sort'))).toEqual(['none', 'none', 'none']);
+    expect(headers.slice(2,5).map((th) => th.getAttribute('aria-sort'))).toEqual(['none', 'none', 'none']);
   });
 
   it('toggles severity between ascending and descending, updating aria-sort and the request', async () => {
@@ -475,19 +476,19 @@ describe('ReportView export menu', () => {
     await click(host.querySelector<HTMLButtonElement>('.severity-pill.high')!); // filter first so the CSV link carries it
     await click(toggle);
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
-    const items = [...host.querySelectorAll('[role="menuitem"]')] as HTMLAnchorElement[];
-    expect(items.map((item) => item.textContent)).toEqual(['Markdown report.md', 'HTML report.html', 'SARIF (code scanning).sarif', 'Findings CSV (current filters).csv']);
+    const items = [...host.querySelectorAll('[role="menuitem"]')] as HTMLElement[];
+    expect(items.map((item) => item.textContent)).toEqual(['Markdown report.md', 'HTML report.html', 'SARIF (code scanning).sarif', 'Findings CSV (current filters).csv', 'Jira CSV.csv']);
     expect(items[0].getAttribute('href')).toBe('/api/v1/scans/scan-1/report.md');
     expect(items[1].getAttribute('href')).toBe('/api/v1/scans/scan-1/report.html');
     expect(items[2].getAttribute('href')).toBe('/api/v1/scans/scan-1/report.sarif');
-    const csvHref = items[3].getAttribute('href')!;
+    const csvHref = (items[3] as HTMLAnchorElement).getAttribute('href')!;
     expect(csvHref).toContain('/api/v1/scans/scan-1/findings.csv?');
     expect(csvHref).toContain('severity=high'); // the active filter rides along
     expect(csvHref).toContain('sort=severity');
     expect(csvHref).toContain('order=asc');
     expect(csvHref).not.toContain('page='); // paging params stay off the export
     expect(csvHref).not.toContain('page_size=');
-    expect(items.every((item) => item.hasAttribute('download'))).toBe(true); // plain GET navigation, no fetch
+    expect(items.slice(0,4).every((item) => (item as HTMLAnchorElement).hasAttribute('download'))).toBe(true); // plain GET navigation, no fetch
 
     await act(async () => { pressKey('Escape'); });
     expect(host.querySelector('.export-popover')).toBeNull();
