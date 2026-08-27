@@ -42,7 +42,7 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
       </nav>
       <div className="nav-actions">
         {seqArmed && <span className="seq-hint" aria-hidden="true">g…</span>}
-        <Button variant="outline" size="icon" className="nav-shortcuts rounded-full h-[2.15rem] w-[2.15rem] border-[var(--color-rule)] hover:border-[var(--color-rule-strong)]" onClick={() => onShowShortcuts?.()} title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">
+        <Button variant="outline" size="icon" className="nav-shortcuts rounded-[var(--radius-button)] h-[2.15rem] w-[2.15rem] border-[var(--color-rule)] hover:border-[var(--color-rule-strong)]" onClick={() => onShowShortcuts?.()} title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">
           <HelpCircle className="h-4 w-4" />
         </Button>
         <Button variant="outline" size="sm" className="theme-toggle hidden sm:inline-flex" onClick={onToggleTheme} aria-pressed={theme === 'dark'} title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}>
@@ -52,7 +52,7 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
         <Button variant="ghost" size="sm" className="close-app hidden lg:inline-flex" onClick={onClose}>
           Close app
         </Button>
-        <Button onClick={onAdd} size="sm" className="add shadow-sm hover:shadow-md active:shadow-sm">
+        <Button onClick={onAdd} size="sm" className="add shadow-[var(--shadow-accent)] active:shadow-sm">
           <Plus className="h-4 w-4" /> <span className="hidden sm:inline">Add workspace</span><span className="sm:hidden">Add</span>
         </Button>
       </div>
@@ -63,7 +63,7 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
 export function AppFooter() {
   return (
     <footer className="app-footer">
-      <span>Blunt Code · local code analysis for Windows</span>
+      <span><span className="font-medium">Blunt Code</span><span className="hidden md:inline text-[var(--color-ink-faint)]"> · local code analysis for Windows</span></span>
       <span className="hidden sm:inline">No account. No telemetry. · v0.7</span>
     </footer>
   );

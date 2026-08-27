@@ -26,7 +26,7 @@ import (
 	"bluntcode/internal/tools"
 )
 
-const version = "0.7.1"
+const version = "0.7.2"
 
 //go:embed static/*
 var staticFiles embed.FS

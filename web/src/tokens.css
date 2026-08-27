@@ -1,199 +1,194 @@
-/* Hallmark · pre-emit critique: P5 H4 E5 S4 R5 V5 · macrostructure: Workbench · theme: Cobalt · 100-loop polish */
- /* Iteration 1-15 · tokens refined through hallmark + frontend-enhancer + ui-ux-polish */
- @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
+/* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 · macrostructure: Workbench · theme: Cobalt Vibrant · 100-loop polish v2 · no slop */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
- :root {
-   color-scheme: light;
+:root {
+  color-scheme: light;
 
-   /* — Surfaces — warm neutral paper, not cold grey · iter 2: elevated paper lifted +0.1 for depth */
-   --color-paper: oklch(98.2% 0.003 280);
-   --color-paper-elevated: oklch(99.1% 0.001 280);
-   --color-surface: oklch(100% 0 0);
-   --color-surface-raised: oklch(100% 0 0);
-   --color-surface-muted: oklch(96.8% 0.004 280);
-   --color-surface-subtle: oklch(95% 0.006 280);
-   --color-surface-glass: oklch(100% 0 0 / 0.72);
-   --color-surface-overlay: oklch(100% 0 0 / 0.86);
+  /* — Surfaces — crisp paper with subtle cool tint, not greige */
+  --color-paper: oklch(98.6% 0.005 260);
+  --color-paper-elevated: oklch(99.2% 0.002 260);
+  --color-surface: oklch(100% 0 0);
+  --color-surface-raised: oklch(100% 0 0);
+  --color-surface-muted: oklch(97.2% 0.005 260);
+  --color-surface-subtle: oklch(96% 0.007 260);
+  --color-surface-glass: oklch(100% 0 0 / 0.82);
+  --color-surface-overlay: oklch(100% 0 0 / 0.92);
 
-   /* — Ink — deep editorial, not pure black · iter 3: ghost lifted for footer contrast AA */
-   --color-ink: oklch(19% 0.015 268);
-   --color-ink-soft: oklch(38% 0.014 268);
-   --color-ink-faint: oklch(52% 0.012 268);
-   --color-ink-ghost: oklch(60% 0.011 268);
+  /* — Ink — near-black editorial, high contrast */
+  --color-ink: oklch(17% 0.016 268);
+  --color-ink-soft: oklch(42% 0.013 268);
+  --color-ink-faint: oklch(56% 0.011 268);
+  --color-ink-ghost: oklch(65% 0.01 268);
 
-   /* — Rules & borders — hairline, premium */
-   --color-rule: oklch(89% 0.007 280);
-   --color-rule-strong: oklch(82% 0.01 280);
-   --color-rule-faint: oklch(93% 0.004 280);
+  /* — Rules — hairline only, no strong borders on cards */
+  --color-rule: oklch(92% 0.006 260);
+  --color-rule-strong: oklch(86% 0.009 260);
+  --color-rule-faint: oklch(95% 0.003 260);
 
-   /* — Accent — deep cobalt, desaturated premium · iter 4: glow widened for focus */
-   --color-accent: oklch(54% 0.19 268);
-   --color-accent-strong: oklch(46% 0.21 268);
-   --color-accent-soft: oklch(92% 0.04 268);
-   --color-accent-ink: oklch(99% 0.002 280);
-   --color-accent-glow: oklch(54% 0.19 268 / 0.14);
-   --color-accent-ghost: oklch(54% 0.19 268 / 0.08);
+  /* — Accent — VIBRANT cobalt, electric vs dull desat */
+  --color-accent: oklch(56% 0.22 268);
+  --color-accent-strong: oklch(50% 0.24 268);
+  --color-accent-soft: oklch(94% 0.05 268);
+  --color-accent-ink: oklch(99% 0.002 280);
+  --color-accent-glow: oklch(56% 0.22 268 / 0.16);
+  --color-accent-ghost: oklch(56% 0.22 268 / 0.10);
+  --color-accent-gradient: linear-gradient(135deg, oklch(56% 0.22 268), oklch(62% 0.20 285));
 
-   /* — Graphite — nav/overlay depth · iter 5: tokenized brand mark so no hex escapes */
-   --color-graphite: oklch(16% 0.014 268);
-   --color-graphite-soft: oklch(22% 0.014 268);
-   --color-graphite-ink: oklch(92% 0.006 280);
-   --color-brand-mark: oklch(16% 0.014 268);
-   --color-brand-accent: oklch(60% 0.20 268);
+  /* — Graphite — overlay depth */
+  --color-graphite: oklch(15% 0.015 268);
+  --color-graphite-soft: oklch(21% 0.015 268);
+  --color-graphite-ink: oklch(93% 0.006 280);
+  --color-brand-mark: oklch(15% 0.015 268);
+  --color-brand-accent: oklch(56% 0.22 268);
 
-   /* — Semantic — muted, premium · iter 6: semantic tints tuned for severity pills */
-   --color-success: oklch(54% 0.13 152);
-   --color-success-soft: oklch(94% 0.03 152);
-   --color-warning: oklch(68% 0.14 72);
-   --color-warning-soft: oklch(95% 0.03 72);
-   --color-danger: oklch(55% 0.2 24);
-   --color-danger-soft: oklch(95% 0.03 24);
-   --color-focus: oklch(56% 0.19 268);
-   --color-focus-ring: oklch(56% 0.19 268 / 0.18);
+  /* — Semantic — vivid but premium */
+  --color-success: oklch(56% 0.15 152);
+  --color-success-soft: oklch(95% 0.04 152);
+  --color-warning: oklch(70% 0.15 75);
+  --color-warning-soft: oklch(96% 0.04 75);
+  --color-danger: oklch(58% 0.22 26);
+  --color-danger-soft: oklch(96% 0.04 26);
+  --color-focus: oklch(56% 0.22 268);
+  --color-focus-ring: oklch(56% 0.22 268 / 0.18);
 
-   /* — Typography — IBM Plex: humanist sans for UI, Plex Mono for code. */
-   --font-display: "IBM Plex Sans", "Segoe UI Variable Display", ui-sans-serif, system-ui, sans-serif;
-   --font-body: "IBM Plex Sans", "Segoe UI Variable Text", ui-sans-serif, system-ui, sans-serif;
-   --font-mono: "IBM Plex Mono", "Cascadia Code", ui-monospace, monospace;
+  /* — Typography — tight modern, mono only for code */
+  --font-display: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 
-   /* Type scale · major-third steps, UI floor 14px, body 16px. iter 7: added micro + tighten display */
-   --text-micro: 0.6875rem;
-   --text-2xs: 0.75rem;
-   --text-xs: 0.75rem;
-   --text-sm: 0.875rem;
-   --text-md: 1rem;
-   --text-lg: 1.125rem;
-   --text-xl: 1.375rem;
-   --text-2xl: clamp(1.75rem, 2.4vw, 2.5rem);
-   --text-3xl: clamp(2rem, 3.2vw, 2.75rem);
-   --text-display: clamp(2.75rem, 5vw, 4.5rem);
-   --leading-tight: 1.05;
-   --leading-snug: 1.25;
-   --leading-relaxed: 1.65;
-   --leading-loose: 1.8;
-   --measure: 38rem;
-   --measure-wide: 44rem;
+  --text-micro: 0.6875rem;
+  --text-2xs: 0.6875rem;
+  --text-xs: 0.8125rem;
+  --text-sm: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.1875rem;
+  --text-xl: 1.5rem;
+  --text-2xl: clamp(1.875rem, 2.6vw, 2.75rem);
+  --text-3xl: clamp(2.25rem, 3.4vw, 3.25rem);
+  --text-display: clamp(3rem, 5.2vw, 4.75rem);
+  --leading-tight: 0.95;
+  --leading-snug: 1.2;
+  --leading-relaxed: 1.6;
+  --leading-loose: 1.75;
+  --measure: 40rem;
+  --measure-wide: 46rem;
 
-   /* — Spacing — 4px base, premium rhythm · iter 8: added 5xl for hero breathing */
-   --space-3xs: 0.125rem;
-   --space-2xs: 0.25rem;
-   --space-xs: 0.375rem;
-   --space-sm: 0.625rem;
-   --space-md: 0.875rem;
-   --space-lg: 1.25rem;
-   --space-xl: 1.875rem;
-   --space-2xl: 2.75rem;
-   --space-3xl: 4rem;
-   --space-4xl: 5.5rem;
-   --space-5xl: 7.5rem;
+  /* — Spacing — 4px base, generous desktop */
+  --space-3xs: 0.125rem;
+  --space-2xs: 0.25rem;
+  --space-xs: 0.375rem;
+  --space-sm: 0.625rem;
+  --space-md: 0.875rem;
+  --space-lg: 1.25rem;
+  --space-xl: 1.875rem;
+  --space-2xl: 3rem;
+  --space-3xl: 4.5rem;
+  --space-4xl: 6rem;
+  --space-5xl: 8rem;
 
-   /* — Radii — refined, not bubbly */
-   --radius-xs: 0.25rem;
-   --radius-sm: 0.5rem;
-   --radius-md: 0.75rem;
-   --radius-lg: 1rem;
-   --radius-xl: 1.25rem;
-   --radius-2xl: 1.5rem;
-   --radius-pill: 999px;
+  /* — Radii — MODERN: soft rect, pill only for badges/pills */
+  --radius-xs: 0.375rem;
+  --radius-sm: 0.625rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.125rem;
+  --radius-2xl: 1.25rem;
+  --radius-pill: 999px;
+  --radius-button: 0.625rem;
+  --radius-card: 1rem;
 
-   /* — Rules · iter 9: hairline + strong + focus ring width */
-   --rule: 1px;
-   --rule-strong: 1.5px;
-   --rule-focus: 2px;
+  --rule: 1px;
+  --rule-strong: 1.5px;
+  --rule-focus: 2px;
 
-   /* — Shadows — layered, soft, premium (no harsh offset) · iter 10: dialog shadow lifted */
-   --shadow-xs: 0 1px 2px oklch(19% 0.015 268 / 0.06), 0 1px 3px oklch(19% 0.015 268 / 0.04);
-   --shadow-sm: 0 2px 8px oklch(19% 0.015 268 / 0.07), 0 1px 2px oklch(19% 0.015 268 / 0.05);
-   --shadow-md: 0 4px 16px oklch(19% 0.015 268 / 0.08), 0 2px 6px oklch(19% 0.015 268 / 0.06);
-   --shadow-lg: 0 8px 32px oklch(19% 0.015 268 / 0.1), 0 4px 12px oklch(19% 0.015 268 / 0.06);
-   --shadow-xl: 0 16px 48px oklch(19% 0.015 268 / 0.12), 0 6px 16px oklch(19% 0.015 268 / 0.08);
-   --shadow-nav: 0 8px 32px oklch(19% 0.015 268 / 0.09), 0 2px 8px oklch(19% 0.015 268 / 0.06);
-   --shadow-dialog: 0 24px 64px oklch(19% 0.015 268 / 0.16), 0 8px 24px oklch(19% 0.015 268 / 0.1);
-   --shadow-accent: 0 4px 20px oklch(54% 0.19 268 / 0.22);
-   --shadow-card-hover: 0 8px 24px oklch(19% 0.015 268 / 0.09), 0 2px 8px oklch(19% 0.015 268 / 0.06);
+  /* — Shadows — VISIBLE, premium depth (not faint) */
+  --shadow-xs: 0 1px 2px oklch(17% 0.016 268 / 0.07), 0 1px 3px oklch(17% 0.016 268 / 0.05);
+  --shadow-sm: 0 2px 10px oklch(17% 0.016 268 / 0.08), 0 1px 3px oklch(17% 0.016 268 / 0.06);
+  --shadow-md: 0 6px 20px oklch(17% 0.016 268 / 0.10), 0 2px 8px oklch(17% 0.016 268 / 0.07);
+  --shadow-lg: 0 12px 32px oklch(17% 0.016 268 / 0.12), 0 4px 12px oklch(17% 0.016 268 / 0.08);
+  --shadow-xl: 0 20px 48px oklch(17% 0.016 268 / 0.14), 0 8px 20px oklch(17% 0.016 268 / 0.10);
+  --shadow-nav: 0 1px 0 oklch(17% 0.016 268 / 0.06);
+  --shadow-dialog: 0 24px 64px oklch(17% 0.016 268 / 0.18), 0 8px 24px oklch(17% 0.016 268 / 0.12);
+  --shadow-accent: 0 6px 20px oklch(56% 0.22 268 / 0.28);
+  --shadow-card: 0 1px 3px oklch(17% 0.016 268 / 0.06), 0 4px 16px oklch(17% 0.016 268 / 0.04);
+  --shadow-card-hover: 0 4px 20px oklch(17% 0.016 268 / 0.08), 0 2px 8px oklch(17% 0.016 268 / 0.06);
 
-   /* — Motion — restrained luxury · iter 11: added stagger + snappy */
-   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-   --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
-   --ease-in: cubic-bezier(0.4, 0, 1, 1);
-   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
-   --ease-spring: cubic-bezier(0.34, 1.42, 0.64, 1);
-   --ease-spring-soft: cubic-bezier(0.32, 0.72, 0, 1);
-   --ease-snappy: cubic-bezier(0.22, 1, 0.36, 1);
-   --dur-instant: 80ms;
-   --dur-fast: 140ms;
-   --dur-base: 200ms;
-   --dur-slow: 360ms;
-   --dur-slower: 560ms;
-   --dur-stagger: 40ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.42, 0.64, 1);
+  --ease-spring-soft: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-snappy: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-instant: 80ms;
+  --dur-fast: 140ms;
+  --dur-base: 200ms;
+  --dur-slow: 360ms;
+  --dur-slower: 560ms;
+  --dur-stagger: 40ms;
 
-   /* — Z indices · iter 12: explicit stack */
-   --z-nav: 20;
-   --z-dialog: 40;
-   --z-toast: 50;
-   --z-command: 45;
+  --z-nav: 20;
+  --z-dialog: 40;
+  --z-toast: 50;
+  --z-command: 45;
 
-   /* — Content widths · iter 13 */
-   --content-max: 86rem;
-   --content-narrow: 48rem;
+  --content-max: 86rem;
+  --content-narrow: 48rem;
+  --focus-ring: 0 0 0 3px var(--color-focus-ring);
+  --grid-gap: var(--space-md);
+}
 
-   /* — Focus · iter 14 */
-   --focus-ring: 0 0 0 3px var(--color-focus-ring);
+:root[data-theme='dark'] {
+  color-scheme: dark;
 
-   /* — Grids · iter 15 */
-   --grid-gap: var(--space-md);
- }
+  --color-paper: oklch(14% 0.012 268);
+  --color-paper-elevated: oklch(16% 0.013 268);
+  --color-surface: oklch(19% 0.013 268);
+  --color-surface-raised: oklch(22% 0.013 268);
+  --color-surface-muted: oklch(24% 0.013 268);
+  --color-surface-subtle: oklch(27% 0.013 268);
+  --color-surface-glass: oklch(19% 0.013 268 / 0.82);
+  --color-surface-overlay: oklch(19% 0.013 268 / 0.92);
 
- :root[data-theme='dark'] {
-   color-scheme: dark;
+  --color-ink: oklch(96% 0.004 280);
+  --color-ink-soft: oklch(78% 0.009 280);
+  --color-ink-faint: oklch(64% 0.012 280);
+  --color-ink-ghost: oklch(54% 0.014 280);
 
-   --color-paper: oklch(16% 0.011 268);
-   --color-paper-elevated: oklch(18% 0.012 268);
-   --color-surface: oklch(20% 0.013 268);
-   --color-surface-raised: oklch(23% 0.013 268);
-   --color-surface-muted: oklch(24% 0.013 268);
-   --color-surface-subtle: oklch(27% 0.013 268);
-   --color-surface-glass: oklch(20% 0.013 268 / 0.72);
-   --color-surface-overlay: oklch(20% 0.013 268 / 0.86);
+  --color-rule: oklch(28% 0.012 268);
+  --color-rule-strong: oklch(34% 0.014 268);
+  --color-rule-faint: oklch(24% 0.01 268);
 
-   --color-ink: oklch(94% 0.004 280);
-   --color-ink-soft: oklch(76% 0.009 280);
-   --color-ink-faint: oklch(62% 0.012 280);
-   --color-ink-ghost: oklch(52% 0.014 280);
+  --color-accent: oklch(64% 0.18 268);
+  --color-accent-strong: oklch(70% 0.16 268);
+  --color-accent-soft: oklch(24% 0.05 268);
+  --color-accent-ink: oklch(14% 0.015 268);
+  --color-accent-glow: oklch(64% 0.18 268 / 0.20);
+  --color-accent-ghost: oklch(64% 0.18 268 / 0.14);
 
-   --color-rule: oklch(26% 0.012 268);
-   --color-rule-strong: oklch(32% 0.014 268);
-   --color-rule-faint: oklch(22% 0.01 268);
+  --color-graphite: oklch(12% 0.01 268);
+  --color-graphite-soft: oklch(10% 0.009 268);
+  --color-graphite-ink: oklch(90% 0.006 280);
+  --color-brand-mark: oklch(96% 0.004 280);
+  --color-brand-accent: oklch(64% 0.18 268);
 
-   --color-accent: oklch(66% 0.15 268);
-   --color-accent-strong: oklch(74% 0.13 268);
-   --color-accent-soft: oklch(24% 0.06 268);
-   --color-accent-ink: oklch(16% 0.015 268);
-   --color-accent-glow: oklch(66% 0.15 268 / 0.18);
-   --color-accent-ghost: oklch(66% 0.15 268 / 0.12);
+  --color-success: oklch(66% 0.15 152);
+  --color-success-soft: oklch(22% 0.05 152);
+  --color-warning: oklch(76% 0.14 80);
+  --color-warning-soft: oklch(24% 0.05 80);
+  --color-danger: oklch(64% 0.20 24);
+  --color-danger-soft: oklch(24% 0.06 24);
+  --color-focus: oklch(64% 0.18 268);
+  --color-focus-ring: oklch(64% 0.18 268 / 0.24);
 
-   --color-graphite: oklch(12% 0.01 268);
-   --color-graphite-soft: oklch(9% 0.009 268);
-   --color-graphite-ink: oklch(90% 0.006 280);
-   --color-brand-mark: oklch(92% 0.006 280);
-   --color-brand-accent: oklch(66% 0.15 268);
-
-   --color-success: oklch(68% 0.14 152);
-   --color-success-soft: oklch(22% 0.05 152);
-   --color-warning: oklch(78% 0.13 80);
-   --color-warning-soft: oklch(24% 0.05 80);
-   --color-danger: oklch(66% 0.18 24);
-   --color-danger-soft: oklch(24% 0.06 24);
-   --color-focus: oklch(66% 0.15 268);
-   --color-focus-ring: oklch(66% 0.15 268 / 0.22);
-
-   --shadow-xs: 0 1px 2px oklch(0% 0 0 / 0.3), 0 1px 3px oklch(0% 0 0 / 0.2);
-   --shadow-sm: 0 2px 8px oklch(0% 0 0 / 0.35), 0 1px 2px oklch(0% 0 0 / 0.25);
-   --shadow-md: 0 4px 16px oklch(0% 0 0 / 0.4), 0 2px 6px oklch(0% 0 0 / 0.3);
-   --shadow-lg: 0 8px 32px oklch(0% 0 0 / 0.45), 0 4px 12px oklch(0% 0 0 / 0.35);
-   --shadow-xl: 0 16px 48px oklch(0% 0 0 / 0.5), 0 6px 16px oklch(0% 0 0 / 0.4);
-   --shadow-nav: 0 8px 32px oklch(0% 0 0 / 0.5), 0 2px 8px oklch(0% 0 0 / 0.4);
-   --shadow-dialog: 0 24px 64px oklch(0% 0 0 / 0.6), 0 8px 24px oklch(0% 0 0 / 0.5);
-   --shadow-accent: 0 4px 20px oklch(66% 0.15 268 / 0.3);
-   --shadow-card-hover: 0 12px 32px oklch(0% 0 0 / 0.45), 0 4px 12px oklch(0% 0 0 / 0.35);
- }
+  --shadow-xs: 0 1px 2px oklch(0% 0 0 / 0.32), 0 1px 3px oklch(0% 0 0 / 0.22);
+  --shadow-sm: 0 2px 10px oklch(0% 0 0 / 0.36), 0 1px 3px oklch(0% 0 0 / 0.26);
+  --shadow-md: 0 6px 20px oklch(0% 0 0 / 0.42), 0 2px 8px oklch(0% 0 0 / 0.32);
+  --shadow-lg: 0 12px 32px oklch(0% 0 0 / 0.48), 0 4px 12px oklch(0% 0 0 / 0.38);
+  --shadow-xl: 0 20px 48px oklch(0% 0 0 / 0.54), 0 8px 20px oklch(0% 0 0 / 0.44);
+  --shadow-nav: 0 1px 0 oklch(0% 0 0 / 0.22);
+  --shadow-dialog: 0 24px 64px oklch(0% 0 0 / 0.62), 0 8px 24px oklch(0% 0 0 / 0.52);
+  --shadow-accent: 0 6px 20px oklch(64% 0.18 268 / 0.32);
+  --shadow-card: 0 1px 3px oklch(0% 0 0 / 0.24), 0 4px 16px oklch(0% 0 0 / 0.18);
+  --shadow-card-hover: 0 8px 24px oklch(0% 0 0 / 0.32), 0 4px 12px oklch(0% 0 0 / 0.24);
+}

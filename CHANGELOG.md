@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-08-27
+
+### Added
+- **Premium UI v2 — substantial redesign:** Vibrant cobalt `56% 0.22` + visible `shadow-card` depth, soft-rect radii (`10px` button / `16px` card, pill only badges), minimal nav (no glass, hairline `faint`, active `muted 600`), breathing page `4.5rem/2xl` + bento `4-col` metrics `clamp 1.75-2.25rem`, clean tables `faint border + card shadow`, solid empty states, soft severity `accent-soft` pills, `text-wrap balance` hero `-.05` tracking, `isolation isolate` + `contain layout` perf.
+
+### Changed
+- **Design system tokens:** `tokens.css` — paper `98.6% cool`, `accent-glow 0.16`, `radius-button/card` split, `shadow-card/hover/accent` lifted, `space 3xl 4.5rem`.
+- **Components:** `AppShell` tokenized brand mark + `rounded-button` + `shadow-accent` Add, `Button` `accent` primary both themes (was black), `HomePage` dashboard eyebrow + bento polish.
+- **Styles:** `styles.css` — Hallmark `P5 H5 E5 S5 R5 V5` 100-loop v2, no lift `translateY`, no pill fatigue, `content-max 86rem` centered.
+
+### Fixed
+- Locked tokens: removed `#0f172a`/`#3b82f6` hex slop via `var(--color-brand-mark/accent)` — Hallmark gate 48.
+- Button/shadow regression: `rounded-full` → `radius-button`, `translateY` removed per audit.
+
+
 ## [0.7.1] - 2026-08-27
 
 ### Added

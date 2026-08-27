@@ -1,5 +1,9 @@
 ## graphify
 
+## Subagents
+
+- Use Luna and Claude CLI as subagents.
+
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
 
 When the user types `/graphify`, invoke the `skill` tool with `skill: "graphify"` before doing anything else.
