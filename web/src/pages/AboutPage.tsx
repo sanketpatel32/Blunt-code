@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode, type SVGProps } from 'reac
 import { api } from '../api';
 import { copyToClipboard } from '../lib/clipboard';
 import { useLoad } from '../hooks/useLoad';
+import { LanguageCoverage } from '../components/LanguageCoverage';
 
 /**
  * Privacy point icons drawn inline (AboutPage gets no stylesheet of its own) so
@@ -44,7 +45,7 @@ function EyeOffIcon(props: SVGProps<SVGSVGElement>) {
     clearTimeout(revert.current);
     revert.current = setTimeout(() => setCopied(false), 1500);
   }
-  return <div className="page narrow"><header className="page-heading"><div><p className="eyebrow">About</p><h1>Blunt Code</h1><p>A local-first static analysis application for Windows.</p></div></header><section className="about-card"><h2>Local by default <span className="badge">{meta.data?.version ? `v${meta.data.version}` : 'Version unknown'}</span></h2><p>Analyzes selected files on this computer and combines results from local analysis tools.</p><ul className="about-points" style={{ display: 'grid', gap: 'var(--space-xs)', margin: 'var(--space-lg) 0 0', padding: 0, listStyle: 'none' }}><li className="local-signal"><MonitorIcon />Local-only analysis</li><li className="local-signal"><PersonSlashIcon />No account required</li><li className="local-signal"><EyeOffIcon />No telemetry</li></ul><dl><dt>Server</dt><dd>{serverStatus}</dd><dt>API version</dt><dd>{meta.data?.api_version ?? 'Unknown'}</dd><dt>Platform</dt><dd>{platform || 'Unknown'}</dd></dl><p aria-live="polite" style={{ margin: 'var(--space-xl) 0 0' }}><button type="button" className="button secondary" onClick={() => void copyVersionInfo()}>{copied ? 'Copied' : 'Copy version info'}</button></p></section><UpdateCard version={meta.data?.version ?? ''} /></div>;
+  return <div className="page narrow"><header className="page-heading"><div><p className="eyebrow">About</p><h1>Blunt Code</h1><p>A local-first static analysis application for Windows.</p></div></header><section className="about-card"><h2>Local by default <span className="badge">{meta.data?.version ? `v${meta.data.version}` : 'Version unknown'}</span></h2><p>Analyzes selected files on this computer and combines results from local analysis tools.</p><ul className="about-points" style={{ display: 'grid', gap: 'var(--space-xs)', margin: 'var(--space-lg) 0 0', padding: 0, listStyle: 'none' }}><li className="local-signal"><MonitorIcon />Local-only analysis</li><li className="local-signal"><PersonSlashIcon />No account required</li><li className="local-signal"><EyeOffIcon />No telemetry</li></ul><dl><dt>Server</dt><dd>{serverStatus}</dd><dt>API version</dt><dd>{meta.data?.api_version ?? 'Unknown'}</dd><dt>Platform</dt><dd>{platform || 'Unknown'}</dd></dl><p aria-live="polite" style={{ margin: 'var(--space-xl) 0 0' }}><button type="button" className="button secondary" onClick={() => void copyVersionInfo()}>{copied ? 'Copied' : 'Copy version info'}</button></p></section><UpdateCard version={meta.data?.version ?? ''} /><section className="about-card" style={{ marginTop: 'var(--space-lg)' }}><LanguageCoverage /></section></div>;
 }
 
 type UpdateState =

@@ -1,0 +1,50 @@
+/* Central animation library — GPU-only (transform, opacity), will-change where needed, respects prefers-reduced-motion */
+:root { --dur-stagger: 40ms; }
+
+@keyframes anim-fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes anim-fadeInUp { from { opacity: 0; transform: translate3d(0, 8px, 0); } to { opacity: 1; transform: translate3d(0, 0, 0); } }
+@keyframes anim-slideIn { from { opacity: 0; transform: translate3d(0, 10px, 0) scale(0.98); } to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); } }
+@keyframes anim-scaleIn { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
+@keyframes anim-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@keyframes anim-pulse-dot { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.15); opacity: .85; } 100% { transform: scale(1); opacity: 1; } }
+@keyframes anim-critical-breathe { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .85; transform: scale(1.06); } }
+@keyframes anim-copy-pop { 0% { transform: scale(1); } 40% { transform: scale(1.18); } 100% { transform: scale(1); } }
+@keyframes anim-icon-float { 0%,100% { transform: translate3d(0,0,0); } 50% { transform: translate3d(0,-3px,0); } }
+
+/* Utility classes */
+.anim-fadeIn { animation: anim-fadeIn var(--dur-slow) var(--ease-out) both; will-change: opacity; }
+.anim-fadeInUp { animation: anim-fadeInUp var(--dur-slow) var(--ease-out-quart) both; will-change: transform, opacity; }
+.anim-slideIn { animation: anim-slideIn var(--dur-slow) var(--ease-spring-soft) both; will-change: transform, opacity; }
+.anim-scaleIn { animation: anim-scaleIn var(--dur-base) var(--ease-out) both; will-change: transform, opacity; }
+.anim-stagger { animation-delay: var(--stagger-delay, 0ms); }
+
+/* Skeleton shimmer — uses background-position (GPU-friendly) + opacity only */
+.skeleton-anim { background: linear-gradient(90deg, var(--color-surface-muted) 30%, var(--color-rule) 50%, var(--color-surface-muted) 70%); background-size: 220% 100%; animation: anim-shimmer 1.4s var(--ease-in-out) infinite; will-change: background-position; }
+
+/* Card hover: subtle scale border tint, no translateY */
+.card-hover-lift { transition: border-color var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out); will-change: transform, border-color; }
+.card-hover-lift:hover { transform: scale(1.01); border-color: var(--color-rule-strong); box-shadow: var(--shadow-card-hover); }
+
+/* pulse-dot refined */
+.pulse-dot-anim { animation: anim-pulse-dot 1.8s var(--ease-in-out) infinite; will-change: transform, opacity; }
+.critical-breathe { animation: anim-critical-breathe 2.4s var(--ease-in-out) infinite; will-change: transform, opacity; }
+.copy-pop { animation: anim-copy-pop var(--dur-base) var(--ease-spring) both; will-change: transform; }
+.icon-float { animation: anim-icon-float 3.2s var(--ease-in-out) infinite; will-change: transform; }
+
+/* Progress bar width: GPU-friendly if using transform scaleX? We use width with ease-out-quart but ensure transition token */
+.progress-fill { transition: width var(--dur-slow) var(--ease-out-quart); will-change: width; }
+
+/* Pills fade in */
+.pill-enter { animation: anim-fadeIn var(--dur-base) var(--ease-out) both; will-change: opacity; }
+
+/* Flow marker spring */
+.flow-marker-spring { transition: transform var(--dur-slow) var(--ease-spring), border-color var(--dur-base) var(--ease-out), background var(--dur-base) var(--ease-out); will-change: transform; }
+.flow-marker-spring.current { transform: scale(1.12); }
+
+/* Reduced motion: disable all */
+@media (prefers-reduced-motion: reduce) {
+  .anim-fadeIn, .anim-fadeInUp, .anim-slideIn, .anim-scaleIn, .skeleton-anim, .pulse-dot-anim, .critical-breathe, .copy-pop, .icon-float, .pill-enter { animation: none !important; }
+  .card-hover-lift:hover { transform: none !important; }
+  .progress-fill { transition: none !important; }
+  .flow-marker-spring { transition: none !important; }
+}

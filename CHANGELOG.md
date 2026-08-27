@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-08-27
+
+### Added
+- **50-loop major UI overhaul via subagents (Luna + Claude CLI):** shadCN primitives `select/tabs/dropdown-menu/popover/tooltip/sheet/accordion/calendar/combobox` (`web/src/components/ui/*`), `DataTable` generic (sort/facet/column-toggle/density/pagination/bulk) + `table-toolbar`, filter drawer 380px + quick filters + saved presets (`filterPresets` ↔ URL ↔ localStorage), command palette grouped navigation/filters/workspaces + recent, file-tree language filter + highlight, i18n provider 6 locales `en/es/fr/de/ja/hi` + `AppShell` language select, central `animations.css` (GPU, stagger 40ms, reduced-motion), skeletons/toasts spring, `useStagger/useReducedMotion`, scan live strip category grouping, dashboard accent-gradient bar, `analyzerCatalog` 16 types (snyk/zap/nuclei/gitleaks/osv/trivy/checkov), `LanguageCoverage` matrix, `PentestPage` + Tools pentest section, manifest stubs 6 tools, route `pentest`, i18n keys.
+
+### Changed
+- **Tables premium:** sticky header 5% hover, tabular-nums, `content-visibility`, row stagger, severity edge tint only high/critical, column toggle, dropdown actions.
+- **Filters make life easy:** toolbar + chips (removable) + severity soft `accent-soft`, drawer per page remembers `bluntcode.filters.*`, URL shareable + back/forward, search debounce 200/250ms preserved for tests.
+- **History/Search/Workspaces polished:** date filter hook, facet sidebar accordion sticky→sheet mobile, saved searches.
+
+### Fixed
+- Locked test regressions from overhaul: `CommandPalette` hooks order, `i18n` fallback, `HistoryPage` band headers `Today` plain, `LanguageBadges` restore `Python`, `ToolsPage` tool-table vs coming-soon split, `FilesPage/SearchPage/WorkspacesPage` debounce + native input preservation — 259 tests green.
+
+
 ## [0.7.2] - 2026-08-27
 
 ### Added

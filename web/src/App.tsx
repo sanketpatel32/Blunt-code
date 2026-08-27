@@ -12,6 +12,7 @@ import { AddWorkspaceDialog, ConfirmationDialog } from './components/dialogs';
 import { CommandPalette, type Command } from './components/CommandPalette';
 import { ShortcutsDialog } from './components/ShortcutsDialog';
 import { useTheme } from './hooks/useTheme';
+import { I18nProvider } from './lib/i18n';
 import { HomePage } from './pages/HomePage';
 import { WorkspacesPage } from './pages/WorkspacesPage';
 import { WorkspacePage } from './pages/WorkspaceDetailPage';
@@ -20,6 +21,7 @@ import { HistoryPage } from './pages/HistoryPage';
 import { ScanPage } from './pages/ScanPage';
 import { SearchPage } from './pages/SearchPage';
 import { ToolsPage } from './pages/ToolsPage';
+import { PentestPage } from './pages/PentestPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AboutPage } from './pages/AboutPage';
 import { NotFoundPage } from './pages/NotFoundPage';
@@ -87,14 +89,18 @@ export function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [go, armSequence, disarmSequence]);
   const paletteCommands: Command[] = [
-    { id: 'nav-home', label: 'Go to Home', keywords: 'dashboard start', hint: 'g h', run: () => go({ page: 'home' }) },
-    { id: 'nav-workspaces', label: 'Go to Workspaces', keywords: 'projects', hint: 'g w', run: () => go({ page: 'workspaces' }) },
-    { id: 'nav-tools', label: 'Go to Tools', keywords: 'analyzers ruff biome semgrep sonar', hint: 'g t', run: () => go({ page: 'tools' }) },
-    { id: 'nav-settings', label: 'Go to Settings', keywords: 'preferences', hint: 'g s', run: () => go({ page: 'settings' }) },
-    { id: 'nav-about', label: 'Go to About', keywords: 'version info', hint: 'g a', run: () => go({ page: 'about' }) },
-    { id: 'action-add-workspace', label: 'Add workspace', keywords: 'new project folder scan', hint: 'N', run: () => setAddOpen(true) },
-    { id: 'action-theme', label: theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme', keywords: 'dark light mode appearance', run: toggleTheme },
-    { id: 'action-shortcuts', label: 'Show keyboard shortcuts', keywords: 'help keys', hint: '?', run: () => setShortcutsOpen(true) },
+    { id: 'nav-home', label: 'Go to Home', keywords: 'dashboard start', hint: 'g h', group: 'Navigation', run: () => go({ page: 'home' }) },
+    { id: 'nav-workspaces', label: 'Go to Workspaces', keywords: 'projects', hint: 'g w', group: 'Navigation', run: () => go({ page: 'workspaces' }) },
+    { id: 'nav-tools', label: 'Go to Tools', keywords: 'analyzers ruff biome semgrep sonar', hint: 'g t', group: 'Navigation', run: () => go({ page: 'tools' }) },
+    { id: 'nav-settings', label: 'Go to Settings', keywords: 'preferences', hint: 'g s', group: 'Navigation', run: () => go({ page: 'settings' }) },
+    { id: 'nav-about', label: 'Go to About', keywords: 'version info', hint: 'g a', group: 'Navigation', run: () => go({ page: 'about' }) },
+    { id: 'nav-search', label: 'Go to findings', keywords: 'search findings', group: 'Navigation', run: () => go({ page: 'search' }) },
+    { id: 'nav-pentest', label: 'Go to Pentest', keywords: 'pentest zap nuclei burp hacking', group: 'Navigation', run: () => go({ page: 'pentest' }) },
+    { id: 'filter-critical', label: 'Filter critical', keywords: 'severity critical', group: 'Filters', run: () => go({ page: 'search' }) },
+    { id: 'filter-findings', label: 'Go to findings', keywords: 'findings', group: 'Filters', run: () => go({ page: 'search' }) },
+    { id: 'action-add-workspace', label: 'Add workspace', keywords: 'new project folder scan', hint: 'N', group: 'Navigation', run: () => setAddOpen(true) },
+    { id: 'action-theme', label: theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme', keywords: 'dark light mode appearance', group: 'Navigation', run: toggleTheme },
+    { id: 'action-shortcuts', label: 'Show keyboard shortcuts', keywords: 'help keys', hint: '?', group: 'Navigation', run: () => setShortcutsOpen(true) },
   ];
   // Dynamic workspace entries load lazily the first time the palette opens;
   // failures degrade to the static list silently (the palette is navigation
@@ -110,10 +116,11 @@ export function App() {
     id: `nav-workspace-${workspace.id}`,
     label: `Go to ${workspace.name || 'Untitled workspace'}`,
     keywords: `${workspace.name} project open`,
+    group: 'Workspaces',
     run: () => go({ page: 'workspace', id: workspace.id }),
   }));
   const allPaletteCommands = useMemo(() => [...paletteCommands, ...workspaceCommands], [paletteCommands, workspaceCommands]);
-  return <div className="app-frame">
+  return <I18nProvider><div className="app-frame">
     <a href="#main-content" className="skip-link">Skip to main content</a>
     <AppShell route={route} onNavigate={go} onAdd={() => setAddOpen(true)} onClose={() => setCloseOpen(true)} theme={theme} onToggleTheme={toggleTheme} onShowShortcuts={() => setShortcutsOpen(true)} seqArmed={seqArmed} />
     <main className="main" id="main-content" tabIndex={-1}>
@@ -128,7 +135,7 @@ export function App() {
     {paletteOpen && <CommandPalette open onClose={() => setPaletteOpen(false)} commands={allPaletteCommands} note={workspacesForPalette.length ? `${workspacesForPalette.length} workspace${workspacesForPalette.length === 1 ? '' : 's'} indexed` : undefined} />}
     <AppFooter />
     <ToastStack toasts={toasts} onDismiss={dismiss} />
-  </div>;
+  </div></I18nProvider>;
 }
 
 function Page({ route, go, notify, onAdd }: { route: Route; go: (r: Route) => void; notify: (n: Notice) => void; onAdd: () => void }) {
@@ -144,6 +151,7 @@ function Page({ route, go, notify, onAdd }: { route: Route; go: (r: Route) => vo
     case 'scan': return id ? <ScanPage id={id} notify={notify} /> : <NotFoundPage go={go} />;
     case 'search': return <SearchPage go={go} />;
     case 'tools': return <ToolsPage notify={notify} />;
+    case 'pentest': return <PentestPage go={go} />;
     case 'settings': return <SettingsPage notify={notify} />;
     case 'about': return <AboutPage />;
     case 'not-found': return <NotFoundPage go={go} />;

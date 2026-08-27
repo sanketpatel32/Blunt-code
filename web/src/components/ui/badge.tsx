@@ -11,6 +11,7 @@ const badgeVariants = cva('inline-flex items-center rounded-full border px-2.5 p
       danger: 'border-[color-mix(in_oklch,var(--color-danger)_40%,var(--color-rule))] bg-[var(--color-danger-soft)] text-[var(--color-danger)]',
       accent: 'border-[color-mix(in_oklch,var(--color-accent)_40%,var(--color-rule))] bg-[var(--color-accent-soft)] text-[var(--color-accent-strong)]',
       outline: 'text-[var(--color-ink-soft)] border-[var(--color-rule)]',
+      secondary: 'border-transparent bg-[var(--color-surface-muted)] text-[var(--color-ink-soft)]',
     },
   },
   defaultVariants: { variant: 'default' },

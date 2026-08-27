@@ -12,6 +12,8 @@ import { ErrorPanel, Loading, SeverityCounts } from '../components/ui';
 import { SkeletonLines } from '../components/skeletons';
 import { AnalyzerStatuses } from './WorkspaceDetailPage';
 import { ReportView } from './report/ReportView';
+import { analyzerMeta, categoryColor, CATEGORY_LABELS } from '../lib/analyzerCatalog';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 
 export type { ScanEvent } from '../lib/scanEvents';
 
@@ -90,20 +92,50 @@ function ScanProgressBar({ scan, events }: { scan: Scan; events: ScanEvent[] }) 
   if (terminal) { state = scan.state === 'failed' ? 'failed' : 'done'; percent = 100; }
   else if (total && done !== undefined) { state = 'determinate'; percent = Math.min(100, Math.round((done / total) * 100)); }
   const label = percent !== undefined ? `Scan progress: ${percent}%` : 'Scan in progress';
-  return <div className={`scan-progress ${state}`} role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent ?? undefined} aria-busy={!terminal}><i style={percent !== undefined ? { width: `${percent}%` } : undefined} /></div>;
+  return <div className={`scan-progress ${state}`} role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent ?? undefined} aria-busy={!terminal}><i className="progress-fill" style={{ width: percent !== undefined ? `${percent}%` : undefined, transition: 'width var(--dur-slow) var(--ease-out-quart)', willChange: 'width' } as never} /></div>;
 }
 
-/** Live per-analyzer pills for the side panel: stream events overlay the
- *  persisted analyzer_runs so a pill flips to "done" the moment its completion
- *  event lands, without waiting for the next scan reload. */
-function LiveAnalyzerStrip({ runs, events }: { runs?: AnalyzerRun[]; events: ScanEvent[] }) {
+/** Lightweight confetti stub for terminal success (no heavy lib): CSS-only dots burst */
+function ConfettiStub({ show }: { show: boolean }) {
+  const reduced = useReducedMotion();
+  if (!show || reduced) return null;
+  return <div aria-hidden="true" className="confetti-stub" style={{ display: 'flex', gap: '4px', marginTop: '8px' }}>{Array.from({ length: 12 }, (_, i) => <i key={i} className="anim-fadeIn" style={{ width: '6px', height: '6px', borderRadius: '50%', background: ['var(--color-accent)','var(--color-success)','var(--color-warning)'][i % 3], display: 'block', animationDelay: `${i * 35}ms`, willChange: 'transform, opacity' } as never} />)}</div>;
+}
+
+/** Live per-analyzer pills grouped by category with category dots and skipped warnings. */
+export function LiveAnalyzerStrip({ runs, events }: { runs?: AnalyzerRun[]; events: ScanEvent[] }) {
   const started = new Map<string, boolean>();
   for (const event of events) {
     if (event.type === 'analyzer.started') started.set(event.analyzer_id ?? event.name ?? '', true);
   }
-  const pills = (runs?.length ? runs.map((run) => ({ id: run.analyzer_id, status: run.status })) : [...started.keys()].map((id) => ({ id, status: 'running' })));
+  const pills = (runs?.length ? runs.map((run) => ({ id: run.analyzer_id, status: run.status, message: run.message })) : [...started.keys()].map((id) => ({ id, status: 'running', message: undefined as string | undefined })));
   if (!pills.length) return null;
-  return <ul className="live-analyzers" aria-label="Analyzer progress">{pills.map((pill) => <li key={pill.id}><span className="badge">{pill.id}</span><span className={`state ${pill.status}`}>{pill.status}</span></li>)}</ul>;
+  const grouped = new Map<string, typeof pills>();
+  for (const p of pills) {
+    const cat = analyzerMeta(p.id)?.category ?? 'other';
+    const arr = grouped.get(cat) ?? [];
+    arr.push(p);
+    grouped.set(cat, arr);
+  }
+  const reduced = useReducedMotion();
+  return <div className="live-analyzers-grouped" aria-label="Analyzer progress">
+    {[...grouped.entries()].map(([cat, items]) => (
+      <div key={cat} className="live-category">
+        <span className="live-category-label" style={{ borderLeftColor: categoryColor(cat as never) }}>{CATEGORY_LABELS[cat as never] ?? cat}</span>
+        <ul className="live-analyzers" aria-label={`${cat} analyzers`}>
+          {items.map((pill, pIdx) => {
+            const skipped = pill.status === 'skipped';
+            return <li key={pill.id} title={skipped ? (pill.message || 'Skipped — no applicable files or not enabled for this profile') : undefined} className={reduced ? '' : 'anim-fadeIn'} style={reduced ? undefined : { animationDelay: `${pIdx * 40}ms`, willChange: 'transform, opacity' } as never}>
+              <span className="badge flex items-center gap-1"><i className="category-dot" style={{ background: categoryColor((analyzerMeta(pill.id)?.category ?? 'security') as never) }} aria-hidden="true" />{pill.id}</span>
+              <span className={`state ${pill.status}`}>{pill.status}</span>
+              {skipped && <span className="text-xs text-[var(--color-ink-faint)] ml-1" role="note">skipped: {pill.message || 'no applicable files'}</span>}
+            </li>;
+          })}
+        </ul>
+      </div>
+    ))}
+    <div className="category-dots" aria-hidden="true">{[...grouped.keys()].map((cat) => <i key={cat} className="category-dot" style={{ background: categoryColor(cat as never) }} title={cat} />)}</div>
+  </div>;
 }
 
 /** Compact rows shown before the "<details>" overflow; the endpoint itself caps the list at 100. */
@@ -139,5 +171,7 @@ function ScanStageList({ scan, events }: { scan: Scan; events: ScanEvent[] }) {
   const entries = journey.length ? journey : [{ type: 'scan.stage', stage: fallback, at: Date.now() }];
   const active = !isTerminalScanState(scan.state) ? entries.at(-1) : undefined;
   const status = active?.type === 'analyzer.started' ? `${active.name ?? active.analyzer_id ?? 'Analyzer'} is checking your code` : active ? eventCopy(active) : scan.state === 'interrupted' ? 'Scan interrupted — completed checks are still available.' : scan.state.replaceAll('_', ' ');
-  return <section className="stage-list"><header><div><p className="eyebrow">Analysis flow</p><h2>What is happening now</h2></div><span>{entries.length} update{entries.length === 1 ? '' : 's'}</span></header><p className={`flow-now ${active ? 'active' : ''}`} role="status" aria-live="polite"><i aria-hidden="true" />{status}</p><ol className="scan-flow">{entries.map((event, index) => { const state = event.type.includes('failed') ? 'failed' : event.type.includes('completed') ? 'done' : event.type.includes('cancelled') ? 'interrupted' : index === entries.length - 1 && !isTerminalScanState(scan.state) ? 'current' : ''; return <li className={state} key={event.seq ?? `${event.type}-${event.at}`}><i className="flow-marker" aria-hidden="true" /><div><strong>{eventCopy(event)}</strong><small>{mediumTime.format(event.at)}</small></div></li>; })}</ol></section>;
+  const reduced = useReducedMotion();
+  const terminalDone = scan.state === 'completed';
+  return <section className="stage-list"><header><div><p className="eyebrow">Analysis flow</p><h2>What is happening now</h2></div><span>{entries.length} update{entries.length === 1 ? '' : 's'}</span></header><p className={`flow-now ${active ? 'active' : ''}`} role="status" aria-live="polite"><i aria-hidden="true" />{status}</p>{terminalDone && <ConfettiStub show={terminalDone} />}<ol className="scan-flow">{entries.map((event, index) => { const state = event.type.includes('failed') ? 'failed' : event.type.includes('completed') ? 'done' : event.type.includes('cancelled') ? 'interrupted' : index === entries.length - 1 && !isTerminalScanState(scan.state) ? 'current' : ''; return <li className={state} key={event.seq ?? `${event.type}-${event.at}`}><i className={`flow-marker flow-marker-spring ${state === 'current' ? 'current' : ''}`} aria-hidden="true" style={reduced ? undefined : { transition: 'transform var(--dur-slow) var(--ease-spring)', willChange: 'transform' } as never} /><div><strong>{eventCopy(event)}</strong><small>{mediumTime.format(event.at)}</small></div></li>; })}</ol></section>;
 }

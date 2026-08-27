@@ -14,6 +14,7 @@ import { SuppressionsSection } from '../components/SuppressionsPanel';
 import { ConfirmationDialog } from '../components/dialogs';
 import { WorkspaceContextSidebar } from '../components/WorkspaceContext';
 import { HistoryTable } from './HistoryPage';
+import { analyzerMeta, categoryColor, CATEGORY_LABELS } from '../lib/analyzerCatalog';
 
 export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) => void; notify: (n: Notice) => void }) {
   const workspace = useLoad(() => api.workspace(id), [id]);
@@ -51,7 +52,18 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
 }
 
 export function AnalyzerStatuses({ runs }: { runs?: AnalyzerRun[] }) {
-  return <div className="analyzers"><h3>Analyzer status</h3>{runs?.length ? runs.map((run) => <div className="analyzer-row" key={run.analyzer_id}><span>{run.analyzer_id}</span><span className={`state ${run.status}`}>{run.status}</span>{run.message && <small>{run.message}</small>}</div>) : <p className="muted">Analyzer detail appears after a scan.</p>}</div>;
+  if (!runs?.length) return <div className="analyzers"><h3>Analyzer status</h3><p className="muted">Analyzer detail appears after a scan.</p></div>;
+  const grouped = new Map<string, typeof runs>();
+  for (const r of runs) {
+    const cat = analyzerMeta(r.analyzer_id)?.category ?? 'other';
+    const arr = grouped.get(cat) ?? [];
+    arr.push(r);
+    grouped.set(cat, arr);
+  }
+  return <div className="analyzers"><h3>Analyzer status</h3>{[...grouped.entries()].map(([cat, items]) => <div key={cat} className="analyzer-group"><span className="analyzer-group-label" style={{ borderLeftColor: categoryColor(cat as never) }}>{(CATEGORY_LABELS as Record<string, string>)[cat] ?? cat}</span>{items.map((run) => {
+    const skipped = run.status === 'skipped';
+    return <div className="analyzer-row" key={run.analyzer_id}><span>{run.analyzer_id}</span><span className={`state ${run.status}`}>{run.status}</span>{skipped ? <small role="note" className="text-amber-600">Skipped — {run.message || 'no applicable files or profile excluded this analyzer'}</small> : run.message ? <small>{run.message}</small> : null}</div>;
+  })}</div>)}</div>;
 }
 
 /** Weighted risk score from the latest completed scan; trend compares the previous one. */

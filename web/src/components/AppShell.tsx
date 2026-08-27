@@ -1,17 +1,20 @@
 import { href, type Route } from '../lib/router';
 import type { Theme } from '../hooks/useTheme';
 import { Button } from './ui/button';
-import { HelpCircle, Moon, Sun, Plus } from 'lucide-react';
+import { HelpCircle, Moon, Sun, Plus, Languages } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { LOCALES, useT } from '../lib/i18n';
 
 export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleTheme, onShowShortcuts, seqArmed = false }: { route: Route; onNavigate: (route: Route) => void; onAdd: () => void; onClose: () => void; theme: Theme; onToggleTheme: () => void; onShowShortcuts?: () => void; seqArmed?: boolean }) {
-  const items: Array<[Route, string, string]> = [
-    [{ page: 'home' }, 'Home', 'Home'],
-    [{ page: 'workspaces' }, 'Workspaces', 'Workspaces'],
-    [{ page: 'search' }, 'Search', 'Search'],
-    [{ page: 'tools' }, 'Tools', 'Tools'],
-    [{ page: 'settings' }, 'Settings', 'Settings'],
-    [{ page: 'about' }, 'About', 'About'],
+  const { t, locale, setLocale } = useT();
+  const items: Array<[Route, string]> = [
+    [{ page: 'home' }, t('nav.home')],
+    [{ page: 'workspaces' }, t('nav.workspaces')],
+    [{ page: 'search' }, t('nav.search')],
+    [{ page: 'tools' }, t('nav.tools')],
+    [{ page: 'pentest' }, t('nav.pentest')],
+    [{ page: 'settings' }, t('nav.settings')],
+    [{ page: 'about' }, t('nav.about')],
   ];
   return (
     <header className="app-nav">
@@ -42,7 +45,13 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
       </nav>
       <div className="nav-actions">
         {seqArmed && <span className="seq-hint" aria-hidden="true">g…</span>}
-        <Button variant="outline" size="icon" className="nav-shortcuts rounded-[var(--radius-button)] h-[2.15rem] w-[2.15rem] border-[var(--color-rule)] hover:border-[var(--color-rule-strong)]" onClick={() => onShowShortcuts?.()} title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">
+        <label className="hidden sm:inline-flex items-center gap-1 text-[var(--color-ink-soft)]" aria-label={t('common.language')}>
+          <Languages className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <select value={locale} onChange={(e) => setLocale(e.target.value as never)} className="h-[2.15rem] rounded-[var(--radius-button)] border border-[var(--color-rule)] bg-[var(--color-surface)] px-2 text-xs font-mono font-semibold">
+            {LOCALES.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
+          </select>
+        </label>
+        <Button variant="outline" size="icon" className="nav-shortcuts rounded-[var(--radius-button)] h-[2.15rem] w-[2.15rem] border-[var(--color-rule)] hover:border-[var(--color-rule-strong)]" onClick={() => onShowShortcuts?.()} title={t('common.shortcuts')} aria-label={t('common.shortcuts')}>
           <HelpCircle className="h-4 w-4" />
         </Button>
         <Button variant="outline" size="sm" className="theme-toggle hidden sm:inline-flex" onClick={onToggleTheme} aria-pressed={theme === 'dark'} title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}>
@@ -50,10 +59,10 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
           <span className="theme-toggle-label">{theme === 'dark' ? 'Light' : 'Dark'}</span>
         </Button>
         <Button variant="ghost" size="sm" className="close-app hidden lg:inline-flex" onClick={onClose}>
-          Close app
+          {t('common.closeApp')}
         </Button>
         <Button onClick={onAdd} size="sm" className="add shadow-[var(--shadow-accent)] active:shadow-sm">
-          <Plus className="h-4 w-4" /> <span className="hidden sm:inline">Add workspace</span><span className="sm:hidden">Add</span>
+          <Plus className="h-4 w-4" /> <span className="hidden sm:inline">{t('common.addWorkspace')}</span><span className="sm:hidden">{t('common.add')}</span>
         </Button>
       </div>
     </header>

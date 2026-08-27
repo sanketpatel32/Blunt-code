@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { Notice } from '../lib/notice';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 
 export type ToastKind = 'error' | 'info' | 'success';
 
@@ -72,12 +73,13 @@ export function ToastStack({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: 
     return () => window.removeEventListener('keydown', onKey);
   }, [toasts, closeToast]);
 
+  const reduced = useReducedMotion();
   return <div className="toast-stack" role="status" aria-live="polite">
-    {toasts.map((toast) => <ToastItem key={toast.id} toast={toast} closing={closingIds.includes(toast.id)} onClose={closeToast} />)}
+    {toasts.map((toast, idx) => <ToastItem key={toast.id} toast={toast} closing={closingIds.includes(toast.id)} onClose={closeToast} index={idx} reduced={reduced} />)}
   </div>;
 }
 
-function ToastItem({ toast, closing, onClose }: { toast: Toast; closing: boolean; onClose: (id: number) => void }) {
+function ToastItem({ toast, closing, onClose, index, reduced }: { toast: Toast; closing: boolean; onClose: (id: number) => void; index: number; reduced: boolean }) {
   const [entered, setEntered] = useState(false);
   const [paused, setPaused] = useState(false);
   const hovered = useRef(false);
@@ -105,10 +107,12 @@ function ToastItem({ toast, closing, onClose }: { toast: Toast; closing: boolean
   }, [toast.id, toast.kind]);
 
   const coded = splitCode(toast.text);
+  const springStyle: CSSProperties | undefined = reduced ? undefined : { animationDelay: `${index * 40}ms`, willChange: 'transform, opacity' } as unknown as CSSProperties;
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: pointer/focus handlers only pause auto-dismiss; the toast itself is not operable (dismissal is a real button).
     <div
-    className={`toast ${toast.kind}`}
+    className={`toast ${toast.kind} shadow-lg ${!reduced ? 'anim-slideIn' : ''}`}
+    style={springStyle}
     data-state={entered && !closing ? 'open' : 'closed'}
     data-paused={paused || undefined}
     role={toast.kind === 'error' ? 'alert' : undefined}
