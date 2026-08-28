@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-08-28
+
+### Changed
+- **Workspace Overview premium:** hero bento `radius-card shadow-card` radial dot `::before` opacity .04 + `::after` gradient 2px, h1 2.5rem -0.05em 700 + copy button, LanguageBadges dots, Next step 20rem `shadow-accent` Sparkles Run + View report ghost, toolbar `workspace-toolbar` Files/History ghost + Export + More dropdown, summary 2x3 grid PremiumSummaryCard 6 with ShieldAlert/BarChart3 spark minis + stagger 40ms, donut 180 + pill legend, `workspace-section-card` `will-change`.
+- **Files & rules editorial:** header hero eyebrow + `workspace-root` chip + toolbar bento Reset/Save, layout `1.2fr 0.8fr gap lg` cards `radius-card shadow-card`, tree-panel header Source tree + count badge tabular-nums, search `file-search-wrap` Search icon + kbd `/` + `file-lang-select`, toolbar Collapse + `tree-summary-bar`, tree-row hover 4% accent stagger 20ms + `tree-hit` pill + children border + `tree-item` animation, rule-editor `Overrides` eyebrow + dashed empty + segmented Include/Exclude + `rule-add` dashed Plus.
+- **Scan history timeline:** filter bar bento mono 0.68rem uppercase Calendar inputs `radius-button` glow + Clear ghost, table outer `history-table-wrap` `radius-card overflow-hidden` sticky header widest 0.08em, rows hover 5% accent is-expanded, timeline vertical line `tbody::before` + dot `history-date::before` accent when expanded, band header sticky count pill `::after`, severity bar 14px pill `padding 2px gap 2px`, detail bento `radius-md p-4` 2-col meta + pills left 3px accent, pagination bento `Previous<svg>Next` (no space, textContent exact) tabular-nums.
+
+### Fixed
+- History pagination `textContent === \"Next\"` — removed space before SVG (`>Previous` / `Next<svg`) for strict equality, `FilesPage` Save button icon removed to keep `textContent === \"Save selection\"`, 259 tests green.
+
+
 ## [0.14.0] - 2026-08-28
 
 ### Changed

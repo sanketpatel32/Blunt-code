@@ -1,4 +1,4 @@
-/* Hallmark · History — Stripe/Linear premium bento · radius-card shadow-card · spring chevron · 4px severity bar */
+/* Hallmark · History — Stripe/Linear premium timeline bento · radius-card shadow-card · spring chevron · 14px severity pill */
 
 .history-filter-bar {
   display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm);
@@ -58,8 +58,24 @@
 .history-filter-clear:hover { background: var(--color-surface-muted); color: var(--color-ink); border-color: var(--color-rule); }
 .history-filter-clear:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
 
-/* Outer table card */
-.history-table-wrap { overflow: hidden; border-radius: var(--radius-card); box-shadow: var(--shadow-card); }
+.history-filter-count {
+  margin-left: auto;
+  display: inline-flex; align-items: center;
+  min-height: 1.75rem; padding: 0 var(--space-sm);
+  border: var(--rule) solid var(--color-rule);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-muted);
+  color: var(--color-ink-faint);
+  font: 700 var(--text-xs) var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Outer table card — bento */
+.history-table-wrap {
+  overflow: hidden; border-radius: var(--radius-card); box-shadow: var(--shadow-card);
+  will-change: transform, box-shadow;
+  position: relative;
+}
 .history-table-wrap table { border-collapse: collapse; }
 .history-table-wrap thead { position: sticky; top: 0; z-index: 1; background: var(--color-surface-muted); }
 .history-table-wrap thead th {
@@ -67,14 +83,37 @@
   letter-spacing: .08em; text-transform: uppercase;
   color: var(--color-ink-faint);
 }
+.history-table-wrap tbody { position: relative; }
 .history-table-wrap tbody tr { transition: background var(--dur-fast) var(--ease-out); }
 .history-table-wrap tbody tr:hover { background: color-mix(in oklch, var(--color-accent) 5%, transparent); }
 .history-table-wrap tbody tr.is-expanded { background: color-mix(in oklch, var(--color-surface-muted) 50%, transparent); }
 
-/* Band header */
+/* Timeline: vertical line + dot on date cell */
+.history-timeline tbody::before {
+  content: '';
+  position: absolute;
+  left: 1.35rem;
+  top: 0; bottom: 0;
+  width: 1px;
+  background: var(--color-rule-faint);
+  pointer-events: none;
+}
+.history-date { display: inline-flex; align-items: center; gap: var(--space-xs); font-variant-numeric: tabular-nums; position: relative; padding-left: 0.35rem; }
+.history-date::before {
+  content: '';
+  width: 0.5rem; height: 0.5rem;
+  border-radius: 50%;
+  background: var(--color-surface);
+  border: 2px solid var(--color-rule-strong);
+  flex: none;
+  box-shadow: var(--shadow-xs);
+}
+tr.is-expanded .history-date::before { border-color: var(--color-accent); background: var(--color-accent); }
+
+/* Band header — sticky with count pill */
 .history-band-row > .history-band {
   position: sticky; top: 2.15rem; z-index: 1;
-  padding: var(--space-xs) var(--space-md);
+  padding: var(--space-xs) var(--space-md) var(--space-xs) 2.15rem;
   color: var(--color-ink-faint);
   font: 700 var(--text-2xs) var(--font-mono);
   letter-spacing: .08em; text-transform: uppercase;
@@ -94,7 +133,6 @@
 }
 
 /* Date + disclose */
-.history-date { display: inline-flex; align-items: center; gap: var(--space-2xs); font-variant-numeric: tabular-nums; }
 .history-disclose {
   display: inline-flex; align-items: center; justify-content: center; flex: none;
   width: 1.5rem; height: 1.5rem; margin-right: var(--space-2xs);
@@ -114,19 +152,21 @@
 }
 .history-disclose[aria-expanded='true'] .disclose-arrow { transform: rotate(90deg); }
 
-/* FindingsCell premium */
+/* FindingsCell premium — 14px segmented pill */
 .findings-cell { display: flex; align-items: center; gap: var(--space-sm); min-width: 10rem; }
 .findings-total { color: var(--color-ink); font: 700 var(--text-sm) var(--font-display); font-variant-numeric: tabular-nums; }
 .findings-zero { color: var(--color-ink-faint); font-variant-numeric: tabular-nums; font-weight: 600; }
-.severity-bar.stacked { display: flex; gap: 1px; width: 8.5rem; height: 4px; overflow: hidden; border-radius: var(--radius-pill); background: var(--color-rule-faint); }
-.severity-bar.stacked i { display: block; min-width: 1px; border-radius: var(--radius-pill); }
-.severity-bar.stacked i.bar-critical { background: var(--color-danger); }
-.severity-bar.stacked i.bar-high { background: color-mix(in oklch, var(--color-danger) 62%, white); }
-.severity-bar.stacked i.bar-medium { background: var(--color-warning); }
-.severity-bar.stacked i.bar-low { background: var(--color-accent-strong); }
+.severity-bar.stacked,
+.severity-bar.severity-bar--pill.stacked { display: flex; gap: 2px; width: 8.5rem; height: 14px; overflow: hidden; border-radius: var(--radius-pill); background: var(--color-rule-faint); padding: 2px; }
+.severity-bar.severity-bar--pill { display: flex; gap: 2px; width: 8.5rem; height: 14px; overflow: hidden; border-radius: var(--radius-pill); background: var(--color-rule-faint); padding: 2px; }
+.severity-bar.stacked i, .severity-bar.severity-bar--pill i { display: block; min-width: 1px; border-radius: var(--radius-pill); flex: 1 1 auto; }
+.severity-bar.stacked i.bar-critical, .severity-bar.severity-bar--pill i.bar-critical { background: var(--color-danger); }
+.severity-bar.stacked i.bar-high, .severity-bar.severity-bar--pill i.bar-high { background: color-mix(in oklch, var(--color-danger) 62%, white); }
+.severity-bar.stacked i.bar-medium, .severity-bar.severity-bar--pill i.bar-medium { background: var(--color-warning); }
+.severity-bar.stacked i.bar-low, .severity-bar.severity-bar--pill i.bar-low { background: var(--color-accent-strong); }
 
-/* Detail bento inner card */
-.history-detail-row > td { padding: var(--space-sm) var(--space-md) var(--space-md) !important; white-space: normal; background: color-mix(in oklch, var(--color-surface-muted) 50%, transparent); border-bottom: var(--rule) solid var(--color-rule-faint); }
+/* Detail bento inner card — 2-col dl + pills with 3px left accent */
+.history-detail-row > td { padding: var(--space-sm) var(--space-md) var(--space-md) 2.15rem !important; white-space: normal; background: color-mix(in oklch, var(--color-surface-muted) 50%, transparent); border-bottom: var(--rule) solid var(--color-rule-faint); }
 .history-detail {
   display: grid; gap: var(--space-sm);
   padding: var(--space-md);
@@ -154,11 +194,16 @@
   color: var(--color-ink-soft); font: 600 var(--text-xs) var(--font-mono);
 }
 
-/* Pagination */
+/* Pagination — bento nav */
 .history-pagination {
   display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); flex-wrap: wrap;
-  margin-top: var(--space-md); padding: var(--space-xs) 0;
+  margin-top: var(--space-md); padding: var(--space-sm) var(--space-md);
+  border: var(--rule) solid var(--color-rule-faint);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
   color: var(--color-ink-soft); font-size: var(--text-sm);
+  will-change: transform;
 }
 .history-pagination-count { font-variant-numeric: tabular-nums; color: var(--color-ink-soft); }
 .history-pagination-count strong { color: var(--color-ink); font-weight: 700; }
@@ -168,9 +213,13 @@
   font: 600 var(--text-xs) var(--font-mono); text-align: center; white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
+.history-pagination .button.secondary { display: inline-flex; align-items: center; gap: var(--space-2xs); }
+.history-pagination .button.secondary svg { flex: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .history-detail { animation: none; }
   .history-disclose .disclose-arrow { transition: none; }
   .history-table-wrap tbody tr { transition: none; }
+  .history-pagination { will-change: auto; }
+  .history-table-wrap { will-change: auto; }
 }
