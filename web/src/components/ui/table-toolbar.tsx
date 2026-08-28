@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Search, X, Download, SlidersHorizontal } from 'lucide-react';
+import { Search, X, Download, SlidersHorizontal, Settings2, Check, Copy, EyeOff } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 export interface ToolbarFacet {
@@ -23,7 +23,14 @@ export interface TableToolbarProps {
   density?: 'comfortable' | 'compact';
   onDensityToggle?: () => void;
   onExportCsv?: () => void;
+  onExportSelected?: () => void;
   exportHref?: string;
+  selectedCount?: number;
+  onBulkSuppress?: () => void;
+  onBulkCopy?: () => void;
+  columnVisibility?: Record<string, boolean>;
+  onColumnVisibilityChange?: (id: string, visible: boolean) => void;
+  columns?: { id: string; header: string }[];
   className?: string;
 }
 
@@ -42,9 +49,17 @@ export function TableToolbar({
   density,
   onDensityToggle,
   onExportCsv,
+  onExportSelected,
   exportHref,
+  selectedCount = 0,
+  onBulkSuppress,
+  onBulkCopy,
+  columnVisibility,
+  onColumnVisibilityChange,
+  columns = [],
   className,
 }: TableToolbarProps) {
+  const hasSelection = selectedCount > 0;
   return (
     <div className={cn('flex flex-wrap items-center gap-2 rounded-[var(--radius-lg)] border border-[var(--color-rule-faint)] bg-[var(--color-surface)] p-2 shadow-[var(--shadow-card)]', className)}>
       {onSearchChange && (
@@ -105,14 +120,39 @@ export function TableToolbar({
         </div>
       )}
 
-      <div className="ml-auto flex items-center gap-1.5">
+      <div className="ml-auto flex flex-wrap items-center gap-1.5">
+        {hasSelection && (
+          <>
+            <span className="inline-flex items-center rounded-[var(--radius-button)] bg-[var(--color-accent)] px-2 py-1 text-xs font-bold text-white shadow-[var(--shadow-card)]" aria-live="polite" aria-label={`${selectedCount} selected`}>
+              {selectedCount} selected
+            </span>
+            {onBulkSuppress && (
+              <button type="button" onClick={onBulkSuppress} className="inline-flex h-8 items-center gap-1.5 rounded-[var(--radius-button)] border border-[var(--color-rule)] bg-[var(--color-surface)] px-3 text-xs font-semibold shadow-[var(--shadow-card)]">
+                <EyeOff className="h-3.5 w-3.5" aria-hidden="true" /> Suppress selected
+              </button>
+            )}
+            {onExportSelected && (
+              <button type="button" onClick={onExportSelected} className="inline-flex h-8 items-center gap-1.5 rounded-[var(--radius-button)] border border-[var(--color-rule)] bg-[var(--color-surface)] px-3 text-xs font-semibold shadow-[var(--shadow-card)]">
+                <Download className="h-3.5 w-3.5" aria-hidden="true" /> Export selected
+              </button>
+            )}
+            {onBulkCopy && (
+              <button type="button" onClick={onBulkCopy} className="inline-flex h-8 items-center gap-1.5 rounded-[var(--radius-button)] border border-[var(--color-rule)] bg-[var(--color-surface)] px-3 text-xs font-semibold shadow-[var(--shadow-card)]">
+                <Copy className="h-3.5 w-3.5" aria-hidden="true" /> Copy
+              </button>
+            )}
+          </>
+        )}
         {onClear && facets.length > 0 && (
           <button type="button" onClick={onClear} className="h-8 rounded-[var(--radius-button)] border border-[var(--color-rule)] bg-[var(--color-surface)] px-3 text-xs font-semibold shadow-[var(--shadow-card)]">
             Clear
           </button>
         )}
+        {onColumnVisibilityChange && columns.length > 0 && (
+          <ColumnVisibilityControl columns={columns} visibility={columnVisibility} onToggle={(id) => onColumnVisibilityChange(id, !(columnVisibility?.[id] !== false))} />
+        )}
         {onDensityToggle && density && (
-          <button type="button" aria-pressed={density === 'compact'} onClick={onDensityToggle} className="inline-flex h-8 items-center gap-1 rounded-[var(--radius-button)] border border-[var(--color-rule)] bg-[var(--color-surface)] px-2 text-xs font-semibold shadow-[var(--shadow-card)]">
+          <button type="button" aria-pressed={density === 'compact'} onClick={onDensityToggle} className="inline-flex h-8 items-center gap-1 rounded-[var(--radius-button)] border border-[var(--color-rule)] bg-[var(--color-surface)] px-2 text-xs font-semibold shadow-[var(--shadow-card)] motion-reduce:transition-none">
             <SlidersHorizontal className="h-3.5 w-3.5" />{density === 'compact' ? 'Comfortable' : 'Compact'}
           </button>
         )}
@@ -128,6 +168,41 @@ export function TableToolbar({
           )
         )}
       </div>
+    </div>
+  );
+}
+
+function ColumnVisibilityControl({ columns, visibility, onToggle }: { columns: { id: string; header: string }[]; visibility?: Record<string, boolean>; onToggle: (id: string) => void }) {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [open]);
+  return (
+    <div ref={ref} className="relative">
+      <button type="button" className="inline-flex h-8 items-center gap-1.5 rounded-[var(--radius-button)] border border-[var(--color-rule)] bg-[var(--color-surface)] px-3 text-xs font-semibold shadow-[var(--shadow-card)]" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        <Settings2 className="h-3.5 w-3.5" /> Columns
+      </button>
+      {open && (
+        <div role="menu" className="absolute right-0 z-20 mt-1 grid min-w-[12rem] gap-1 rounded-[var(--radius-lg)] border border-[var(--color-rule)] bg-[var(--color-surface)] p-2 shadow-[var(--shadow-lg)]">
+          {columns.map((c) => {
+            const vis = visibility ? visibility[c.id] !== false : true;
+            return (
+              <button key={c.id} role="menuitemcheckbox" aria-checked={vis} type="button" className="flex items-center gap-2 rounded-[var(--radius-button)] px-2 py-1.5 text-left text-sm hover:bg-[var(--color-surface-muted)]" onClick={() => onToggle(c.id)}>
+                <span className={cn('grid h-4 w-4 place-items-center rounded-[var(--radius-xs)] border', vis ? 'bg-[var(--color-accent)] border-[var(--color-accent)] text-white' : 'border-[var(--color-rule)] bg-[var(--color-surface)]')}>
+                  {vis && <Check className="h-3 w-3" />}
+                </span>
+                {c.header}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

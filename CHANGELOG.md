@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-08-28
+
+### Added
+- **Advanced Data Grid:** column pinning (sticky left + shadow), column resizing (drag + keyboard Arrow, persisted `bluntcode.colWidths` 80-600), row height var `--row-height`, row expansion (`aria-expanded`, remediation + related findings), bulk bar (Suppress/Export CSV/Copy) + toolbar selectedCount/badge/column-visibility (`DataTable.tsx`, `table-toolbar.tsx`, `ReportView.tsx`).
+- **Hacking Suite expansion:** 22 templates SQLi/XSS/SSRF/XXE/IDOR/auth bypass/traversal/CMDi/open redirect/CSRF/upload/JWT/GraphQL/pollution/SSTI with owasp A01-A10 cwe payload remediation (`hackingTests.ts`), 4th tab “Hacking Suite” grouped by OWASP search severity toggle sheet, stats card (`PentestSuite.tsx`, `PentestPage.tsx`, `analyzerCatalog.ts` hacking `#be123c`).
+- **Languages 42 + Compliance:** 8 more `Haskell/Clojure/Erlang/F#/Lua/Zig/OCaml/Perl` + Functional family, `secrets/todo` cover all 42, semgrep expanded, `ComplianceMatrix.tsx` OWASP Top10 + CWE Top25 table progress click filters report, `LanguageCoverage.tsx` 42 + `FilesPage.tsx` languageIcon + `LanguageDistributionDonut` drill.
+- **Animations v2 + Filters v2:** `animations.css` slideInLeft/Right scaleIn spring fadeInUp stagger skeleton toast dialog tab bar, `QueryBuilder.tsx` grouping parentheses drag GripVertical duplicate clear a11y, `SavedViews.tsx` rename duplicate export/import pin star, `NotificationsCenter.tsx` tabs All/Unread/Scans groupByDay markRead per item clear sound toggle, `FilterDrawer.tsx` backdrop blur slideInRight 200ms.
+
+### Changed
+- Data grid bulk/tool bar polish, hacking suite categorized, compliance matrix integrated below DependencyGraph.
+
+
 ## [0.10.0] - 2026-08-28
 
 ### Added

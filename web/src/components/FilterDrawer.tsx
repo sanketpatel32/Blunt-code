@@ -42,8 +42,8 @@ export function FilterDrawer({ open, onClose, filters, setFilters, sort, setSort
 
   if (!open) return null;
   return (
-    <div role="presentation" className="filter-drawer-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <aside role="dialog" aria-modal="true" aria-label="Advanced filters" className="filter-drawer">
+    <div role="presentation" className="filter-drawer-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }} style={{ backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}>
+      <aside role="dialog" aria-modal="true" aria-label="Advanced filters" className="filter-drawer" style={{ animation: 'anim-filterDrawerIn 200ms var(--ease-out-quart) both' }}>
         <header className="filter-drawer-head">
           <h2>Filters</h2>
           <button type="button" className="icon-button" aria-label="Close filters" onClick={onClose}>×</button>

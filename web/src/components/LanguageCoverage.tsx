@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
 import { ANALYZER_CATALOG, LANGUAGE_FAMILIES, ALL_LANGUAGES, type AnalyzerCategory } from '../lib/analyzerCatalog';
 
-const FAMILY_ORDER = ['Systems', 'Web', 'Mobile', 'Script', 'Data'] as const;
+const FAMILY_ORDER = ['Systems', 'Web', 'Mobile', 'Script', 'Data', 'Functional'] as const;
 
 const LANG_LABELS: Record<string, string> = {
-  python: 'Python', javascript: 'JS', typescript: 'TS', go: 'Go', java: 'Java', kotlin: 'Kotlin', csharp: 'C#', c: 'C', cpp: 'C++', ruby: 'Ruby', php: 'PHP', rust: 'Rust', swift: 'Swift', scala: 'Scala', dart: 'Dart', elixir: 'Elixir', 'objective-c': 'ObjC', vue: 'Vue', svelte: 'Svelte', html: 'HTML', css: 'CSS', scss: 'SCSS', json: 'JSON', yaml: 'YAML', toml: 'TOML', xml: 'XML', sql: 'SQL', graphql: 'GQL', shell: 'Shell', powershell: 'PS', batch: 'Batch', markdown: 'MD', dockerfile: 'Docker', env: 'Env',
+  python: 'Python', javascript: 'JS', typescript: 'TS', go: 'Go', java: 'Java', kotlin: 'Kotlin', csharp: 'C#', c: 'C', cpp: 'C++', ruby: 'Ruby', php: 'PHP', rust: 'Rust', swift: 'Swift', scala: 'Scala', dart: 'Dart', elixir: 'Elixir', haskell: 'Haskell', clojure: 'Clojure', erlang: 'Erlang', fsharp: 'F#', lua: 'Lua', zig: 'Zig', ocaml: 'OCaml', perl: 'Perl', 'objective-c': 'ObjC', vue: 'Vue', svelte: 'Svelte', html: 'HTML', css: 'CSS', scss: 'SCSS', json: 'JSON', yaml: 'YAML', toml: 'TOML', xml: 'XML', sql: 'SQL', graphql: 'GQL', shell: 'Shell', powershell: 'PS', batch: 'Batch', markdown: 'MD', dockerfile: 'Docker', env: 'Env',
 };
 
 function analyzerCountFor(lang: string): number {

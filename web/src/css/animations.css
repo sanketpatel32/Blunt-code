@@ -4,22 +4,65 @@
 @keyframes anim-fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes anim-fadeInUp { from { opacity: 0; transform: translate3d(0, 8px, 0); } to { opacity: 1; transform: translate3d(0, 0, 0); } }
 @keyframes anim-slideIn { from { opacity: 0; transform: translate3d(0, 10px, 0) scale(0.98); } to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); } }
-@keyframes anim-scaleIn { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
+@keyframes anim-slideInLeft { from { opacity: 0; transform: translate3d(-16px, 0, 0); } to { opacity: 1; transform: translate3d(0, 0, 0); } }
+@keyframes anim-slideInRight { from { opacity: 0; transform: translate3d(16px, 0, 0); } to { opacity: 1; transform: translate3d(0, 0, 0); } }
+@keyframes anim-scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+@keyframes anim-scaleInSpring { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+@keyframes anim-toastInRight { from { opacity: 0; transform: translate3d(100%, 0, 0) scale(0.96); } to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); } }
+@keyframes anim-dialogIn { from { opacity: 0; transform: translate(-50%, -48%) scale(0.96); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
 @keyframes anim-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 @keyframes anim-pulse-dot { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.15); opacity: .85; } 100% { transform: scale(1); opacity: 1; } }
 @keyframes anim-critical-breathe { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .85; transform: scale(1.06); } }
 @keyframes anim-copy-pop { 0% { transform: scale(1); } 40% { transform: scale(1.18); } 100% { transform: scale(1); } }
 @keyframes anim-icon-float { 0%,100% { transform: translate3d(0,0,0); } 50% { transform: translate3d(0,-3px,0); } }
+@keyframes anim-barGrow { from { transform: scaleY(0); opacity: 0; } to { transform: scaleY(1); opacity: 1; } }
+@keyframes anim-filterDrawerIn { from { opacity: 0; transform: translate3d(100%, 0, 0); } to { opacity: 1; transform: translate3d(0, 0, 0); } }
+@keyframes anim-backdropIn { from { opacity: 0; backdrop-filter: blur(0); } to { opacity: 1; backdrop-filter: blur(8px); } }
 
 /* Utility classes */
 .anim-fadeIn { animation: anim-fadeIn var(--dur-slow) var(--ease-out) both; will-change: opacity; }
 .anim-fadeInUp { animation: anim-fadeInUp var(--dur-slow) var(--ease-out-quart) both; will-change: transform, opacity; }
 .anim-slideIn { animation: anim-slideIn var(--dur-slow) var(--ease-spring-soft) both; will-change: transform, opacity; }
-.anim-scaleIn { animation: anim-scaleIn var(--dur-base) var(--ease-out) both; will-change: transform, opacity; }
+.anim-slideInLeft { animation: anim-slideInLeft var(--dur-base) var(--ease-out-quart) both; will-change: transform, opacity; }
+.anim-slideInRight { animation: anim-slideInRight var(--dur-base) var(--ease-out-quart) both; will-change: transform, opacity; }
+.anim-scaleIn { animation: anim-scaleInSpring var(--dur-base) var(--ease-spring) both; will-change: transform, opacity; }
+.anim-scaleIn-spring { animation: anim-scaleInSpring var(--dur-base) var(--ease-spring) both; will-change: transform, opacity; }
 .anim-stagger { animation-delay: var(--stagger-delay, 0ms); }
 
-/* Skeleton shimmer — uses background-position (GPU-friendly) + opacity only */
+/* FadeInUp stagger — apply to parent .stagger-group children */
+.stagger-group > * { opacity: 0; animation: anim-fadeInUp var(--dur-slow) var(--ease-out-quart) both; will-change: transform, opacity; }
+.stagger-group > *:nth-child(1) { animation-delay: calc(0 * var(--dur-stagger)); }
+.stagger-group > *:nth-child(2) { animation-delay: calc(1 * var(--dur-stagger)); }
+.stagger-group > *:nth-child(3) { animation-delay: calc(2 * var(--dur-stagger)); }
+.stagger-group > *:nth-child(4) { animation-delay: calc(3 * var(--dur-stagger)); }
+.stagger-group > *:nth-child(5) { animation-delay: calc(4 * var(--dur-stagger)); }
+.stagger-group > *:nth-child(6) { animation-delay: calc(5 * var(--dur-stagger)); }
+.stagger-group > *:nth-child(7) { animation-delay: calc(6 * var(--dur-stagger)); }
+.stagger-group > *:nth-child(8) { animation-delay: calc(7 * var(--dur-stagger)); }
+
+/* Skeleton shimmer — uses background-position (GPU-friendly) + opacity only, 1.4s */
 .skeleton-anim { background: linear-gradient(90deg, var(--color-surface-muted) 30%, var(--color-rule) 50%, var(--color-surface-muted) 70%); background-size: 220% 100%; animation: anim-shimmer 1.4s var(--ease-in-out) infinite; will-change: background-position; }
+
+/* Toast slideInRight spring */
+.anim-toastIn { animation: anim-toastInRight var(--dur-slow) var(--ease-spring) both; will-change: transform, opacity; }
+.toast-enter { animation: anim-toastInRight 360ms var(--ease-spring) both; will-change: transform, opacity; }
+
+/* Dialog scale 0.96 → 1 */
+.anim-dialogIn { animation: anim-dialogIn var(--dur-base) var(--ease-spring-soft) both; will-change: transform, opacity; }
+.dialog-enter { animation: anim-dialogIn var(--dur-base) var(--ease-spring-soft) both; will-change: transform, opacity; }
+
+/* Tab indicator slide */
+.tab-indicator { transition: transform var(--dur-base) var(--ease-out-quart), width var(--dur-base) var(--ease-out-quart); will-change: transform, width; }
+.tabs-indicator { position: absolute; bottom: -1px; height: 2px; background: var(--color-accent); border-radius: var(--radius-pill); transition: transform var(--dur-base) var(--ease-out-quart), width var(--dur-base) var(--ease-out-quart); will-change: transform, width; }
+
+/* Chart bar grow — transform scaleY from 0 */
+.chart-bar-grow { transform-origin: bottom; animation: anim-barGrow var(--dur-slow) var(--ease-out-quart) both; will-change: transform, opacity; }
+.trend-bar-grow { transform-origin: bottom; transition: transform var(--dur-slow) var(--ease-out-quart), opacity var(--dur-base) var(--ease-out); will-change: transform, opacity; }
+.trend-chart .trend-bar { transform-origin: bottom; }
+
+/* FilterDrawer slideInRight 200ms ease-out-quart */
+.filter-drawer-backdrop { animation: anim-backdropIn 200ms var(--ease-out-quart) both; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.filter-drawer { animation: anim-filterDrawerIn 200ms var(--ease-out-quart) both; will-change: transform, opacity; }
 
 /* Card hover: subtle scale border tint, no translateY */
 .card-hover-lift { transition: border-color var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out); will-change: transform, border-color; }
@@ -43,8 +86,7 @@
 
 /* Reduced motion: disable all */
 @media (prefers-reduced-motion: reduce) {
-  .anim-fadeIn, .anim-fadeInUp, .anim-slideIn, .anim-scaleIn, .skeleton-anim, .pulse-dot-anim, .critical-breathe, .copy-pop, .icon-float, .pill-enter { animation: none !important; }
+  .anim-fadeIn, .anim-fadeInUp, .anim-slideIn, .anim-slideInLeft, .anim-slideInRight, .anim-scaleIn, .anim-scaleIn-spring, .anim-toastIn, .toast-enter, .anim-dialogIn, .dialog-enter, .skeleton-anim, .pulse-dot-anim, .critical-breathe, .copy-pop, .icon-float, .pill-enter, .chart-bar-grow, .stagger-group > *, .filter-drawer, .filter-drawer-backdrop { animation: none !important; }
   .card-hover-lift:hover { transform: none !important; }
-  .progress-fill { transition: none !important; }
-  .flow-marker-spring { transition: none !important; }
+  .progress-fill, .flow-marker-spring, .tab-indicator, .tabs-indicator, .trend-bar-grow, .trend-chart .trend-bar { transition: none !important; }
 }

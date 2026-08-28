@@ -1,3 +1,4 @@
+import * as React from 'react';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { api } from '../../api';
 import type { AnalyzerRun, Finding, Report, Scan, Severity } from '../../types';
@@ -322,6 +323,21 @@ function FindingsPagination({ total, page, pageSize, hasNext, onPrevious, onNext
 
 function SortHeader({ label, column, sort, onSort }: { label: string; column: SortKey; sort: SortState; onSort: (key: SortKey) => void }) { const active = sort.key === column; return <th scope="col" aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}><button type="button" className={`th-sort${active ? ' active' : ''}`} onClick={() => onSort(column)}>{label}<span className="sort-arrow" aria-hidden="true">{active ? (sort.dir === 'asc' ? '▲' : '▼') : '↕'}</span>{active && <span className="sr-only"> (sorted {sort.dir === 'asc' ? 'ascending' : 'descending'})</span>}</button></th>; }
 
+const COL_WIDTHS_KEY = 'bluntcode.colWidths';
+function useColWidthsReport() {
+  const [widths, setWidths] = useState<Record<string, number>>(() => {
+    try { const raw = window.localStorage.getItem(COL_WIDTHS_KEY); return raw ? JSON.parse(raw) as Record<string, number> : {}; } catch { return {}; }
+  });
+  const setWidth = (id: string, w: number) => {
+    setWidths((prev) => {
+      const next = { ...prev, [id]: Math.max(90, Math.min(600, w)) };
+      try { window.localStorage.setItem(COL_WIDTHS_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+  return { widths, setWidth };
+}
+
 /** Loop 25 · Findings table: each row ends in a copy-details icon button (clipboard with a hidden-textarea fallback for non-secure loopback origins; success swaps in a check for 800ms). The copy buttons form a roving-tabindex group — only the current row's button is tabbable, ArrowUp/ArrowDown/Home/End move focus, and the handlers live on the buttons themselves so arrows are never hijacked elsewhere. Suppression actions are plain labelled buttons (always tabbable): "Suppress…" on fingerprinted findings, "Restore" once status flips to suppressed. */
 function FindingsTable({ findings, sort, onSort, onPreview, canSuppress, onSuppress, onRestore, onFix, onComment }: { findings: Finding[]; sort: SortState; onSort: (key: SortKey) => void; onPreview: (finding: Finding) => void; canSuppress: boolean; onSuppress: (finding: Finding) => void; onRestore: (finding: Finding) => void; onFix: (finding: Finding) => void; onComment: (finding: Finding) => void }) {
   const [focusIndex, setFocusIndex] = useState(0);
@@ -329,7 +345,6 @@ function FindingsTable({ findings, sort, onSort, onPreview, canSuppress, onSuppr
   const copyTimer = useRef<number | undefined>(undefined);
   const copyRefs = useRef<Array<HTMLButtonElement | null>>([]);
   useEffect(() => () => window.clearTimeout(copyTimer.current), []);
-  /** Clamped so a page-size change leaving focusIndex past the end still keeps exactly one tabbable row button. */
   const activeIndex = Math.min(focusIndex, Math.max(0, findings.length - 1));
   const onCopyKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, index: number) => {
     if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
@@ -345,5 +360,68 @@ function FindingsTable({ findings, sort, onSort, onPreview, canSuppress, onSuppr
     window.clearTimeout(copyTimer.current);
     copyTimer.current = window.setTimeout(() => setCopiedKey(null), COPY_CONFIRM_MS);
   };
-  return <div className="findings-table table-wrap"><table><caption className="sr-only">Findings matching the current filters</caption><thead><tr><SortHeader label="Severity" column="severity" sort={sort} onSort={onSort} /><th scope="col">Finding</th><SortHeader label="File" column="path" sort={sort} onSort={onSort} /><SortHeader label="Tool" column="analyzer" sort={sort} onSort={onSort} /><SortHeader label="Status" column="status" sort={sort} onSort={onSort} /><th scope="col">Fix</th></tr></thead><tbody>{findings.map((finding, index) => { const rowKey = finding.id || finding.fingerprint || String(index); const copied = copiedKey === rowKey; const rowName = finding.title ?? finding.rule_id ?? 'finding'; const suppressed = finding.status === 'suppressed'; const rowAction = canSuppress && finding.fingerprint ? suppressed ? <button type="button" className="text-button restore-finding" aria-label={`Restore ${rowName}`} title="Stop hiding this finding" onClick={() => onRestore(finding)}>Restore</button> : <button type="button" className="text-button suppress-finding" aria-label={`Suppress ${rowName}`} title="Hide this finding from future scans" onClick={() => onSuppress(finding)}>Suppress…</button> : null; return <tr key={rowKey} className={severityEdgeClass(finding.severity)}><td><span className={`severity ${finding.severity}`}>{finding.severity}</span></td><td className="finding-summary"><strong>{finding.title ?? finding.rule_id ?? 'Finding'}</strong><span className="finding-message">{finding.message}</span>{finding.remediation && <span className="finding-remediation">Fix: {finding.remediation}</span>}{finding.documentation_url && <a href={finding.documentation_url} target="_blank" rel="noreferrer">Rule docs</a>}</td><td>{finding.relative_path && finding.id ? <button type="button" className="finding-file" onClick={() => onPreview(finding)} aria-label={`Preview ${findingLocation(finding)}`}><code>{findingLocation(finding)}</code></button> : <code>{findingLocation(finding)}</code>}</td><td><span className="badge">{finding.analyzer_id}</span>{finding.rule_id && <code>{finding.rule_id}</code>}</td><td><div className="finding-actions-cell">{finding.status ? <span className={`status-text${suppressed ? ' suppressed' : ''}`}>{finding.status}</span> : '—'}<span className="finding-row-actions">{rowAction}<button type="button" className="icon-button" aria-label={`Comment on ${rowName}`} title="Comment" onClick={() => onComment(finding)}><MessageCircle className="h-4 w-4" aria-hidden="true" /></button><a href={buildJiraIssueUrl(finding)} target="_blank" rel="noreferrer noopener" className="text-button" aria-label={`Create Jira issue for ${rowName}`} title="Create Jira issue (external stub)">Jira ↗</a><button ref={(element) => { copyRefs.current[index] = element; }} type="button" className={`icon-button copy-finding${copied ? ' copied' : ''}`} tabIndex={index === activeIndex ? 0 : -1} aria-label="Copy finding details" title="Copy finding details" onKeyDown={(event) => onCopyKeyDown(event, index)} onClick={() => void copyFinding(finding)}>{copied ? <CheckIcon /> : <ClipboardIcon />}</button></span></div></td><td><button type="button" className="button secondary" style={{ borderRadius: 'var(--radius-button)', padding: '0.25rem 0.5rem', fontSize: '12px' }} aria-label={`AI Fix for ${rowName}`} onClick={() => onFix(finding)}><Sparkles width={14} height={14} aria-hidden="true" /> AI Fix</button></td></tr>; })}</tbody></table></div>;
+  // bulk selection (checkbox per row, additive header)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const allIds = findings.map((f, i) => f.id || f.fingerprint || String(i));
+  const allSelected = allIds.length > 0 && allIds.every((id) => selectedIds.has(id));
+  const someSelected = allIds.some((id) => selectedIds.has(id)) && !allSelected;
+  const selectedCount = selectedIds.size;
+  const selectAllRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (selectAllRef.current) selectAllRef.current.indeterminate = !!someSelected; }, [someSelected]);
+  const toggleSelectAll = (checked: boolean) => {
+    if (checked) setSelectedIds(new Set(allIds)); else setSelectedIds(new Set());
+  };
+  const toggleRowSelect = (id: string, checked: boolean) => {
+    const next = new Set(selectedIds);
+    if (checked) next.add(id); else next.delete(id);
+    setSelectedIds(next);
+  };
+  // row expansion
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggleExpand = (id: string) => { const n = new Set(expanded); if (n.has(id)) n.delete(id); else n.add(id); setExpanded(n); };
+  // column resizing
+  const { widths, setWidth } = useColWidthsReport();
+  const resizingRef = useRef<{ id: string; startX: number; startW: number } | null>(null);
+  const onResizeStart = (e: React.PointerEvent, id: string, cur: number) => {
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    resizingRef.current = { id, startX: e.clientX, startW: cur };
+    const onMove = (ev: PointerEvent) => { if (!resizingRef.current) return; const d = ev.clientX - resizingRef.current.startX; setWidth(resizingRef.current.id, resizingRef.current.startW + d); };
+    const onUp = () => { resizingRef.current = null; window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+  const rowHeight = 'var(--row-height, 52px)';
+  const handleBulkCopy = async () => {
+    const sel = findings.filter((f, i) => selectedIds.has(f.id || f.fingerprint || String(i)));
+    const text = sel.map(findingSummaryText).join('\n\n');
+    if (text) await copyToClipboard(text);
+  };
+  const handleBulkExport = () => {
+    const sel = findings.filter((f, i) => selectedIds.has(f.id || f.fingerprint || String(i)));
+    if (!sel.length) return;
+    const header = ['severity','rule_id','message','path','analyzer_id'].join(',');
+    const rows = sel.map((f) => [f.severity, f.rule_id ?? '', `"${(f.message ?? '').replace(/"/g, '""')}"`, f.relative_path ?? '', f.analyzer_id].join(',')).join('\n');
+    const blob = new Blob([header + '\n' + rows], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'findings-selected.csv'; a.click(); URL.revokeObjectURL(url);
+  };
+  const handleBulkSuppress = () => {
+    const sel = findings.filter((f, i) => selectedIds.has(f.id || f.fingerprint || String(i)) && f.fingerprint && canSuppress);
+    sel.forEach((f) => onSuppress(f));
+  };
+  const colIds = ['severity','finding','path','analyzer','status','fix'];
+  const headerStyle = (id: string) => widths[id] ? { width: widths[id], minWidth: widths[id] } : undefined;
+  const resizeHandle = (id: string) => (
+    <span role="separator" aria-orientation="vertical" aria-label={'Resize '+id+' column'} onPointerDown={(e)=>onResizeStart(e,id,widths[id]??160)} className="absolute right-0 top-0 h-full w-2 cursor-col-resize touch-none select-none hover:bg-[var(--color-accent-ghost)]" tabIndex={0} onKeyDown={(e)=>{ if(e.key==='ArrowLeft') setWidth(id,(widths[id]??160)-16); if(e.key==='ArrowRight') setWidth(id,(widths[id]??160)+16); }} />
+  );
+  return <div className="space-y-2" style={{ ['--row-height']: rowHeight } as React.CSSProperties}>
+    {selectedCount>0 && <div role="toolbar" aria-label="Bulk actions" className="flex flex-wrap items-center gap-2 rounded-[var(--radius-button)] border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-3 py-2 shadow-[var(--shadow-card)]"><span className="inline-flex items-center rounded-[var(--radius-button)] bg-[var(--color-accent)] px-2 py-0.5 text-xs font-bold text-white" aria-live="polite">{selectedCount} selected</span><button type="button" onClick={handleBulkSuppress} className="inline-flex h-7 items-center gap-1.5 rounded-[var(--radius-button)] border border-[var(--color-rule)] bg-[var(--color-surface)] px-3 text-xs font-semibold shadow-[var(--shadow-card)]">Suppress selected</button><button type="button" onClick={handleBulkExport} className="inline-flex h-7 items-center gap-1.5 rounded-[var(--radius-button)] border border-[var(--color-rule)] bg-[var(--color-surface)] px-3 text-xs font-semibold shadow-[var(--shadow-card)]">Export selected CSV</button><button type="button" onClick={handleBulkCopy} className="inline-flex h-7 items-center gap-1.5 rounded-[var(--radius-button)] border border-[var(--color-rule)] bg-[var(--color-surface)] px-3 text-xs font-semibold shadow-[var(--shadow-card)]">Copy</button></div>}
+    <div className="findings-table table-wrap"><table><caption className="sr-only">Findings matching the current filters</caption><thead><tr>
+      <th scope="col" className="relative sticky left-0 z-[2] bg-[var(--color-surface-muted)] shadow-[var(--shadow-card)]" style={headerStyle('severity')} aria-sort={sort.key==='severity'?(sort.dir==='asc'?'ascending':'descending'):'none'}><div className="flex items-center gap-2"><input ref={selectAllRef} type="checkbox" role="checkbox" aria-label="Select all" checked={!!allSelected} onChange={(e)=>toggleSelectAll(e.target.checked)} /><button type="button" className={'th-sort'+(sort.key==='severity'?' active':'')} onClick={()=>onSort('severity')}>Severity<span className="sort-arrow" aria-hidden="true">{sort.key==='severity'?(sort.dir==='asc'?'▲':'▼'):'↕'}</span>{sort.key==='severity' && <span className="sr-only"> (sorted {sort.dir==='asc'?'ascending':'descending'})</span>}</button></div>{resizeHandle('severity')}</th>
+      <th scope="col" className="relative" style={headerStyle('finding')}>Finding{resizeHandle('finding')}</th>
+      <th scope="col" className="relative" style={headerStyle('path')} aria-sort={sort.key==='path'?(sort.dir==='asc'?'ascending':'descending'):'none'}><button type="button" className={'th-sort'+(sort.key==='path'?' active':'')} onClick={()=>onSort('path')}>File<span className="sort-arrow" aria-hidden="true">{sort.key==='path'?(sort.dir==='asc'?'▲':'▼'):'↕'}</span></button>{resizeHandle('path')}</th>
+      <th scope="col" className="relative" style={headerStyle('analyzer')} aria-sort={sort.key==='analyzer'?(sort.dir==='asc'?'ascending':'descending'):'none'}><button type="button" className={'th-sort'+(sort.key==='analyzer'?' active':'')} onClick={()=>onSort('analyzer')}>Tool<span className="sort-arrow" aria-hidden="true">{sort.key==='analyzer'?(sort.dir==='asc'?'▲':'▼'):'↕'}</span></button>{resizeHandle('analyzer')}</th>
+      <th scope="col" className="relative" style={headerStyle('status')} aria-sort={sort.key==='status'?(sort.dir==='asc'?'ascending':'descending'):'none'}><button type="button" className={'th-sort'+(sort.key==='status'?' active':'')} onClick={()=>onSort('status')}>Status<span className="sort-arrow" aria-hidden="true">{sort.key==='status'?(sort.dir==='asc'?'▲':'▼'):'↕'}</span></button>{resizeHandle('status')}</th>
+      <th scope="col" className="relative" style={headerStyle('fix')}>Fix{resizeHandle('fix')}</th>
+    </tr></thead><tbody>{findings.map((finding, index) => { const rowKey = finding.id || finding.fingerprint || String(index); const copied = copiedKey === rowKey; const rowName = finding.title ?? finding.rule_id ?? 'finding'; const suppressed = finding.status === 'suppressed'; const isSelected = selectedIds.has(rowKey); const isExpanded = expanded.has(rowKey); const related = isExpanded ? findings.filter((f, i)=> i!==index && (f.rule_id===finding.rule_id || f.relative_path===finding.relative_path)).slice(0,3) : []; const rowAction = canSuppress && finding.fingerprint ? suppressed ? <button type="button" className="text-button restore-finding" aria-label={'Restore '+rowName} title="Stop hiding this finding" onClick={(e)=>{ e.stopPropagation(); onRestore(finding);}}>Restore</button> : <button type="button" className="text-button suppress-finding" aria-label={'Suppress '+rowName} title="Hide this finding from future scans" onClick={(e)=>{ e.stopPropagation(); onSuppress(finding);}}>Suppress…</button> : null; return <React.Fragment key={rowKey}><tr className={severityEdgeClass(finding.severity)+(isSelected?' selected':'')} data-state={isSelected?'selected':undefined} aria-expanded={isExpanded} style={{ height: rowHeight } as React.CSSProperties} onClick={()=>toggleExpand(rowKey)} tabIndex={0} onKeyDown={(e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); toggleExpand(rowKey); } }}><td className="sticky left-0 z-[1] bg-[var(--color-surface)] shadow-[var(--shadow-card)]" style={headerStyle('severity')} onClick={(e)=>e.stopPropagation()}><span className="flex items-center gap-2"><input type="checkbox" role="checkbox" aria-label={'Select row '+rowKey} checked={isSelected} onChange={(e)=>toggleRowSelect(rowKey,e.target.checked)} onClick={(e)=>e.stopPropagation()} /><span className={'severity '+finding.severity}>{finding.severity}</span></span></td><td className="finding-summary" style={headerStyle('finding')}><strong>{finding.title ?? finding.rule_id ?? 'Finding'}</strong><span className="finding-message">{finding.message}</span>{finding.remediation && <span className="finding-remediation">Fix: {finding.remediation}</span>}{finding.documentation_url && <a href={finding.documentation_url} target="_blank" rel="noreferrer" onClick={(e)=>e.stopPropagation()}>Rule docs</a>}</td><td style={headerStyle('path')} onClick={(e)=>e.stopPropagation()}>{finding.relative_path && finding.id ? <button type="button" className="finding-file" onClick={() => onPreview(finding)} aria-label={'Preview '+findingLocation(finding)}><code>{findingLocation(finding)}</code></button> : <code>{findingLocation(finding)}</code>}</td><td style={headerStyle('analyzer')}><span className="badge">{finding.analyzer_id}</span>{finding.rule_id && <code>{finding.rule_id}</code>}</td><td style={headerStyle('status')}><div className="finding-actions-cell">{finding.status ? <span className={'status-text'+(suppressed ? ' suppressed' : '')}>{finding.status}</span> : '—'}<span className="finding-row-actions" onClick={(e)=>e.stopPropagation()}>{rowAction}<button type="button" className="icon-button" aria-label={'Comment on '+rowName} title="Comment" onClick={() => onComment(finding)}><MessageCircle className="h-4 w-4" aria-hidden="true" /></button><a href={buildJiraIssueUrl(finding)} target="_blank" rel="noreferrer noopener" className="text-button" aria-label={'Create Jira issue for '+rowName} title="Create Jira issue (external stub)">Jira ↗</a><button ref={(el)=>{ copyRefs.current[index]=el; }} type="button" className={'icon-button copy-finding'+(copied ? ' copied' : '')} tabIndex={index===activeIndex?0:-1} aria-label="Copy finding details" title="Copy finding details" onKeyDown={(e)=>onCopyKeyDown(e,index)} onClick={()=> void copyFinding(finding)}>{copied ? <CheckIcon /> : <ClipboardIcon />}</button></span></div></td><td style={headerStyle('fix')} onClick={(e)=>e.stopPropagation()}><button type="button" className="button secondary" style={{ borderRadius: 'var(--radius-button)', padding: '0.25rem 0.5rem', fontSize: '12px' }} aria-label={'AI Fix for '+rowName} onClick={() => onFix(finding)}><Sparkles width={14} height={14} aria-hidden="true" /> AI Fix</button></td></tr>{isExpanded && <tr className="bg-[var(--color-surface-muted)]"><td colSpan={6} className="p-0"><div className="px-4 py-3 text-sm grid gap-2 motion-reduce:transition-none animate-[page-enter_var(--dur-slow)_var(--ease-out)] motion-reduce:animate-none"><div><strong className="text-[var(--color-ink)]">Remediation</strong><p className="text-[var(--color-ink-soft)]">{finding.remediation || 'No remediation provided. See rule docs.'}</p></div>{related.length>0 && <div><strong className="text-[var(--color-ink)]">Related findings</strong><ul className="list-disc pl-4 text-[var(--color-ink-soft)]">{related.map((r)=> <li key={r.id||r.fingerprint}><code>{r.rule_id}</code> — {r.message} <span className="text-[var(--color-ink-faint)]">{r.relative_path}</span></li>)}</ul></div>}</div></td></tr>}</React.Fragment>; })}</tbody></table></div></div>;
 }

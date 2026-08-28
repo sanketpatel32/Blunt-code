@@ -20,6 +20,7 @@ import { languageCoverageFromLanguages, severityCountsFromSummary, trendPointsFr
 
 const AnalyticsCharts = lazy(() => import('../components/AnalyticsCharts').then((m) => ({ default: m.AnalyticsCharts })));
 const DependencyGraph = lazy(() => import('../components/DependencyGraph').then((m) => ({ default: m.DependencyGraph })) );
+const ComplianceMatrix = lazy(() => import('../components/ComplianceMatrix').then((m) => ({ default: m.ComplianceMatrix })) );
 
 export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) => void; notify: (n: Notice) => void }) {
   const workspace = useLoad(() => api.workspace(id), [id]);
@@ -69,6 +70,7 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
         </AccordionContent>
       </AccordionItem>
     </Accordion>
+    {latest && <ComplianceSection scanId={latest.id} go={go} />}
     <SuppressionsSection workspaceId={id} notify={notify} />
     <section className="split-section"><div><h2>Latest analysis</h2>{latest ? <><p className="muted">{latest.state.replaceAll('_', ' ')} · {date(latest.finished_at ?? latest.started_at)}</p>{latest.error_summary && <div className="inline-warning">Warning: {latest.error_summary}</div>}<AnalyzerStatuses runs={latest.analyzer_runs} /></> : <Empty title="Ready when you are" icon={<ScanIcon />}>Run the first scan to get a combined report.</Empty>}</div><div><h2>Scan history</h2>{scans.loading ? <SkeletonTable rows={4} cols={10} /> : scans.error ? <ErrorPanel error={scans.error} retry={scans.reload} /> : <HistoryTable scans={scans.data ?? []} go={go} />}</div></section>
   {deleteOpen && <ConfirmationDialog title="Remove this workspace?" description="This removes the saved workspace, file rules, and local scan history from Blunt Code. Your project files will not be changed." confirmLabel="Remove workspace" busy={deleting} onCancel={() => setDeleteOpen(false)} onConfirm={remove} />}</div></div>;
@@ -141,6 +143,18 @@ function LanguageDistributionDonut({ languages, workspaceId, go }: { languages: 
         </ul>
       </div>
     </section>
+  );
+}
+
+function ComplianceSection({ scanId, go }: { scanId: string; go: (r: Route) => void }) {
+  const report = useLoad(() => api.report(scanId), [scanId]);
+  const findings = report.data?.findings ?? [];
+  if (report.loading) return <SkeletonCards count={1} variant="chart" />;
+  if (!findings.length && !report.loading) return null;
+  return (
+    <Suspense fallback={<SkeletonCards count={1} variant="chart" />}>
+      <ComplianceMatrix findings={findings} scanId={scanId} onFilterOwasp={(owasp) => go({ page: 'scan', id: scanId })} />
+    </Suspense>
   );
 }
 

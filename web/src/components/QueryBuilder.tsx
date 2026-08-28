@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
@@ -7,7 +7,7 @@ import { Combobox, type ComboboxOption } from './ui/combobox';
 import { cn } from '../lib/utils';
 import { FIELD_LABELS, OP_LABELS, QUERY_FIELDS, QUERY_OPS, type QueryGroup, type QueryRow, nextRowId, previewSql, queryGroupToFilter, buildUrlSearchFromFilter } from '../lib/queryBuilder';
 import type { FindingFilter, SortState } from '../pages/report/ReportView';
-import { Trash2, Plus, Copy, Check } from 'lucide-react';
+import { Trash2, Plus, Copy, Check, GripVertical, CopyPlus, X } from 'lucide-react';
 import { copyToClipboard } from '../lib/clipboard';
 
 type Props = {
@@ -31,7 +31,6 @@ function optionsForField(field: QueryRow['field'], analyzers: string[], rules: s
   else if (field === 'analyzer') values = analyzers;
   else if (field === 'rule') values = rules;
   else values = [];
-  // if no predefined list (path/category), return empty so free-text input shows
   return values.map((v) => {
     const c = counts?.[v];
     return { value: v, label: c != null ? `${v} (${c})` : v };
@@ -42,6 +41,7 @@ export function QueryBuilder({ group, onChange, onApply, facetCounts, analyzers 
   const [copied, setCopied] = useState(false);
   const preview = useMemo(() => previewSql(group), [group]);
   const urlSearch = useMemo(() => buildUrlSearchFromFilter(queryGroupToFilter(group), sort, page), [group, sort, page]);
+  const dragIdxRef = useRef<number | null>(null);
 
   const updateRow = (id: string, patch: Partial<QueryRow>) => {
     onChange({ ...group, rows: group.rows.map((r) => (r.id === id ? { ...r, ...patch } : r)) });
@@ -51,6 +51,41 @@ export function QueryBuilder({ group, onChange, onApply, facetCounts, analyzers 
     onChange({ ...group, rows: next.length ? next : [{ id: nextRowId(), field: 'severity', op: '=', value: '' }] });
   };
   const addRow = () => onChange({ ...group, rows: [...group.rows, { id: nextRowId(), field: 'severity', op: '=', value: '' }] });
+  const duplicateRow = (id: string) => {
+    const idx = group.rows.findIndex((r) => r.id === id);
+    if (idx === -1) return;
+    const row = group.rows[idx];
+    const dup: QueryRow = { ...row, id: nextRowId() };
+    const next = [...group.rows];
+    next.splice(idx + 1, 0, dup);
+    onChange({ ...group, rows: next });
+  };
+  const clearGroup = () => {
+    onChange({ logic: 'AND', rows: [{ id: nextRowId(), field: 'severity', op: '=', value: '' }] });
+  };
+  const reorder = useCallback((from: number, to: number) => {
+    if (from === to) return;
+    const next = [...group.rows];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    onChange({ ...group, rows: next });
+  }, [group, onChange]);
+
+  const handlePointerDown = (e: React.PointerEvent, idx: number) => {
+    const target = e.currentTarget as HTMLElement;
+    target.setPointerCapture(e.pointerId);
+    dragIdxRef.current = idx;
+  };
+  const handlePointerUp = (e: React.PointerEvent, idx: number) => {
+    const from = dragIdxRef.current;
+    dragIdxRef.current = null;
+    if (from == null || from === idx) return;
+    reorder(from, idx);
+  };
+  const handleKeyReorder = (e: React.KeyboardEvent, idx: number) => {
+    if (e.key === 'ArrowUp' && idx > 0) { e.preventDefault(); reorder(idx, idx - 1); }
+    if (e.key === 'ArrowDown' && idx < group.rows.length - 1) { e.preventDefault(); reorder(idx, idx + 1); }
+  };
 
   const handleCopy = async () => {
     const url = `${window.location.pathname}${urlSearch ? `?${urlSearch}` : ''}${window.location.hash}`;
@@ -82,71 +117,99 @@ export function QueryBuilder({ group, onChange, onApply, facetCounts, analyzers 
             ))}
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={addRow} aria-label="Add condition">
-          <Plus className="h-3.5 w-3.5" /> Add row
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <Button variant="ghost" size="sm" onClick={clearGroup} aria-label="Clear all conditions" className="h-8 text-xs text-[var(--color-ink-faint)]">
+            <X className="h-3.5 w-3.5" /> Clear
+          </Button>
+          <Button variant="outline" size="sm" onClick={addRow} aria-label="Add condition">
+            <Plus className="h-3.5 w-3.5" /> Add row
+          </Button>
+        </div>
       </div>
 
-      <div className="flex flex-col gap-2" role="list" aria-label="Query conditions">
-        {group.rows.map((row) => {
-          const counts = facetCounts?.[row.field];
-          const opts = optionsForField(row.field, analyzers, rules, counts);
-          const isFreeText = opts.length === 0;
-          return (
-            <div key={row.id} role="listitem" className="flex items-center gap-2 rounded-[var(--radius-lg)] border border-[var(--color-rule-faint)] bg-[var(--color-surface)] p-2">
-              <Select value={row.field} onValueChange={(v) => updateRow(row.id, { field: v as QueryRow['field'], value: '' })}>
-                <SelectTrigger className="h-8 w-[130px] shrink-0 text-xs" aria-label="Field">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {QUERY_FIELDS.map((f) => (
-                    <SelectItem key={f} value={f}>
-                      {FIELD_LABELS[f]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+      {/* Grouping parentheses visual */}
+      <div className="relative rounded-[var(--radius-lg)] border border-[var(--color-rule-faint)] bg-[var(--color-surface-muted)]/40 p-2">
+        <span aria-hidden="true" className="pointer-events-none absolute left-1 top-2 bottom-2 flex flex-col items-center justify-between text-[var(--color-rule-strong)]">
+          <span className="text-lg font-mono leading-none">(</span>
+          <span className="w-px flex-1 bg-[var(--color-rule-faint)]" />
+          <span className="text-lg font-mono leading-none">)</span>
+        </span>
+        <div className="flex flex-col gap-2 pl-6" role="list" aria-label="Query conditions">
+          {group.rows.map((row, idx) => {
+            const counts = facetCounts?.[row.field];
+            const opts = optionsForField(row.field, analyzers, rules, counts);
+            const isFreeText = opts.length === 0;
+            return (
+              <div key={row.id} role="listitem" className="group/row flex items-center gap-1.5 rounded-[var(--radius-lg)] border border-[var(--color-rule-faint)] bg-[var(--color-surface)] p-2 focus-within:border-[var(--color-rule-strong)] focus-within:shadow-xs">
+                <button
+                  type="button"
+                  aria-label={`Drag to reorder condition ${idx + 1}`}
+                  className="flex h-8 w-6 shrink-0 items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-ink-ghost)] hover:text-[var(--color-ink-soft)] hover:bg-[var(--color-surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus)] cursor-grab active:cursor-grabbing touch-none"
+                  onPointerDown={(e) => handlePointerDown(e, idx)}
+                  onPointerUp={(e) => handlePointerUp(e, idx)}
+                  onKeyDown={(e) => handleKeyReorder(e, idx)}
+                  tabIndex={0}
+                >
+                  <GripVertical className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+                <Select value={row.field} onValueChange={(v) => updateRow(row.id, { field: v as QueryRow['field'], value: '' })}>
+                  <SelectTrigger className="h-8 w-[130px] shrink-0 text-xs" aria-label={`Field for condition ${idx + 1}`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {QUERY_FIELDS.map((f) => (
+                      <SelectItem key={f} value={f}>
+                        {FIELD_LABELS[f]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
-              <Select value={row.op} onValueChange={(v) => updateRow(row.id, { op: v as QueryRow['op'] })}>
-                <SelectTrigger className="h-8 w-[130px] shrink-0 text-xs" aria-label="Operator">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {QUERY_OPS.map((op) => (
-                    <SelectItem key={op} value={op}>
-                      {OP_LABELS[op]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <Select value={row.op} onValueChange={(v) => updateRow(row.id, { op: v as QueryRow['op'] })}>
+                  <SelectTrigger className="h-8 w-[130px] shrink-0 text-xs" aria-label={`Operator for condition ${idx + 1}`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {QUERY_OPS.map((op) => (
+                      <SelectItem key={op} value={op}>
+                        {OP_LABELS[op]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
-              <div className="min-w-0 flex-1">
-                {isFreeText ? (
-                  <input
-                    value={row.value}
-                    onChange={(e) => updateRow(row.id, { value: e.target.value })}
-                    placeholder={row.field === 'path' ? 'src/' : row.field === 'category' ? 'security' : 'value'}
-                    aria-label={`Value for ${row.field}`}
-                    className="h-8 w-full rounded-[var(--radius-button)] border border-[var(--color-rule-strong)] bg-[var(--color-surface)] px-3 text-sm text-[var(--color-ink)] placeholder:text-[var(--color-ink-faint)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)] focus:border-[var(--color-accent)]"
-                  />
-                ) : (
-                  <Combobox
-                    options={opts}
-                    value={row.value}
-                    onValueChange={(v) => updateRow(row.id, { value: v })}
-                    placeholder="Select…"
-                    searchPlaceholder="Search…"
-                    triggerClassName="h-8 text-xs"
-                  />
-                )}
+                <div className="min-w-0 flex-1">
+                  {isFreeText ? (
+                    <input
+                      value={row.value}
+                      onChange={(e) => updateRow(row.id, { value: e.target.value })}
+                      placeholder={row.field === 'path' ? 'src/' : row.field === 'category' ? 'security' : 'value'}
+                      aria-label={`Value for ${row.field} condition ${idx + 1}`}
+                      className="h-8 w-full rounded-[var(--radius-button)] border border-[var(--color-rule-strong)] bg-[var(--color-surface)] px-3 text-sm text-[var(--color-ink)] placeholder:text-[var(--color-ink-faint)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)] focus:border-[var(--color-accent)]"
+                    />
+                  ) : (
+                    <Combobox
+                      options={opts}
+                      value={row.value}
+                      onValueChange={(v) => updateRow(row.id, { value: v })}
+                      placeholder="Select…"
+                      searchPlaceholder="Search…"
+                      triggerClassName="h-8 text-xs"
+                    />
+                  )}
+                </div>
+
+                <Button variant="ghost" size="icon" aria-label={`Duplicate condition ${idx + 1}`} onClick={() => duplicateRow(row.id)} className="h-8 w-8 shrink-0 text-[var(--color-ink-faint)] hover:text-[var(--color-ink)]">
+                  <CopyPlus className="h-3.5 w-3.5" />
+                </Button>
+                <Button variant="ghost" size="icon" aria-label={`Remove condition ${idx + 1}`} onClick={() => removeRow(row.id)} className="h-8 w-8 shrink-0 text-[var(--color-ink-faint)] hover:text-[var(--color-danger)]">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
               </div>
-
-              <Button variant="ghost" size="icon" aria-label="Remove condition" onClick={() => removeRow(row.id)} className="h-8 w-8 shrink-0 text-[var(--color-ink-faint)] hover:text-[var(--color-danger)]">
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
+        <p className="pl-6 pt-2 text-[10px] font-mono text-[var(--color-ink-faint)]">{group.rows.length} condition(s) grouped with {group.logic}</p>
       </div>
 
       <div className="rounded-[var(--radius-lg)] border border-[var(--color-rule-faint)] bg-[var(--color-surface-muted)] p-3">
