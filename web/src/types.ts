@@ -213,6 +213,7 @@ export interface TreeNode {
   path: string;
   name: string;
   type: 'file' | 'directory';
+  language?: string;
   included?: boolean;
   excluded_reason?: string;
   partial?: boolean;

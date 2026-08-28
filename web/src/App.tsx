@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from './api';
 import type { Workspace } from './types';
 import { href, parseRoute, type Route } from './lib/router';
@@ -21,9 +21,18 @@ import { HistoryPage } from './pages/HistoryPage';
 import { ScanPage } from './pages/ScanPage';
 import { SearchPage } from './pages/SearchPage';
 import { ToolsPage } from './pages/ToolsPage';
-import { PentestPage } from './pages/PentestPage';
 import { SettingsPage } from './pages/SettingsPage';
-import { RuleStudioPage } from './pages/RuleStudioPage';
+import { SkeletonCards } from './components/skeletons';
+
+const PentestPage = lazy(() => import('./pages/PentestPage').then((m) => ({ default: m.PentestPage })));
+const RuleStudioPage = lazy(() => import('./pages/RuleStudioPage').then((m) => ({ default: m.RuleStudioPage })));
+
+// Preload heavy chunks in parallel (no waterfall): hints only, safe if fail
+void import('./pages/PentestPage');
+void import('./pages/RuleStudioPage');
+void import('./components/AnalyticsCharts');
+void import('./components/DependencyGraph');
+void import('./components/AutoFixPanel');
 import { AboutPage } from './pages/AboutPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 
@@ -151,9 +160,9 @@ function Page({ route, go, notify, onAdd }: { route: Route; go: (r: Route) => vo
     case 'history': return id ? <HistoryPage workspaceId={id} go={go} /> : <NotFoundPage go={go} />;
     case 'scan': return id ? <ScanPage id={id} notify={notify} /> : <NotFoundPage go={go} />;
     case 'search': return <SearchPage go={go} />;
-    case 'tools': return <ToolsPage notify={notify} />;
-    case 'pentest': return <PentestPage go={go} />;
-    case 'rules': return <RuleStudioPage />;
+    case 'tools': return <ToolsPage notify={notify} go={go} />;
+    case 'pentest': return <Suspense fallback={<SkeletonCards count={3} variant="chart" />}><PentestPage go={go} /></Suspense>;
+    case 'rules': return <Suspense fallback={<SkeletonCards count={2} />}><RuleStudioPage /></Suspense>;
     case 'settings': return <SettingsPage notify={notify} />;
     case 'about': return <AboutPage />;
     case 'not-found': return <NotFoundPage go={go} />;

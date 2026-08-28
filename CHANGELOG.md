@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-08-28
+
+### Added
+- **Loop continue — Monaco + Pentest + Languages + Perf + Query Builder:** `CodeEditor.tsx` (line numbers, syntax highlight overlay, Tab 2-spaces, Ctrl+S, error wavy, Monaco dynamic import) for `RuleStudioPage.tsx` (language select, Snippets, validateYaml), `PentestSuite.tsx` (ZAP/Nuclei/Burp tabs, combobox search, severity filter, enable toggle, sheet drawer target/auth/scope) + `pentestTemplates.ts` 12+8+4, `PentestPage.tsx` stats + Run pentest deep, expanded `analyzerCatalog.ts` 34 languages (C/C++/C#/Ruby/PHP/Rust/Swift/Kotlin/Scala/Dart/Elixir) + `LanguageCoverage.tsx` 20+ grouped + CSV export + File `languageIcon` + `LanguageDistributionDonut` drill to `FilesPage?lang=`, `VirtualizedList.tsx` windowed + `vite.config.ts` manualChunks (`vendor-react/radix/icons/ui`, `chunk-charts/pentest/editor/autofix`, main 202k) + lazy `PentestPage/RuleStudioPage` + `AnalyticsCharts` etc + memo `SeverityDistribution/AnalyzerResults` primitive deps, `QueryBuilder.tsx`/`SavedViews.tsx`/`queryBuilder.ts` advanced filter builder AND/OR + URL ↔ `FindingFilter` + `ReportView.tsx`/`SearchPage.tsx` Advanced sheet 420px.
+
+### Changed
+- Perf code-split: circular chunk warning fixed via manualChunks, Go `go vet/test` clean.
+
+
 ## [0.9.0] - 2026-08-27
 
 ### Added

@@ -11,6 +11,7 @@ import { SkeletonTable } from '../components/skeletons';
 import { ANALYZER_CATALOG, analyzerMeta, categoryColor, CATEGORY_LABELS, type AnalyzerCategory } from '../lib/analyzerCatalog';
 import { LanguageCoverage } from '../components/LanguageCoverage';
 import { PentestSection } from './PentestPage';
+import type { Route } from '../lib/router';
 import { Wrench, Shield, Bug, KeyRound, Boxes, Container, FileCog, Scale, Palette, Zap, Crosshair, Radar, Package, ListTodo, Gauge, Download, WrenchIcon as RepairIcon, RefreshCw, MoreHorizontal } from 'lucide-react';
 
 type ToolOperation = 'install' | 'repair' | 'update';
@@ -75,7 +76,7 @@ function CategoryAccordion({ category, tools, busy, onAction, tableClassName = "
   );
 }
 
-export function ToolsPage({ notify }: { notify: (n: Notice) => void }) {
+export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r: Route) => void }) {
   const tools = useLoad(api.tools, []);
   const [busy, setBusy] = useState<BusyAction>();
   async function action(tool: Tool, operation: ToolOperation) { setBusy({ tool: tool.id, operation }); try { await api.toolAction(tool.id, operation); await tools.reload(); notify({ kind: 'info', text: `${tool.name?.trim() || tool.id}: ${operationVerbs[operation]}.` }); } catch (e) { notify({ kind: 'error', text: message(e) }); } finally { setBusy(undefined); } }
@@ -115,6 +116,6 @@ export function ToolsPage({ notify }: { notify: (n: Notice) => void }) {
     {[...grouped.entries()].map(([cat, list]) => <CategoryAccordion key={cat} category={cat} tools={list} busy={busy} onAction={action} />)}
     {placeholderGrouped.size > 0 && <section className="coming-soon" aria-label="Coming soon analyzers"><h3 className="text-sm font-semibold mt-4">Coming soon — managed install</h3><p className="text-xs text-[var(--color-ink-soft)]">Additional analyzers from the catalog will appear here when available.</p>{[...placeholderGrouped.entries()].map(([cat, list]) => <CategoryAccordion key={`soon-${cat}`} category={cat} tools={list} busy={busy} onAction={action} tableClassName="coming-soon-table" />)}</section>}
     <LanguageCoverage />
-    <PentestSection />
+    <PentestSection go={go} />
   </>}</div>;
 }

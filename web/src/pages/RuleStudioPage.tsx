@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { CodeEditor, type CodeEditorLanguage } from '../components/CodeEditor';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 
 type CustomRule = {
@@ -36,11 +38,37 @@ severity: high
 message: Avoid eval — use safe parsing instead.
 `;
 
+const SNIPPETS: Record<CodeEditorLanguage, string> = {
+  yaml: DEFAULT_YAML,
+  python: `id: no-eval-python
+languages: [python]
+pattern: "eval($ARG)"
+severity: high
+message: Avoid eval in Python — use ast.literal_eval instead.
+# test snippet — matches below
+# eval(user_input)
+`,
+  javascript: `id: no-eval-js
+languages: [javascript]
+pattern: "eval($ARG)"
+severity: high
+message: Avoid eval in JS — use JSON.parse instead.
+// test snippet — matches below
+// eval(userInput)
+`,
+  js: `id: no-eval-js
+languages: [javascript]
+pattern: "eval($ARG)"
+severity: high
+message: Avoid eval in JS — use JSON.parse instead.
+`,
+};
+
 function parseYamlLike(text: string): Partial<CustomRule> & { rawLanguages?: string } {
   const out: Record<string, string> = {};
   for (const line of text.split('\n')) {
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
+    if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('//')) continue;
     const idx = trimmed.indexOf(':');
     if (idx === -1) continue;
     const k = trimmed.slice(0, idx).trim();
@@ -62,20 +90,35 @@ function parseYamlLike(text: string): Partial<CustomRule> & { rawLanguages?: str
   };
 }
 
-function tokenizeYaml(text: string) {
-  const tokens: Array<{ text: string; color: string }> = [];
-  for (const line of text.split('\n')) {
+function validateYaml(text: string): string | null {
+  const lines = text.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     const trimmed = line.trim();
-    if (!trimmed) { tokens.push({ text: line + '\n', color: 'var(--color-ink)' }); continue; }
-    if (trimmed.startsWith('#')) { tokens.push({ text: line + '\n', color: 'var(--color-ink-faint)' }); continue; }
-    const idx = line.indexOf(':');
-    if (idx === -1) { tokens.push({ text: line + '\n', color: 'var(--color-ink)' }); continue; }
-    const key = line.slice(0, idx);
-    const rest = line.slice(idx);
-    tokens.push({ text: key, color: 'var(--color-accent)' });
-    tokens.push({ text: rest + '\n', color: 'var(--color-ink-soft)' });
+    if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('//')) continue;
+    // allow bracket-wrapped lines like languages: [python] — handled, but bare lines without colon are invalid YAML
+    if (!trimmed.includes(':')) {
+      // heuristic: if line looks like a YAML key without colon -> invalid
+      // also catch stray tokens
+      return `Invalid YAML on line ${i + 1}: missing ':' — each rule field needs "key: value"`;
+    }
+    // check for unclosed quotes/brackets in that line value part
+    const colonIdx = trimmed.indexOf(':');
+    const valuePart = trimmed.slice(colonIdx + 1).trim();
+    if (valuePart) {
+      const single = (valuePart.match(/'/g) ?? []).length;
+      const dbl = (valuePart.match(/"/g) ?? []).length;
+      if (single % 2 !== 0 || dbl % 2 !== 0) {
+        return `Invalid YAML on line ${i + 1}: unclosed quote`;
+      }
+      const openB = (valuePart.match(/\[/g) ?? []).length;
+      const closeB = (valuePart.match(/\]/g) ?? []).length;
+      if (openB !== closeB) {
+        return `Invalid YAML on line ${i + 1}: unclosed bracket`;
+      }
+    }
   }
-  return tokens;
+  return null;
 }
 
 type MockFinding = { file: string; line: number; message: string; severity: CustomRule['severity'] };
@@ -84,7 +127,6 @@ function mockFindings(rule: Partial<CustomRule>): MockFinding[] {
   if (!rule.pattern || !rule.id) return [];
   const sev = (rule.severity ?? 'medium') as CustomRule['severity'];
   const msg = rule.message ?? `Matched ${rule.id}`;
-  // naive mock: if pattern non-empty, show 2 findings
   return [
     { file: `src/example.${(rule.languages?.[0] ?? 'py')}`, line: 12, message: msg, severity: sev },
     { file: `src/utils.${(rule.languages?.[0] ?? 'py')}`, line: 34, message: msg, severity: sev },
@@ -93,17 +135,20 @@ function mockFindings(rule: Partial<CustomRule>): MockFinding[] {
 
 export function RuleStudioPage() {
   const [yaml, setYaml] = useState(DEFAULT_YAML);
+  const [language, setLanguage] = useState<CodeEditorLanguage>('yaml');
   const [rules, setRules] = useState<CustomRule[]>(() => loadRules());
   const [error, setError] = useState<string | null>(null);
   const reduced = useReducedMotion();
 
   const parsed = useMemo(() => parseYamlLike(yaml), [yaml]);
+  const yamlValidationError = useMemo(() => validateYaml(yaml), [yaml]);
   const findings = useMemo(() => mockFindings(parsed), [parsed]);
-  const canSave = Boolean(parsed.id && parsed.pattern && parsed.message);
+  const canSave = Boolean(parsed.id && parsed.pattern && parsed.message) && !yamlValidationError;
 
   useEffect(() => { saveRules(rules); }, [rules]);
 
   function handleSave() {
+    if (yamlValidationError) { setError(yamlValidationError); return; }
     if (!canSave || !parsed.id) { setError('Fill id, pattern, and message.'); return; }
     setError(null);
     const rule: CustomRule = {
@@ -128,7 +173,13 @@ export function RuleStudioPage() {
     setRules((prev) => prev.filter((r) => r.id !== id));
   }
 
-  const highlighted = useMemo(() => tokenizeYaml(yaml), [yaml]);
+  function handleInsertSnippet() {
+    const snippet = SNIPPETS[language] ?? SNIPPETS.yaml;
+    setYaml(snippet);
+    setError(null);
+  }
+
+  const editorError = yamlValidationError ?? error;
 
   return (
     <div className="page">
@@ -136,38 +187,53 @@ export function RuleStudioPage() {
         <div>
           <p className="eyebrow">Rule Studio</p>
           <h1>Custom rules</h1>
-          <p>Create YAML rules, preview matched findings, and save locally.</p>
+          <p>Create YAML rules, preview matched findings, and save locally. Tab indents 2 spaces · Ctrl+S saves.</p>
         </div>
       </header>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card className={reduced ? '' : 'anim-fadeInUp'}>
           <CardHeader>
-            <CardTitle>Rule YAML editor</CardTitle>
-            <CardDescription>Fields: id, languages, pattern, severity, message. Saved to localStorage <code className="font-mono text-xs">bluntcode.customRules</code>.</CardDescription>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <CardTitle>Rule editor</CardTitle>
+                <CardDescription>Fields: id, languages, pattern, severity, message. Saved to localStorage <code className="font-mono text-xs">bluntcode.customRules</code>.</CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <label htmlFor="rule-language" className="text-xs font-medium text-[var(--color-ink-soft)]">Language</label>
+                <Select value={language} onValueChange={(v) => setLanguage(v as CodeEditorLanguage)}>
+                  <SelectTrigger id="rule-language" aria-label="Select editor language" className="h-8 w-[9rem] text-xs">
+                    <SelectValue placeholder="yaml" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="yaml">yaml</SelectItem>
+                    <SelectItem value="python">python</SelectItem>
+                    <SelectItem value="javascript">javascript</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="relative">
-              <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-rule-faint)] bg-[var(--color-surface-muted)] p-3 font-mono text-xs leading-5 whitespace-pre-wrap break-words">
-                {highlighted.map((tok, i) => <span key={i} style={{ color: tok.color }}>{tok.text}</span>)}
-              </div>
-              <textarea
-                aria-label="Rule YAML editor"
-                value={yaml}
-                onChange={(e) => setYaml(e.target.value)}
-                spellCheck={false}
-                rows={10}
-                className="relative min-h-[14rem] w-full resize-y rounded-[var(--radius-md)] border border-[var(--color-rule)] bg-transparent p-3 font-mono text-xs leading-5 text-transparent caret-[var(--color-ink)] placeholder:text-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus)] focus-visible:ring-offset-2"
-                style={{ caretColor: 'var(--color-ink)' }}
-                placeholder={DEFAULT_YAML}
-              />
-            </div>
-            {error && <p role="alert" className="text-sm text-[var(--color-danger)]">{error}</p>}
-            {!canSave && <p className="text-xs text-[var(--color-ink-faint)]">Add at least <code>id</code>, <code>pattern</code>, and <code>message</code> to enable save.</p>}
-            <div className="flex gap-2">
+            <CodeEditor
+              id="rule-yaml-editor"
+              value={yaml}
+              onChange={(v) => { setYaml(v); if (error) setError(null); }}
+              language={language}
+              ariaLabel="Rule YAML editor"
+              placeholder={DEFAULT_YAML}
+              error={editorError}
+              onSave={handleSave}
+              minHeight="14rem"
+            />
+            {editorError && <p role="alert" className="sr-only">{editorError}</p>}
+            {!canSave && !yamlValidationError && <p className="text-xs text-[var(--color-ink-faint)]">Add at least <code>id</code>, <code>pattern</code>, and <code>message</code> to enable save.</p>}
+            <div className="flex flex-wrap gap-2">
               <Button onClick={handleSave} disabled={!canSave} aria-label="Save rule">Save rule</Button>
               <Button variant="outline" onClick={() => setYaml(DEFAULT_YAML)} aria-label="Reset editor">Reset</Button>
+              <Button variant="secondary" onClick={handleInsertSnippet} aria-label="Insert test snippet">Test snippet</Button>
             </div>
+            <p className="text-xs text-[var(--color-ink-faint)]">Tip: Tab inserts 2 spaces · <kbd className="rounded border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-1 py-0.5 font-mono text-xs">Ctrl</kbd> + <kbd className="rounded border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-1 py-0.5 font-mono text-xs">S</kbd> saves. Monaco loads automatically if installed.</p>
           </CardContent>
         </Card>
 
@@ -218,7 +284,7 @@ export function RuleStudioPage() {
                       <span className="relative inline-flex">
                         <input type="checkbox" role="switch" aria-checked={r.enabled} aria-label={`Enable ${r.id}`} checked={r.enabled} onChange={() => toggle(r.id)} className="peer sr-only" />
                         <span className="inline-flex h-5 w-9 items-center rounded-full border border-[var(--color-rule)] bg-[var(--color-surface-muted)] p-0.5 transition-colors peer-checked:bg-[var(--color-accent)] peer-checked:border-[var(--color-accent)] peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--color-focus)] peer-focus-visible:ring-offset-2" aria-hidden="true">
-                          <span className={`block h-4 w-4 rounded-full bg-white shadow transition-transform ${r.enabled ? 'translate-x-4' : 'translate-x-0'}`} />
+                          <span className={`block h-4 w-4 rounded-full bg-white shadow transition-transform ${r.enabled ? 'translate-x-4' : 'translate-x-0'}`} style={reduced ? { transition: 'none' } : undefined} />
                         </span>
                       </span>
                       <span className="text-xs font-medium text-[var(--color-ink-soft)]">{r.enabled ? 'Enabled' : 'Disabled'}</span>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Suspense, lazy, useState } from 'react';
 import { api } from '../api';
 import type { RecentScanItem, Severity, Workspace } from '../types';
 import type { Route } from '../lib/router';
@@ -17,9 +17,11 @@ import { SkeletonCards, SkeletonLines, SkeletonTable } from '../components/skele
 import { ConfirmationDialog } from '../components/dialogs';
 import { WorkspaceTemplates } from '../components/WorkspaceTemplates';
 import { useReducedMotion } from '../hooks/useReducedMotion';
-import { AnalyticsCharts } from '../components/AnalyticsCharts';
 import { MiniSparkline } from '../components/MiniSparkline';
+
 import { languageCoverageFromLanguages, severityCountsFromSummary, trendPointsFromScans } from '../lib/chartData';
+
+const AnalyticsCharts = lazy(() => import('../components/AnalyticsCharts').then((m) => ({ default: m.AnalyticsCharts })) );
 
 const ACTIVITY_FEED_LIMIT = 8;
 
@@ -52,13 +54,15 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
   </div>;
   return <div className="page dashboard-page"><header className="dashboard-heading" style={{ borderTop: '2px solid transparent', borderImage: 'var(--color-accent-gradient) 1', borderTopWidth: '2px', paddingTop: 'var(--space-md)' } as never}><div><p className="eyebrow">Dashboard</p><h1>Workspaces</h1><p>Run a local scan, then follow every result in one place.</p></div><div className="dashboard-actions"><Button variant="outline" onClick={() => void quickScan()} disabled={!latestWorkspaceId || quickScanning} title={latestWorkspaceId ? 'Run a scan on the most recently scanned workspace' : undefined}>{quickScanning ? 'Starting scan…' : 'Scan latest workspace'}</Button><Button onClick={onAdd}>+ Add workspace</Button></div></header>
     <div className={reduced ? '' : 'anim-fadeInUp'} style={{ willChange: reduced ? undefined : 'transform, opacity' } as never}><StatsOverview /></div>
-    <div className={reduced ? '' : 'anim-fadeInUp anim-stagger'} style={reduced ? undefined : ({ animationDelay: '60ms', willChange: 'transform, opacity' } as React.CSSProperties)}>
-      <AnalyticsCharts
-        trends={trendPointsFromScans(scans)}
-        severityCounts={severityCountsFromSummary(summary)}
-        languages={languageCoverageFromLanguages(workspaces.data?.flatMap((w) => w.languages ?? []).filter((v, i, a) => a.indexOf(v) === i).slice(0, 6))}
-      />
-    </div>
+    <Suspense fallback={<SkeletonCards count={3} variant="chart" />}>
+      <div className={reduced ? '' : 'anim-fadeInUp anim-stagger'} style={reduced ? undefined : ({ animationDelay: '60ms', willChange: 'transform, opacity' } as React.CSSProperties)}>
+        <AnalyticsCharts
+          trends={trendPointsFromScans(scans)}
+          severityCounts={severityCountsFromSummary(summary)}
+          languages={languageCoverageFromLanguages(workspaces.data?.flatMap((w) => w.languages ?? []).filter((v, i, a) => a.indexOf(v) === i).slice(0, 6))}
+        />
+      </div>
+    </Suspense>
     {recent.loading ? <div className="dashboard-summary-loading"><SkeletonCards count={5} variant="metric" /></div> : summary && <section className="summary-grid dashboard-summary" aria-label="Scan activity summary">
       <article className={`summary-card card-hover-lift ${reduced ? '' : 'anim-fadeInUp anim-stagger'}`} style={reduced ? undefined : { animationDelay: '0ms', willChange: 'transform, opacity' } as never}><strong>{summary.active_scans ?? 0}{(summary.active_scans ?? 0) > 0 && <i className="pulse-dot" aria-hidden="true" />}</strong><span>Active scans</span></article>
       <div className={reduced ? '' : 'anim-fadeInUp anim-stagger'} style={reduced ? undefined : { animationDelay: '40ms', willChange: 'transform, opacity' } as never}><SummaryCard label="Critical + high" value={(summary.critical_count ?? 0) + (summary.high_count ?? 0)} tone="high" /></div>

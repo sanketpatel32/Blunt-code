@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Suspense, lazy, useState } from 'react';
 import { api } from '../api';
 import type { AnalyzerRun, RiskProfile } from '../types';
 import type { Route } from '../lib/router';
@@ -11,14 +11,15 @@ import { ScanIcon } from '../components/icons';
 import { SkeletonCards, SkeletonTable } from '../components/skeletons';
 import { SeverityTrendSection } from '../components/SeverityTrendChart';
 import { SuppressionsSection } from '../components/SuppressionsPanel';
-import { DependencyGraph } from '../components/DependencyGraph';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../components/ui/accordion';
 import { ConfirmationDialog } from '../components/dialogs';
 import { WorkspaceContextSidebar } from '../components/WorkspaceContext';
 import { HistoryTable } from './HistoryPage';
 import { analyzerMeta, categoryColor, CATEGORY_LABELS } from '../lib/analyzerCatalog';
-import { AnalyticsCharts } from '../components/AnalyticsCharts';
 import { languageCoverageFromLanguages, severityCountsFromSummary, trendPointsFromScans } from '../lib/chartData';
+
+const AnalyticsCharts = lazy(() => import('../components/AnalyticsCharts').then((m) => ({ default: m.AnalyticsCharts })));
+const DependencyGraph = lazy(() => import('../components/DependencyGraph').then((m) => ({ default: m.DependencyGraph })) );
 
 export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) => void; notify: (n: Notice) => void }) {
   const workspace = useLoad(() => api.workspace(id), [id]);
@@ -49,17 +50,22 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
     {pruneOpen && <form className="settings-editor" onSubmit={(event) => { event.preventDefault(); void prune(); }} aria-label="Prune scan history"><label>Keep newest<input type="number" min={1} max={100} value={pruneKeep} onChange={(event) => setPruneKeep(Number(event.target.value))} /></label><div className="editor-actions"><button type="submit" className="button primary" disabled={pruning}>Delete older scans</button><button type="button" className="button secondary" onClick={() => setPruneOpen(false)}>Cancel</button></div></form>}
     {editing && <form className="settings-editor" onSubmit={(event) => { event.preventDefault(); saveSettings(); }} aria-label="Workspace settings"><label>Name<input value={nameDraft} onChange={(event) => setNameDraft(event.target.value)} maxLength={80} /></label><label>Default profile<select value={profileDraft} onChange={(event) => setProfileDraft(event.target.value)}>{['quick', 'standard', 'deep'].map((value) => <option key={value} value={value}>{value}</option>)}</select></label><div className="editor-actions"><button type="submit" className="button primary" disabled={savingSettings}>Save</button><button type="button" className="button secondary" onClick={() => setEditing(false)}>Cancel</button></div></form>}
     {!latest && scans.loading ? <SkeletonCards count={6} /> : <section className="summary-grid" aria-label="Latest scan summary"><RiskCard risk={risk.data} /><SummaryCard label="Critical + high" value={(latest?.critical_count ?? 0) + (latest?.high_count ?? 0)} tone="high" /><SummaryCard label="Medium" value={latest?.medium_count ?? 0} tone="medium" /><SummaryCard label="Low + info" value={(latest?.low_count ?? 0) + (latest?.info_count ?? 0)} /><SummaryCard label="Total findings" value={latest?.total_findings ?? 0} /><SummaryCard label="New since last scan" value={latest?.new_count ?? 0} /><SummaryCard label="Fixed since last scan" value={latest?.fixed_count ?? 0} /></section>}
-    <AnalyticsCharts
-      trends={trendPointsFromScans(scans.data ?? [])}
-      severityCounts={severityCountsFromSummary({ critical_count: latest?.critical_count, high_count: latest?.high_count, medium_count: latest?.medium_count, low_count: latest?.low_count, info_count: latest?.info_count })}
-      languages={languageCoverageFromLanguages(item.languages)}
-    />
+    <Suspense fallback={<SkeletonCards count={3} variant="chart" />}>
+      <AnalyticsCharts
+        trends={trendPointsFromScans(scans.data ?? [])}
+        severityCounts={severityCountsFromSummary({ critical_count: latest?.critical_count, high_count: latest?.high_count, medium_count: latest?.medium_count, low_count: latest?.low_count, info_count: latest?.info_count })}
+        languages={languageCoverageFromLanguages(item.languages)}
+      />
+    </Suspense>
+    <LanguageDistributionDonut languages={languageCoverageFromLanguages(item.languages)} workspaceId={id} go={go} />
     <SeverityTrendSection workspaceId={id} />
     <Accordion type="single" collapsible className="mt-2 rounded-[var(--radius-card)] border border-[var(--color-rule)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] px-4">
       <AccordionItem value="dependency-graph">
         <AccordionTrigger className="text-sm font-semibold">Dependency graph</AccordionTrigger>
         <AccordionContent>
-          <DependencyGraph languages={item.languages} />
+          <Suspense fallback={<SkeletonCards count={1} variant="chart" />}>
+            <DependencyGraph languages={item.languages} />
+          </Suspense>
         </AccordionContent>
       </AccordionItem>
     </Accordion>
@@ -81,6 +87,61 @@ export function AnalyzerStatuses({ runs }: { runs?: AnalyzerRun[] }) {
     const skipped = run.status === 'skipped';
     return <div className="analyzer-row" key={run.analyzer_id}><span>{run.analyzer_id}</span><span className={`state ${run.status}`}>{run.status}</span>{skipped ? <small role="note" className="text-amber-600">Skipped — {run.message || 'no applicable files or profile excluded this analyzer'}</small> : run.message ? <small>{run.message}</small> : null}</div>;
   })}</div>)}</div>;
+}
+
+function LanguageDistributionDonut({ languages, workspaceId, go }: { languages: ReturnType<typeof languageCoverageFromLanguages>; workspaceId: string; go: (r: Route) => void }) {
+  if (!languages.length) return null;
+  const total = languages.reduce((s, l) => s + l.files, 0);
+  const colors = ['var(--color-accent)', 'var(--color-success)', 'var(--color-warning)', 'var(--color-danger)', 'var(--color-ink)', 'var(--color-accent-strong)', 'var(--color-ink-soft)', 'var(--color-ink-faint)'];
+  const cx = 60; const cy = 60; const r = 46; const inner = 30;
+  let angle = -90;
+  const segs = languages.map((row, i) => {
+    const sweep = total ? (row.files / total) * 360 : 0;
+    const start = angle; const end = angle + sweep; angle = end;
+    const large = sweep > 180 ? 1 : 0;
+    const rad = (d: number) => (d * Math.PI) / 180;
+    const x1 = cx + r * Math.cos(rad(start)); const y1 = cy + r * Math.sin(rad(start));
+    const x2 = cx + r * Math.cos(rad(end)); const y2 = cy + r * Math.sin(rad(end));
+    const ix1 = cx + inner * Math.cos(rad(end)); const iy1 = cy + inner * Math.sin(rad(end));
+    const ix2 = cx + inner * Math.cos(rad(start)); const iy2 = cy + inner * Math.sin(rad(start));
+    const d = `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} L ${ix1} ${iy1} A ${inner} ${inner} 0 ${large} 0 ${ix2} ${iy2} Z`;
+    return { ...row, d, color: colors[i % colors.length] };
+  });
+  function drill(lang: string) {
+    const url = `/workspaces/${workspaceId}/files?lang=${encodeURIComponent(lang)}`;
+    window.history.pushState(null, '', url);
+    go({ page: 'files', id: workspaceId });
+  }
+  return (
+    <section aria-label="Language distribution" className="rounded-[var(--radius-card)] border border-[var(--color-rule)] bg-[var(--color-surface)] p-4 shadow-[var(--shadow-card)]">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="font-display text-sm font-semibold tracking-tight">Language distribution</h3>
+        <span className="rounded-full border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-2 py-0.5 font-mono text-[0.65rem] font-semibold uppercase tracking-widest text-[var(--color-ink-faint)]">click to filter files</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-4">
+        <svg viewBox="0 0 120 120" width={140} height={140} role="img" aria-label={`Language distribution: ${languages.map((l) => `${l.language} ${l.files}`).join(', ')}`} className="shrink-0">
+          {segs.map((s) => (
+            <path key={s.language} d={s.d} fill={s.color} stroke="var(--color-surface)" strokeWidth={1.2} className="cursor-pointer hover:opacity-80 focus:opacity-80" tabIndex={0} role="button" aria-label={`Filter files by ${s.language}`} onClick={() => drill(s.language)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); drill(s.language); } }} />
+          ))}
+          <circle cx={cx} cy={cy} r={inner - 0.5} fill="var(--color-surface)" />
+          <text x={cx} y={cy - 2} textAnchor="middle" fontSize={14} fontWeight={800} fill="var(--color-ink)" className="tabular-nums">{total}</text>
+          <text x={cx} y={cy + 12} textAnchor="middle" fontSize={7} fontWeight={600} fill="var(--color-ink-faint)" style={{ letterSpacing: '0.06em', textTransform: 'uppercase' as const }}>files</text>
+        </svg>
+        <ul className="grid gap-1.5 text-xs" aria-label="Language legend, select to filter">
+          {segs.map((s) => (
+            <li key={s.language} className="flex items-center gap-2">
+              <button type="button" onClick={() => drill(s.language)} className="flex items-center gap-2 rounded px-1 py-0.5 hover:bg-[var(--color-surface-muted)] focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]" aria-label={`Show only ${s.language} files`}>
+                <i aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: s.color }} />
+                <span className="min-w-[4.2rem] text-left text-[var(--color-ink-soft)]">{s.language}</span>
+                <span className="font-mono font-semibold text-[var(--color-ink)]">{s.files}</span>
+                <span className="ml-1 rounded-full border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-1.5 py-0.5 font-mono text-[0.65rem] leading-none text-[var(--color-ink-faint)]">{total ? `${Math.round((s.files * 1000) / total) / 10}%` : '0%'}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
 }
 
 /** Weighted risk score from the latest completed scan; trend compares the previous one. */

@@ -10,6 +10,9 @@ import { MagnifierIcon } from '../components/icons';
 import { SkeletonTable } from '../components/skeletons';
 import { SavedFilters } from '../components/SavedFilters';
 import type { FindingFilter } from './report/ReportView';
+import { QueryBuilder } from '../components/QueryBuilder';
+import { filterToQueryGroup, queryGroupToFilter, type QueryGroup } from '../lib/queryBuilder';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '../components/ui/sheet';
 
 const SEARCH_PAGE_SIZE = 25;
 const SEARCH_DEBOUNCE_MS = 250;
@@ -38,7 +41,9 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
   const [visibleCols, setVisibleCols] = useState({ severity:true, finding:true, location:true, actions:true });
   const [page, setPage] = useState(() => { const p=Number(new URLSearchParams(window.location.search).get('page')); return Number.isFinite(p)&&p>=1?Math.floor(p):1; });
   const [facetsOpen, setFacetsOpen] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [acc, setAcc] = useState({ sev:true, ana:true, ws:true, st:true });
+  const [queryGroup, setQueryGroup] = useState<QueryGroup>(() => filterToQueryGroup({ severity:[...(() => { const v=new URLSearchParams(window.location.search).get('severity'); return new Set(v?v.split(',').filter(Boolean):[]); })()].join(','), category:'', analyzer:new URLSearchParams(window.location.search).get('analyzer')??'', rule:'', path:new URLSearchParams(window.location.search).get('workspace')??'', status:new URLSearchParams(window.location.search).get('status')??'', q:new URLSearchParams(window.location.search).get('q')??'' } as FindingFilter));
   const debouncedQuery = useDebouncedValue(query, query ? SEARCH_DEBOUNCE_MS : 0);
 
   const params = useMemo(() => {
@@ -80,9 +85,11 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
       setPathPrefix(sp.get('path')??'');
       const v=sp.get('severity'); setSeverities(new Set(v?v.split(',').filter(Boolean):[]));
       const p=Number(sp.get('page')); setPage(Number.isFinite(p)&&p>=1?Math.floor(p):1);
+      setQueryGroup(filterToQueryGroup({ severity:v??'', category:'', analyzer:sp.get('analyzer')??'', rule:'', path:sp.get('workspace')??'', status:sp.get('status')??'', q:sp.get('q')??'' } as FindingFilter));
     };
     window.addEventListener('popstate',onPop); return()=>window.removeEventListener('popstate',onPop);
   },[]);
+  useEffect(()=>{ setQueryGroup(filterToQueryGroup({ severity:[...severities].join(','), category:'', analyzer, rule:'', path:workspace, status, q:query } as FindingFilter)); },[severities, analyzer, status, workspace, query]);
 
   const state = useLoad(() => api.searchFindings(params), [params.q, params.severity, params.analyzer, params.page, params.status]);
   const items = state.data?.items ?? [];
@@ -152,7 +159,8 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
         <h1>Find findings everywhere</h1>
         <p>Searches every stored scan on this computer. Suppressed findings stay hidden.</p>
       </div>
-      <div className="search-page-actions">
+      <div className="search-page-actions flex items-center gap-2">
+        <button type="button" className="button secondary" onClick={()=>setAdvancedOpen(true)} aria-expanded={advancedOpen} aria-controls="search-advanced">Advanced</button>
         <button type="button" className="button secondary md:hidden" onClick={()=>setFacetsOpen(v=>!v)}>Filters</button>
         {(query||analyzer||severities.size||status||workspace||pathPrefix) && <button type="button" className="text-button" onClick={clearAll}>Clear</button>}
       </div>
@@ -160,6 +168,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
     <div className="search-toolbar" role="search">
       <input type="search" className="search-input" placeholder="Search message, rule, or path…" aria-label="Search findings" value={query} onChange={(event) => setQuery(event.target.value)} />
     </div>
+    <Sheet open={advancedOpen} onOpenChange={setAdvancedOpen}><SheetContent side="right" className="w-full max-w-[420px] sm:max-w-[420px] overflow-y-auto" aria-label="Global search query builder" id="search-advanced"><SheetHeader><SheetTitle>Advanced search</SheetTitle><SheetDescription>Workspace scope + severity query builder. Apply writes to global search URL and results.</SheetDescription></SheetHeader><div className="mt-4"><QueryBuilder group={queryGroup} onChange={setQueryGroup} onApply={(f)=>{ setSeverities(new Set(f.severity?f.severity.split(','):[])); setAnalyzer(f.analyzer); setQuery(f.q); setStatus(f.status); setWorkspace(f.path); setAdvancedOpen(false); }} facetCounts={{ severity: severityCounts as Record<string,number> }} analyzers={[...ANALYZERS]} /></div></SheetContent></Sheet>
     <div className="search-layout">
       <aside className="search-sidebar desktop-only">{facets}</aside>
       {facetsOpen && <div className="filter-drawer-backdrop" role="presentation" onMouseDown={e=>{ if(e.target===e.currentTarget) setFacetsOpen(false); }}><aside role="dialog" aria-modal="true" aria-label="Filters" className="filter-drawer">{facets}<button type="button" className="button secondary" onClick={()=>setFacetsOpen(false)}>Close</button></aside></div>}
