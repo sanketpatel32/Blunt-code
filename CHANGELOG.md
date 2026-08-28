@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-08-28
+
+### Changed
+- **Workspace Files premium:** bento `radius-card shadow-card` `file-layout 1fr 20rem gap lg`, tree-panel elevated `Source tree` eyebrow + count badge tabular-nums, search `file-search-wrap` Search icon + kbd `/` focus ring, language select `file-lang-select`, toolbar gap xs `Collapse all` ghost, `tree-row` 2.6rem hover 5% accent, toggle 1.5rem chevron, `tree-lang-badge` 10px muted, `tree-hit` pill accent-soft, children left border faint + `height 200ms` `will-change` (reduced-motion disables), `tree-item` stagger 20ms + `tree-hit` pill, RuleEditor card `rule-editor-head` eyebrow + empty dashed + `rule-add` dashed ghost Plus.
+- **Workspace History premium:** filter bar bento `history-filter-bar` mono 0.68rem uppercase + Calendar date inputs `radius-button` focus glow + Clear ghost, table outer `history-table-wrap` `radius-card overflow-hidden` sticky header mono widest 0.08em, rows hover 5% accent `is-expanded` 50%, band header `::after` pill count (keeps textContent for tests) + `history.css` spring rotate 90deg, `FindingsCell` bar 4px pill tabular-nums, detail bento `radius-md p-4` 2-col meta + pills `border-left 3px accent`, pagination `tabular-nums` + `Page X of Y` mono.
+
+
 ## [0.13.0] - 2026-08-28
 
 ### Changed
