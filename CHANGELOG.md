@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-08-28
+
+### Changed
+- **Workspace cards premium:** top accent bar 3px `var(--color-accent)`, shield icon `ShieldCheck` `accent-soft`, name 18px 700 -0.02em, path mono 12px faint, languages as colored dots `ws-lang-dots` + `LanguageBadges` sr-only, analysis metric 28px tabular 700 -0.03em, footer single primary `Run scan` accent `shadow-accent` + ghost `Open details`, dropdown `Remove`, grid `24rem` gap lg, card `rule-faint` `radius-card` `shadow-card` hover tint.
+- **Workspace detail hero:** eyebrow Workspace h1 tight -0.04em, path mono + `LanguageBadges`, right `workspace-next` 18rem accent top 2px, profile select + `Run scan →` large `shadow-accent`, toolbar single line Files/History ghost + Export Markdown outline + `More` dropdown Settings/Prune/Remove, summary-grid 5 bento `clamp 1.75-2.25rem`, tabs Overview/Analysis/History `workspace-tab-panel`, analyzer-group cards `categoryColor` left border.
+
+### Fixed
+- Workspace page density: action-row soup 6 secondary → single toolbar, sidebar active `surface-muted` not ink, summary hover `accent 14%`, no lift translateY.
+
+
 ## [0.11.1] - 2026-08-28
 
 ### Fixed

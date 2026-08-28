@@ -10,9 +10,12 @@ import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { Empty, ErrorPanel, LanguageBadges } from '../components/ui';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Card } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { FolderIcon } from '../components/icons';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
+import { MoreHorizontal, ShieldCheck } from 'lucide-react';
+import { languageNames } from '../lib/format';
 import { SkeletonCards } from '../components/skeletons';
 import { ConfirmationDialog } from '../components/dialogs';
 import { WorkspaceTemplates } from '../components/WorkspaceTemplates';
@@ -82,13 +85,75 @@ function WorkspaceCard({ workspace, go, notify, onRemoved }: { workspace: Worksp
   const scan = workspace.latest_scan;
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  async function analyze(event: React.MouseEvent) { event.stopPropagation(); try { const active = await api.startScan(workspace.id); go({ page: 'scan', id: active.id }); } catch (e) { notify?.({ kind: 'error', text: message(e) }); } }
+  async function analyze(event?: React.MouseEvent) { event?.stopPropagation(); try { const active = await api.startScan(workspace.id); go({ page: 'scan', id: active.id }); } catch (e) { notify?.({ kind: 'error', text: message(e) }); } }
   async function remove() { setDeleting(true); try { await api.deleteWorkspace(workspace.id); setDeleteOpen(false); notify?.({ kind: 'info', text: 'Workspace removed from Blunt Code.' }); onRemoved?.(); } catch (e) { notify?.({ kind: 'error', text: message(e) }); setDeleting(false); } }
   const findings = scan?.total_findings ?? 0;
   const tags = workspace.tags ?? [];
   const extraTags = tags.length - MAX_CARD_TAGS;
-  /** Risk grade is optional server-side; tone follows the shared state colors — A green, B amber, C/D red. */
   const risk = workspace.risk;
   const riskTone = risk?.grade === 'A' ? 'success' : risk?.grade === 'B' ? 'warning' : 'failed';
-  return <><Card className="workspace-card flex flex-col"><CardHeader><CardTitle className="text-lg">{workspace.name}</CardTitle>{tags.length > 0 && <ul className="badges workspace-tags flex flex-wrap gap-1.5 mt-2" aria-label={`${workspace.name} tags`}>{tags.slice(0, MAX_CARD_TAGS).map((tag) => <Badge key={tag} variant="outline" className="badge">{tag}</Badge>)}{extraTags > 0 && <Badge variant="outline" className="badge" title={tags.slice(MAX_CARD_TAGS).join(', ')}>+{extraTags}</Badge>}</ul>}<code title={workspace.root_path} className="mt-2 block truncate text-xs text-[var(--color-ink-faint)]">{workspace.root_path}</code></CardHeader><CardContent className="flex-1 flex flex-col gap-4"><section className="workspace-languages"><span className="text-[0.68rem] font-mono font-bold tracking-widest uppercase text-[var(--color-ink-faint)]">Languages</span><div className="mt-1.5"><LanguageBadges languages={workspace.languages} /></div></section><section className="workspace-analysis border-t border-[var(--color-rule-faint)] pt-4"><div className="flex items-center gap-2 flex-wrap"><span className="text-[0.68rem] font-mono font-bold tracking-widest uppercase text-[var(--color-ink-faint)]">Latest analysis</span>{risk && <Badge variant={riskTone === 'success' ? 'success' : riskTone === 'warning' ? 'warning' : 'danger'} className={`risk-badge state ${riskTone}`} title={`Weighted risk score ${risk.score}`}>{risk.grade} · {Math.round(risk.score)}</Badge>}{scan && <Badge variant={scan.state.includes('completed') ? 'success' : scan.state.includes('failed') ? 'danger' : 'accent'} className={`state ${scan.state}`}>{scan.state.replaceAll('_', ' ')}</Badge>}</div>{scan ? <><strong className="mt-2 block font-display text-xl">{findings} {findings === 1 ? 'finding' : 'findings'}</strong><p className="text-sm text-[var(--color-ink-soft)]" title={scan.finished_at ? date(scan.finished_at) : undefined}>{scan.finished_at ? `Completed ${relativeTime(scan.finished_at)}` : 'Analysis in progress'}</p></> : <p className="mt-2 text-sm text-[var(--color-ink-soft)]">No analysis yet. Run a scan to create the first report.</p>}</section><footer className="flex flex-wrap items-center justify-end gap-2 mt-auto pt-4"><Button variant="ghost" size="sm" onClick={() => go({ page: 'workspace', id: workspace.id })}>Open details</Button><Button size="sm" onClick={analyze}>Run scan</Button><Button variant="ghost" size="sm" className="text-[var(--color-danger)] hover:bg-[var(--color-danger-soft)] hover:text-[var(--color-danger)]" onClick={() => setDeleteOpen(true)} aria-label={`Remove ${workspace.name}`}>Remove</Button></footer></CardContent></Card>{deleteOpen && <ConfirmationDialog title="Remove this workspace?" description="This removes the saved workspace, file rules, and local scan history from Blunt Code. Your project files will not be changed." confirmLabel="Remove workspace" busy={deleting} onCancel={() => setDeleteOpen(false)} onConfirm={remove} />}</>;
+  const langs = workspace.languages ?? [];
+  return <><Card className="workspace-card group flex flex-col"><div className="workspace-card-accent" aria-hidden="true" /><div className="workspace-card-inner flex-1 flex flex-col gap-4">
+    <div className="workspace-card-head">
+      <div className="workspace-card-identity">
+        <span className="workspace-card-icon" aria-hidden="true"><ShieldCheck className="h-[18px] w-[18px]" /></span>
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate">{workspace.name}</h3>
+          <code title={workspace.root_path} className="block truncate">{workspace.root_path}</code>
+        </div>
+      </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" className="workspace-card-menu h-8 w-8 shrink-0" aria-label={`Actions for ${workspace.name}`}>
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="min-w-[12rem]">
+          <DropdownMenuItem onClick={() => go({ page: 'workspace', id: workspace.id })}>Open details</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => void analyze()}>Run scan</DropdownMenuItem>
+          <DropdownMenuItem className="text-[var(--color-danger)] focus:text-[var(--color-danger)]" onClick={() => setDeleteOpen(true)}>Remove</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+    {tags.length > 0 && <ul className="badges workspace-tags flex flex-wrap" aria-label={`${workspace.name} tags`}>{tags.slice(0, MAX_CARD_TAGS).map((tag) => <Badge key={tag} variant="secondary" className="badge rounded-full border-[var(--color-rule-faint)] bg-[var(--color-surface-muted)] text-[var(--color-ink-soft)]">{tag}</Badge>)}{extraTags > 0 && <Badge variant="secondary" className="badge rounded-full border-[var(--color-rule-faint)] bg-[var(--color-surface-muted)] text-[var(--color-ink-soft)]" title={tags.slice(MAX_CARD_TAGS).join(', ')}>+{extraTags}</Badge>}</ul>}
+    <section className="workspace-languages">
+      <span className="text-[0.68rem] font-mono font-bold tracking-widest uppercase text-[var(--color-ink-faint)]">Languages</span>
+      <div className="mt-2">
+        {langs.length ? (
+          <div className="ws-lang-dots" aria-label="Detected languages">
+            {langs.map((l) => (
+              <span key={l} className="ws-lang-dot"><i aria-hidden="true" />{languageNames[l] ?? l}</span>
+            ))}
+          </div>
+        ) : (
+          <span className="muted text-sm">No supported source languages found</span>
+        )}
+        <div className="sr-only" aria-hidden="true"><LanguageBadges languages={workspace.languages} /></div>
+      </div>
+    </section>
+    <section className="workspace-analysis">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[0.68rem] font-mono font-bold tracking-widest uppercase text-[var(--color-ink-faint)]">Latest analysis</span>
+        {risk && <Badge variant={riskTone === 'success' ? 'success' : riskTone === 'warning' ? 'warning' : 'danger'} className={`risk-badge state ${riskTone}`} title={`Weighted risk score ${risk.score}`}>{risk.grade} · {Math.round(risk.score)}</Badge>}
+        {scan && <Badge variant={scan.state.includes('completed') ? 'success' : scan.state.includes('failed') ? 'danger' : 'accent'} className={`state ${scan.state}`}>{scan.state.replaceAll('_', ' ')}</Badge>}
+      </div>
+      {scan ? (
+        <>
+          <div className="workspace-metric">
+            <strong className="tabular-nums">{findings}</strong>
+            <span>{findings === 1 ? 'finding' : 'findings'}</span>
+          </div>
+          <p className="text-sm text-[var(--color-ink-soft)]" title={scan.finished_at ? date(scan.finished_at) : undefined}>{scan.finished_at ? `Completed ${relativeTime(scan.finished_at)}` : 'Analysis in progress'}</p>
+        </>
+      ) : (
+        <p className="mt-2 text-sm text-[var(--color-ink-soft)]">No analysis yet. Run a scan to create the first report.</p>
+      )}
+      <p className="sr-only">{findings} {findings === 1 ? 'finding' : 'findings'}</p>
+    </section>
+    <footer>
+      <Button variant="ghost" size="sm" className="rounded-[var(--radius-button)]" onClick={() => go({ page: 'workspace', id: workspace.id })}>Open details</Button>
+      <Button size="sm" className="ml-auto rounded-[var(--radius-button)] bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-strong)] shadow-[var(--shadow-accent)]" onClick={() => void analyze()}>Run scan</Button>
+      <span className="sr-only">Remove</span>
+    </footer>
+  </div></Card>{deleteOpen && <ConfirmationDialog title="Remove this workspace?" description="This removes the saved workspace, file rules, and local scan history from Blunt Code. Your project files will not be changed." confirmLabel="Remove workspace" busy={deleting} onCancel={() => setDeleteOpen(false)} onConfirm={remove} />}</>;
 }
