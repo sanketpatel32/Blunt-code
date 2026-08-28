@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-08-28
+
+### Fixed
+- **Vendor chunk circular** `vendor-3pAXeipQ.js:9 useLayoutEffect` — `vite.config.ts:17` manualChunks now single `vendor` (was split `vendor-react/radix/icons/ui` causing circular `vendor→vendor-react`), main `213.97 kB` + `vendor 367.46 kB` split `chunk-charts/pentest/editor/autofix/compliance` clean, no error.
+
+### Added
+- **Logo v2 Shield Chevron:** `web/public/bluntcode-mark.svg:1` + `cmd/bluntcode/static/bluntcode-mark.svg:1` redesigned from chevron `>` + line to shield outline (`M16 5.2 L23.6 9 … C23.6 21 20.2 24.5 16 26.8`) + check `M11.8 15.9 L15.2 19.1 L20.6 12.1` + dot `r1.7 #3B82F6`, `rx 8` + subtle depth, works at 16px favicon → 512px store, `AppShell.tsx:24` inline SVG tokenized `fill var(--color-brand-mark)` + `stroke var(--color-paper) 0.14/0.96` + `fill var(--color-brand-accent)` dot for dark/light paper contrast, `public/logo-showcase.html:1` 6 variants (Shield/Chisel/Brackets/B/Flow/Line) + recommendation.
+
+### Changed
+- **Logo availability:** `web/index.html:6` favicon `href /bluntcode-mark.svg` now serves new shield from `public/` + `cmd/bluntcode/static` Go embed, both kept in sync.
+
+
 ## [0.11.0] - 2026-08-28
 
 ### Added

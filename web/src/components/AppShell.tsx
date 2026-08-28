@@ -23,12 +23,9 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
       <a className="brand group" href="/" onClick={(event) => { event.preventDefault(); onNavigate({ page: 'home' }); }}>
         <svg className="brand-mark transition-transform group-hover:scale-[1.02] group-active:scale-[0.99]" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
           <rect width="32" height="32" rx="8" fill="var(--color-brand-mark)" />
-          <rect x="7" y="7" width="18" height="18" rx="4" fill="none" stroke="white" strokeOpacity="0.10" strokeWidth="1" />
-          <g fill="none" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="11 10.2 17.1 16 11 21.8" stroke="white" strokeWidth="2.8" opacity="0.98" />
-            <line x1="19.9" y1="22.5" x2="24.2" y2="22.5" stroke="var(--color-brand-accent)" strokeWidth="2.8" />
-          </g>
-          <circle cx="24.2" cy="8.2" r="1.45" fill="var(--color-brand-accent)" />
+          <path d="M16 5.2 L23.6 9 L23.6 17.2 C23.6 21 20.2 24.5 16 26.8 C11.8 24.5 8.4 21 8.4 17.2 L8.4 9 Z" fill="none" stroke="var(--color-paper)" strokeOpacity="0.14" strokeWidth="1" strokeLinejoin="round"/>
+          <path d="M11.8 15.9 L15.2 19.1 L20.6 12.1" fill="none" stroke="var(--color-paper)" strokeWidth="2.7" strokeLinecap="round" strokeLinejoin="round" opacity="0.96"/>
+          <circle cx="23.4" cy="7.2" r="1.7" fill="var(--color-brand-accent)"/>
         </svg>
         <b>Blunt Code</b>
       </a>
