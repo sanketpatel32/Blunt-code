@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-08-28
+
+### Changed
+- **Analysis story premium — shape + dynamism:** hero bento `radius-card shadow-card` gradient top `var(--color-accent-gradient)` 2px, h1 tight -0.04em 700, subtitle mono 0.75rem faint `tabular-nums` elapsed, `scan-progress-card` 4px bento shimmer `linear-gradient 90deg transparent/var(--color-accent)/transparent` sweep 1.6s spring `ease-spring will-change width`, terminal done `success`/`failed` danger, `ConfettiStub` 12 dots burst stagger 35ms `520ms ease-out-quart`, `LiveAnalyzerStrip` grouped per `analyzerMeta` category `borderLeftColor categoryColor` 3px + label, pills stagger 40ms `scan-fadeInUp` `will-change`, `ScanStageList` `stage-enter` stagger 40ms `flow-now` spinner `flow-marker-spring` current pulse shadow `done ✓ white on success` `failed danger`, `scan-side` elevated card `scan-side-head accent-soft` metric `2xl tabular-nums`, `progress-layout` gap lg bento, `live-category` colored left border per category, `will-change` + `prefers-reduced-motion` disables.
+
+
 ## [0.12.0] - 2026-08-28
 
 ### Changed
