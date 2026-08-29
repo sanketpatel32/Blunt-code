@@ -41,7 +41,7 @@
 .stagger-group > *:nth-child(8) { animation-delay: calc(7 * var(--dur-stagger)); }
 
 /* Skeleton shimmer — uses background-position (GPU-friendly) + opacity only, 1.4s */
-.skeleton-anim { background: linear-gradient(90deg, var(--color-surface-muted) 30%, var(--color-rule) 50%, var(--color-surface-muted) 70%); background-size: 220% 100%; animation: anim-shimmer 1.4s var(--ease-in-out) infinite; will-change: background-position; }
+.skeleton-anim { background: linear-gradient(90deg, var(--color-skeleton) 30%, var(--color-skeleton-sheen) 50%, var(--color-skeleton) 70%); background-size: 220% 100%; animation: anim-shimmer 1.4s var(--ease-in-out) infinite; will-change: background-position; }
 
 /* Toast slideInRight spring */
 .anim-toastIn { animation: anim-toastInRight var(--dur-slow) var(--ease-spring) both; will-change: transform, opacity; }

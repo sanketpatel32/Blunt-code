@@ -1,9 +1,15 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import pkg from './package.json';
+
+// Loop 135 · single source of truth for the version shown in the footer, so it
+// can never drift from the shipped build again.
+const version: string = pkg.version;
 
 export default defineConfig({
   plugins: [react()],
+  define: { __APP_VERSION__: JSON.stringify(version) },
   server: {
     proxy: {
       '/api': { target: 'http://127.0.0.1:8787', changeOrigin: true },

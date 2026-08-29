@@ -30,6 +30,7 @@ bc-install-test-*
 graphify-out/
 .hallmark/
 blunt-work/
+.workbuddy-ai/
 
 # --- OS / editor noise -------------------------------------------------------
 .DS_Store

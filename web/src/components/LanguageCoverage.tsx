@@ -73,9 +73,9 @@ export function LanguageCoverage({ compact }: { compact?: boolean }) {
           />
         </label>
         <div className="flex items-center gap-1" role="group" aria-label="Filter by family">
-          <button type="button" onClick={() => setFamilyFilter('all')} aria-pressed={familyFilter === 'all'} className={`rounded-full px-2 py-0.5 text-xs border ${familyFilter === 'all' ? 'bg-[var(--color-accent)] text-white border-[var(--color-accent)]' : 'bg-[var(--color-surface)] border-[var(--color-rule)]'}`}>All</button>
+          <button type="button" onClick={() => setFamilyFilter('all')} aria-pressed={familyFilter === 'all'} className={`rounded-full px-2 py-0.5 text-xs border ${familyFilter === 'all' ? 'bg-[var(--color-accent)] text-[var(--color-accent-ink)] border-[var(--color-accent)]' : 'bg-[var(--color-surface)] border-[var(--color-rule)]'}`}>All</button>
           {FAMILY_ORDER.map((fam) => (
-            <button key={fam} type="button" onClick={() => setFamilyFilter(fam)} aria-pressed={familyFilter === fam} className={`rounded-full px-2 py-0.5 text-xs border ${familyFilter === fam ? 'bg-[var(--color-accent)] text-white border-[var(--color-accent)]' : 'bg-[var(--color-surface)] border-[var(--color-rule)]'}`}>{fam}</button>
+            <button key={fam} type="button" onClick={() => setFamilyFilter(fam)} aria-pressed={familyFilter === fam} className={`rounded-full px-2 py-0.5 text-xs border ${familyFilter === fam ? 'bg-[var(--color-accent)] text-[var(--color-accent-ink)] border-[var(--color-accent)]' : 'bg-[var(--color-surface)] border-[var(--color-rule)]'}`}>{fam}</button>
           ))}
         </div>
         {q && <span className="text-xs text-[var(--color-ink-soft)]" aria-live="polite">{visibleLangs.length} match{q ? ` for "${filter}"` : ''}</span>}

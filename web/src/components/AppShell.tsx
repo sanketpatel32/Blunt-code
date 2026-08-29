@@ -44,7 +44,10 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
       </nav>
       <div className="nav-actions">
         {seqArmed && <span className="seq-hint" aria-hidden="true">g…</span>}
-        <label className="hidden sm:inline-flex items-center gap-1 text-[var(--color-ink-soft)]" aria-label={t('common.language')}>
+        {/* Loop 122 · this control was `hidden sm:`, so below 640px there was no
+            way to change language at all. It now hides only below md, and
+            Settings carries a full-width language row for phone widths. */}
+        <label className="hidden md:inline-flex items-center gap-1 text-[var(--color-ink-soft)]" aria-label={t('common.language')}>
           <Languages className="h-4 w-4 shrink-0" aria-hidden="true" />
           <select value={locale} onChange={(e) => setLocale(e.target.value as never)} className="h-[2.15rem] rounded-[var(--radius-button)] border border-[var(--color-rule)] bg-[var(--color-surface)] px-2 text-xs font-mono font-semibold">
             {LOCALES.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
@@ -54,7 +57,10 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
         <Button variant="outline" size="icon" className="nav-shortcuts rounded-[var(--radius-button)] h-[2.15rem] w-[2.15rem] border-[var(--color-rule)] hover:border-[var(--color-rule-strong)]" onClick={() => onShowShortcuts?.()} title={t('common.shortcuts')} aria-label={t('common.shortcuts')}>
           <HelpCircle className="h-4 w-4" />
         </Button>
-        <Button variant="outline" size="sm" className="theme-toggle hidden sm:inline-flex" onClick={onToggleTheme} aria-pressed={theme === 'dark'} title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}>
+        {/* Loop 121 · dark mode was unreachable on phones: the only toggle in the
+            app carried `hidden sm:`. The label already collapses below 68rem, so
+            the button is safe to show at every width as an icon. */}
+        <Button variant="outline" size="sm" className="theme-toggle" onClick={onToggleTheme} aria-pressed={theme === 'dark'} title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}>
           {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           <span className="theme-toggle-label">{theme === 'dark' ? 'Light' : 'Dark'}</span>
         </Button>
@@ -69,11 +75,15 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
   );
 }
 
+/** Injected by Vite from package.json — the footer used to hardcode "v0.7"
+ *  while the app shipped 0.15.0. Falls back for non-Vite test runners. */
+const APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'dev';
+
 export function AppFooter() {
   return (
     <footer className="app-footer">
       <span><span className="font-medium">Blunt Code</span><span className="hidden md:inline text-[var(--color-ink-faint)]"> · local code analysis for Windows</span></span>
-      <span className="hidden sm:inline">No account. No telemetry. · v0.7</span>
+      <span className="hidden sm:inline">No account. No telemetry. · v{APP_VERSION}</span>
     </footer>
   );
 }

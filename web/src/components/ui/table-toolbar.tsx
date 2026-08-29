@@ -110,7 +110,7 @@ export function TableToolbar({
                   type="button"
                   aria-label={`Remove ${f.label} filter`}
                   onClick={() => onRemoveFacet(f.key)}
-                  className="grid h-4 w-4 place-items-center rounded-full bg-[var(--color-surface)] text-[var(--color-ink-faint)] hover:bg-[var(--color-ink)] hover:text-white"
+                  className="grid h-4 w-4 place-items-center rounded-full bg-[var(--color-surface)] text-[var(--color-ink-faint)] hover:bg-[var(--color-ink)] hover:text-[var(--color-paper)]"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -123,7 +123,7 @@ export function TableToolbar({
       <div className="ml-auto flex flex-wrap items-center gap-1.5">
         {hasSelection && (
           <>
-            <span className="inline-flex items-center rounded-[var(--radius-button)] bg-[var(--color-accent)] px-2 py-1 text-xs font-bold text-white shadow-[var(--shadow-card)]" aria-live="polite" aria-label={`${selectedCount} selected`}>
+            <span className="inline-flex items-center rounded-[var(--radius-button)] bg-[var(--color-accent)] px-2 py-1 text-xs font-bold text-[var(--color-accent-ink)] shadow-[var(--shadow-card)]" aria-live="polite" aria-label={`${selectedCount} selected`}>
               {selectedCount} selected
             </span>
             {onBulkSuppress && (
@@ -194,7 +194,7 @@ function ColumnVisibilityControl({ columns, visibility, onToggle }: { columns: {
             const vis = visibility ? visibility[c.id] !== false : true;
             return (
               <button key={c.id} role="menuitemcheckbox" aria-checked={vis} type="button" className="flex items-center gap-2 rounded-[var(--radius-button)] px-2 py-1.5 text-left text-sm hover:bg-[var(--color-surface-muted)]" onClick={() => onToggle(c.id)}>
-                <span className={cn('grid h-4 w-4 place-items-center rounded-[var(--radius-xs)] border', vis ? 'bg-[var(--color-accent)] border-[var(--color-accent)] text-white' : 'border-[var(--color-rule)] bg-[var(--color-surface)]')}>
+                <span className={cn('grid h-4 w-4 place-items-center rounded-[var(--radius-xs)] border', vis ? 'bg-[var(--color-accent)] border-[var(--color-accent)] text-[var(--color-accent-ink)]' : 'border-[var(--color-rule)] bg-[var(--color-surface)]')}>
                   {vis && <Check className="h-3 w-3" />}
                 </span>
                 {c.header}

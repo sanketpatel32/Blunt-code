@@ -90,7 +90,7 @@ export function Calendar({ className, selected, onSelect, disabled, month: contr
                   className={cn(
                     'h-8 w-8 rounded-[var(--radius-button)] text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus)] focus-visible:ring-offset-1 disabled:opacity-30 disabled:pointer-events-none',
                     isSelected
-                      ? 'bg-[var(--color-accent)] text-white font-semibold shadow-[var(--shadow-xs)] hover:bg-[var(--color-accent-strong)]'
+                      ? 'bg-[var(--color-accent)] text-[var(--color-accent-ink)] font-semibold shadow-[var(--shadow-xs)] hover:bg-[var(--color-accent-strong)]'
                       : isToday
                         ? 'bg-[var(--color-accent-soft)] text-[var(--color-accent-strong)] font-semibold border border-[var(--color-accent)]/20'
                         : 'text-[var(--color-ink)] hover:bg-[var(--color-surface-muted)]',

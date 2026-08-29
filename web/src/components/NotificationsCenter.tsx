@@ -93,7 +93,7 @@ export function NotificationsCenter() {
           <Bell className="h-4 w-4" aria-hidden="true" />
           {unread > 0 && (
             <>
-              <Badge className="absolute -right-1 -top-1 h-4 min-w-4 justify-center px-1 py-0 text-[10px] leading-none bg-[var(--color-danger)] text-white border-transparent">
+              <Badge className="absolute -right-1 -top-1 h-4 min-w-4 justify-center px-1 py-0 text-[10px] leading-none bg-[var(--color-danger-strong)] text-[var(--color-on-accent)] border-transparent">
                 {unread > 99 ? '99+' : String(unread)}
               </Badge>
               <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-[var(--color-danger)] ring-2 ring-[var(--color-surface)] motion-reduce:hidden" aria-hidden="true" />

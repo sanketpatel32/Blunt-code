@@ -20,6 +20,18 @@ import { analyzerMeta, categoryColor, CATEGORY_LABELS } from '../lib/analyzerCat
 import { languageCoverageFromLanguages, severityCountsFromSummary, trendPointsFromScans } from '../lib/chartData';
 import { Sparkles, Copy, Check, ShieldAlert, BarChart3, Clock as ClockIcon, AlertTriangle, Layers, FileSearch, History as HistoryIcon, ShieldCheck } from 'lucide-react';
 
+/**
+ * Loop 142 · this used to inline `oklch(62% 0.18 285)` as the fourth entry, which
+ * is the *light* value of --color-cat-5 — so that dot kept its light-mode hue in
+ * dark mode while the other three inverted. Categorical tokens invert correctly.
+ */
+const LANGUAGE_DOTS = [
+  'var(--color-accent)',
+  'var(--color-success)',
+  'var(--color-warning)',
+  'var(--color-cat-5)',
+];
+
 const AnalyticsCharts = lazy(() => import('../components/AnalyticsCharts').then((m) => ({ default: m.AnalyticsCharts })));
 const DependencyGraph = lazy(() => import('../components/DependencyGraph').then((m) => ({ default: m.DependencyGraph })) );
 const ComplianceMatrix = lazy(() => import('../components/ComplianceMatrix').then((m) => ({ default: m.ComplianceMatrix })) );
@@ -68,7 +80,7 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
         </div>
         <div className="workspace-lang-dots" aria-label="Detected languages">
           {item.languages?.length ? item.languages.map((lang,i)=>(
-            <span key={lang} className="ws-lang-dot"><i style={{background: ['var(--color-accent)','var(--color-success)','var(--color-warning)','oklch(62% 0.18 285)'][i%4]}} />{lang}</span>
+            <span key={lang} className="ws-lang-dot"><i style={{ background: LANGUAGE_DOTS[i % LANGUAGE_DOTS.length] }} />{lang}</span>
           )) : <span className="muted text-xs">No supported source languages found</span>}
           {/* keep LanguageBadges for tests/assistive but visually hidden */}
           <span className="sr-only"><LanguageBadges languages={item.languages} /></span>

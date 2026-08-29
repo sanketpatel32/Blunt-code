@@ -1,16 +1,23 @@
 [CmdletBinding()]
 param(
-  [string]$Version = '0.15.0',
+  [string]$Version = '0.16.0',
   # No $PSScriptRoot here: Windows PowerShell 5.1 leaves it empty inside
   # param() default expressions, so resolve after the body starts.
-  [string]$OutputDir = ''
+  [string]$OutputDir = '',
+  # Reuse the existing node_modules / dist / bluntcode.exe instead of running
+  # build.ps1, which starts with `npm ci` and deletes all of node_modules.
+  # Only correct when the tree is already built and verified; if anything is
+  # stale, drop this switch and do a full build.
+  [switch]$SkipBuild
 )
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 if (-not $OutputDir) { $OutputDir = Join-Path $root 'dist' }
-& (Join-Path $PSScriptRoot 'build.ps1')
-if ($LASTEXITCODE -ne 0) { throw "Build failed with exit code $LASTEXITCODE" }
+if (-not $SkipBuild) {
+  & (Join-Path $PSScriptRoot 'build.ps1')
+  if ($LASTEXITCODE -ne 0) { throw "Build failed with exit code $LASTEXITCODE" }
+}
 
 $output = [IO.Path]::GetFullPath($OutputDir)
 $releaseName = "BluntCode-$Version-windows-amd64"

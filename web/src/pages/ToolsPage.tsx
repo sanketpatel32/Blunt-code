@@ -57,7 +57,7 @@ function CategoryAccordion({ category, tools, busy, onAction, tableClassName = "
   return (
     <details open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)} className="tool-category border rounded-lg bg-[var(--color-surface)] mb-3">
       <summary className="flex items-center gap-2 px-4 py-3 cursor-pointer list-none">
-        <span className="flex h-7 w-7 items-center justify-center rounded-md text-white" style={{ background: categoryColor(category) }}><Icon className="h-4 w-4" /></span>
+        <span className="flex h-7 w-7 items-center justify-center rounded-md border" style={{ background: `color-mix(in oklch, ${categoryColor(category)} 16%, var(--color-surface))`, color: categoryColor(category), borderColor: `color-mix(in oklch, ${categoryColor(category)} 34%, var(--color-rule))` }}><Icon className="h-4 w-4" /></span>
         <strong>{CATEGORY_LABELS[category]}</strong>
         <span className="badge ml-2">{ready} of {tools.length} ready</span>
         <span className="ml-auto text-xs text-[var(--color-ink-faint)]">{open ? 'Hide' : 'Show'}</span>

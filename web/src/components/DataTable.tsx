@@ -224,7 +224,7 @@ export function DataTable<T>({
 
       {showBulkBar && (
         <div role="toolbar" aria-label="Bulk actions" className="flex flex-wrap items-center gap-2 rounded-[var(--radius-button)] border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-3 py-2 shadow-[var(--shadow-card)]">
-          <span className="inline-flex items-center rounded-[var(--radius-button)] bg-[var(--color-accent)] px-2 py-0.5 text-xs font-bold text-white shadow-[var(--shadow-card)]" aria-live="polite">{selectedCount} selected</span>
+          <span className="inline-flex items-center rounded-[var(--radius-button)] bg-[var(--color-accent)] px-2 py-0.5 text-xs font-bold text-[var(--color-accent-ink)] shadow-[var(--shadow-card)]" aria-live="polite">{selectedCount} selected</span>
           <button type="button" onClick={() => onBulkSuppress?.()} className="inline-flex h-7 items-center gap-1.5 rounded-[var(--radius-button)] border border-[var(--color-rule)] bg-[var(--color-surface)] px-3 text-xs font-semibold shadow-[var(--shadow-card)]">
             <EyeOff className="h-3.5 w-3.5" aria-hidden="true" /> Suppress selected
           </button>
@@ -450,7 +450,7 @@ function ColumnVisibilityToggle({
                 className="flex items-center gap-2 rounded-[var(--radius-button)] px-2 py-1.5 text-left text-sm hover:bg-[var(--color-surface-muted)]"
                 onClick={() => onToggle(c.id)}
               >
-                <span className={cn('grid h-4 w-4 place-items-center rounded-[var(--radius-xs)] border', vis ? 'bg-[var(--color-accent)] border-[var(--color-accent)] text-white' : 'border-[var(--color-rule)] bg-[var(--color-surface)]')}>
+                <span className={cn('grid h-4 w-4 place-items-center rounded-[var(--radius-xs)] border', vis ? 'bg-[var(--color-accent)] border-[var(--color-accent)] text-[var(--color-accent-ink)]' : 'border-[var(--color-rule)] bg-[var(--color-surface)]')}>
                   {vis && <Check className="h-3 w-3" />}
                 </span>
                 {c.header}

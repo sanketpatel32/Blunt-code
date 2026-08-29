@@ -74,7 +74,10 @@ export function ToastStack({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: 
   }, [toasts, closeToast]);
 
   const reduced = useReducedMotion();
-  return <div className="toast-stack" role="status" aria-live="polite">
+  // Loop 138 · role=status already implies aria-live=polite, and the region had
+  // no name, so a screen reader announced bare text with no context. The label
+  // gives it one; aria-atomic=false keeps each toast a separate announcement.
+  return <div className="toast-stack" role="status" aria-live="polite" aria-atomic="false" aria-label="Notifications">
     {toasts.map((toast, idx) => <ToastItem key={toast.id} toast={toast} closing={closingIds.includes(toast.id)} onClose={closeToast} index={idx} reduced={reduced} />)}
   </div>;
 }

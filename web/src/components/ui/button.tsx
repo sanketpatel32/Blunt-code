@@ -8,8 +8,8 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: 'bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-strong)] shadow-[var(--shadow-accent)] hover:shadow-[var(--shadow-accent)]',
-        destructive: 'bg-[var(--color-danger)] text-white hover:bg-[var(--color-danger)]/90 shadow-sm',
+        default: 'bg-[var(--color-accent)] text-[var(--color-accent-ink)] hover:bg-[var(--color-accent-strong)] shadow-[var(--shadow-accent)] hover:shadow-[var(--shadow-accent)]',
+        destructive: 'bg-[var(--color-danger)] text-[var(--color-danger-ink)] hover:bg-[var(--color-danger)]/90 shadow-sm',
         outline: 'border border-[var(--color-rule)] bg-[var(--color-surface)] text-[var(--color-ink)] hover:bg-[var(--color-surface-muted)] hover:border-[var(--color-rule-strong)] shadow-xs',
         secondary: 'bg-[var(--color-surface-muted)] text-[var(--color-ink)] hover:bg-[var(--color-surface-subtle)] border border-[var(--color-rule-faint)]',
         ghost: 'hover:bg-[var(--color-accent-soft)] hover:text-[var(--color-accent-strong)] text-[var(--color-ink-soft)]',

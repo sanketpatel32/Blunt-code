@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-08-29
+
+### Added
+- **`npm run audit:contrast`** — WCAG AA regression guard (`web/scripts/contrast-audit.mjs`). Converts `oklch` to linear sRGB and computes contrast ratios for every pairing that actually ships, naming the CSS rule that creates each one, and exits non-zero on any result below 4.5:1 so it can run in CI. All 10 shipped pairings pass.
+- **Layout + semantic tokens:** `--nav-h`, `--page-gutter` (with responsive overrides at 68/56/38rem), `--tap-min`, `--color-on-accent`, `--color-sev-critical|high|medium|low|info`, `--color-success-ink|warning-ink|danger-ink`, `--color-success-strong`, `--color-skeleton`, `--color-skeleton-sheen`, `--color-scrollbar-thumb|track`, `--shadow-inset-critical|high|medium`, and `--color-cat-9..13` so the 11 analyzer categories never share a hue.
+- **Settings → General language row** — a full-width select so the language switcher stays reachable below 768px, where the nav control is width-gated.
+
+### Changed
+- **Severity ramp consolidated (loop 120):** 15 duplicated rules collapsed into one ordered `--sev` scale shared by `.severity-bar`, `.severity-legend`, `.severity-stack`, `.trend-chart` and `.severity-dots`; row severity edges now use `--shadow-inset-*` tokens.
+- **Chrome offsets unified (loop 102):** three disagreeing nav-height magic numbers (`3.5rem`/`3.75rem`/`5rem`) replaced by a single `--nav-h`, consumed by `.app-nav`, `.workspace-context`, `.findings-section .section-head` and `.search-sidebar`.
+- **Sticky footer (loop 131):** `.app-frame` is now a `100dvh` flex column with `.main { flex: 1 1 auto }`, replacing a `calc(100vh - 5rem)` guess that floated the footer mid-screen on short pages.
+- **Scroll affordance without JS (loop 133):** `.table-wrap` uses four background layers — two `background-attachment: local` masks over two `scroll` radial shadows — so an edge shadow appears only when there is real overflow.
+- **Stylesheet hygiene (loops 113–119):** removed a duplicate toast block that shadowed `@keyframes toast-in`, merged a dead duplicate `.tree-toolbar`, deleted an empty `:hover` rule, dropped `backdrop-filter` from `.filters`, and stripped `will-change` from 7 static elements.
+- **Typography & layout (loops 129–134):** `text-wrap: pretty/balance` on prose and headings, `tabular-nums` on metric lists, `[id] { scroll-margin-top }` so anchors clear the sticky nav, `hyphens: auto` + `overflow-wrap: anywhere` for long paths, and print rules with `@page { margin: 14mm }`.
+- **Accessibility (loops 123–128):** 44px hit pads under `(pointer: coarse)`, a `prefers-contrast: more` block that promotes hairlines to full rules — restated inside `:root[data-theme='dark']` so higher specificity cannot bypass it — and custom `:focus-visible` rings for row-like controls.
+- `--color-*-strong` tokens now invert direction per theme: light goes darker, dark goes brighter, because "strong" means maximum contrast against that theme's ink.
+
+### Fixed
+- **Four WCAG AA failures found by measurement (loop 141):** scan-flow checkmark on a filled success circle 4.22:1 → **5.27:1**; dark 10px unread-count badge 3.23:1 → **5.77:1**; light `--color-ink-faint` on paper 4.47:1 → **4.66:1** (was failing by 0.03); dark `--color-ink-ghost` 3.93:1 → **4.64:1**.
+- **Undefined `--color-danger-ink`** — referenced by `ui/button.tsx` but never defined, so destructive button labels silently fell back to inherited ink. Added the three semantic ink tokens.
+- **Dark mode was unreachable below 640px** — the only theme toggle in the app carried `hidden sm:`. Now always visible.
+- **Footer showed `v0.7` while the app shipped 0.15.0** — version is injected at build time from `package.json` via Vite `define` (`__APP_VERSION__`).
+- **Invalid `aria-expanded` on `<tr>`** — unsupported by `role="row"`; replaced with an `aria-label` on the row plus screen-reader-only expanded-state text.
+- **`.skeleton-chart` clipped ~18rem of grid content** — fixed `height: 9.5rem` changed to `min-height`.
+- **`THEME_COLORS` and the `theme-color` meta used warm hexes** (`#fbf9f7`/`#1a1c20`) that never matched the cool oklch tokens; recomputed to `#ffffff`/`#11141a`.
+- Toast live region had no accessible name, so screen readers announced bare text with no context.
+- 17 hardcoded `white` foregrounds on coloured fills and 11 raw hex values in `analyzerCatalog.ts` replaced with tokens.
+
 ## [0.15.0] - 2026-08-28
 
 ### Changed

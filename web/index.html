@@ -4,10 +4,29 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/bluntcode-mark.svg" />
-    <meta name="theme-color" content="#fbf9f7" />
+    <meta name="theme-color" content="#ffffff" />
     <title>Blunt Code — Local code analysis</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!--
+      Loaded non-blocking: media="print" keeps it out of the critical path and the
+      onload handler promotes it once it arrives. The old version was an @import at
+      the top of tokens.css, which made the entire cascade wait on two serial round
+      trips. Offline (packaged desktop binary) the request just fails and the
+      system-font fallbacks in --font-body / --font-mono carry the UI.
+    -->
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+      media="print"
+      onload="this.media='all'"
+    />
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+      />
+    </noscript>
     <script>
       (function () {
         try {
@@ -19,7 +38,7 @@
               : 'light';
           document.documentElement.dataset.theme = theme;
           var meta = document.querySelector('meta[name="theme-color"]');
-          if (meta) meta.setAttribute('content', theme === 'dark' ? '#1a1c20' : '#fbf9f7');
+          if (meta) meta.setAttribute('content', theme === 'dark' ? '#11141a' : '#ffffff');
         } catch (error) {
           document.documentElement.dataset.theme = 'light';
         }

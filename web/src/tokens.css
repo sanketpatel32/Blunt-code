@@ -1,5 +1,7 @@
 /* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 · macrostructure: Workbench · theme: Cobalt Vibrant · 100-loop polish v2 · no slop */
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+/* Web fonts are loaded from index.html, not imported here. An @import at the top
+   of this file sat behind two serial round trips (styles.css -> tokens.css ->
+   Google), which blocked the whole cascade. See the <link> in index.html. */
 
 :root {
   color-scheme: light;
@@ -17,7 +19,11 @@
   /* — Ink — near-black editorial, high contrast */
   --color-ink: oklch(17% 0.016 268);
   --color-ink-soft: oklch(42% 0.013 268);
-  --color-ink-faint: oklch(56% 0.011 268);
+  /* Loop 141 · 56% measured 4.47:1 — three hundredths short of AA-normal, and
+     this token carries small metadata text. 55% measures 4.66:1. */
+  --color-ink-faint: oklch(55% 0.011 268);
+  /* Deliberately AA-large only (3.11:1). Raising it to 4.5:1 needs ~53%, which
+     collapses it into --color-ink-faint and flattens the ramp. Decorative only. */
   --color-ink-ghost: oklch(65% 0.01 268);
 
   /* — Rules — hairline only, no strong borders on cards */
@@ -44,19 +50,71 @@
   /* — Semantic — vivid but premium */
   --color-success: oklch(56% 0.15 152);
   --color-success-soft: oklch(95% 0.04 152);
+  /* Loop 141 · a filled success circle carrying the near-white ink only reached
+     4.22:1 at L=56. L=50 measures 5.27:1. Mirrors the danger-strong token. */
+  --color-success-strong: oklch(50% 0.16 152);
   --color-warning: oklch(70% 0.15 75);
   --color-warning-soft: oklch(96% 0.04 75);
   --color-danger: oklch(58% 0.22 26);
+  /* Filled danger surfaces (count badges) get a darker base for margin.
+     --color-danger clears AA at 4.79:1 on white, but the badge that uses this is
+     10px — the smallest text in the UI — and 46% measures 7.18:1. */
+  --color-danger-strong: oklch(46% 0.21 26);
   --color-danger-soft: oklch(96% 0.04 26);
   --color-focus: oklch(56% 0.22 268);
   --color-focus-ring: oklch(56% 0.22 268 / 0.18);
+
+  /* — Semantic ink — readable text ON a semantic fill (loop 101) */
+  --color-success-ink: oklch(99% 0.004 152);
+  --color-warning-ink: oklch(20% 0.02 75);
+  --color-danger-ink: oklch(99% 0.004 26);
+
+  /* — Severity ramp — one ordered scale, dark-mode aware (loop 104) */
+  --color-sev-critical: oklch(58% 0.22 26);
+  --color-sev-high: oklch(66% 0.17 26);
+  --color-sev-medium: oklch(70% 0.15 75);
+  --color-sev-low: oklch(50% 0.24 268);
+  --color-sev-info: oklch(64% 0.13 268);
+
+  /* — On-accent — text/shape drawn on top of a filled accent (loop 103) */
+  --color-on-accent: oklch(99% 0.002 280);
+
+  /* — Extended palette — categorical hues for charts/legend/donut (locked, no ad-hoc oklch in components) */
+  --color-cat-1: oklch(56% 0.22 268);
+  --color-cat-2: oklch(56% 0.15 152);
+  --color-cat-3: oklch(70% 0.15 75);
+  --color-cat-4: oklch(58% 0.22 26);
+  --color-cat-5: oklch(62% 0.18 285);
+  --color-cat-6: oklch(17% 0.016 268);
+  /* Was a literal duplicate of --color-accent-strong. Aliased so the two can
+     never drift apart. Keeps the cat- ramp contiguous. */
+  --color-cat-7: var(--color-accent-strong);
+  --color-cat-8: oklch(42% 0.013 268);
+  /* cat-9..13 extend the ramp so the 11 analyzer categories never collide (loop 107) */
+  --color-cat-9: oklch(66% 0.16 60);
+  --color-cat-10: oklch(58% 0.12 195);
+  --color-cat-11: oklch(56% 0.20 350);
+  --color-cat-12: oklch(56% 0.14 220);
+  --color-cat-13: oklch(56% 0.20 310);
+
+  /* — Overlay scrim — tokenized so dialog/popover/sheet share one depth (loop 106) */
+  --color-dialog-backdrop: oklch(16% 0.01 268 / 0.42);
+
+  /* — Skeleton shimmer — tokenized pair, no ad-hoc gradients (loop 111) */
+  --color-skeleton: var(--color-surface-muted);
+  --color-skeleton-sheen: var(--color-rule);
+
+  /* — Scrollbar — native chrome matched to the surface (loop 112) */
+  --color-scrollbar-thumb: var(--color-rule-strong);
+  --color-scrollbar-track: transparent;
 
   /* — Typography — tight modern, mono only for code */
   --font-display: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --font-body: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 
-  --text-micro: 0.6875rem;
+  /* --text-micro was removed: it duplicated --text-2xs at the same 0.6875rem and
+     had zero usages anywhere in src/. Use --text-2xs. */
   --text-2xs: 0.6875rem;
   --text-xs: 0.8125rem;
   --text-sm: 0.875rem;
@@ -112,6 +170,9 @@
   --shadow-accent: 0 6px 20px oklch(56% 0.22 268 / 0.28);
   --shadow-card: 0 1px 3px oklch(17% 0.016 268 / 0.06), 0 4px 16px oklch(17% 0.016 268 / 0.04);
   --shadow-card-hover: 0 4px 20px oklch(17% 0.016 268 / 0.08), 0 2px 8px oklch(17% 0.016 268 / 0.06);
+  --shadow-inset-critical: inset 3px 0 0 var(--color-sev-critical);
+  --shadow-inset-high: inset 3px 0 0 var(--color-sev-high);
+  --shadow-inset-medium: inset 3px 0 0 var(--color-sev-medium);
 
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
@@ -136,6 +197,11 @@
   --content-narrow: 48rem;
   --focus-ring: 0 0 0 3px var(--color-focus-ring);
   --grid-gap: var(--space-md);
+
+  /* — Layout constants — single source for chrome offsets (loop 102) */
+  --nav-h: 3.5rem;
+  --page-gutter: var(--space-2xl);
+  --tap-min: 2.75rem;
 }
 
 :root[data-theme='dark'] {
@@ -153,7 +219,9 @@
   --color-ink: oklch(96% 0.004 280);
   --color-ink-soft: oklch(78% 0.009 280);
   --color-ink-faint: oklch(64% 0.012 280);
-  --color-ink-ghost: oklch(54% 0.014 280);
+  /* Loop 141 · 54% measured 3.93:1 on dark paper. 58% measures 4.64:1 and still
+     reads as the dimmest step of the ramp. */
+  --color-ink-ghost: oklch(58% 0.014 280);
 
   --color-rule: oklch(28% 0.012 268);
   --color-rule-strong: oklch(34% 0.014 268);
@@ -174,12 +242,48 @@
 
   --color-success: oklch(66% 0.15 152);
   --color-success-soft: oklch(22% 0.05 152);
+  /* Loop 141 · --color-success already clears 4.5:1 against the dark ink here
+     (6.81:1); this deeper variant exists so both themes expose the same token.
+     Measures 4.65:1 against --color-success-ink. */
+  --color-success-strong: oklch(56% 0.16 152);
   --color-warning: oklch(76% 0.14 80);
   --color-warning-soft: oklch(24% 0.05 80);
   --color-danger: oklch(64% 0.20 24);
+  /* Loop 141 · "strong" means max contrast against --color-on-accent, and that
+     inverts per theme: light goes darker (46%), dark goes brighter. At 52% the
+     dark badge measured 3.23:1 with the near-black ink — 66% measures 5.77:1. */
+  --color-danger-strong: oklch(66% 0.22 24);
   --color-danger-soft: oklch(24% 0.06 24);
   --color-focus: oklch(64% 0.18 268);
   --color-focus-ring: oklch(64% 0.18 268 / 0.24);
+
+  --color-success-ink: oklch(14% 0.015 152);
+  --color-warning-ink: oklch(18% 0.02 80);
+  --color-danger-ink: oklch(14% 0.015 24);
+
+  --color-sev-critical: oklch(64% 0.20 24);
+  --color-sev-high: oklch(70% 0.16 26);
+  --color-sev-medium: oklch(76% 0.14 80);
+  --color-sev-low: oklch(70% 0.16 268);
+  --color-sev-info: oklch(66% 0.12 268);
+
+  --color-on-accent: oklch(14% 0.015 268);
+
+  --color-cat-1: oklch(64% 0.18 268);
+  --color-cat-2: oklch(66% 0.15 152);
+  --color-cat-3: oklch(76% 0.14 80);
+  --color-cat-4: oklch(64% 0.20 24);
+  --color-cat-5: oklch(70% 0.16 300);
+  --color-cat-6: oklch(96% 0.004 280);
+  --color-cat-7: var(--color-accent-strong);
+  --color-cat-8: oklch(78% 0.009 280);
+  --color-cat-9: oklch(76% 0.14 60);
+  --color-cat-10: oklch(68% 0.11 195);
+  --color-cat-11: oklch(68% 0.17 350);
+  --color-cat-12: oklch(68% 0.12 220);
+  --color-cat-13: oklch(68% 0.17 310);
+
+  --color-dialog-backdrop: oklch(6% 0.01 268 / 0.62);
 
   --shadow-xs: 0 1px 2px oklch(0% 0 0 / 0.32), 0 1px 3px oklch(0% 0 0 / 0.22);
   --shadow-sm: 0 2px 10px oklch(0% 0 0 / 0.36), 0 1px 3px oklch(0% 0 0 / 0.26);

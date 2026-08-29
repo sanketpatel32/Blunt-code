@@ -152,7 +152,7 @@ function WorkspaceCard({ workspace, go, notify, onRemoved }: { workspace: Worksp
     </section>
     <footer>
       <Button variant="ghost" size="sm" className="rounded-[var(--radius-button)]" onClick={() => go({ page: 'workspace', id: workspace.id })}>Open details</Button>
-      <Button size="sm" className="ml-auto rounded-[var(--radius-button)] bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-strong)] shadow-[var(--shadow-accent)]" onClick={() => void analyze()}>Run scan</Button>
+      <Button size="sm" className="ml-auto rounded-[var(--radius-button)] bg-[var(--color-accent)] text-[var(--color-accent-ink)] hover:bg-[var(--color-accent-strong)] shadow-[var(--shadow-accent)]" onClick={() => void analyze()}>Run scan</Button>
       <span className="sr-only">Remove</span>
     </footer>
   </div></Card>{deleteOpen && <ConfirmationDialog title="Remove this workspace?" description="This removes the saved workspace, file rules, and local scan history from Blunt Code. Your project files will not be changed." confirmLabel="Remove workspace" busy={deleting} onCancel={() => setDeleteOpen(false)} onConfirm={remove} />}</>;

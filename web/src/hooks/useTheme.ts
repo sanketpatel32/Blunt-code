@@ -4,8 +4,13 @@ export type Theme = 'light' | 'dark';
 
 export const THEME_STORAGE_KEY = 'bluntcode-theme';
 
-/** Rough sRGB equivalents of the --color-paper token per theme; keeps the browser chrome (theme-color meta) in sync with the app canvas. */
-export const THEME_COLORS: Record<Theme, string> = { light: '#f8fafd', dark: '#14171d' };
+/**
+ * sRGB equivalents of the --color-surface token per theme (loop 108).
+ * The browser/OS chrome sits directly against the sticky nav, which paints
+ * --color-surface — not --color-paper — so these are derived from surface,
+ * converted out of oklch(100% 0 0) / oklch(19% 0.013 268).
+ */
+export const THEME_COLORS: Record<Theme, string> = { light: '#ffffff', dark: '#11141a' };
 
 function readStoredTheme(): Theme | null {
   try {

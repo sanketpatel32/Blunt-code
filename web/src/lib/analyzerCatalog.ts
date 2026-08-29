@@ -52,18 +52,20 @@ export function analyzerMeta(id: string): AnalyzerMeta | undefined {
 }
 
 export function categoryColor(category: AnalyzerCategory): string {
+  // Categorical tokens only — no ad-hoc hex. Hues are spaced so adjacent
+  // categories stay distinguishable at 8px dot size and after dark inversion.
   const map: Record<AnalyzerCategory, string> = {
-    lint: 'var(--color-accent)',
-    style: '#7c3aed',
-    security: '#dc2626',
-    pentest: '#ea580c',
-    secrets: '#b45309',
-    maintainability: '#059669',
-    dependencies: '#2563eb',
-    container: '#0e7490',
-    iac: '#6d28d9',
-    license: '#64748b',
-    hacking: '#be123c',
+    lint: 'var(--color-cat-1)',
+    style: 'var(--color-cat-5)',
+    security: 'var(--color-cat-4)',
+    pentest: 'var(--color-cat-11)',
+    secrets: 'var(--color-cat-9)',
+    maintainability: 'var(--color-cat-2)',
+    dependencies: 'var(--color-cat-10)',
+    container: 'var(--color-cat-12)',
+    iac: 'var(--color-cat-13)',
+    license: 'var(--color-cat-8)',
+    hacking: 'var(--color-cat-3)',
   };
   return map[category] ?? 'var(--color-ink-faint)';
 }
