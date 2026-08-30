@@ -24,6 +24,16 @@
 
 ---
 
+## Product snapshot
+
+| | |
+|---|---|
+| **Purpose** | One local workspace for code quality, security findings, suppressions, history, and CI gates |
+| **Privacy** | Loopback-only, zero telemetry, local SQLite storage |
+| **Delivery** | Single Windows application with sandboxed analyzers and no global PATH changes |
+| **Coverage** | Python, JavaScript/TypeScript, React, and polyglot SonarQube projects |
+| **Quality** | 259 automated tests passing |
+
 ### What's new in 0.7.0 — shadcn clean UI
 
 Tailwind 3.4 · Radix Dialog/Slot · CVA · lucide-react. Ten iterative loops: glass nav `backdrop-blur(16px)`, pill badges `oklch`, table hover `color-mix(in oklch, accent 4%)`, spring toasts with lifetime bar, shimmer skeletons, staggered dialogs. **1869 modules · 259 tests passing · `—` placeholders never `NaN`.**
