@@ -1,5 +1,4 @@
-import { Suspense, lazy, useState, type ReactNode } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { Suspense, lazy, useState } from 'react';
 import { api } from '../api';
 import type { RecentScanItem, Severity, Workspace } from '../types';
 import type { Route } from '../lib/router';
@@ -73,10 +72,10 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
     <section className="dashboard-list" aria-labelledby="recent-workspaces"><header><div><h2 id="recent-workspaces">Recent projects</h2><p>{workspaces.data?.length ? `${workspaces.data.length} saved locally` : 'Choose a project to begin.'}</p></div><Button variant="ghost" size="sm" onClick={() => go({ page: 'workspaces' })}>All workspaces</Button></header>
       {workspaces.loading ? <SkeletonTable rows={6} cols={5} className="workspace-table" /> : workspaces.error ? <ErrorPanel error={workspaces.error} retry={workspaces.reload} /> : !workspaces.data?.length ? <Empty title="No workspaces yet" icon={<FolderIcon />} action={<Button onClick={onAdd}>Add workspace</Button>}>Choose a folder. Blunt Code never changes your source files.</Empty> : <WorkspaceTable workspaces={workspaces.data.slice(0, 6)} go={go} notify={notify} onRemoved={workspaces.reload} />}
     </section>
-    {/* Tertiary zone — charts and tool status are reference material, not
-        destinations. Both sit behind one collapsed row at the bottom. */}
+    {/* Reference zone — trends and tool status sit flat on the page: hiding
+        them behind a disclosure saved bytes but hid the product's payoff. */}
     <div className="dashboard-tertiary">
-      <Disclosure label="Trends and language coverage" hint="Findings over time · severity mix · languages">
+      <section className="dashboard-trends" aria-label="Trends and language coverage">
         <Suspense fallback={<SkeletonCards count={3} variant="chart" />}>
           <AnalyticsCharts
             trends={trendPointsFromScans(scans)}
@@ -84,36 +83,21 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
             languages={languageCoverageFromLanguages(workspaces.data?.flatMap((w) => w.languages ?? []).filter((v, i, a) => a.indexOf(v) === i).slice(0, 6))}
           />
         </Suspense>
-      </Disclosure>
+      </section>
       <ToolReadiness ready={readyTools} total={tools.data?.length ?? 0} loading={tools.loading} error={tools.error} retry={tools.reload} go={go} />
     </div>
   </div>;
-}
-
-/** Collapsed-by-default section. Children mount on first open so the lazy chart bundle is never fetched for someone who does not look. */
-function Disclosure({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
-  const [mounted, setMounted] = useState(false);
-  return <details className="dashboard-disclosure" onToggle={(event) => { if (event.currentTarget.open) setMounted(true); }}>
-    <summary className="dashboard-disclosure-toggle"><DisclosureCaret />{label}{hint && <small>{hint}</small>}</summary>
-    {mounted && <div className="dashboard-disclosure-panel">{children}</div>}
-  </details>;
-}
-
-function DisclosureCaret() {
-  return <ChevronDown className="dashboard-disclosure-caret" aria-hidden="true" />;
 }
 
 /** Severity split of the findings the headline row counts — the one piece of the old StatsOverview worth keeping. Same /scans summary as the cards above, so the numbers cannot disagree. */
 function SeverityBreakdown({ counts, total }: { counts: SeverityCounts; total: number }) {
   const present = SEVERITY_ORDER.filter((severity) => counts[severity] > 0);
   const label = `Current findings by severity: ${present.length ? present.map((severity) => `${counts[severity]} ${severity}`).join(', ') : 'none yet'}`;
-  return <details className="dashboard-disclosure dashboard-severity">
-    <summary className="dashboard-disclosure-toggle"><DisclosureCaret />Severity breakdown<small>{total} findings</small></summary>
-    <div className="dashboard-disclosure-panel">
-      <div className="severity-stack severity-bar" role="img" aria-label={label} title={label}>{total > 0 && present.map((severity) => <i key={severity} className={`seg-${severity}`} style={{ width: `${Math.round((counts[severity] * 1000) / total) / 10}%` }} />)}</div>
-      <ul className="severity-legend">{SEVERITY_ORDER.map((severity) => <li key={severity} className={counts[severity] > 0 ? severity : 'zero'}><i className={`seg-${severity}`} aria-hidden="true" />{severity}<span className="legend-count">{counts[severity]}</span></li>)}</ul>
-    </div>
-  </details>;
+  return <section className="dashboard-severity" aria-label={label}>
+    <div className="dashboard-severity-head"><h3>Severity breakdown</h3><small>{total} findings</small></div>
+    <div className="severity-stack severity-bar" role="img" aria-label={label} title={label}>{total > 0 && present.map((severity) => <i key={severity} className={`seg-${severity}`} style={{ width: `${Math.round((counts[severity] * 1000) / total) / 10}%` }} />)}</div>
+    <ul className="severity-legend">{SEVERITY_ORDER.map((severity) => <li key={severity} className={counts[severity] > 0 ? severity : 'zero'}><i className={`seg-${severity}`} aria-hidden="true" />{severity}<span className="legend-count">{counts[severity]}</span></li>)}</ul>
+  </section>;
 }
 
 /** Tool readiness demoted from a full-width card to a one-line status nudge: it only matters when something is missing. */

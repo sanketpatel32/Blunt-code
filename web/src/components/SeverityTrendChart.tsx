@@ -117,7 +117,7 @@ export function SeverityTrendSection({ workspaceId }: { workspaceId: string }) {
   const points = trends.data ?? [];
   if (!points.length) return null;
   return <section className="trend-section" aria-labelledby="severity-trend-title">
-    <div className="section-head"><div><h2 id="severity-trend-title">Severity trend</h2><p>Findings by severity across the last {points.length} completed {points.length === 1 ? 'scan' : 'scans'}.</p></div><label className="range-picker">Range{' '}<select value={range} onChange={(event) => setRange(Number(event.target.value))} aria-label="Number of scans in the trend chart">{[10, 20, 50, 100].map((value) => <option key={value} value={value}>{value}</option>)}</select></label></div>
+    <div className="section-head"><div><h2 id="severity-trend-title">Severity trend</h2><p>Findings by severity across the last {points.length} completed {points.length === 1 ? 'scan' : 'scans'}.</p></div><fieldset className="range-picker segmented" aria-label="Number of scans in the trend chart"><span className="range-picker-label">Range</span>{[10, 20, 50, 100].map((value) => <button key={value} type="button" aria-pressed={range === value} onClick={() => setRange(value)}>{value}</button>)}</fieldset></div>
     <SeverityTrendChart points={points} />
     <ul className="severity-legend">{SEVERITY_ORDER.map((severity) => <li key={severity}><i className={`seg-${severity}`} aria-hidden="true" />{severity}</li>)}</ul>
     {/* First/last dates moved onto the chart's own ticks; this line is just the reading direction. */}

@@ -58,12 +58,13 @@ export function FilterDrawer({ open, onClose, filters, setFilters, sort, setSort
             </div>
           </fieldset>
 
-          <label>Analyzer
-            <select value={draft.analyzer} onChange={e=>setDraft(d=>({...d, analyzer:e.target.value}))}>
-              <option value="">All analyzers</option>
-              {analyzers.map(a=><option key={a} value={a}>{analyzerName(a)}</option>)}
-            </select>
-          </label>
+          <div className="filter-field">
+            <span className="filters-field-label">Analyzer</span>
+            <fieldset className="chip-group" aria-label="Analyzer">
+              <button type="button" className="chip" aria-pressed={draft.analyzer === ''} onClick={()=>setDraft(d=>({...d, analyzer:''}))}>All analyzers</button>
+              {analyzers.map(a=><button key={a} type="button" className="chip" aria-pressed={draft.analyzer===a} onClick={()=>setDraft(d=>({...d, analyzer:a}))}>{analyzerName(a)}</button>)}
+            </fieldset>
+          </div>
 
           <label>Rule
             <input list="filter-rule-list" value={draft.rule} onChange={e=>setDraft(d=>({...d, rule:e.target.value}))} placeholder="All rules" />
@@ -78,12 +79,13 @@ export function FilterDrawer({ open, onClose, filters, setFilters, sort, setSort
             <input value={draft.category} onChange={e=>setDraft(d=>({...d, category:e.target.value}))} placeholder="All categories" />
           </label>
 
-          <label>Status
-            <select value={draft.status} onChange={e=>setDraft(d=>({...d, status:e.target.value}))}>
-              <option value="">All</option>
-              {STATUSES.filter(Boolean).map(s=><option key={s} value={s}>{s}</option>)}
-            </select>
-          </label>
+          <div className="filter-field">
+            <span className="filters-field-label">Status</span>
+            <fieldset className="chip-group" aria-label="Status">
+              <button type="button" className="chip" aria-pressed={draft.status === ''} onClick={()=>setDraft(d=>({...d, status:''}))}>All</button>
+              {STATUSES.filter(Boolean).map(s=><button key={s} type="button" className="chip" aria-pressed={draft.status===s} onClick={()=>setDraft(d=>({...d, status:s}))}>{s}</button>)}
+            </fieldset>
+          </div>
 
           <label>Search
             <input value={draft.q} onChange={e=>setDraft(d=>({...d, q:e.target.value}))} placeholder="Message or rule" />

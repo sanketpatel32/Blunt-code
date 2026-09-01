@@ -192,3 +192,68 @@
   .dashboard-disclosure-caret,
   .dashboard-disclosure > summary { animation: none; transition: none; }
 }
+
+/* ════════════════════════════════════════════════════════════════════
+   FULL-WIDTH DASHBOARD — everything visible, nothing boxed
+   ════════════════════════════════════════════════════════════════════ */
+
+/* Severity breakdown is now an always-open card (was a <details>). */
+.dashboard-severity {
+  display: grid;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border: var(--rule) solid var(--color-rule-faint);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+.dashboard-severity-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+.dashboard-severity-head h3 { margin: 0; font-size: var(--text-sm); }
+.dashboard-severity-head small { color: var(--color-ink-faint); }
+
+/* Trends section rendered flat in its own card. */
+.dashboard-trends {
+  padding: var(--space-md);
+  border: var(--rule) solid var(--color-rule-faint);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+/* Workspace cards: the old dropdown menu became a flat action row. */
+.workspace-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs);
+  margin-top: auto;
+  padding-top: var(--space-2xs);
+  border-top: var(--rule) solid var(--color-rule-faint);
+}
+.workspace-card-actions .workspace-card-remove { color: var(--color-danger); }
+.workspace-card-actions .workspace-card-remove:hover { border-color: var(--color-danger); color: var(--color-danger); }
+
+/* ── Wide desktop: feed and projects side by side, charts full width ── */
+@media (min-width: 90rem) {
+  .dashboard-page {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+    gap: var(--space-2xl);
+    align-items: start;
+  }
+  .dashboard-page > .dashboard-heading,
+  .dashboard-page > .dashboard-primary { grid-column: 1 / -1; }
+  .dashboard-page > .dashboard-activity { grid-column: 1; }
+  .dashboard-page > .dashboard-list { grid-column: 2; }
+  .dashboard-page > .dashboard-tertiary {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    gap: var(--space-2xl);
+    align-items: start;
+  }
+}

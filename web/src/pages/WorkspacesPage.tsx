@@ -13,8 +13,7 @@ import { Input } from '../components/ui/input';
 import { Card } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { FolderIcon } from '../components/icons';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
-import { MoreHorizontal, ShieldCheck } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
 import { languageNames, languageColor, scanStateDisplay } from '../lib/format';
 import { SkeletonCards } from '../components/skeletons';
 import { ConfirmationDialog } from '../components/dialogs';
@@ -107,18 +106,13 @@ function WorkspaceCard({ workspace, go, notify, onRemoved }: { workspace: Worksp
           <PathCopy path={workspace.root_path} />
         </div>
       </div>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="workspace-card-menu h-8 w-8 shrink-0" aria-label={`Actions for ${workspace.name}`}>
-            <MoreHorizontal className="h-4 w-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="min-w-[12rem]">
-          <DropdownMenuItem onClick={() => go({ page: 'workspace', id: workspace.id })}>Open details</DropdownMenuItem>
-          <DropdownMenuItem onClick={() => void analyze()}>Run scan</DropdownMenuItem>
-          <DropdownMenuItem className="text-[var(--color-danger)] focus:text-[var(--color-danger)]" onClick={() => setDeleteOpen(true)}>Remove</DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+    </div>
+    {/* Actions live flat on the card — a dropdown hid the three things this
+        card can do behind a click and made them look rarer than they are. */}
+    <div className="workspace-card-actions">
+      <button type="button" className="button ghost" onClick={() => go({ page: 'workspace', id: workspace.id })}>Open details</button>
+      <button type="button" className="button primary" onClick={(event) => void analyze(event)}>Run scan</button>
+      <button type="button" className="button ghost workspace-card-remove" onClick={(event) => { event.stopPropagation(); setDeleteOpen(true); }}>Remove</button>
     </div>
     {tags.length > 0 && <ul className="badges workspace-tags flex flex-wrap" aria-label={`${workspace.name} tags`}>{tags.slice(0, MAX_CARD_TAGS).map((tag) => <Badge key={tag} variant="secondary" className="badge rounded-full border-[var(--color-rule-faint)] bg-[var(--color-surface-muted)] text-[var(--color-ink-soft)]">{tag}</Badge>)}{extraTags > 0 && <Badge variant="secondary" className="badge rounded-full border-[var(--color-rule-faint)] bg-[var(--color-surface-muted)] text-[var(--color-ink-soft)]" title={tags.slice(MAX_CARD_TAGS).join(', ')}>+{extraTags}</Badge>}</ul>}
     <section className="workspace-languages">

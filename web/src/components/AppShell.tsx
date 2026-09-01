@@ -77,6 +77,7 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
       </a>
       <nav aria-label="Main navigation">
         <div className="nav-primary">{primary.map(link)}</div>
+        {/* biome-ignore lint/a11y/useKeyWithClickEvents: <details> is natively keyboard-operable through its summary; this onClick only closes the open menu after a link inside it is chosen. */}
         <details
           className="nav-more"
           ref={moreRef}
@@ -105,12 +106,10 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
             cohesive group instead of four competing buttons — and every one of
             them is still reachable from the command palette (Ctrl/Cmd+K). */}
         <div className="nav-utils">
-          <label className="nav-util nav-lang" aria-label={t('common.language')}>
+          <fieldset className="nav-util nav-lang segmented" aria-label={t('common.language')}>
             <Languages className="h-4 w-4 shrink-0" aria-hidden="true" />
-            <select value={locale} onChange={(e) => setLocale(e.target.value as never)} className="nav-lang-select" title={t('common.language')}>
-              {LOCALES.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
-            </select>
-          </label>
+            {LOCALES.map((l) => <button key={l.value} type="button" title={l.label} aria-label={l.label} aria-pressed={locale === l.value} onClick={() => setLocale(l.value as never)}>{l.label}</button>)}
+          </fieldset>
           <Button variant="ghost" size="icon" className="nav-shortcuts" onClick={() => onShowShortcuts?.()} title={t('common.shortcuts')} aria-label={t('common.shortcuts')}>
             <HelpCircle className="h-4 w-4" />
           </Button>

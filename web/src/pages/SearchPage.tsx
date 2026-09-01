@@ -12,7 +12,7 @@ import { SkeletonTable } from '../components/skeletons';
 import { SavedFilters } from '../components/SavedFilters';
 import type { FindingFilter } from './report/ReportView';
 import { QueryBuilder } from '../components/QueryBuilder';
-import { filterToQueryGroup, queryGroupToFilter, type QueryGroup } from '../lib/queryBuilder';
+import { filterToQueryGroup, type QueryGroup } from '../lib/queryBuilder';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '../components/ui/sheet';
 
 const SEARCH_PAGE_SIZE = 25;
@@ -50,7 +50,6 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
   const [page, setPage] = useState(() => { const p=Number(new URLSearchParams(window.location.search).get('page')); return Number.isFinite(p)&&p>=1?Math.floor(p):1; });
   const [facetsOpen, setFacetsOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [acc, setAcc] = useState({ sev:true, ana:true, ws:true, st:true });
   const [queryGroup, setQueryGroup] = useState<QueryGroup>(() => filterToQueryGroup({ severity:[...(() => { const v=new URLSearchParams(window.location.search).get('severity'); return new Set(v?v.split(',').filter(Boolean):[]); })()].join(','), category:'', analyzer:new URLSearchParams(window.location.search).get('analyzer')??'', rule:'', path:new URLSearchParams(window.location.search).get('workspace')??'', status:new URLSearchParams(window.location.search).get('status')??'', q:new URLSearchParams(window.location.search).get('q')??'' } as FindingFilter));
   const debouncedQuery = useDebouncedValue(query, query ? SEARCH_DEBOUNCE_MS : 0);
 
@@ -125,30 +124,30 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
   const facets = (
     <div className="search-facets">
       <div className="facet-section">
-        <button type="button" className="facet-head" aria-expanded={acc.sev} onClick={()=>setAcc(a=>({...a,sev:!a.sev}))}>Severity {acc.sev?'−':'+'}</button>
-        {acc.sev && <div className="severity-pills" role="group" aria-label="Filter by severity">
+        <p className="facet-title">Severity</p>
+        <fieldset className="severity-pills" aria-label="Filter by severity">
           {SEVERITIES.map((severity) => (
             <button key={severity} type="button" className={`severity-pill ${severities.has(severity) ? 'selected' : ''}`} aria-pressed={severities.has(severity)} onClick={() => toggleSeverity(severity)}>{severity}<span className="count">{severityCounts[severity]??0}</span></button>
           ))}
-        </div>}
+        </fieldset>
       </div>
       <div className="facet-section">
-        <button type="button" className="facet-head" aria-expanded={acc.ana} onClick={()=>setAcc(a=>({...a,ana:!a.ana}))}>Analyzer {acc.ana?'−':'+'}</button>
-        {acc.ana && <select className="search-analyzer" aria-label="Filter by analyzer" value={analyzer} onChange={(event) => setAnalyzer(event.target.value)}>
-          <option value="">All analyzers</option>
-          {ANALYZERS.map((id) => <option key={id} value={id}>{analyzerName(id)}</option>)}
-        </select>}
+        <p className="facet-title">Analyzer</p>
+        <fieldset className="chip-group" aria-label="Filter by analyzer">
+          <button type="button" className="chip" aria-pressed={analyzer === ''} onClick={() => setAnalyzer('')}>All analyzers</button>
+          {ANALYZERS.map((id) => <button key={id} type="button" className="chip" aria-pressed={analyzer === id} onClick={() => setAnalyzer(id)}>{analyzerName(id)}</button>)}
+        </fieldset>
       </div>
       <div className="facet-section">
-        <button type="button" className="facet-head" aria-expanded={acc.ws} onClick={()=>setAcc(a=>({...a,ws:!a.ws}))}>Workspace {acc.ws?'−':'+'}</button>
-        {acc.ws && <input value={workspace} onChange={e=>setWorkspace(e.target.value)} placeholder="Workspace id" aria-label="Filter by workspace" />}
+        <p className="facet-title">Workspace</p>
+        <input value={workspace} onChange={e=>setWorkspace(e.target.value)} placeholder="Workspace id" aria-label="Filter by workspace" />
       </div>
       <div className="facet-section">
-        <button type="button" className="facet-head" aria-expanded={acc.st} onClick={()=>setAcc(a=>({...a,st:!a.st}))}>Status {acc.st?'−':'+'}</button>
-        {acc.st && <select aria-label="Filter by status" value={status} onChange={e=>setStatus(e.target.value)}>
-          <option value="">All</option>
-          {STATUSES.map(s=><option key={s} value={s}>{s}</option>)}
-        </select>}
+        <p className="facet-title">Status</p>
+        <fieldset className="chip-group" aria-label="Filter by status">
+          <button type="button" className="chip" aria-pressed={status === ''} onClick={() => setStatus('')}>All</button>
+          {STATUSES.map(s=><button key={s} type="button" className="chip" aria-pressed={status === s} onClick={() => setStatus(s)}>{s}</button>)}
+        </fieldset>
       </div>
       <div className="facet-saved">
         <p className="muted">Saved searches</p>

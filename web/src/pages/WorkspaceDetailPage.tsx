@@ -12,7 +12,6 @@ import { ScanIcon } from '../components/icons';
 import { SkeletonCards, SkeletonTable } from '../components/skeletons';
 import { SeverityTrendSection } from '../components/SeverityTrendChart';
 import { SuppressionsSection } from '../components/SuppressionsPanel';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { ConfirmationDialog } from '../components/dialogs';
 import { WorkspaceContextSidebar } from '../components/WorkspaceContext';
@@ -20,7 +19,7 @@ import { HistoryTable } from './HistoryPage';
 import { analyzerMeta, categoryColor, CATEGORY_LABELS } from '../lib/analyzerCatalog';
 import { languageCoverageFromLanguages, severityCountsFromSummary, trendPointsFromScans } from '../lib/chartData';
 import { useReducedMotion } from '../hooks/useReducedMotion';
-import { Sparkles, Copy, Check, ShieldAlert, BarChart3, AlertTriangle, Layers, FileSearch, History as HistoryIcon, ShieldCheck } from 'lucide-react';
+import { Sparkles, Copy, Check, ShieldAlert, BarChart3, AlertTriangle, Layers, FileSearch, ShieldCheck } from 'lucide-react';
 
 /**
  * Loop 142 · this used to inline `oklch(62% 0.18 285)` as the fourth entry, which
@@ -96,26 +95,20 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
     {/* 2 · Act — one primary action, everything else quietly grouped beside it. */}
     <div className="workspace-toolbar workspace-action-rail">
       <div className="action-rail-primary">
-        <label className="profile-picker">Profile{' '}<select value={profile} onChange={(event) => setProfile(event.target.value)} aria-label="Scan profile">{['quick', 'standard', 'deep'].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
+        <fieldset className="profile-picker segmented" aria-label="Scan profile"><span className="profile-picker-label">Profile</span>{['quick', 'standard', 'deep'].map((value) => <button key={value} type="button" aria-pressed={profile === value} onClick={() => setProfile(value)}>{value}</button>)}</fieldset>
         <button type="button" className="button primary workspace-run" onClick={start}><Sparkles className="h-4 w-4" />Run scan</button>
       </div>
       <div className="action-rail-secondary">
         <button type="button" className="button ghost" onClick={() => go({ page: 'files', id })}>Configure files</button>
         <button type="button" className="button ghost" disabled={!latest} onClick={() => latest && go({ page: 'scan', id: latest.id })}>View last report</button>
         {latest && <a className="button ghost" href={api.markdownUrl(latest.id)}>Export Markdown</a>}
-        <DropdownMenu>
-          <DropdownMenuTrigger className="button ghost workspace-more-trigger">More ▾</DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={openSettings}>Workspace settings</DropdownMenuItem>
-            <DropdownMenuItem onSelect={()=>setPruneOpen(true)}>Prune history…</DropdownMenuItem>
-            <DropdownMenuSeparator/>
-            <DropdownMenuItem className="workspace-danger-item" onSelect={()=>setDeleteOpen(true)}>Remove workspace</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <button type="button" className="button ghost" onClick={openSettings}>Workspace settings</button>
+        <button type="button" className="button ghost" onClick={()=>setPruneOpen(true)}>Prune history…</button>
+        <button type="button" className="button ghost workspace-danger-item" onClick={()=>setDeleteOpen(true)}>Remove workspace</button>
       </div>
     </div>
     {pruneOpen && <form className="settings-editor" onSubmit={(event) => { event.preventDefault(); void prune(); }} aria-label="Prune scan history"><label>Keep newest<input type="number" min={1} max={100} value={pruneKeep} onChange={(event) => setPruneKeep(Number(event.target.value))} /></label><div className="editor-actions"><button type="submit" className="button primary" disabled={pruning}>Delete older scans</button><button type="button" className="button secondary" onClick={() => setPruneOpen(false)}>Cancel</button></div></form>}
-    {editing && <form className="settings-editor" onSubmit={(event) => { event.preventDefault(); saveSettings(); }} aria-label="Workspace settings"><label>Name<input value={nameDraft} onChange={(event) => setNameDraft(event.target.value)} maxLength={80} /></label><label>Default profile<select value={profileDraft} onChange={(event) => setProfileDraft(event.target.value)}>{['quick', 'standard', 'deep'].map((value) => <option key={value} value={value}>{value}</option>)}</select></label><div className="editor-actions"><button type="submit" className="button primary" disabled={savingSettings}>Save</button><button type="button" className="button secondary" onClick={() => setEditing(false)}>Cancel</button></div></form>}
+    {editing && <form className="settings-editor" onSubmit={(event) => { event.preventDefault(); saveSettings(); }} aria-label="Workspace settings"><label>Name<input value={nameDraft} onChange={(event) => setNameDraft(event.target.value)} maxLength={80} /></label><div className="settings-editor-profile"><span>Default profile</span><fieldset className="segmented" aria-label="Default profile">{['quick', 'standard', 'deep'].map((value) => <button key={value} type="button" aria-pressed={profileDraft === value} onClick={() => setProfileDraft(value)}>{value}</button>)}</fieldset></div><div className="editor-actions"><button type="submit" className="button primary" disabled={savingSettings}>Save</button><button type="button" className="button secondary" onClick={() => setEditing(false)}>Cancel</button></div></form>}
 
     {/* 3 · Verdict — three headline numbers; the rest are one click away. */}
     {!latest && scans.loading ? <SkeletonCards count={6} /> : <section className={`workspace-verdict ${reduced ? '' : 'is-animated'}`} aria-label="Latest scan summary">
@@ -291,7 +284,7 @@ function ComplianceSection({ scanId, go }: { scanId: string; go: (r: Route) => v
   return (
     <Suspense fallback={<div className="skeleton-chart" aria-busy="true" />}>
       <div className="workspace-section-card">
-        <ComplianceMatrix findings={findings} scanId={scanId} onFilterOwasp={(owasp) => go({ page: 'scan', id: scanId })} />
+        <ComplianceMatrix findings={findings} scanId={scanId} onFilterOwasp={() => go({ page: 'scan', id: scanId })} />
       </div>
     </Suspense>
   );

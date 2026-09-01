@@ -82,6 +82,11 @@ function filterSelect(host: HTMLElement, labelText: string) {
   return label.querySelector('select')!;
 }
 
+/** The Tool filter is a chip group (all options visible); pick a chip the way a user does. */
+function toolChip(host: HTMLElement, label: string) {
+  return [...host.querySelectorAll<HTMLButtonElement>('#finding-filters fieldset[aria-label="Tool"] .chip')].find((button) => button.textContent === label)!;
+}
+
 /** Picks a select option the way a real user does (value + change event). */
 async function choose(select: HTMLSelectElement, value: string) {
   await act(async () => { select.value = value; select.dispatchEvent(new Event('change', { bubbles: true })); });
@@ -115,11 +120,10 @@ describe('ReportView finding filters', () => {
     expect(findingUrls()[1]).toContain('q=eval');
   });
 
-  it('applies select filters immediately without waiting for the debounce', async () => {
+  it('applies pill filters immediately without waiting for the debounce', async () => {
     const host = await render();
     await click(buttonByText(host, 'Filters'));
-    const severity = host.querySelector<HTMLSelectElement>('#finding-filters label:nth-of-type(1) select')!;
-    await act(async () => { severity.value = 'high'; severity.dispatchEvent(new Event('change', { bubbles: true })); });
+    await click(host.querySelector<HTMLButtonElement>('.severity-pill.high')!);
     expect(findingUrls()).toHaveLength(2);
     expect(findingUrls()[1]).toContain('severity=high');
     expect(host.textContent).toContain('severity: high');
@@ -197,7 +201,7 @@ describe('ReportView analyzer and rule filters', () => {
       await click(buttonByText(host, 'Filters'));
       expect(findingUrls()).toHaveLength(1);
 
-      await choose(filterSelect(host, 'Tool'), 'biome');
+      await click(toolChip(host, 'Biome'));
       expect(findingUrls()).toHaveLength(2);
       expect(findingUrls()[1]).toContain('analyzer=biome');
       expect(host.textContent).toContain('tool: Biome'); // chip echoes the choice
@@ -209,7 +213,7 @@ describe('ReportView analyzer and rule filters', () => {
       await click(buttonByText(host, 'Filters'));
       expect([...filterSelect(host, 'Rule').options].map((option) => option.value)).toEqual(['', 'COM841', 'E501', 'F821']); // distinct rules across every run, sorted
 
-      await choose(filterSelect(host, 'Tool'), 'ruff');
+      await click(toolChip(host, 'Ruff'));
       expect([...filterSelect(host, 'Rule').options].map((option) => option.value)).toEqual(['', 'E501', 'F821']); // scoped to the active tool
 
       await choose(filterSelect(host, 'Rule'), 'E501');
@@ -225,11 +229,11 @@ describe('ReportView analyzer and rule filters', () => {
   it('switching tools resets a rule the new tool never reports', async () => {
     await withRuleScan(async (host) => {
       await click(buttonByText(host, 'Filters'));
-      await choose(filterSelect(host, 'Tool'), 'ruff');
+      await click(toolChip(host, 'Ruff'));
       await choose(filterSelect(host, 'Rule'), 'F821');
       expect(findingUrls().at(-1)).toContain('rule=F821');
 
-      await choose(filterSelect(host, 'Tool'), 'biome');
+      await click(toolChip(host, 'Biome'));
       const last = findingUrls().at(-1)!;
       expect(last).toContain('analyzer=biome');
       expect(last).not.toContain('rule='); // F821 belongs to ruff, so the rule filter resets with the tool
@@ -399,15 +403,15 @@ describe('ReportView findings pagination', () => {
   it('lets the user pick the rows-per-page window; the choice refetches, restarts on page 1, and reaches the URL', async () => {
     window.history.replaceState(null, '', window.location.pathname); // start from a clean URL so earlier describes cannot leak state
     await pageMock(async (host) => {
-      const size = host.querySelector<HTMLSelectElement>('nav[aria-label="Findings pagination"] .page-size select')!;
-      expect([...size.options].map((option) => option.value)).toEqual(['25', '50', '100', '200']); // API-legal windows, 200 being MaxFindingsPageSize
-      expect(size.value).toBe('50');
+      const sizeButtons = [...host.querySelectorAll<HTMLButtonElement>('nav[aria-label="Findings pagination"] .page-size button')];
+      expect(sizeButtons.map((button) => button.textContent)).toEqual(['25', '50', '100', '200']); // API-legal windows, 200 being MaxFindingsPageSize
+      expect(sizeButtons.find((button) => button.getAttribute('aria-pressed') === 'true')!.textContent).toBe('50');
       expect(window.location.search).not.toContain('page_size='); // the default stays out of shareable URLs
 
       await click(pager(host).next);
       expect(findingUrls().at(-1)).toContain('page=2');
 
-      await choose(size, '100');
+      await click(sizeButtons.find((button) => button.textContent === '100')!);
       const last = findingUrls().at(-1)!;
       expect(last).toContain('page_size=100');
       expect(last).toContain('page=1'); // a new window restarts on the first page
@@ -485,22 +489,13 @@ describe('ReportView analyzer mini-bars', () => {
   });
 });
 
-describe('ReportView export menu', () => {
-  function pressKey(key: string) {
-    document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
-  }
-
-  it('lists the four export targets with plain download links and closes on Escape', async () => {
+describe('ReportView export row', () => {
+  it('lists the five export targets as always-visible download links and carries the active filter in the CSV href', async () => {
     const host = await render();
-    const toggle = host.querySelector<HTMLButtonElement>('.export-toggle')!;
-    expect(toggle.textContent).toContain('Export');
-    expect(host.querySelector('.export-popover')).toBeNull();
-
+    expect(host.querySelector('.export-toggle')).toBeNull(); // the popover trigger is gone — exports sit flat on the page
     await click(host.querySelector<HTMLButtonElement>('.severity-pill.high')!); // filter first so the CSV link carries it
-    await click(toggle);
-    expect(toggle.getAttribute('aria-expanded')).toBe('true');
-    const items = [...host.querySelectorAll('[role="menuitem"]')] as HTMLElement[];
-    expect(items.map((item) => item.textContent)).toEqual(['Markdown report.md', 'HTML report.html', 'SARIF (code scanning).sarif', 'Findings CSV (current filters).csv', 'Jira CSV.csv']);
+    const items = [...host.querySelectorAll('.export-menu.export-inline .export-item')] as HTMLElement[];
+    expect(items.map((item) => item.textContent)).toEqual(['Markdown.md', 'HTML.html', 'SARIF.sarif', 'CSV (current filters).csv', 'Jira CSV.csv']);
     expect(items[0].getAttribute('href')).toBe('/api/v1/scans/scan-1/report.md');
     expect(items[1].getAttribute('href')).toBe('/api/v1/scans/scan-1/report.html');
     expect(items[2].getAttribute('href')).toBe('/api/v1/scans/scan-1/report.sarif');
@@ -512,21 +507,6 @@ describe('ReportView export menu', () => {
     expect(csvHref).not.toContain('page='); // paging params stay off the export
     expect(csvHref).not.toContain('page_size=');
     expect(items.slice(0,4).every((item) => (item as HTMLAnchorElement).hasAttribute('download'))).toBe(true); // plain GET navigation, no fetch
-
-    await act(async () => { pressKey('Escape'); });
-    expect(host.querySelector('.export-popover')).toBeNull();
-    expect(toggle.getAttribute('aria-expanded')).toBe('false');
-    expect(document.activeElement).toBe(toggle); // Escape hands focus back to the toggle
-  });
-
-  it('closes on an outside mousedown but stays open for clicks inside the menu', async () => {
-    const host = await render();
-    await click(host.querySelector<HTMLButtonElement>('.export-toggle')!);
-    expect(host.querySelector('.export-popover')).not.toBeNull();
-    await act(async () => { host.querySelector('.export-popover a')!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); });
-    expect(host.querySelector('.export-popover')).not.toBeNull();
-    await act(async () => { document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); });
-    expect(host.querySelector('.export-popover')).toBeNull();
   });
 });
 
