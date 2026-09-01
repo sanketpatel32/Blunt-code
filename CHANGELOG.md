@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.7] - 2026-09-01
+
+### Changed
+- **Every page now spans the full viewport width** — the boxed content cap and centering are gone, and on wide desktops (≥90rem) the dashboard becomes a multi-column grid: Recent activity and Recent projects side by side under the full-width metric row, with trends and tool readiness in their own band below.
+- **No hidden controls left: every option is visible on screen at once.** Scan profile (quick/standard/deep), the severity-trend range, search analyzer/status facets, the report's Tool/Status filters and rows-per-page window, the filter drawer's analyzer/status, and the UI language switcher (nav + Settings) are now segmented pill bars or chip groups instead of `<select>` menus. The Files & rules language filter is a scrollable chip rail keeping per-language file counts.
+- **Dropdown menus became flat rows:** workspace cards show Open details / Run scan / Remove as an always-visible action row; the workspace page's "More" menu is inline ghost buttons; the report's Export popover is a flat link row.
+- **Dashboard disclosures removed:** the severity breakdown card and the trends/language-coverage section render open instead of hiding behind a collapsed summary.
+
 ## [0.16.6] - 2026-09-01
 
 ### Changed
