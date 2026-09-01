@@ -45,7 +45,10 @@ func (s *Service) Status(id string) (status Status) {
 		return Status{ID: id, Detail: "No pinned managed artifact is configured.", CanInstall: false}
 	}
 	if artifact.InstallKind == "uv_tool" {
-		return s.semgrepStatus(artifact)
+		if artifact.ToolID == "semgrep" {
+			return s.semgrepStatus(artifact)
+		}
+		return s.uvToolStatus(artifact)
 	}
 	ready := s.Manager.IsReady(artifact)
 	detail := "Ready"
@@ -67,6 +70,8 @@ func toolName(id string) string {
 		return "OSV Scanner"
 	case "container-trivy":
 		return "Trivy"
+	case "iac-checkov":
+		return "Checkov"
 	case "semgrep":
 		return "Semgrep"
 	case "sonarqube":
@@ -76,7 +81,7 @@ func toolName(id string) string {
 	}
 }
 func (s *Service) All() []Status {
-	ids := []string{"ruff", "biome", "gitleaks-secrets", "osv-dependencies", "container-trivy", "semgrep", "sonarqube"}
+	ids := []string{"ruff", "biome", "gitleaks-secrets", "osv-dependencies", "container-trivy", "iac-checkov", "semgrep", "sonarqube"}
 	out := make([]Status, 0, len(ids))
 	for _, id := range ids {
 		out = append(out, s.Status(id))
@@ -98,16 +103,19 @@ func (s *Service) Ensure(ctx context.Context, id string) error {
 	}
 	artifact, _ := s.Manager.Manifest.Find(id, platform())
 	if artifact.InstallKind == "uv_tool" {
-		paths := s.Manager.SemgrepPaths(artifact)
+		paths := s.Manager.UvToolPaths(artifact)
 		if _, err := os.Stat(paths.Executable); err == nil {
-			return ExtractSemgrepRules(paths.RulesDir)
+			if artifact.ToolID == "semgrep" {
+				return ExtractSemgrepRules(paths.RulesDir)
+			}
+			return nil
 		}
 	}
 	if s.Offline() {
 		return fmt.Errorf("%s is not installed and offline mode is enabled", id)
 	}
 	if artifact.InstallKind == "uv_tool" {
-		return s.installSemgrep(ctx, artifact)
+		return s.installUvTool(ctx, artifact)
 	}
 	return s.Manager.InstallExecutable(ctx, artifact)
 }
@@ -170,7 +178,7 @@ func (s *Service) SonarQubeArtifacts() ([]Artifact, bool) {
 }
 
 func (s *Service) semgrepStatus(semgrep Artifact) Status {
-	paths := s.Manager.SemgrepPaths(semgrep)
+	paths := s.Manager.UvToolPaths(semgrep)
 	if _, err := os.Stat(paths.Executable); err != nil {
 		return Status{ID: semgrep.ToolID, Version: semgrep.Version, Detail: "Pinned Semgrep is not installed.", CanInstall: true}
 	}
@@ -180,23 +188,39 @@ func (s *Service) semgrepStatus(semgrep Artifact) Status {
 	return Status{ID: semgrep.ToolID, Version: semgrep.Version, Ready: true, Detail: "Ready with bundled local rules " + SemgrepRulesVersion + ".", CanInstall: true}
 }
 
-func (s *Service) installSemgrep(ctx context.Context, semgrep Artifact) error {
+// installUvTool installs any uv_tool artifact (semgrep, checkov) through the
+// managed uv; semgrep additionally re-extracts its bundled local rules.
+func (s *Service) installUvTool(ctx context.Context, artifact Artifact) error {
 	uv, ok := s.Manager.Manifest.Find("uv", platform())
 	if !ok {
-		return fmt.Errorf("Semgrep requires a pinned managed uv artifact")
+		return fmt.Errorf("%s requires a pinned managed uv artifact", artifact.ToolID)
 	}
-	if err := s.Manager.InstallSemgrep(ctx, uv, semgrep); err != nil {
+	if err := s.Manager.InstallUvTool(ctx, uv, artifact); err != nil {
 		return err
 	}
-	return ExtractSemgrepRules(s.Manager.SemgrepPaths(semgrep).RulesDir)
+	if artifact.ToolID == "semgrep" {
+		return ExtractSemgrepRules(s.Manager.UvToolPaths(artifact).RulesDir)
+	}
+	return nil
 }
 
-func (s *Service) SemgrepPaths() (SemgrepPaths, bool) {
+// uvToolStatus is the generic readiness check for non-semgrep uv tools: the
+// manifest executable (for checkov, the tool venv's python.exe) existing is
+// the whole contract.
+func (s *Service) uvToolStatus(artifact Artifact) Status {
+	paths := s.Manager.UvToolPaths(artifact)
+	if _, err := os.Stat(paths.Executable); err != nil {
+		return Status{ID: artifact.ToolID, Version: artifact.Version, Detail: "Pinned " + toolName(artifact.ToolID) + " is not installed.", CanInstall: true}
+	}
+	return Status{ID: artifact.ToolID, Version: artifact.Version, Ready: true, Detail: "Ready", CanInstall: true}
+}
+
+func (s *Service) SemgrepPaths() (UvToolPaths, bool) {
 	artifact, ok := s.Manager.Manifest.Find("semgrep", platform())
 	if !ok {
-		return SemgrepPaths{}, false
+		return UvToolPaths{}, false
 	}
-	return s.Manager.SemgrepPaths(artifact), true
+	return s.Manager.UvToolPaths(artifact), true
 }
 
 func verifySemgrepRules(dir string) error {

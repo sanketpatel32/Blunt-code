@@ -43,7 +43,7 @@ func TestEnsureSemgrepUsesPrivatePinnedUVAndExtractsRules(t *testing.T) {
 	if err := os.WriteFile(service.Manager.Executable(uv), []byte("managed uv"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	semgrepPaths := service.Manager.SemgrepPaths(semgrep)
+	semgrepPaths := service.Manager.UvToolPaths(semgrep)
 	if err := os.MkdirAll(filepath.Join(semgrepPaths.Root, "downloads"), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func TestEnsureSemgrepUsesPrivatePinnedUVAndExtractsRules(t *testing.T) {
 	var gotArgs, gotEnv []string
 	service.Manager.RunCommand = func(_ context.Context, executable string, args []string, dir string, env []string) error {
 		gotExecutable, gotArgs, gotDir, gotEnv = executable, append([]string(nil), args...), dir, append([]string(nil), env...)
-		paths := service.Manager.SemgrepPaths(semgrep)
+		paths := service.Manager.UvToolPaths(semgrep)
 		return os.WriteFile(paths.Executable, []byte("managed semgrep"), 0o600)
 	}
 	if err := service.Ensure(context.Background(), "semgrep"); err != nil {
@@ -85,7 +85,7 @@ func TestEnsureSemgrepRestoresBundledRulesOffline(t *testing.T) {
 	root := t.TempDir()
 	semgrep := Artifact{ToolID: "semgrep", Version: "1.172.0", Platform: platform(), SourceURL: "https://example.test/semgrep.whl", SHA256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", ArchiveType: "wheel", Executable: "semgrep.exe", InstallKind: "uv_tool", Package: "semgrep==1.172.0"}
 	service := NewService(root, Manifest{Artifacts: []Artifact{semgrep}}, true)
-	paths := service.Manager.SemgrepPaths(semgrep)
+	paths := service.Manager.UvToolPaths(semgrep)
 	if err := os.MkdirAll(paths.Root, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +131,7 @@ func TestConcurrentEnsureSerializesInstalls(t *testing.T) {
 	if err := os.WriteFile(service.Manager.Executable(uv), []byte("managed uv"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	paths := service.Manager.SemgrepPaths(semgrep)
+	paths := service.Manager.UvToolPaths(semgrep)
 	if err := os.MkdirAll(filepath.Join(paths.Root, "downloads"), 0o700); err != nil {
 		t.Fatal(err)
 	}

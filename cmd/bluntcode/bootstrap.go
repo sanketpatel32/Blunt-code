@@ -19,6 +19,7 @@ import (
 	"bluntcode/internal/analyzers/gitleaks"
 	analyzersosv "bluntcode/internal/analyzers/osv"
 	analyzerstrivy "bluntcode/internal/analyzers/trivy"
+	analyzerscheckov "bluntcode/internal/analyzers/checkov"
 	"bluntcode/internal/analyzers/ruff"
 	"bluntcode/internal/analyzers/secrets"
 	"bluntcode/internal/analyzers/semgrep"
@@ -121,6 +122,10 @@ func openCore() (core *appCore, release func(), err error) {
 	trivyAdapter := analyzerstrivy.New(filepath.Join(paths.ToolsDir, "container-trivy", "0.74.0", "trivy.exe"), "0.74.0")
 	trivyAdapter.CacheDir = filepath.Join(paths.DataDir, "trivy-cache")
 	_ = registry.Register(trivyAdapter)
+	// checkov runs through its uv tool venv's interpreter (uv's Windows shim
+	// resolves python from PATH, so python -m checkov.main is the hermetic
+	// entry); the path mirrors the manifest's executable field.
+	_ = registry.Register(analyzerscheckov.New(filepath.Join(paths.ToolsDir, "iac-checkov", "3.3.16", "env", "checkov", "Scripts", "python.exe"), "3.3.16"))
 	_ = registry.Register(semgrep.New(semgrepExecutable, semgrepVersion, semgrepRules))
 	_ = registry.Register(managedSonar)
 	// bluntcode:ignore

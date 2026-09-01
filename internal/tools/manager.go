@@ -108,10 +108,10 @@ func (m Manager) InstallExecutable(ctx context.Context, a Artifact) error {
 	return os.Rename(stage, dest)
 }
 
-// SemgrepPaths keeps every uv-owned file below Blunt Code's private tools
+// UvToolPaths keeps every uv-owned file below Blunt Code's private tools
 // directory.  It intentionally does not use a user's PATH, uv data directory,
 // cache, or installed Python.
-type SemgrepPaths struct {
+type UvToolPaths struct {
 	Root       string
 	Executable string
 	RulesDir   string
@@ -120,9 +120,9 @@ type SemgrepPaths struct {
 	PythonDir  string
 }
 
-func (m Manager) SemgrepPaths(a Artifact) SemgrepPaths {
+func (m Manager) UvToolPaths(a Artifact) UvToolPaths {
 	root := filepath.Join(m.Root, a.ToolID, a.Version)
-	return SemgrepPaths{
+	return UvToolPaths{
 		Root:       root,
 		Executable: filepath.Join(root, a.Executable),
 		RulesDir:   filepath.Join(root, "rules"),
@@ -132,14 +132,14 @@ func (m Manager) SemgrepPaths(a Artifact) SemgrepPaths {
 	}
 }
 
-func (m Manager) InstallSemgrep(ctx context.Context, uv, semgrep Artifact) error {
-	if uv.ToolID != "uv" || semgrep.InstallKind != "uv_tool" {
-		return fmt.Errorf("invalid uv/Semgrep installation configuration")
+func (m Manager) InstallUvTool(ctx context.Context, uv, tool Artifact) error {
+	if uv.ToolID != "uv" || tool.InstallKind != "uv_tool" {
+		return fmt.Errorf("invalid uv tool installation configuration")
 	}
 	if err := uv.Validate(); err != nil {
 		return err
 	}
-	if err := semgrep.Validate(); err != nil {
+	if err := tool.Validate(); err != nil {
 		return err
 	}
 	if !m.IsReady(uv) {
@@ -147,48 +147,48 @@ func (m Manager) InstallSemgrep(ctx context.Context, uv, semgrep Artifact) error
 			return fmt.Errorf("install managed uv: %w", err)
 		}
 	}
-	paths := m.SemgrepPaths(semgrep)
+	paths := m.UvToolPaths(tool)
 	for _, dir := range []string{paths.Root, paths.ToolDir, paths.CacheDir, paths.PythonDir} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return err
 		}
 	}
-	wheel, err := m.verifiedSemgrepWheel(ctx, semgrep, paths)
+	wheel, err := m.verifiedWheel(ctx, tool, paths)
 	if err != nil {
 		return err
 	}
-	if err := m.runCommand(ctx, m.Executable(uv), []string{"tool", "install", "--managed-python", wheel}, paths.Root, semgrepUVEnv(paths)); err != nil {
-		return fmt.Errorf("install %s: %w", semgrep.ToolID, err)
+	if err := m.runCommand(ctx, m.Executable(uv), []string{"tool", "install", "--managed-python", wheel}, paths.Root, uvToolEnv(paths)); err != nil {
+		return fmt.Errorf("install %s: %w", tool.ToolID, err)
 	}
 	if _, err := os.Stat(paths.Executable); err != nil {
-		return fmt.Errorf("install %s: expected executable missing: %w", semgrep.ToolID, err)
+		return fmt.Errorf("install %s: expected executable missing: %w", tool.ToolID, err)
 	}
 	return nil
 }
 
-func (m Manager) verifiedSemgrepWheel(ctx context.Context, semgrep Artifact, paths SemgrepPaths) (string, error) {
+func (m Manager) verifiedWheel(ctx context.Context, tool Artifact, paths UvToolPaths) (string, error) {
 	wheelDir := filepath.Join(paths.Root, "downloads")
-	filename, err := wheelFilename(semgrep.SourceURL)
+	filename, err := wheelFilename(tool.SourceURL)
 	if err != nil {
 		return "", err
 	}
 	wheel := filepath.Join(wheelDir, filename)
-	if err := VerifySHA256(wheel, semgrep.SHA256); err == nil {
+	if err := VerifySHA256(wheel, tool.SHA256); err == nil {
 		return wheel, nil
 	}
 	if err := os.MkdirAll(wheelDir, 0o700); err != nil {
 		return "", err
 	}
-	temporary, err := m.Download(ctx, semgrep)
+	temporary, err := m.Download(ctx, tool)
 	if err != nil {
-		return "", fmt.Errorf("download verified %s wheel: %w", semgrep.ToolID, err)
+		return "", fmt.Errorf("download verified %s wheel: %w", tool.ToolID, err)
 	}
 	defer os.Remove(temporary)
 	if err := os.Remove(wheel); err != nil && !os.IsNotExist(err) {
-		return "", fmt.Errorf("replace cached %s wheel: %w", semgrep.ToolID, err)
+		return "", fmt.Errorf("replace cached %s wheel: %w", tool.ToolID, err)
 	}
 	if err := os.Rename(temporary, wheel); err != nil {
-		return "", fmt.Errorf("store verified %s wheel: %w", semgrep.ToolID, err)
+		return "", fmt.Errorf("store verified %s wheel: %w", tool.ToolID, err)
 	}
 	return wheel, nil
 }
@@ -200,7 +200,7 @@ func wheelFilename(sourceURL string) (string, error) {
 	}
 	name := path.Base(u.Path)
 	if !strings.HasSuffix(strings.ToLower(name), ".whl") || name == ".whl" {
-		return "", fmt.Errorf("Semgrep wheel URL does not end in a wheel filename")
+		return "", fmt.Errorf("wheel URL does not end in a wheel filename")
 	}
 	return name, nil
 }
@@ -222,7 +222,7 @@ func (m Manager) runCommand(ctx context.Context, executable string, args []strin
 	return nil
 }
 
-func semgrepUVEnv(paths SemgrepPaths) []string {
+func uvToolEnv(paths UvToolPaths) []string {
 	return mergeEnv(os.Environ(), map[string]string{
 		"UV_CACHE_DIR":          paths.CacheDir,
 		"UV_TOOL_DIR":           paths.ToolDir,

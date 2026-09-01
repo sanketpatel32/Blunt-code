@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.16] - 2026-09-01
+
+### Added
+- **Checkov 3.3.16 is the tenth analyzer — infrastructure-as-code policy scanning on deep scans.** Checkov evaluates Terraform, Dockerfile, Kubernetes, and CloudFormation files against its 1000+ built-in policies (public S3 ACLs, wide-open security groups, privileged containers, root users, missing encryption, ...). It installs through the same managed-uv pipeline as semgrep (pinned wheel, SHA256-verified, venv under the app's tools dir) and runs hermetically via the venv interpreter — `python -m checkov.main` — because uv's Windows shim resolves python from PATH. Standard scans skip it as deep-only, like OSV Scanner and Trivy.
+
 ## [0.16.15] - 2026-09-01
 
 ### Added

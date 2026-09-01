@@ -33,7 +33,7 @@
 
 ## 🔍 What is this?
 
-- **Nine analyzers, one app.** Ruff, Biome, Gitleaks, Semgrep, SonarQube, OSV Scanner (deep), Trivy (deep), plus built-in secrets + TODO/FIXME trackers — one installer, zero `PATH` fights, no global Python/Java/Node.
+- **Ten analyzers, one app.** Ruff, Biome, Gitleaks, Semgrep, SonarQube, OSV Scanner (deep), Trivy (deep), Checkov (deep), plus built-in secrets + TODO/FIXME trackers — one installer, zero `PATH` fights, no global Python/Java/Node.
 - **Everything stays on your machine.** Loopback-only server (`127.0.0.1`), findings in local SQLite, reports on disk. Offline after the first tool download.
 - **Built for real workflows.** Suppress at the source line, gate CI on `--fail-on high+`, diff against a baseline, export SARIF — then get back to writing code.
 
@@ -49,6 +49,7 @@ flowchart LR
     C --> D6["Secrets"]
     C --> D7["OSV Scanner"]
     C --> D8["Trivy"]
+    C --> D9["Checkov"]
     C --> D6["TODO"]
     D1 --> E["Dedup + fingerprint"]
     D2 --> E
@@ -58,6 +59,7 @@ flowchart LR
     D6 --> E
     D7 --> E
     D8 --> E
+    D9 --> E
     D6 --> E
     E --> F[("SQLite<br>local db")]
     F --> G["Reports<br>MD · HTML · SARIF · CSV · JSON"]
@@ -119,7 +121,7 @@ Keyboard: `g h/w/t/s/a` navigate · `n` add workspace · `/` search · `?` help 
 | | |
 |---|---|
 | **Private by design** | Loopback server, zero telemetry, SQLite at `%LOCALAPPDATA%\BluntCode\bluntcode.db` |
-| **Batteries included** | Ruff (Python), Biome (JS/TS + React auto-domain), Gitleaks (directory-wide secrets), Semgrep (25-rule security pack), SonarQube (polyglot), OSV Scanner (dependency CVEs, deep), Trivy (CVEs + secrets + Dockerfile/IaC misconfigs, deep), in-binary **secrets** (AWS, GitHub, Slack, JWT, Stripe, OpenAI, Anthropic, Azure) + **TODO/FIXME** trackers across 40+ file types |
+| **Batteries included** | Ruff (Python), Biome (JS/TS + React auto-domain), Gitleaks (directory-wide secrets), Semgrep (25-rule security pack), SonarQube (polyglot), OSV Scanner (dependency CVEs, deep), Trivy (CVEs + secrets + Dockerfile/IaC misconfigs, deep), Checkov (Terraform/K8s/CloudFormation policies, deep), in-binary **secrets** (AWS, GitHub, Slack, JWT, Stripe, OpenAI, Anthropic, Azure) + **TODO/FIXME** trackers across 40+ file types |
 | **Dashboard that helps** | Overview cards, activity feed with severity dots, risk grades `A–D` (critical×10/high×5/med×2/low×1) with trend, severity bars, stacked history, suppressions panel |
 | **Workspaces that scale** | Tag chips with `+N` overflow, debounced tag filter, sort by Name / Last scan / Findings, 51→2 queries at 50 workspaces |
 | **Reports you can use** | Sticky filter toolbar, severity-tinted row edges, removable chips, `page`/`page_size` toggles (25/50/100/200 rows), hostile-corpus HTML-escaped |
@@ -199,11 +201,12 @@ bluntcode agent scan "C:\my-app" --profile quick --fail-on high+  # forces --jso
 | **Gitleaks** 8.30.1 | All file types, directory-wide | External secrets scan; honors workspace `.gitleaks.toml` / `.gitleaksignore` |
 | **OSV Scanner** 2.5.1 | npm/PyPI/Go/Maven/NuGet/Composer/RubyGems/cargo lockfiles | Known CVEs per pinned dependency (deep profile) |
 | **Trivy** 0.74.0 | Dockerfile, YAML, JSON, TOML | Dependency CVEs + secrets + misconfigurations (deep; first run downloads its vuln DB) |
+| **Checkov** 3.3.16 | Terraform, Dockerfile, K8s, CloudFormation | IaC misconfigurations against 1000+ built-in policies (deep) |
 | **SonarQube** | Polyglot project-wide | Code smells, hotspots, metrics (cold boot ≤10 min, `BLUNTCODE_SONAR_STARTUP_TIMEOUT`) |
 | **Secrets** (built-in) | 40+ types inc. `.env`/Dockerfile/YAML | AWS, GitHub, Slack, JWT, Stripe, OpenAI, Anthropic, Azure |
 | **TODO** (built-in) | Code & config where comments exist | `TODO/FIXME/HACK/XXX/BUG` with owner `TODO(jane):` |
 
-**Profiles** · Quick `Ruff+Biome` · Standard `+Gitleaks+Semgrep+SonarQube` · Deep `+OSV+Trivy+Ruff extended`
+**Profiles** · Quick `Ruff+Biome` · Standard `+Gitleaks+Semgrep+SonarQube` · Deep `+OSV+Trivy+Checkov+Ruff extended`
 
 Ignore at source: `// bluntcode:ignore` or `// bluntcode:ignore secrets.aws-access-key-id reason: test key` · or suppress by fingerprint with reason (500 chars) · or `.bluntcodeignore` patterns (`dir/**`, `**/name`, basename, `#` comments, 1000/64 KiB cap).
 

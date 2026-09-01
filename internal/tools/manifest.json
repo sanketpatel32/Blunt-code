@@ -51,6 +51,18 @@
       "license_url": "https://github.com/aquasecurity/trivy/blob/v0.74.0/LICENSE"
     },
     {
+      "tool_id": "iac-checkov",
+      "version": "3.3.16",
+      "platform": "windows-amd64",
+      "source_url": "https://files.pythonhosted.org/packages/f8/bd/6f0b157a5d9f9a7da6ba1c651918226e4ba7a3bf67d22b98347439259dcb/checkov-3.3.16-py3-none-any.whl",
+      "sha256": "43e5383418a8b52d39747e2daaec4da4a6b7db3e2f64ab6c93f8b89c044c7665",
+      "archive_type": "wheel",
+      "executable": "env/checkov/Scripts/python.exe",
+      "license_url": "https://github.com/bridgecrewio/checkov/blob/3.3.16/LICENSE",
+      "install_kind": "uv_tool",
+      "package": "checkov==3.3.16"
+    },
+    {
       "tool_id": "uv",
       "version": "0.11.16",
       "platform": "windows-amd64",

@@ -144,7 +144,7 @@ func hashSelectedFiles(root string, files []core.FileEntry) map[string]string {
 var deepOnlyAnalyzerIDs = map[string]bool{
 	"osv-dependencies": true,
 	"container-trivy":  true,
-	// iac-checkov joins this set when it registers.
+	"iac-checkov":      true,
 }
 
 // profileAllowsAnalyzer mirrors the profile gating in executeAnalyzer: the
