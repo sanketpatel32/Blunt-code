@@ -2,246 +2,442 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Blunt Code — Local code quality &amp; security for Windows</title>
-<meta name="description" content="Ruff, Biome, Semgrep, SonarQube, secrets and TODO tracking in one loopback app for Windows. No cloud, no account, no telemetry." />
-<meta property="og:title" content="Blunt Code — Local code quality &amp; security" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Blunt Code — Your code never leaves the machine</title>
+<meta name="description" content="Local code quality & security for Windows — Ruff, Biome, Semgrep, SonarQube, secrets and TODO tracking in one loopback app. No cloud, no account, no telemetry." />
+<meta property="og:title" content="Blunt Code — local code quality & security" />
 <meta property="og:description" content="Ruff · Biome · Semgrep · SonarQube · Secrets · TODO — one loopback app for Windows. No cloud, no account, no telemetry." />
 <meta property="og:type" content="website" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230F172A'/%3E%3Cpath d='M16 5.2 L23.6 9 L23.6 17.2 C23.6 21 20.2 24.5 16 26.8 C11.8 24.5 8.4 21 8.4 17.2 L8.4 9 Z' fill='none' stroke='white' stroke-opacity='0.10' stroke-width='1'/%3E%3Cpath d='M11.8 15.9 L15.2 19.1 L20.6 12.1' fill='none' stroke='white' stroke-width='2.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='23.4' cy='7.2' r='1.7' fill='%233B82F6'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="tokens.css" />
+<script>document.documentElement.classList.add("js");</script>
 <style>
-  :root {
-    --bg: #0b1220;
-    --bg-soft: #0f172a;
-    --card: #131c31;
-    --rule: #233049;
-    --ink: #e7edf7;
-    --ink-soft: #9fb0c8;
-    --ink-faint: #64748b;
-    --accent: #3b82f6;
-    --accent-soft: rgba(59, 130, 246, 0.14);
-    --green: #34d399;
-    --radius: 14px;
-    --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
-  }
+  /* Hallmark · macrostructure: Marquee Hero · theme: Midnight · nav: N5 · footer: Ft5 */
   * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
+  html { overflow-x: clip; }
   body {
+    overflow-x: clip;
     margin: 0;
-    background:
-      radial-gradient(1100px 500px at 85% -10%, rgba(59, 130, 246, 0.14), transparent 60%),
-      radial-gradient(900px 420px at -10% 0%, rgba(52, 211, 153, 0.07), transparent 55%),
-      var(--bg);
-    color: var(--ink);
-    font: 16px/1.65 ui-sans-serif, system-ui, "Segoe UI", Roboto, Arial, sans-serif;
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font: 400 var(--text-base)/1.6 var(--font-body);
     -webkit-font-smoothing: antialiased;
   }
-  a { color: var(--accent); text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  .wrap { max-width: 66rem; margin: 0 auto; padding: 0 1.5rem; }
-
-  header.nav {
-    position: sticky; top: 0; z-index: 10;
-    backdrop-filter: blur(12px);
-    background: rgba(11, 18, 32, 0.78);
-    border-bottom: 1px solid var(--rule);
+  /* Film grain — one fixed layer under content */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.05;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
   }
-  .nav-inner { display: flex; align-items: center; gap: .75rem; padding: .8rem 0; }
-  .brand { display: flex; align-items: center; gap: .6rem; font-weight: 700; font-size: 1.05rem; color: var(--ink); }
-  .brand:hover { text-decoration: none; }
-  .brand svg { display: block; }
-  .nav-links { margin-left: auto; display: flex; gap: 1.25rem; font-size: .92rem; }
-  .nav-links a { color: var(--ink-soft); }
-  .nav-links a:hover { color: var(--ink); }
+  main, header, footer { position: relative; z-index: var(--z-base); }
+  a { color: var(--color-accent); text-decoration: none; }
+  a:hover { text-decoration: underline; text-underline-offset: 2px; }
+  a:active { color: var(--color-accent-strong); }
+  code { font-family: var(--font-outlier); }
+  :focus-visible { outline: 2px solid var(--color-focus); outline-offset: 3px; }
+  ::selection { background: color-mix(in oklch, var(--color-accent) 30%, transparent); }
 
-  .hero { text-align: center; padding: 5.5rem 0 4rem; }
-  .hero .mark { width: 84px; height: 84px; border-radius: 20px; box-shadow: 0 12px 40px rgba(0,0,0,.45); }
-  .hero h1 { font-size: clamp(2.1rem, 5vw, 3.1rem); letter-spacing: -.02em; margin: 1.2rem 0 .4rem; }
-  .hero .tag { font-size: clamp(1.02rem, 2.4vw, 1.25rem); color: var(--ink); font-weight: 600; }
-  .hero .sub { color: var(--ink-soft); max-width: 42rem; margin: .55rem auto 0; }
-  .badges { display: flex; flex-wrap: wrap; gap: .5rem; justify-content: center; margin: 1.6rem 0 2.1rem; }
-  .badge {
-    display: inline-flex; align-items: center; gap: .45rem;
-    padding: .3rem .8rem; border: 1px solid var(--rule); border-radius: 999px;
-    background: var(--bg-soft); color: var(--ink-soft); font-size: .84rem; font-weight: 600;
+  /* ————— N5 floating pill ————— */
+  .nav-pill {
+    position: fixed;
+    inset: var(--space-md) auto auto 50%;
+    transform: translateX(-50%);
+    z-index: var(--z-sticky);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: 0.5rem 1rem;
+    background: color-mix(in oklch, var(--color-paper) 78%, transparent);
+    backdrop-filter: blur(14px) saturate(120%);
+    border: 1px solid var(--color-rule);
+    border-radius: var(--radius-pill);
+    box-shadow: 0 8px 24px -12px var(--color-shadow);
+    white-space: nowrap;
   }
-  .badge .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
-  .cta { display: flex; flex-wrap: wrap; gap: .8rem; justify-content: center; }
-  .btn {
-    display: inline-flex; align-items: center; gap: .5rem;
-    padding: .72rem 1.5rem; border-radius: 12px; font-weight: 650; font-size: .98rem;
-    border: 1px solid var(--rule); color: var(--ink); background: var(--card);
-    transition: transform .12s ease, border-color .12s ease;
+  .nav-pill .wordmark {
+    display: inline-flex; align-items: center; gap: var(--space-xs);
+    font-family: var(--font-outlier); font-weight: 600; font-size: var(--text-sm);
+    letter-spacing: -0.01em; color: var(--color-ink);
   }
-  .btn:hover { text-decoration: none; transform: translateY(-1px); border-color: #34456b; }
-  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 8px 24px rgba(59,130,246,.3); }
+  .nav-pill .wordmark:hover { text-decoration: none; color: var(--color-accent-strong); }
+  .logo-tile { fill: var(--color-paper-3); }
+  .logo-ghost { stroke: color-mix(in oklch, var(--color-ink) 12%, transparent); }
+  .logo-check { stroke: var(--color-ink); }
+  .logo-dot { fill: var(--color-accent); }
+  .nav-pill ul { display: flex; gap: var(--space-md); list-style: none; margin: 0; padding: 0; }
+  .nav-pill ul a { color: var(--color-ink-soft); font-size: var(--text-sm); white-space: nowrap; }
+  .nav-pill ul a:hover { color: var(--color-ink); text-decoration: none; border-bottom: 1px solid var(--color-accent); }
+  .nav-cta {
+    background: var(--color-accent); color: var(--color-accent-ink);
+    font-weight: 600; font-size: var(--text-sm);
+    padding: 0.5rem 1rem; border-radius: var(--radius-pill);
+    white-space: nowrap;
+    transition: background-color var(--dur-short) var(--ease-out), transform var(--dur-micro) var(--ease-out);
+  }
+  .nav-cta:hover { text-decoration: none; background: var(--color-accent-strong); transform: translateY(-1.5px); }
+  .nav-cta:active { transform: translateY(1px); }
+  @media (max-width: 30rem) { .nav-pill ul { display: none; } }
 
-  section { padding: 3.2rem 0; }
-  h2 { font-size: 1.5rem; letter-spacing: -.01em; margin: 0 0 .4rem; }
-  .section-sub { color: var(--ink-soft); margin: 0 0 1.8rem; max-width: 46rem; }
-
-  .cmd-block { border: 1px solid var(--rule); border-radius: var(--radius); background: var(--bg-soft); overflow: hidden; }
-  .cmd-block + .cmd-block { margin-top: 1rem; }
-  .cmd-head {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: .55rem .9rem; border-bottom: 1px solid var(--rule);
-    font: 600 .78rem var(--mono); color: var(--ink-faint); text-transform: uppercase; letter-spacing: .06em;
+  /* ————— Marquee fold ————— */
+  .fold {
+    position: relative;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: var(--space-xl) var(--page-gutter) var(--space-2xl);
+    background:
+      radial-gradient(90rem 40rem at 82% 12%, color-mix(in oklch, var(--color-accent) 17%, transparent), transparent 70%),
+      radial-gradient(60rem 34rem at 8% 92%, color-mix(in oklch, var(--color-accent) 10%, transparent), transparent 65%);
   }
+  .fold h1 {
+    margin: 0 0 var(--space-lg);
+    max-width: 13ch;
+    font: 600 var(--text-marquee)/1.04 var(--font-display);
+    letter-spacing: -0.03em;
+    overflow-wrap: anywhere;
+    min-width: 0;
+  }
+  .fold-tag {
+    display: flex; flex-wrap: wrap; gap: var(--space-sm) var(--space-lg);
+    align-items: baseline; justify-content: space-between;
+    font-size: var(--text-sm);
+    color: var(--color-ink-faint); letter-spacing: 0.02em;
+  }
+  .fold-tag a { color: var(--color-ink-soft); }
+
+  /* Thick divider — the macrostructure's signature break */
+  .divide { border: 0; margin: 0; height: 3px; background: var(--color-rule-faint); }
+  .divide::after { content: ""; }
+
+  /* ————— Shared section rhythm (deliberately uneven) ————— */
+  section { padding-inline: var(--page-gutter); }
+  .section-head { max-width: var(--measure); }
+  .section-head h2 {
+    margin: 0 0 var(--space-sm);
+    font: 600 var(--text-xl)/1.15 var(--font-display);
+    letter-spacing: -0.02em;
+    overflow-wrap: anywhere; min-width: 0;
+  }
+  .section-head p { margin: 0; color: var(--color-ink-soft); max-width: 58ch; }
+
+  /* ————— Install ————— */
+  .install { padding-block: var(--space-3xl) var(--space-2xl); }
+  .install .section-head { margin-bottom: var(--space-xl); }
+  .code-frame {
+    margin: 0 0 var(--space-lg);
+    border-top: 2px solid var(--color-rule);
+    border-bottom: 1px solid var(--color-rule-faint);
+    background: var(--color-paper-2);
+  }
+  .code-frame .frame-head {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--space-md);
+    padding: var(--space-xs) var(--space-md);
+    border-bottom: 1px solid var(--color-rule-faint);
+    font-family: var(--font-outlier); font-size: var(--text-sm); color: var(--color-ink-faint);
+  }
+  .code-frame pre {
+    margin: 0; padding: var(--space-md);
+    overflow-x: auto;
+    font: 400 0.875rem/1.7 var(--font-outlier);
+    color: var(--color-ink-soft);
+    font-variant-numeric: tabular-nums;
+  }
+  .code-frame .cmd-line { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .caret {
+    display: inline-block; width: 1ch; margin-left: var(--space-3xs);
+    background: var(--color-accent); color: var(--color-accent);
+    animation: blink 1s steps(2) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
   .copy-btn {
-    border: 1px solid var(--rule); background: var(--card); color: var(--ink-soft);
-    border-radius: 8px; padding: .28rem .7rem; font: 600 .78rem ui-sans-serif, system-ui, sans-serif; cursor: pointer;
+    display: inline-flex; align-items: center;
+    border: 1px solid var(--color-rule); background: var(--color-paper-3);
+    color: var(--color-ink-soft);
+    border-radius: var(--radius-input);
+    padding: 0.25rem 0.75rem;
+    font: 500 var(--text-sm) var(--font-body);
+    cursor: pointer; white-space: nowrap;
+    transition: background-color var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out);
   }
-  .copy-btn:hover { color: var(--ink); border-color: #34456b; }
-  .copy-btn.ok { color: var(--green); border-color: rgba(52, 211, 153, .4); }
-  .cmd-block pre { margin: 0; padding: 1rem 1.1rem; overflow-x: auto; font: .88rem/1.6 var(--mono); color: #c9d6ec; }
+  .copy-btn:hover { color: var(--color-ink); }
+  .copy-btn:active { transform: translateY(1px); }
+  .copy-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+  .copy-btn[data-state="copied"] { color: var(--color-success); border-color: color-mix(in oklch, var(--color-success) 45%, var(--color-rule)); }
+  .install-alt { margin: var(--space-md) 0 0; color: var(--color-ink-faint); font-size: var(--text-sm); }
 
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: 1rem; }
-  .card {
-    border: 1px solid var(--rule); border-radius: var(--radius); background: var(--card);
-    padding: 1.4rem 1.4rem 1.5rem;
+  /* CTA row — the one action */
+  .cta-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-lg); margin-top: var(--space-xl); }
+  .btn-primary {
+    display: inline-flex; align-items: center; gap: 0.6rem;
+    background: var(--color-accent); color: var(--color-accent-ink);
+    font: 600 var(--text-md) var(--font-display);
+    padding: 0.75rem 1.75rem; border-radius: var(--radius-pill);
+    white-space: nowrap;
+    transition: background-color var(--dur-short) var(--ease-out), transform var(--dur-micro) var(--ease-out);
   }
-  .card h3 { margin: 0 0 .45rem; font-size: 1.02rem; }
-  .card p { margin: 0; color: var(--ink-soft); font-size: .93rem; }
-  .card .k { color: var(--accent); font-weight: 700; margin-right: .5rem; }
+  .btn-primary:hover { text-decoration: none; background: var(--color-accent-strong); transform: translateY(-1.5px); }
+  .btn-primary:active { transform: translateY(1px); }
+  .btn-primary[aria-disabled="true"] { opacity: 0.55; cursor: not-allowed; }
+  .cta-row .secondary { color: var(--color-ink-soft); white-space: nowrap; }
 
-  .chips { display: flex; flex-wrap: wrap; gap: .55rem; }
-  .chip {
-    padding: .42rem .95rem; border-radius: 999px; border: 1px solid var(--rule);
-    background: var(--accent-soft); color: #bfdbfe; font-weight: 600; font-size: .88rem;
+  /* ————— Analyzer marquee ————— */
+  .analyzer-strip {
+    margin-block: var(--space-xl) 0;
+    padding-block: var(--space-lg);
+    border-block: 1px solid var(--color-rule-faint);
+    overflow: hidden;
+    position: relative;
+    -webkit-mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
+    mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
   }
-  .chip.more { background: var(--bg-soft); color: var(--ink-faint); border-style: dashed; }
+  .analyzer-track {
+    display: flex; gap: var(--space-2xl);
+    width: max-content;
+    animation: marquee 48s linear infinite;
+  }
+  .analyzer-strip:hover .analyzer-track, .analyzer-strip:focus-within .analyzer-track { animation-play-state: paused; }
+  .analyzer-track span {
+    font-size: var(--text-sm);
+    color: var(--color-ink-faint); white-space: nowrap;
+  }
+  .analyzer-track span b { color: var(--color-ink-soft); font-weight: 600; }
+  @keyframes marquee { to { transform: translateX(-50%); } }
+  .sr-only {
+    position: absolute; width: 1px; height: 1px;
+    clip-path: inset(50%); overflow: hidden; white-space: nowrap;
+  }
 
-  .vs { border: 1px solid var(--rule); border-radius: var(--radius); overflow: hidden; }
-  .vs-row { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--rule); }
-  .vs-row:last-child { border-bottom: 0; }
-  .vs-row > div { padding: 1rem 1.2rem; font-size: .93rem; }
-  .vs-row .without { color: var(--ink-faint); background: var(--bg-soft); }
-  .vs-row .with { color: var(--ink); }
-  .vs-row .with b { color: var(--green); }
-  @media (max-width: 640px) { .vs-row { grid-template-columns: 1fr; } .vs-row .without { border-bottom: 1px dashed var(--rule); } }
+  /* ————— Why — asymmetric split ————— */
+  .why { padding-block: var(--space-2xl) var(--space-3xl); }
+  .why-grid {
+    display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    gap: var(--space-2xl) var(--space-3xl);
+    align-items: start;
+  }
+  .why-lede h2 {
+    margin: var(--space-md) 0 0;
+    font: 600 var(--text-display-s)/1.08 var(--font-display);
+    letter-spacing: -0.025em;
+    overflow-wrap: anywhere; min-width: 0;
+  }
+  .why-lede p { color: var(--color-ink-soft); max-width: 45ch; }
+  .why-rows { display: grid; gap: var(--space-xl); }
+  .why-row { display: grid; gap: var(--space-2xs); border-top: 1px solid var(--color-rule-faint); padding-top: var(--space-md); }
+  .why-row .without { color: var(--color-ink-faint); }
+  .why-row .with { color: var(--color-ink); }
+  .why-row .with::before {
+    content: ""; display: inline-block; width: 8px; height: 8px;
+    margin-inline-end: var(--space-sm);
+    background: var(--color-accent);
+  }
+  .why-row code {
+    font-family: var(--font-outlier); font-size: 0.82em;
+    background: var(--color-paper-2); border: 1px solid var(--color-rule-faint);
+    border-radius: 5px; padding: var(--space-3xs) var(--space-2xs); color: var(--color-ink-soft);
+  }
+  @media (max-width: 48rem) {
+    .why-grid { grid-template-columns: minmax(0, 1fr); gap: var(--space-xl); }
+  }
 
-  footer { border-top: 1px solid var(--rule); margin-top: 2rem; padding: 2.2rem 0 3rem; color: var(--ink-faint); font-size: .88rem; }
-  footer .wrap { display: flex; flex-wrap: wrap; gap: 1rem 2rem; align-items: center; justify-content: space-between; }
-  .code { font-family: var(--mono); font-size: .85em; color: #c9d6ec; background: var(--bg-soft); border: 1px solid var(--rule); border-radius: 6px; padding: .08em .45em; }
+  /* ————— Numbers — honest, one quiet band ————— */
+  .numbers { padding-block: var(--space-xl) var(--space-2xl); }
+  .numbers dl {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+    gap: var(--space-lg) var(--space-xl); margin: 0;
+  }
+  .numbers dd { margin: 0; font: 600 var(--text-2xl)/1.1 var(--font-display); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .numbers dt { color: var(--color-ink-faint); font-size: var(--text-sm); margin-top: var(--space-2xs); }
+
+  /* ————— Ft5 statement footer ————— */
+  .foot-stmt {
+    padding: var(--space-2xl) var(--page-gutter) var(--space-xl);
+    display: grid; gap: var(--space-lg);
+    background: radial-gradient(70rem 30rem at 85% 110%, color-mix(in oklch, var(--color-accent) 8%, transparent), transparent 70%);
+  }
+  .foot-stmt .line {
+    margin: 0; max-width: 24ch;
+    font: 600 clamp(1.75rem, 5vw, 3.25rem)/1.05 var(--font-display);
+    letter-spacing: -0.02em;
+    overflow-wrap: anywhere; min-width: 0;
+  }
+  .foot-meta {
+    display: flex; flex-wrap: wrap; gap: var(--space-sm) var(--space-lg);
+    justify-content: space-between; align-items: baseline;
+    border-top: 1px solid var(--color-rule-faint);
+    padding-top: var(--space-sm);
+    font-size: var(--text-sm); color: var(--color-ink-faint);
+  }
+  .foot-meta .wordmark { font-family: var(--font-outlier); font-weight: 600; color: var(--color-ink-soft); }
+  .foot-meta nav { display: flex; flex-wrap: wrap; gap: var(--space-md); }
+  .foot-meta nav a { color: var(--color-ink-faint); white-space: nowrap; }
+  .foot-meta nav a:hover { color: var(--color-ink); }
+
+  /* ————— Reveal — one orchestrated entrance on load, one-shot ————— */
+  .js .reveal { opacity: 0; transform: translateY(8px); animation: reveal var(--dur-long) var(--ease-out) forwards; animation-delay: calc(var(--i, 0) * 70ms); }
+  @keyframes reveal { to { opacity: 1; transform: none; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 150ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 150ms !important;
+    }
+    .analyzer-track { animation: none; flex-wrap: wrap; width: auto; }
+    .caret { animation: none; }
+    .js .reveal { opacity: 1; transform: none; animation: none; }
+  }
 </style>
 </head>
 <body>
 
-<header class="nav">
-  <div class="wrap nav-inner">
-    <a class="brand" href="#">
-      <svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#0F172A"/><path d="M16 5.2 L23.6 9 L23.6 17.2 C23.6 21 20.2 24.5 16 26.8 C11.8 24.5 8.4 21 8.4 17.2 L8.4 9 Z" fill="none" stroke="white" stroke-opacity="0.10" stroke-width="1"/><path d="M11.8 15.9 L15.2 19.1 L20.6 12.1" fill="none" stroke="white" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="23.4" cy="7.2" r="1.7" fill="#3B82F6"/></svg>
-      Blunt Code
+<header>
+  <nav class="nav-pill" aria-label="Primary">
+    <a class="wordmark" href="#top">
+      <svg width="20" height="20" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" class="logo-tile"/><path d="M16 5.2 L23.6 9 L23.6 17.2 C23.6 21 20.2 24.5 16 26.8 C11.8 24.5 8.4 21 8.4 17.2 L8.4 9 Z" fill="none" class="logo-ghost" stroke-width="1"/><path d="M11.8 15.9 L15.2 19.1 L20.6 12.1" fill="none" class="logo-check" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="23.4" cy="7.2" r="1.7" class="logo-dot"/></svg>
+      blunt-code
     </a>
-    <nav class="nav-links">
-      <a href="#install">Install</a>
-      <a href="#why">Why</a>
-      <a href="https://github.com/sanketpatel32/Blunt-code/releases">Releases</a>
-      <a href="https://github.com/sanketpatel32/Blunt-code">GitHub</a>
-    </nav>
-  </div>
+    <ul>
+      <li><a href="#install">Install</a></li>
+      <li><a href="#why">Why</a></li>
+      <li><a href="https://github.com/sanketpatel32/Blunt-code">GitHub</a></li>
+    </ul>
+    <a class="nav-cta" href="https://github.com/sanketpatel32/Blunt-code/releases/latest">Download</a>
+  </nav>
 </header>
 
-<main>
-  <div class="hero wrap">
-    <svg class="mark" viewBox="0 0 32 32" role="img" aria-label="Blunt Code"><rect width="32" height="32" rx="8" fill="#0F172A"/><path d="M16 5.2 L23.6 9 L23.6 17.2 C23.6 21 20.2 24.5 16 26.8 C11.8 24.5 8.4 21 8.4 17.2 L8.4 9 Z" fill="none" stroke="white" stroke-opacity="0.10" stroke-width="1"/><path d="M11.8 15.9 L15.2 19.1 L20.6 12.1" fill="none" stroke="white" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="23.4" cy="7.2" r="1.7" fill="#3B82F6"/></svg>
-    <h1>Blunt Code</h1>
-    <p class="tag">Local code quality &amp; security — no cloud, no account, no telemetry.</p>
-    <p class="sub">Ruff · Biome · Semgrep · SonarQube · Secrets · TODO — every analyzer you already trust, one loopback app for Windows.</p>
-    <div class="badges">
-      <span class="badge"><span class="dot"></span>100% local</span>
-      <span class="badge">Windows 10 / 11</span>
-      <span class="badge">MIT license</span>
-      <span class="badge">Loopback only · zero telemetry</span>
+<main id="top">
+
+  <section class="fold" aria-label="Blunt Code">
+    <h1 class="reveal" style="--i: 0">Your code never leaves the machine.</h1>
+    <p class="fold-tag reveal" style="--i: 2">
+      <span>blunt code · windows 10/11 · 100% local</span>
+      <a href="#install">install ↓</a>
+    </p>
+  </section>
+
+  <hr class="divide" />
+
+  <section class="install" id="install">
+    <div class="section-head">
+      <h2>Install in 30 seconds</h2>
+      <p>One line, no admin. Verifies SHA-256, adds a Start Menu shortcut, and launches. Rerunning it later upgrades in place.</p>
     </div>
-    <div class="cta">
-      <a class="btn primary" href="https://github.com/sanketpatel32/Blunt-code/releases/latest">Download for Windows</a>
-      <a class="btn" href="#install">Install in 30 seconds</a>
+
+    <div class="code-frame">
+      <div class="frame-head">
+        <span>powershell</span>
+        <button class="copy-btn" type="button" data-copy="ps">Copy</button>
+      </div>
+      <pre id="cmd-ps"><code class="cmd-line">irm https://github.com/sanketpatel32/Blunt-code/releases/latest/download/install-latest.ps1 | iex<span class="caret" aria-hidden="true">▮</span></code></pre>
+    </div>
+
+    <div class="code-frame">
+      <div class="frame-head">
+        <span>cmd</span>
+        <button class="copy-btn" type="button" data-copy="cmd">Copy</button>
+      </div>
+      <pre id="cmd-cmd"><code class="cmd-line">curl -fsSL -o "%TEMP%\install-bluntcode.cmd" https://github.com/sanketpatel32/Blunt-code/releases/latest/download/install.cmd &amp;&amp; "%TEMP%\install-bluntcode.cmd"</code></pre>
+    </div>
+
+    <div class="cta-row">
+      <a class="btn-primary" href="https://github.com/sanketpatel32/Blunt-code/releases/latest">Download for Windows</a>
+      <a class="secondary" href="https://github.com/sanketpatel32/Blunt-code/releases/latest">Portable ZIP + SHA-256 →</a>
+    </div>
+    <p class="install-alt">Installs to <code>%LOCALAPPDATA%\Programs\BluntCode</code>. Tools are sandboxed under <code>%LOCALAPPDATA%\BluntCode\tools</code> — your PATH is never touched.</p>
+  </section>
+
+  <div class="analyzer-strip" aria-label="Bundled analyzers">
+    <ul class="sr-only">
+      <li>Ruff — Python</li><li>Biome — JS/TS + React</li><li>Semgrep — 25-rule security pack</li><li>SonarQube — polyglot, managed runtime</li><li>Secrets — AWS, GitHub, Slack, JWT, Stripe, OpenAI, Anthropic, Azure</li><li>TODO/FIXME — 40+ file types</li>
+    </ul>
+    <div class="analyzer-track" aria-hidden="true">
+      <span><b>Ruff</b> — Python</span><span><b>Biome</b> — JS/TS + React</span><span><b>Semgrep</b> — 25-rule security pack</span><span><b>SonarQube</b> — polyglot, managed runtime</span><span><b>Secrets</b> — 8 credential families</span><span><b>TODO/FIXME</b> — 40+ file types</span>
+      <span><b>Ruff</b> — Python</span><span><b>Biome</b> — JS/TS + React</span><span><b>Semgrep</b> — 25-rule security pack</span><span><b>SonarQube</b> — polyglot, managed runtime</span><span><b>Secrets</b> — 8 credential families</span><span><b>TODO/FIXME</b> — 40+ file types</span>
     </div>
   </div>
 
-  <section id="install">
-    <div class="wrap">
-      <h2>Install in 30 seconds</h2>
-      <p class="section-sub">One line, no admin. Installs to <span class="code">%LOCALAPPDATA%\Programs\BluntCode</span>, verifies SHA-256, creates a Start Menu shortcut, and launches the app. Rerunning either command upgrades in place.</p>
-      <div class="cmd-block">
-        <div class="cmd-head"><span>PowerShell — Win+R → powershell</span><button class="copy-btn" type="button">Copy</button></div>
-        <pre><code>irm https://github.com/sanketpatel32/Blunt-code/releases/latest/download/install-latest.ps1 | iex</code></pre>
+  <section class="why" id="why">
+    <div class="why-grid">
+      <div class="why-lede">
+        <h2>One exe instead of four PATH fights.</h2>
+        <p>Ruff, Biome, Semgrep, SonarQube, secrets and TODO tracking — one app, one report, one loopback server.</p>
       </div>
-      <div class="cmd-block">
-        <div class="cmd-head"><span>Cmd — Win+R → cmd</span><button class="copy-btn" type="button">Copy</button></div>
-        <pre><code>curl -fsSL -o "%TEMP%\install-bluntcode.cmd" https://github.com/sanketpatel32/Blunt-code/releases/latest/download/install.cmd &amp;&amp; "%TEMP%\install-bluntcode.cmd"</code></pre>
-      </div>
-      <p class="section-sub" style="margin-top:1.2rem">Prefer a portable build? Grab the <a href="https://github.com/sanketpatel32/Blunt-code/releases/latest">ZIP + SHA-256 from Releases</a> and run <span class="code">bluntcode.exe</span>.</p>
-    </div>
-  </section>
-
-  <section id="why">
-    <div class="wrap">
-      <h2>Why Blunt Code</h2>
-      <p class="section-sub">Four linters means four installs and four PATH fights — and findings scattered across terminals. Blunt Code is one app, one report.</p>
-      <div class="vs">
-        <div class="vs-row"><div class="without">Four linters, four installs, four PATH fights</div><div class="with"><b>One</b> <span class="code">bluntcode.exe</span> — tools sandboxed under <span class="code">%LOCALAPPDATA%\BluntCode\tools</span>, never touching global PATH</div></div>
-        <div class="vs-row"><div class="without">Findings scattered across terminals</div><div class="with"><b>One report</b> — Markdown / HTML / SARIF / CSV / JSON, filterable by tool · rule · severity · path</div></div>
-        <div class="vs-row"><div class="without">Cloud gates that ship your source</div><div class="with"><b>Loopback only</b> — <span class="code">127.0.0.1</span>, SQLite + reports stay on disk, offline mode after first download</div></div>
-        <div class="vs-row"><div class="without">"Fix later" that never sticks</div><div class="with"><b>Suppressions that ship with the repo</b> — <span class="code">bluntcode:ignore</span> at the source, fingerprint suppressions, <span class="code">.bluntcodeignore</span></div></div>
+      <div class="why-rows">
+        <div class="why-row">
+          <span class="without">Four linters, four installs, four PATH fights</span>
+          <span class="with">One <code>bluntcode.exe</code> — analyzers pinned and sandboxed, global PATH untouched</span>
+        </div>
+        <div class="why-row">
+          <span class="without">Findings scattered across terminals</span>
+          <span class="with">One report — Markdown, HTML, SARIF, CSV, JSON; filter by tool, rule, severity, path</span>
+        </div>
+        <div class="why-row">
+          <span class="without">Cloud gates that ship your source</span>
+          <span class="with">Loopback only — SQLite and reports stay on disk, offline mode after first download</span>
+        </div>
+        <div class="why-row">
+          <span class="without">“Fix later” that never sticks</span>
+          <span class="with">Suppressions that ship with the repo — <code>bluntcode:ignore</code>, fingerprints, <code>.bluntcodeignore</code></span>
+        </div>
       </div>
     </div>
   </section>
 
-  <section id="analyzers">
-    <div class="wrap">
-      <h2>Batteries included</h2>
-      <p class="section-sub">Every analyzer is pinned, sandboxed, and managed for you — including a private Java runtime for SonarQube.</p>
-      <div class="chips">
-        <span class="chip">Ruff — Python</span>
-        <span class="chip">Biome — JS/TS + React</span>
-        <span class="chip">Semgrep — 25-rule security pack</span>
-        <span class="chip">SonarQube — polyglot, managed runtime</span>
-        <span class="chip">Secrets — AWS · GitHub · Slack · JWT · Stripe · OpenAI · Anthropic · Azure</span>
-        <span class="chip">TODO / FIXME — 40+ file types</span>
-        <span class="chip more">+ CI gate via <span class="code">--format github</span></span>
-      </div>
-    </div>
+  <section class="numbers" aria-label="By the numbers">
+    <dl>
+      <div><dd>6</dd><dt>bundled analyzers</dt></div>
+      <div><dd>723</dd><dt>automated tests passing</dt></div>
+      <div><dd>0</dd><dt>bytes of telemetry</dt></div>
+      <div><dd>40+</dd><dt>file types scanned</dt></div>
+    </dl>
   </section>
 
-  <section id="features">
-    <div class="wrap grid">
-      <div class="card"><h3><span class="k">01</span>Private by design</h3><p>Loopback server, zero telemetry, SQLite at <span class="code">%LOCALAPPDATA%\BluntCode\bluntcode.db</span>. Your code never leaves the machine.</p></div>
-      <div class="card"><h3><span class="k">02</span>One report, every tool</h3><p>Severity, rule, analyzer, path, status — filter without leaving the report. Export to Markdown, HTML, SARIF, CSV or JSON.</p></div>
-      <div class="card"><h3><span class="k">03</span>History &amp; comparisons</h3><p>Every scan is kept. New, fixed and persistent findings are diffed automatically so regressions stand out.</p></div>
-      <div class="card"><h3><span class="k">04</span>Suppressions that stick</h3><p>Fingerprint-based, reason-tagged, restorable — and exportable so the whole team shares one source of truth.</p></div>
-      <div class="card"><h3><span class="k">05</span>CLI + GUI, same engine</h3><p><span class="code">bluntcode scan</span> for scripts and CI gates; the app for exploring. One data dir, one truth.</p></div>
-      <div class="card"><h3><span class="k">06</span>Incremental scans</h3><p>Unchanged files skip re-analysis, so the second scan of a workspace is seconds, not minutes.</p></div>
-    </div>
-  </section>
 </main>
 
-<footer>
-  <div class="wrap">
-    <span>Blunt Code — MIT license. Built for Windows 10/11.</span>
-    <span><a href="https://github.com/sanketpatel32/Blunt-code">GitHub</a> · <a href="https://github.com/sanketpatel32/Blunt-code/releases">Releases</a> · <a href="https://github.com/sanketpatel32/Blunt-code/blob/main/CHANGELOG.md">Changelog</a> · <a href="https://github.com/sanketpatel32/Blunt-code/blob/main/docs/ci.md">CI guide</a></span>
+<footer class="foot-stmt">
+  <p class="line">Scan everything. Send nothing.</p>
+  <div class="foot-meta">
+    <span class="wordmark">blunt-code</span>
+    <nav aria-label="Footer">
+      <a href="https://github.com/sanketpatel32/Blunt-code">GitHub</a>
+      <a href="https://github.com/sanketpatel32/Blunt-code/releases">Releases</a>
+      <a href="https://github.com/sanketpatel32/Blunt-code/blob/main/CHANGELOG.md">Changelog</a>
+      <a href="https://github.com/sanketpatel32/Blunt-code/blob/main/docs/ci.md">CI guide</a>
+    </nav>
+    <span>© 2026 · MIT · Windows 10/11</span>
   </div>
 </footer>
 
 <script>
-  document.querySelectorAll('.copy-btn').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const code = btn.closest('.cmd-block').querySelector('code');
-      const text = code ? code.textContent : '';
+  // Copy-to-clipboard — the label change is the feedback; no toast.
+  document.querySelectorAll(".copy-btn").forEach(function (btn) {
+    btn.addEventListener("click", async function () {
+      var pre = document.getElementById(btn.dataset.copy === "ps" ? "cmd-ps" : "cmd-cmd");
+      var text = pre ? pre.textContent.replace("▮", "").trim() : "";
       try {
         await navigator.clipboard.writeText(text);
       } catch {
-        const range = document.createRange();
-        range.selectNodeContents(code);
-        const sel = window.getSelection();
-        sel.removeAllRanges(); sel.addRange(range);
-        document.execCommand('copy'); sel.removeAllRanges();
+        var range = document.createRange(); range.selectNodeContents(pre);
+        var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+        document.execCommand("copy"); sel.removeAllRanges();
       }
-      const old = btn.textContent;
-      btn.textContent = 'Copied';
-      btn.classList.add('ok');
-      setTimeout(() => { btn.textContent = old; btn.classList.remove('ok'); }, 1400);
+      btn.dataset.state = "copied";
+      btn.textContent = "Copied ✓";
+      btn.setAttribute("aria-label", "Command copied to clipboard");
+      clearTimeout(btn._t);
+      btn._t = setTimeout(function () {
+        delete btn.dataset.state;
+        btn.textContent = "Copy";
+        btn.setAttribute("aria-label", "Copy command to clipboard");
+      }, 2500);
     });
   });
 </script>
