@@ -47,8 +47,10 @@ function SeveritySegments({ counts, total }: { counts: Record<Severity, number>;
 /** Text filters wait for typing to pause before hitting the API; empty values flush instantly. */
 const TEXT_FILTER_DELAY_MS = 300;
 
-/** Server-side page window for the findings list; modest by design so first paint stays fast and the table stays scrollable. */
-const PAGE_SIZE = 50;
+/** Server-side page window options for the findings list, capped at the API's
+ *  MaxFindingsPageSize (200) so first paint stays fast and the table stays scrollable. */
+const PAGE_SIZE_OPTIONS = [25, 50, 100, 200] as const;
+const DEFAULT_PAGE_SIZE = 50;
 
 /** Sortable findings columns; keys match the backend sort param (severity|path|analyzer|status). */
 export type SortKey = 'severity' | 'path' | 'analyzer' | 'status';
@@ -63,9 +65,9 @@ const SORT_DEFAULT_DIR: Record<SortKey, SortDir> = { severity: 'desc', path: 'as
 
 const VALID_SORT_KEYS: SortKey[] = ['severity', 'path', 'analyzer', 'status'];
 
-/** Read the shareable report state (filters/sort/page) from the current URL. Unknown values fall back to defaults. */
-function readUrlState(): { filters: FindingFilter; sort: SortState; page: number } {
-  if (typeof window === 'undefined') return { filters: { ...EMPTY_FILTER }, sort: { key: 'severity', dir: 'asc' }, page: 1 };
+/** Read the shareable report state (filters/sort/page/page size) from the current URL. Unknown values fall back to defaults. */
+function readUrlState(): { filters: FindingFilter; sort: SortState; page: number; pageSize: number } {
+  if (typeof window === 'undefined') return { filters: { ...EMPTY_FILTER }, sort: { key: 'severity', dir: 'asc' }, page: 1, pageSize: DEFAULT_PAGE_SIZE };
   const sp = new URLSearchParams(window.location.search);
   const filters: FindingFilter = {
     severity: sp.get('severity') ?? '',
@@ -86,11 +88,14 @@ function readUrlState(): { filters: FindingFilter; sort: SortState; page: number
   let page = 1;
   const rawPage = Number(sp.get('page'));
   if (Number.isFinite(rawPage) && rawPage >= 1) page = Math.floor(rawPage);
-  return { filters, sort, page };
+  let pageSize = DEFAULT_PAGE_SIZE;
+  const rawPageSize = Number(sp.get('page_size'));
+  if ((PAGE_SIZE_OPTIONS as readonly number[]).includes(rawPageSize)) pageSize = rawPageSize;
+  return { filters, sort, page, pageSize };
 }
 
 /** Serialize the shareable state to a query string; default values are omitted so clean URLs stay clean. */
-function buildUrlSearch(filters: FindingFilter, sort: SortState, page: number): string {
+function buildUrlSearch(filters: FindingFilter, sort: SortState, page: number, pageSize: number): string {
   const sp = new URLSearchParams();
   for (const key of ['severity', 'category', 'rule', 'status'] as const) {
     if (filters[key]) sp.set(key, filters[key]);
@@ -103,6 +108,7 @@ function buildUrlSearch(filters: FindingFilter, sort: SortState, page: number): 
     sp.set('order', sort.dir);
   }
   if (page !== 1) sp.set('page', String(page));
+  if (pageSize !== DEFAULT_PAGE_SIZE) sp.set('page_size', String(pageSize));
   return sp.toString();
 }
 
@@ -152,6 +158,7 @@ export function ReportView({ scanId, notify }: { scanId: string; notify?: (n: No
   const [filters, setFilters] = useState<FindingFilter>(initialUrlState.filters);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [page, setPage] = useState(initialUrlState.page);
+  const [pageSize, setPageSize] = useState(initialUrlState.pageSize);
   const [sort, setSort] = useState<SortState>(initialUrlState.sort);
   const [previewFinding, setPreviewFinding] = useState<Finding>();
   const [suppressing, setSuppressing] = useState<Finding>();
@@ -160,17 +167,17 @@ export function ReportView({ scanId, notify }: { scanId: string; notify?: (n: No
   const debouncedCategory = useDebouncedValue(filters.category, filters.category ? TEXT_FILTER_DELAY_MS : 0);
   const debouncedPath = useDebouncedValue(filters.path, filters.path ? TEXT_FILTER_DELAY_MS : 0);
   const debouncedQ = useDebouncedValue(filters.q, filters.q ? TEXT_FILTER_DELAY_MS : 0);
-  // Keep the URL in sync for shareable report links (filters/sort/page).
+  // Keep the URL in sync for shareable report links (filters/sort/page/page size).
   // Text filters use their debounced values so typing does not spam history;
   // replaceState keeps back/forward linear. A no-op when nothing changed.
   useEffect(() => {
     const urlFilters: FindingFilter = { ...filters, category: debouncedCategory, path: debouncedPath, q: debouncedQ };
-    const qs = buildUrlSearch(urlFilters, sort, page);
+    const qs = buildUrlSearch(urlFilters, sort, page, pageSize);
     const current = window.location.search.replace(/^\?/, '');
     if (qs === current) return;
     const nextUrl = qs ? `${window.location.pathname}?${qs}${window.location.hash}` : `${window.location.pathname}${window.location.hash}`;
     window.history.replaceState(null, '', nextUrl);
-  }, [filters, debouncedCategory, debouncedPath, debouncedQ, sort, page]);
+  }, [filters, debouncedCategory, debouncedPath, debouncedQ, sort, page, pageSize]);
   // Restore filters/sort/page when the user navigates back/forward.
   useEffect(() => {
     const onPopState = () => {
@@ -178,11 +185,12 @@ export function ReportView({ scanId, notify }: { scanId: string; notify?: (n: No
       setFilters(next.filters);
       setSort(next.sort);
       setPage(next.page);
+      setPageSize(next.pageSize);
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
-  const params = useMemo(() => ({ ...filters, category: debouncedCategory, path: debouncedPath, q: debouncedQ, page: String(page), page_size: String(PAGE_SIZE), sort: sort.key, order: sort.dir }), [filters, debouncedCategory, debouncedPath, debouncedQ, page, sort]);
+  const params = useMemo(() => ({ ...filters, category: debouncedCategory, path: debouncedPath, q: debouncedQ, page: String(page), page_size: String(pageSize), sort: sort.key, order: sort.dir }), [filters, debouncedCategory, debouncedPath, debouncedQ, page, pageSize, sort]);
   /** CSV export query: the on-screen filters + sort minus paging, built exactly like the findings request so the file mirrors the list. */
   const csvParams = useMemo(() => Object.fromEntries(Object.entries(params).filter(([key]) => key !== 'page' && key !== 'page_size')), [params]);
   const findings = useLoad(() => api.findings(scanId, params), [scanId, ...Object.values(params)]);
@@ -190,6 +198,8 @@ export function ReportView({ scanId, notify }: { scanId: string; notify?: (n: No
   const updateFilters = (next: FindingFilter) => { setFilters(next); setPage(1); };
   /** Toggles the active column's direction; switching columns applies that column's default direction. Either way paging restarts on page one. */
   const changeSort = (key: SortKey) => { setSort((current) => (current.key === key ? { key, dir: current.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: SORT_DEFAULT_DIR[key] })); setPage(1); };
+  /** Switching the page window restarts on page one; the new window rarely contains the old page's rows. */
+  const changePageSize = (next: number) => { setPageSize(next); setPage(1); };
   const removeFilter = (key: keyof FindingFilter) => updateFilters({ ...filters, [key]: '' });
   const toggleSeverity = (severity: string) => updateFilters({ ...filters, severity: filters.severity === severity ? '' : severity });
   if (report.loading) return <section className="report"><SkeletonCards count={4} /><SkeletonLines lines={3} /></section>;
@@ -224,7 +234,7 @@ export function ReportView({ scanId, notify }: { scanId: string; notify?: (n: No
   const noFindingsCopy = filters.analyzer ? 'This analyzer completed without reportable issues for the selected files.' : 'Try clearing one or more filters.';
   /** A completed scan with zero findings and no active filters earns the celebratory panel; anything else keeps the filter-empty messaging. */
   const allClear = !activeFilterCount && dataScan.state === 'completed' && (dataScan.total_findings ?? 0) === 0;
-  return <section className="report"><header className="report-header"><div><p className="eyebrow">Report</p><h2>Analysis overview</h2><p>{data.warnings?.length ? 'Analysis completed with limitations.' : 'Analysis completed.'}</p></div><ExportMenu scanId={scanId} csvParams={csvParams} findings={list} /></header><AnalyzerDurationChips runs={dataScan.analyzer_runs} />{data.warnings?.length ? <div className="inline-warning"><strong>Incomplete analysis</strong>{data.warnings.map((warning) => <span key={warning}>{warning}</span>)}</div> : null}<section className="summary-grid"><SummaryCard label="Total findings" value={dataScan.total_findings ?? 0} /><SummaryCard label="New" value={data.comparison?.new_count ?? dataScan.new_count ?? 0} /><SummaryCard label="Fixed" value={data.comparison?.fixed_count ?? 0} /><SummaryCard label="Persistent" value={data.comparison?.persistent_count ?? 0} /></section><SeverityDistribution scan={dataScan} /><AnalyzerResults runs={dataScan.analyzer_runs} findings={data.findings} selectedAnalyzer={filters.analyzer} onSelect={(analyzer) => changeAnalyzer(filters.analyzer === analyzer ? '' : analyzer)} /><section className="findings-section"><div className="section-head"><div><h2>Findings</h2><p>Filter results without leaving the report.</p></div><div className="findings-toolbar"><button type="button" className="button secondary density-toggle" aria-pressed={dense} title={dense ? 'Switch to comfortable row spacing' : 'Switch to compact row spacing'} onClick={toggleDensity}>{dense ? 'Comfortable' : 'Compact'}</button><button type="button" className="button secondary" aria-expanded={filtersOpen} aria-controls="finding-filters" onClick={() => setFiltersOpen((open) => !open)}>Filters{activeFilterCount ? ` (${activeFilterCount})` : ''}</button>{activeFilterCount ? <button type="button" className="text-button" onClick={clearFilters}>Clear</button> : null}</div></div><FilterChips filters={filters} onRemove={removeFilter} />{filtersOpen && <FindingFilters filters={filters} setFilters={updateFilters} analyzers={dataScan.analyzer_runs} rules={ruleOptions} onAnalyzer={changeAnalyzer} />}<SeverityPills scan={dataScan} selected={filters.severity} onToggle={toggleSeverity} /><div className={`finding-list${dense ? ' finding-dense' : ''}`}>{findings.loading ? <SkeletonTable rows={5} cols={5} className="findings-table" /> : findings.error ? <ErrorPanel error={findings.error} retry={findings.reload} /> : list.length ? <FindingsTable findings={list} sort={sort} onSort={changeSort} onPreview={setPreviewFinding} canSuppress={canManageSuppressions} onSuppress={setSuppressing} onRestore={restoreFinding} onFix={setFixFinding} onComment={setCommentFinding} /> : allClear ? <Empty title="All clear — no findings" tone="positive" icon={<><CheckShieldIcon /><span className="empty-sparkle one"><SparkleIcon /></span><span className="empty-sparkle two"><SparkleIcon /></span></>}>Every analyzer finished and found nothing to flag. Nice work.</Empty> : <Empty title={noFindingsTitle} icon={<MagnifierIcon />}>{noFindingsCopy}</Empty>}</div>{findings.data && <FindingsPagination total={findings.data.total ?? 0} page={page} pageSize={PAGE_SIZE} hasNext={findings.data.has_next ?? findings.data.has_more} onPrevious={() => setPage((current) => Math.max(1, current - 1))} onNext={() => setPage((current) => current + 1)} />}</section>{previewFinding && <FindingPreviewDialog scanId={scanId} finding={previewFinding} onClose={() => setPreviewFinding(undefined)} />}{suppressing && <SuppressFindingDialog workspaceId={workspaceId} finding={suppressing} onClose={() => setSuppressing(undefined)} onSuppressed={(reason) => { setSuppressing(undefined); notify?.({ kind: 'success', text: `Finding suppressed${reason ? ` (${reason})` : ''}. It will not appear in future scans, reports, or the CI gate.` }); void findings.reload(); }} notify={notify ?? noopNotify} />}<Sheet open={!!commentFinding} onOpenChange={(o) => { if (!o) setCommentFinding(undefined); }}><SheetContent side="right" className="w-full max-w-md overflow-y-auto sm:max-w-md" aria-label="Comments"><SheetHeader><SheetTitle className="flex items-center gap-2"><MessageCircle className="h-4 w-4 text-[var(--color-accent)]" aria-hidden="true" /> Comments</SheetTitle><SheetDescription>{commentFinding ? (commentFinding.title ?? commentFinding.rule_id ?? 'Finding') : ''}</SheetDescription></SheetHeader>{commentFinding && <div className="mt-4"><CommentsPanel fingerprint={commentFinding.fingerprint ?? commentFinding.id ?? 'unknown'} title={findingLocation(commentFinding)} /></div>}</SheetContent></Sheet><Sheet open={!!fixFinding} onOpenChange={(o) => { if (!o) setFixFinding(undefined); }}><SheetContent side="right" className="w-full max-w-xl overflow-y-auto sm:max-w-xl" aria-label="AI Fix suggestion"><SheetHeader><SheetTitle className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-[var(--color-accent)]" aria-hidden="true" /> AI Fix</SheetTitle><SheetDescription>AI-generated suggestion — review before applying</SheetDescription></SheetHeader>{fixFinding && <AutoFixPanel finding={fixFinding} onClose={() => setFixFinding(undefined)} />}</SheetContent></Sheet></section>;
+  return <section className="report"><header className="report-header"><div><p className="eyebrow">Report</p><h2>Analysis overview</h2><p>{data.warnings?.length ? 'Analysis completed with limitations.' : 'Analysis completed.'}</p></div><ExportMenu scanId={scanId} csvParams={csvParams} findings={list} /></header><AnalyzerDurationChips runs={dataScan.analyzer_runs} />{data.warnings?.length ? <div className="inline-warning"><strong>Incomplete analysis</strong>{data.warnings.map((warning) => <span key={warning}>{warning}</span>)}</div> : null}<section className="summary-grid"><SummaryCard label="Total findings" value={dataScan.total_findings ?? 0} /><SummaryCard label="New" value={data.comparison?.new_count ?? dataScan.new_count ?? 0} /><SummaryCard label="Fixed" value={data.comparison?.fixed_count ?? 0} /><SummaryCard label="Persistent" value={data.comparison?.persistent_count ?? 0} /></section><SeverityDistribution scan={dataScan} /><AnalyzerResults runs={dataScan.analyzer_runs} findings={data.findings} selectedAnalyzer={filters.analyzer} onSelect={(analyzer) => changeAnalyzer(filters.analyzer === analyzer ? '' : analyzer)} /><section className="findings-section"><div className="section-head"><div><h2>Findings</h2><p>Filter results without leaving the report.</p></div><div className="findings-toolbar"><button type="button" className="button secondary density-toggle" aria-pressed={dense} title={dense ? 'Switch to comfortable row spacing' : 'Switch to compact row spacing'} onClick={toggleDensity}>{dense ? 'Comfortable' : 'Compact'}</button><button type="button" className="button secondary" aria-expanded={filtersOpen} aria-controls="finding-filters" onClick={() => setFiltersOpen((open) => !open)}>Filters{activeFilterCount ? ` (${activeFilterCount})` : ''}</button>{activeFilterCount ? <button type="button" className="text-button" onClick={clearFilters}>Clear</button> : null}</div></div><FilterChips filters={filters} onRemove={removeFilter} />{filtersOpen && <FindingFilters filters={filters} setFilters={updateFilters} analyzers={dataScan.analyzer_runs} rules={ruleOptions} onAnalyzer={changeAnalyzer} />}<SeverityPills scan={dataScan} selected={filters.severity} onToggle={toggleSeverity} /><div className={`finding-list${dense ? ' finding-dense' : ''}`}>{findings.loading ? <SkeletonTable rows={5} cols={5} className="findings-table" /> : findings.error ? <ErrorPanel error={findings.error} retry={findings.reload} /> : list.length ? <FindingsTable findings={list} sort={sort} onSort={changeSort} onPreview={setPreviewFinding} canSuppress={canManageSuppressions} onSuppress={setSuppressing} onRestore={restoreFinding} onFix={setFixFinding} onComment={setCommentFinding} /> : allClear ? <Empty title="All clear — no findings" tone="positive" icon={<><CheckShieldIcon /><span className="empty-sparkle one"><SparkleIcon /></span><span className="empty-sparkle two"><SparkleIcon /></span></>}>Every analyzer finished and found nothing to flag. Nice work.</Empty> : <Empty title={noFindingsTitle} icon={<MagnifierIcon />}>{noFindingsCopy}</Empty>}</div>{findings.data && <FindingsPagination total={findings.data.total ?? 0} page={page} pageSize={pageSize} hasNext={findings.data.has_next ?? findings.data.has_more} onPrevious={() => setPage((current) => Math.max(1, current - 1))} onNext={() => setPage((current) => current + 1)} onPageSize={changePageSize} />}</section>{previewFinding && <FindingPreviewDialog scanId={scanId} finding={previewFinding} onClose={() => setPreviewFinding(undefined)} />}{suppressing && <SuppressFindingDialog workspaceId={workspaceId} finding={suppressing} onClose={() => setSuppressing(undefined)} onSuppressed={(reason) => { setSuppressing(undefined); notify?.({ kind: 'success', text: `Finding suppressed${reason ? ` (${reason})` : ''}. It will not appear in future scans, reports, or the CI gate.` }); void findings.reload(); }} notify={notify ?? noopNotify} />}<Sheet open={!!commentFinding} onOpenChange={(o) => { if (!o) setCommentFinding(undefined); }}><SheetContent side="right" className="w-full max-w-md overflow-y-auto sm:max-w-md" aria-label="Comments"><SheetHeader><SheetTitle className="flex items-center gap-2"><MessageCircle className="h-4 w-4 text-[var(--color-accent)]" aria-hidden="true" /> Comments</SheetTitle><SheetDescription>{commentFinding ? (commentFinding.title ?? commentFinding.rule_id ?? 'Finding') : ''}</SheetDescription></SheetHeader>{commentFinding && <div className="mt-4"><CommentsPanel fingerprint={commentFinding.fingerprint ?? commentFinding.id ?? 'unknown'} title={findingLocation(commentFinding)} /></div>}</SheetContent></Sheet><Sheet open={!!fixFinding} onOpenChange={(o) => { if (!o) setFixFinding(undefined); }}><SheetContent side="right" className="w-full max-w-xl overflow-y-auto sm:max-w-xl" aria-label="AI Fix suggestion"><SheetHeader><SheetTitle className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-[var(--color-accent)]" aria-hidden="true" /> AI Fix</SheetTitle><SheetDescription>AI-generated suggestion — review before applying</SheetDescription></SheetHeader>{fixFinding && <AutoFixPanel finding={fixFinding} onClose={() => setFixFinding(undefined)} />}</SheetContent></Sheet></section>;
 }
 
 /** Header export dropdown (Loops 16/17/18): plain `<a download>` GET links for the Markdown/HTML/SARIF attachments plus a CSV of the currently filtered findings. Lightweight menu a11y — role=menu/menuitem, Escape and outside mousedown close, focus moves to the first item on open and back to the toggle on Escape. */
@@ -319,7 +329,7 @@ function AnalyzerResults({ runs, findings, selectedAnalyzer, onSelect }: { runs?
 function FindingFilters({ filters, setFilters, analyzers, rules, onAnalyzer }: { filters: FindingFilter; setFilters: (next: FindingFilter) => void; analyzers?: AnalyzerRun[]; rules: string[]; onAnalyzer: (analyzer: string) => void }) { const set = (key: keyof FindingFilter, value: string) => setFilters({ ...filters, [key]: value }); const tools = [...new Set(analyzers?.map((run) => run.analyzer_id) ?? [])]; return <div className="filters" id="finding-filters"><label>Severity<select value={filters.severity} onChange={(e) => set('severity', e.target.value)}><option value="">All</option>{['critical', 'high', 'medium', 'low', 'info'].map((value) => <option value={value} key={value}>{value}</option>)}</select></label><label>Category<input value={filters.category} onChange={(e) => set('category', e.target.value)} placeholder="All categories" /></label><label>Tool<select value={filters.analyzer} onChange={(e) => onAnalyzer(e.target.value)}><option value="">All tools</option>{tools.map((tool) => <option value={tool} key={tool}>{analyzerName(tool)}</option>)}</select></label><label>Rule<select value={filters.rule} onChange={(e) => set('rule', e.target.value)}><option value="">All rules</option>{rules.map((rule) => <option value={rule} key={rule}>{rule}</option>)}</select></label><label>File<input value={filters.path} onChange={(e) => set('path', e.target.value)} placeholder="Any path" /></label><label>Status<select value={filters.status} onChange={(e) => set('status', e.target.value)}><option value="">All</option><option value="new">New</option><option value="persistent">Persistent</option><option value="suppressed">Suppressed</option></select></label><label className="filter-search">Search<input value={filters.q} onChange={(e) => set('q', e.target.value)} placeholder="Message or rule" /></label></div>; }
 
 /** Page-mode pagination: Previous/Next walk the server's `page` windows while the status line narrates both the slice and the page count (announced politely via the same `<output aria-live>` pattern as the scan history pager). `hasNext` comes from the envelope's `has_next`, falling back to legacy `has_more` envelopes. */
-function FindingsPagination({ total, page, pageSize, hasNext, onPrevious, onNext }: { total: number; page: number; pageSize: number; hasNext: boolean; onPrevious: () => void; onNext: () => void }) { const pageCount = Math.max(1, Math.ceil(total / pageSize)); const first = total ? (page - 1) * pageSize + 1 : 0; const last = Math.min(page * pageSize, total); return <nav className="findings-pagination" aria-label="Findings pagination"><span>Showing {first}–{last} of {total}</span><div><button type="button" className="button secondary" onClick={onPrevious} disabled={page <= 1}>Previous</button><output aria-live="polite">Page {page} of {pageCount}</output><button type="button" className="button secondary" onClick={onNext} disabled={!hasNext}>Next</button></div></nav>; }
+function FindingsPagination({ total, page, pageSize, hasNext, onPrevious, onNext, onPageSize }: { total: number; page: number; pageSize: number; hasNext: boolean; onPrevious: () => void; onNext: () => void; onPageSize: (size: number) => void }) { const pageCount = Math.max(1, Math.ceil(total / pageSize)); const first = total ? (page - 1) * pageSize + 1 : 0; const last = Math.min(page * pageSize, total); return <nav className="findings-pagination" aria-label="Findings pagination"><span>Showing {first}–{last} of {total}</span><div><label className="page-size">Per page<select value={pageSize} onChange={(event) => { const next = Number(event.target.value); if (next !== pageSize) onPageSize(next); }}>{PAGE_SIZE_OPTIONS.map((size) => <option key={size} value={size}>{size}</option>)}</select></label><button type="button" className="button secondary" onClick={onPrevious} disabled={page <= 1}>Previous</button><output aria-live="polite">Page {page} of {pageCount}</output><button type="button" className="button secondary" onClick={onNext} disabled={!hasNext}>Next</button></div></nav>; }
 
 function SortHeader({ label, column, sort, onSort }: { label: string; column: SortKey; sort: SortState; onSort: (key: SortKey) => void }) { const active = sort.key === column; return <th scope="col" aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}><button type="button" className={`th-sort${active ? ' active' : ''}`} onClick={() => onSort(column)}>{label}<span className="sort-arrow" aria-hidden="true">{active ? (sort.dir === 'asc' ? '▲' : '▼') : '↕'}</span>{active && <span className="sr-only"> (sorted {sort.dir === 'asc' ? 'ascending' : 'descending'})</span>}</button></th>; }
 

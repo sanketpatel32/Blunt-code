@@ -395,6 +395,29 @@ describe('ReportView findings pagination', () => {
       expect(last).toContain('page=1');
     });
   });
+
+  it('lets the user pick the rows-per-page window; the choice refetches, restarts on page 1, and reaches the URL', async () => {
+    window.history.replaceState(null, '', window.location.pathname); // start from a clean URL so earlier describes cannot leak state
+    await pageMock(async (host) => {
+      const size = host.querySelector<HTMLSelectElement>('nav[aria-label="Findings pagination"] .page-size select')!;
+      expect([...size.options].map((option) => option.value)).toEqual(['25', '50', '100', '200']); // API-legal windows, 200 being MaxFindingsPageSize
+      expect(size.value).toBe('50');
+      expect(window.location.search).not.toContain('page_size='); // the default stays out of shareable URLs
+
+      await click(pager(host).next);
+      expect(findingUrls().at(-1)).toContain('page=2');
+
+      await choose(size, '100');
+      const last = findingUrls().at(-1)!;
+      expect(last).toContain('page_size=100');
+      expect(last).toContain('page=1'); // a new window restarts on the first page
+      expect(pager(host).status.textContent).toBe('Showing 1–100 of 120');
+      expect(pager(host).output.textContent).toBe('Page 1 of 2');
+      expect(window.location.search).toContain('page_size=100'); // shareable links reproduce the chosen window
+
+      window.history.replaceState(null, '', window.location.pathname); // leave the URL clean for later describes
+    });
+  });
 });
 
 describe('ReportView severity distribution', () => {
