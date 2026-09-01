@@ -627,6 +627,9 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 /* ── L6 · Dialogs · premium ────────────────────────────────────── */
 .dialog-backdrop { position: fixed; z-index: var(--z-dialog); inset: 0; display: grid; place-items: center; padding: var(--space-xl); background: var(--color-dialog-backdrop); backdrop-filter: blur(12px) saturate(1.05); -webkit-backdrop-filter: blur(8px); animation: backdrop-in var(--dur-base) var(--ease-out); }
 .dialog-backdrop dialog { position: static; inset: auto; width: min(32rem, 100%); max-height: calc(100dvh - 2 * var(--space-xl)); margin: 0; padding: 0; overflow: auto; border: var(--rule) solid var(--color-rule); border-radius: var(--radius-xl); background: var(--color-surface); color: var(--color-ink); box-shadow: var(--shadow-dialog); animation: dialog-in var(--dur-slow) var(--ease-spring); }
+/* The shortcut sheet is two columns of groups — it needs more room than a
+   confirmation dialog, and 44rem keeps the rows from wrapping. */
+.dialog-backdrop dialog.shortcuts-dialog { width: min(44rem, 100%); }
 @keyframes backdrop-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes dialog-in { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }
 .dialog-backdrop form, .confirmation-dialog { padding: var(--space-xl); }
@@ -738,7 +741,7 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .tree-search-meta strong { color: var(--color-accent-strong); }
 .tree-name mark { padding: 0 2px; border-radius: var(--radius-xs); background: var(--color-accent-soft); color: var(--color-accent-strong); font-weight: 700; }
 .tree-load-error { display: inline-flex; align-items: center; gap: var(--space-2xs); color: var(--color-danger); font-size: var(--text-xs); }
-.kbd-hint { margin-left: var(--space-2xs); padding: 1px var(--space-2xs); border: var(--rule) solid var(--color-rule); border-radius: var(--radius-xs); background: var(--color-surface-muted); color: var(--color-ink-faint); font: 600 var(--text-xs)/1.4 var(--font-mono); }
+.kbd-hint { display: inline-flex; align-items: center; justify-content: center; min-width: 1.35rem; margin-left: var(--space-2xs); padding: 1px var(--space-3xs); border: var(--rule) solid var(--color-rule); border-bottom-width: 2px; border-radius: var(--radius-xs); background: var(--color-surface-muted); color: var(--color-ink-soft); font: 600 var(--text-xs)/1.4 var(--font-mono); text-align: center; }
 .what-changed { margin-top: var(--space-xl); padding: var(--space-lg); border: var(--rule) solid color-mix(in oklch, var(--color-success) 30%, var(--color-rule)); border-left: 3px solid var(--color-success); border-radius: var(--radius-lg); background: var(--color-success-soft); }
 .what-changed-header { display: flex; align-items: end; justify-content: space-between; gap: var(--space-lg); padding-bottom: var(--space-md); border-bottom: var(--rule) solid color-mix(in oklch, var(--color-success) 20%, var(--color-rule)); }
 .what-changed-header h2 { margin: 0; font-family: var(--font-display); font-size: var(--text-xl); font-weight: 700; }
@@ -825,12 +828,17 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .data-folders p { max-width: 36rem; margin: 0; color: var(--color-ink-soft); font-size: var(--text-sm); line-height: 1.5; }
 .data-folders code { display: block; max-width: 36rem; margin-top: var(--space-sm); font-size: var(--text-xs); }
 .folder-buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-sm); }
-.shortcut-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: var(--space-lg); margin-top: var(--space-md); }
+.shortcut-groups { display: grid; grid-template-columns: 11fr 9fr; gap: var(--space-md); margin-top: var(--space-md); }
+.shortcut-group { padding: var(--space-sm) var(--space-md); border: var(--rule) solid var(--color-rule-faint); border-radius: var(--radius-card); background: var(--color-surface-muted); }
 .shortcut-group h3 { margin: 0 0 var(--space-xs); color: var(--color-ink-faint); font: 700 var(--text-xs)/1.4 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; }
-.shortcut-group dl { display: grid; gap: var(--space-2xs); margin: 0; }
-.shortcut-row { display: grid; grid-template-columns: minmax(4.5rem, auto) minmax(0, 1fr); align-items: center; gap: var(--space-sm); }
-.shortcut-row dt { display: flex; align-items: center; gap: var(--space-3xs); }
-.shortcut-row dd { margin: 0; color: var(--color-ink-soft); font-size: var(--text-sm); }
+.shortcut-group dl { display: grid; gap: 2px; margin: 0; }
+.shortcut-row { display: flex; justify-content: space-between; align-items: center; gap: var(--space-md); padding: var(--space-2xs) var(--space-xs); border-radius: var(--radius-sm); }
+.shortcut-row:hover { background: var(--color-surface); }
+/* DOM keeps dt (keys) first for the reading order; visually the action leads
+   and its keys align right — the convention every shortcut sheet uses. */
+.shortcut-row dt { display: flex; align-items: center; gap: var(--space-3xs); order: 2; }
+.shortcut-row dt .kbd-hint { margin-left: 0; }
+.shortcut-row dd { margin: 0; order: 1; color: var(--color-ink-soft); font-size: var(--text-sm); }
 
 /* ── L10 · Toasts ──────────────────────────────────────────────────
    Loops 113–114 · the stack was declared twice (an early "premium" block and a
