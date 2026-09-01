@@ -19,6 +19,7 @@ import { languageNames } from '../lib/format';
 import { SkeletonCards } from '../components/skeletons';
 import { ConfirmationDialog } from '../components/dialogs';
 import { WorkspaceTemplates } from '../components/WorkspaceTemplates';
+import { PathCopy } from '../components/PathCopy';
 
 export function WorkspacesPage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd: () => void; notify: (n: Notice) => void }) {
   const state = useLoad(api.workspaces, []);
@@ -73,10 +74,10 @@ export function sortWorkspaces(workspaces: Workspace[], key: WorkspaceSortKey, d
 }
 
 function WorkspaceSortBar({ sort, onSort }: { sort: WorkspaceSort; onSort: (key: WorkspaceSortKey) => void }) {
-  return <div className="workspace-sortbar" role="group" aria-label="Sort workspaces"><span>Sort</span>{(Object.keys(workspaceSortLabels) as WorkspaceSortKey[]).map((key) => {
+  return <fieldset className="workspace-sortbar" aria-label="Sort workspaces"><span>Sort</span>{(Object.keys(workspaceSortLabels) as WorkspaceSortKey[]).map((key) => {
     const active = sort.key === key;
-    return <button key={key} type="button" className={`th-sort${active ? ' active' : ''}`} aria-pressed={active} aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined} onClick={() => onSort(key)}>{workspaceSortLabels[key]}<span className="sort-arrow" aria-hidden="true">{active ? (sort.dir === 'asc' ? '▲' : '▼') : '↕'}</span>{active && <span className="sr-only"> (sorted {sort.dir === 'asc' ? 'ascending' : 'descending'})</span>}</button>;
-  })}</div>;
+    return <button key={key} type="button" className={`th-sort${active ? ' active' : ''}`} aria-pressed={active} onClick={() => onSort(key)}>{workspaceSortLabels[key]}<span className="sort-arrow" aria-hidden="true">{active ? (sort.dir === 'asc' ? '▲' : '▼') : '↕'}</span>{active && <span className="sr-only"> (sorted {sort.dir === 'asc' ? 'ascending' : 'descending'})</span>}</button>;
+  })}</fieldset>;
 }
 
 /** Tag chips shown per card: at most three, with any remainder collapsed into a +N chip whose title lists the hidden tags. */
@@ -100,7 +101,7 @@ function WorkspaceCard({ workspace, go, notify, onRemoved }: { workspace: Worksp
         <span className="workspace-card-icon" aria-hidden="true"><ShieldCheck className="h-[18px] w-[18px]" /></span>
         <div className="min-w-0 flex-1">
           <h3 className="truncate">{workspace.name}</h3>
-          <code title={workspace.root_path} className="block truncate">{workspace.root_path}</code>
+          <PathCopy path={workspace.root_path} />
         </div>
       </div>
       <DropdownMenu>
@@ -121,7 +122,9 @@ function WorkspaceCard({ workspace, go, notify, onRemoved }: { workspace: Worksp
       <span className="text-[0.68rem] font-mono font-bold tracking-widest uppercase text-[var(--color-ink-faint)]">Languages</span>
       <div className="mt-2">
         {langs.length ? (
-          <div className="ws-lang-dots" aria-label="Detected languages">
+          <div className="ws-lang-dots">
+            {/* The visible "Languages" caption above labels this row; an aria-label
+                on a plain div is dropped by assistive tech anyway. */}
             {langs.map((l) => (
               <span key={l} className="ws-lang-dot"><i aria-hidden="true" />{languageNames[l] ?? l}</span>
             ))}

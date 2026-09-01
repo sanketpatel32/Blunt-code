@@ -150,3 +150,36 @@ describe('HomePage dashboard', () => {
     expect(go).toHaveBeenCalledWith({ page: 'scan', id: 'scan-new' });
   });
 });
+
+describe('HomePage workspace paths', () => {
+  const DEEP_PATH = 'C:\\Users\\sanpa\\OneDrive\\Desktop\\Claire\\claire-core\\src\\Suremed_agent\\complete_prod';
+
+  function stubClipboard() {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(window.navigator, 'clipboard', { value: { writeText }, configurable: true });
+    return writeText;
+  }
+
+  it('keeps shallow paths whole and offers a copy button for the full path', async () => {
+    const host = await render(homeFetchMock({ scans: [], total: 0, summary }));
+    const path = host.querySelector('.workspace-project .path-copy code')!;
+    expect(path.textContent).toBe('C:\\code\\example');
+    expect(path.getAttribute('title')).toBe('C:\\code\\example');
+    const copy = host.querySelector<HTMLButtonElement>('.workspace-project .path-copy-button')!;
+    expect(copy.getAttribute('aria-label')).toBe('Copy full path');
+  });
+
+  it('shows deep paths as their last two segments and copies the full path on click', async () => {
+    const writeText = stubClipboard();
+    const host = await render(homeFetchMock({ scans: [], total: 0, summary }, { items: [{ id: 'ws-1', name: 'Deep Project', root_path: DEEP_PATH, languages: ['Python'], latest_scan: null }] }));
+    const path = host.querySelector('.workspace-project .path-copy code')!;
+    expect(path.textContent).toBe('…\\Suremed_agent\\complete_prod');
+    expect(path.getAttribute('title')).toBe(DEEP_PATH);
+    const copy = host.querySelector<HTMLButtonElement>('.workspace-project .path-copy-button')!;
+    await act(async () => { copy.click(); await Promise.resolve(); await Promise.resolve(); });
+    expect(writeText).toHaveBeenCalledWith(DEEP_PATH);
+    expect(copy.getAttribute('aria-label')).toBe('Copied to clipboard');
+    expect(copy.className).toContain('copied');
+    Reflect.deleteProperty(window.navigator, 'clipboard');
+  });
+});

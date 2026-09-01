@@ -83,3 +83,17 @@ export function analyzerName(id: string) {
 export function findingLocation(finding: Finding) {
   return `${finding.relative_path ?? 'Project-level finding'}${finding.start_line ? `:${finding.start_line}${finding.start_column ? `:${finding.start_column}` : ''}` : ''}`;
 }
+
+/**
+ * The tail of a filesystem path for tight UI: once a path runs deeper than
+ * volume + two segments, only its last two segments remain, behind an
+ * ellipsis. Anything shallower stays whole — an ellipsis must not cost more
+ * length than it saves. The full value lives in the title attribute and the
+ * copy button next to it (see components/PathCopy.tsx).
+ */
+export function shortPath(path: string): string {
+  const separator = path.includes('\\') ? '\\' : '/';
+  const parts = path.split(/[\\/]/).filter(Boolean);
+  if (parts.length <= 3) return path;
+  return `…${separator}${parts.slice(-2).join(separator)}`;
+}

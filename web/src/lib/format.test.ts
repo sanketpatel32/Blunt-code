@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compactDuration, date, elapsed, relativeTime } from './format';
+import { compactDuration, date, elapsed, relativeTime, shortPath } from './format';
 
 const NOW = new Date('2026-08-22T12:00:00Z').getTime();
 
@@ -105,5 +105,23 @@ describe('date', () => {
 
   it('formats a full timestamp for title attributes', () => {
     expect(date('2026-08-22T12:00:00Z')).toBe(new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date('2026-08-22T12:00:00Z')));
+  });
+});
+
+describe('shortPath', () => {
+  it('keeps shallow paths whole — an ellipsis must not cost more than it saves', () => {
+    expect(shortPath('C:\\code\\example')).toBe('C:\\code\\example');
+    expect(shortPath('/home/user/proj')).toBe('/home/user/proj');
+    expect(shortPath('proj')).toBe('proj');
+  });
+
+  it('replaces deep Windows paths with their last two segments', () => {
+    expect(shortPath('C:\\Users\\sanpa\\OneDrive\\Desktop\\Claire\\claire-core\\src\\Suremed_agent\\complete_prod')).toBe('…\\Suremed_agent\\complete_prod');
+  });
+
+  it('handles forward-slash paths and drive-rooted edge cases', () => {
+    expect(shortPath('/a/b/c/d')).toBe('…/c/d');
+    expect(shortPath('\\\\server\\share\\deep\\tree\\leaf')).toBe('…\\tree\\leaf');
+    expect(shortPath('')).toBe('');
   });
 });
