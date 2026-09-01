@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.5] - 2026-09-01
+
+### Removed
+- **The Workspaces page heading block:** an eyebrow reading "Workspaces" above an h1 reading "Your local projects" — directly under a nav item already called Workspaces — plus a paragraph about file rules nobody reads on a list page. The page now opens straight onto the filter and sort bar; adding a workspace still lives in the nav's + button (and the empty state's templates). An sr-only h1 keeps the accessible heading order intact.
+
 ## [0.16.4] - 2026-09-01
 
 ### Added
