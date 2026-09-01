@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compactDuration, date, elapsed, relativeTime, shortPath } from './format';
+import { compactDuration, date, elapsed, relativeTime, scanStateDisplay, shortPath } from './format';
 
 const NOW = new Date('2026-08-22T12:00:00Z').getTime();
 
@@ -123,5 +123,22 @@ describe('shortPath', () => {
     expect(shortPath('/a/b/c/d')).toBe('…/c/d');
     expect(shortPath('\\\\server\\share\\deep\\tree\\leaf')).toBe('…\\tree\\leaf');
     expect(shortPath('')).toBe('');
+  });
+});
+
+describe('scanStateDisplay', () => {
+  it('maps tones explicitly — warnings are amber, not whatever a string-includes check guessed', () => {
+    expect(scanStateDisplay('completed')).toEqual({ label: 'Completed', variant: 'success' });
+    expect(scanStateDisplay('completed_with_warnings')).toEqual({ label: 'Completed with warnings', variant: 'warning' });
+    expect(scanStateDisplay('failed')).toEqual({ label: 'Failed', variant: 'danger' });
+    expect(scanStateDisplay('cancelled')).toEqual({ label: 'Cancelled', variant: 'danger' });
+    expect(scanStateDisplay('running')).toEqual({ label: 'Running', variant: 'accent' });
+    expect(scanStateDisplay('queued')).toEqual({ label: 'Queued', variant: 'accent' });
+  });
+
+  it('falls back sanely for missing and unknown states', () => {
+    expect(scanStateDisplay(null)).toEqual({ label: 'Ready', variant: 'outline' });
+    expect(scanStateDisplay(undefined)).toEqual({ label: 'Ready', variant: 'outline' });
+    expect(scanStateDisplay('some_new_state')).toEqual({ label: 'Some new state', variant: 'outline' });
   });
 });

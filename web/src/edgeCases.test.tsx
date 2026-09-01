@@ -115,7 +115,8 @@ describe('hostile API fixtures', () => {
     const host = await renderAt('/workspaces', fetchMock);
     expectClean(host);
     expect(host.textContent).toContain('No supported source languages found');
-    expect(host.textContent).toContain('halfway done');
+    // Unknown states still render — sentence-cased and neutral-toned by scanStateDisplay.
+    expect(host.textContent).toContain('Halfway done');
   });
 
   it('WorkspaceDetailPage survives a null scans payload plus a hostile latest scan', async () => {

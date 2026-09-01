@@ -195,3 +195,22 @@ describe('HomePage language badges', () => {
     expect(dots[2].style.background).not.toContain('#'); // unknown language falls back to the accent token
   });
 });
+
+describe('HomePage status badge', () => {
+  it('tones completed_with_warnings as a warning and labels it in sentence case', async () => {
+    const warned = { id: 'ws-1', name: 'Warned', root_path: 'C:\\code\\warn', languages: ['python'], latest_scan: { id: 's-1', workspace_id: 'ws-1', state: 'completed_with_warnings', profile: 'standard', started_at: anHourAgo(), finished_at: anHourAgo(), total_findings: 5, critical_count: 0, high_count: 0, medium_count: 2, low_count: 3, info_count: 0 } };
+    const host = await render(homeFetchMock({ scans: [], total: 0, summary }, { items: [warned] }));
+    const statusCell = host.querySelectorAll('.workspace-table tbody tr > *')[3] as HTMLElement;
+    expect(statusCell.textContent).toBe('Completed with warnings');
+    const badge = statusCell.firstElementChild!;
+    expect(badge.className).toContain('text-[var(--color-warning)]');
+    expect(badge.className).toContain('whitespace-nowrap');
+  });
+
+  it('shows the neutral Ready badge when the workspace has no scans', async () => {
+    const host = await render(homeFetchMock({ scans: [], total: 0, summary }));
+    const statusCell = host.querySelectorAll('.workspace-table tbody tr > *')[3] as HTMLElement;
+    expect(statusCell.textContent).toBe('Ready');
+    expect(statusCell.firstElementChild!.className).toContain('text-[var(--color-ink-soft)]');
+  });
+});

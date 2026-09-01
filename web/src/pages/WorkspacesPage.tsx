@@ -15,7 +15,7 @@ import { Badge } from '../components/ui/badge';
 import { FolderIcon } from '../components/icons';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
 import { MoreHorizontal, ShieldCheck } from 'lucide-react';
-import { languageNames, languageColor } from '../lib/format';
+import { languageNames, languageColor, scanStateDisplay } from '../lib/format';
 import { SkeletonCards } from '../components/skeletons';
 import { ConfirmationDialog } from '../components/dialogs';
 import { WorkspaceTemplates } from '../components/WorkspaceTemplates';
@@ -139,7 +139,7 @@ function WorkspaceCard({ workspace, go, notify, onRemoved }: { workspace: Worksp
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-[0.68rem] font-mono font-bold tracking-widest uppercase text-[var(--color-ink-faint)]">Latest analysis</span>
         {risk && <Badge variant={riskTone === 'success' ? 'success' : riskTone === 'warning' ? 'warning' : 'danger'} className={`risk-badge state ${riskTone}`} title={`Weighted risk score ${risk.score}`}>{risk.grade} · {Math.round(risk.score)}</Badge>}
-        {scan && <Badge variant={scan.state.includes('completed') ? 'success' : scan.state.includes('failed') ? 'danger' : 'accent'} className={`state ${scan.state}`}>{scan.state.replaceAll('_', ' ')}</Badge>}
+        {scan && (() => { const d = scanStateDisplay(scan.state); return <Badge variant={d.variant} className="whitespace-nowrap">{d.label}</Badge>; })()}
       </div>
       {scan ? (
         <>

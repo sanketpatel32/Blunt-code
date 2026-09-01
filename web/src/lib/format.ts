@@ -103,6 +103,24 @@ export function languageColor(id: string): string {
   return languageColors[id] ?? 'var(--color-accent)';
 }
 
+export type ScanStateVariant = 'success' | 'warning' | 'danger' | 'accent' | 'outline';
+
+/**
+ * Human label + Badge tone for a scan lifecycle state. The raw snake_case
+ * leaked onto surfaces that don't use the CSS `.state` pill system, and
+ * completed_with_warnings was getting whatever tone a string-includes check
+ * guessed — warnings are warnings: amber, explicitly mapped here.
+ */
+export function scanStateDisplay(state?: string | null): { label: string; variant: ScanStateVariant } {
+  if (!state) return { label: 'Ready', variant: 'outline' };
+  const label = state.charAt(0).toUpperCase() + state.slice(1).replaceAll('_', ' ');
+  if (state === 'completed') return { label, variant: 'success' };
+  if (state === 'completed_with_warnings') return { label, variant: 'warning' };
+  if (state === 'failed' || state === 'cancelled') return { label, variant: 'danger' };
+  if (state === 'running' || state === 'queued' || state === 'pending') return { label, variant: 'accent' };
+  return { label, variant: 'outline' };
+}
+
 export const analyzerDisplayNames: Record<string, string> = { biome: 'Biome', ruff: 'Ruff', semgrep: 'Semgrep', sonarqube: 'SonarQube' };
 
 export function analyzerName(id: string) {
