@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.11] - 2026-09-01
+
+### Fixed
+- **Agent docs and catalog match reality.** llm.txt/llms.txt claimed a 20-rule semgrep pack (the bundled pack has 25 rules), and the analyzer catalog listed SonarQube as deep-only when the backend runs it on standard scans too. Both corrected.
+
 ## [0.16.10] - 2026-09-01
 
 ### Fixed

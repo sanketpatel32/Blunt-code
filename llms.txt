@@ -126,7 +126,7 @@ Auth: none (loopback). Rate limit: token bucket 30/30m on mutations -> `429 RATE
 ## Scan profiles & analyzers
 
 - **quick:** ruff+biome
-- **standard:** +semgrep (20 rules) +sonarqube (polyglot, 10m startup, env `BLUNTCODE_SONAR_STARTUP_TIMEOUT`)
+- **standard:** +semgrep (25-rule local pack) +sonarqube (polyglot, 10m startup, env `BLUNTCODE_SONAR_STARTUP_TIMEOUT`)
 - **deep:** standard + ruff extended `E,W,F,B,SIM,C4,RET,ARG,PLR`
 - **secrets:** AWS/GH/Slack/Google/JWT/Stripe/OpenAI/Anthropic/Azure, entropy + placeholder filtering, msg = `prefix + length` never secret
 - **todo:** `TODO|FIXME|HACK|XXX|BUG` whole-word, case-sensitive, 200 chars, follower heuristics
