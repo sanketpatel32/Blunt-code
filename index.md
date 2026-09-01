@@ -1,14 +1,14 @@
-# Blunt Code — Your code never leaves the machine
+# Blunt Code — your code has problems. Here they are.
 
-> Local code quality & security for Windows — Ruff, Biome, Semgrep, SonarQube, secrets and TODO tracking in one loopback app. No cloud, no account, no telemetry.
+> Six analyzers, one honest report, zero uploads. Local code quality & security for Windows — Ruff, Biome, Semgrep, SonarQube, secrets and TODO tracking in one loopback app. No cloud, no account, no telemetry.
 
 ## The short version
 
-Your code flows through one local executable — `bluntcode.exe` — to six bundled analyzers, and returns one report. Everything stays inside your machine. There is no upload.
+Your code flows through one local executable — `bluntcode.exe` — to six bundled analyzers, and comes back as one blunt report: every finding named, severity-graded, and filed in a local SQLite database. Everything stays inside your machine. There is no upload.
 
 - **Analyzers bundled:** Ruff (Python), Biome (JS/TS + React), Semgrep (25-rule security pack), SonarQube (polyglot, managed runtime), Secrets (8 credential families), TODO/FIXME (40+ file types).
 - **Two ways to scan:** Blunt Code scans locally — code, analyzers, and the report never leave your disk. Cloud scanners require uploading your source to someone else's server.
-- **Numbers:** 6 bundled analyzers · 723 automated tests passing · 0 bytes of telemetry · 40+ file types scanned.
+- **Numbers:** 6 bundled analyzers · 726 automated tests passing (457 Go · 269 web) · 0 bytes of telemetry · 40+ file types scanned.
 - **Statement:** Scan everything. Send nothing.
 
 ## Install in 30 seconds

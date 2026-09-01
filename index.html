@@ -3,16 +3,17 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Blunt Code — Your code never leaves the machine</title>
-<meta name="description" content="Local code quality & security for Windows — Ruff, Biome, Semgrep, SonarQube, secrets and TODO tracking in one loopback app. No cloud, no account, no telemetry." />
-<meta property="og:title" content="Blunt Code — local code quality & security" />
-<meta property="og:description" content="Ruff · Biome · Semgrep · SonarQube · Secrets · TODO — one loopback app for Windows. No cloud, no account, no telemetry." />
+<title>Blunt Code — your code has problems. Here they are.</title>
+<meta name="description" content="Six analyzers, one honest report, zero uploads. Ruff · Biome · Semgrep · SonarQube · Secrets · TODO in one loopback app for Windows. No cloud, no account, no telemetry." />
+<meta property="og:title" content="Blunt Code — your code has problems. Here they are." />
+<meta property="og:description" content="Six analyzers. One honest report. Zero uploads. Free, local-first code scanning for Windows." />
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://sanketpatel32.github.io/Blunt-code/" />
 <meta property="og:image" content="https://sanketpatel32.github.io/Blunt-code/og-image.png" />
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="630" />
-<meta property="og:image:alt" content="Blunt Code — your code never leaves the machine" />
+<meta property="og:image:alt" content="Blunt Code — your code has problems. Here they are." />
+<meta name="twitter:card" content="summary_large_image" />
 <link rel="canonical" href="https://sanketpatel32.github.io/Blunt-code/" />
 <script type="application/ld+json">
 {
@@ -24,7 +25,7 @@
   "description": "Local code quality & security for Windows: Ruff, Biome, Semgrep, SonarQube, secrets and TODO tracking in one loopback desktop app. No cloud, no account, no telemetry.",
   "applicationCategory": "DeveloperApplication",
   "operatingSystem": "Windows 10, Windows 11",
-  "softwareVersion": "0.16.6",
+  "softwareVersion": "0.16.7",
   "downloadUrl": "https://github.com/sanketpatel32/Blunt-code/releases/latest",
   "isAccessibleForFree": true,
   "license": "https://github.com/sanketpatel32/Blunt-code/blob/main/LICENSE",
@@ -54,356 +55,642 @@
   "sameAs": ["https://github.com/sanketpatel32/Blunt-code"]
 }
 </script>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230F172A'/%3E%3Cpath d='M16 5.2 L23.6 9 L23.6 17.2 C23.6 21 20.2 24.5 16 26.8 C11.8 24.5 8.4 21 8.4 17.2 L8.4 9 Z' fill='none' stroke='white' stroke-opacity='0.10' stroke-width='1'/%3E%3Cpath d='M11.8 15.9 L15.2 19.1 L20.6 12.1' fill='none' stroke='white' stroke-width='2.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='23.4' cy='7.2' r='1.7' fill='%233B82F6'/%3E%3C/svg%3E" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23DA1E28'/%3E%3Cpath d='M11.8 15.9 L15.2 19.1 L20.6 12.1' fill='none' stroke='white' stroke-width='2.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='24.4' cy='7.6' r='2' fill='%23151515'/%3E%3C/svg%3E" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="tokens.css" />
-<script>document.documentElement.classList.add("js");</script>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
 <style>
-  /* Hallmark · macrostructure: Marquee Hero · theme: Midnight · nav: N5 · footer: Ft5 */
+  /* ————————————————————————————————————————————————
+     BLUNT CODE — brutalist broadsheet
+     paper / ink / signal red · hard shadows · no radii
+     ———————————————————————————————————————————————— */
+  :root {
+    --paper: #F3F0E9;
+    --paper-2: #EAE6DA;
+    --ink: #151515;
+    --ink-soft: #45423A;
+    --red: #DA1E28;
+    --red-deep: #B3151F;
+    --tape: #F2C744;
+    --crit: #FF4D5E;
+    --high: #FF9142;
+    --med:  #FFD84D;
+    --low:  #63D68B;
+    --grid: rgba(21, 21, 21, 0.055);
+    --shadow-s: 4px 4px 0 var(--ink);
+    --shadow-m: 6px 6px 0 var(--ink);
+    --shadow-l: 9px 9px 0 var(--ink);
+    --bw: 2.5px;
+    --font-display: "Archivo Black", "Arial Black", ui-sans-serif, sans-serif;
+    --font-body: "Archivo", ui-sans-serif, system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", monospace;
+    --gutter: clamp(1.25rem, 4.5vw, 4rem);
+  }
   * { box-sizing: border-box; }
-  html { overflow-x: clip; }
+  html { overflow-x: clip; scroll-behavior: smooth; }
   body {
     overflow-x: clip;
     margin: 0;
-    background: var(--color-paper);
-    color: var(--color-ink);
-    font: 400 var(--text-base)/1.6 var(--font-body);
+    background:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+      var(--paper);
+    background-size: 48px 48px, 48px 48px, auto;
+    color: var(--ink);
+    font: 400 1rem/1.6 var(--font-body);
     -webkit-font-smoothing: antialiased;
   }
-  /* Film grain — one fixed layer under content */
-  body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    z-index: 0;
-    pointer-events: none;
-    opacity: 0.05;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
-  }
-  main, header, footer { position: relative; z-index: var(--z-base); }
-  a { color: var(--color-accent); text-decoration: none; }
-  a:hover { text-decoration: underline; text-underline-offset: 2px; }
-  a:active { color: var(--color-accent-strong); }
-  code { font-family: var(--font-outlier); }
-  :focus-visible { outline: 2px solid var(--color-focus); outline-offset: 3px; }
-  ::selection { background: color-mix(in oklch, var(--color-accent) 30%, transparent); }
-
-  /* ————— N5 floating pill ————— */
-  .nav-pill {
-    position: fixed;
-    inset: var(--space-md) auto auto 50%;
-    transform: translateX(-50%);
-    z-index: var(--z-sticky);
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-md);
-    padding: 0.5rem 1rem;
-    background: color-mix(in oklch, var(--color-paper) 78%, transparent);
-    backdrop-filter: blur(14px) saturate(120%);
-    border: 1px solid var(--color-rule);
-    border-radius: var(--radius-pill);
-    box-shadow: 0 8px 24px -12px var(--color-shadow);
-    white-space: nowrap;
-  }
-  .nav-pill .wordmark {
-    display: inline-flex; align-items: center; gap: var(--space-xs);
-    font-family: var(--font-outlier); font-weight: 600; font-size: var(--text-sm);
-    letter-spacing: -0.01em; color: var(--color-ink);
-  }
-  .nav-pill .wordmark:hover { text-decoration: none; color: var(--color-accent-strong); }
-  .logo-tile { fill: var(--color-paper-3); }
-  .logo-ghost { stroke: color-mix(in oklch, var(--color-ink) 12%, transparent); }
-  .logo-check { stroke: var(--color-ink); }
-  .logo-dot { fill: var(--color-accent); }
-  .nav-pill ul { display: flex; gap: var(--space-md); list-style: none; margin: 0; padding: 0; }
-  .nav-pill ul a { color: var(--color-ink-soft); font-size: var(--text-sm); white-space: nowrap; }
-  .nav-pill ul a:hover { color: var(--color-ink); text-decoration: none; border-bottom: 1px solid var(--color-accent); }
-  .nav-cta {
-    background: var(--color-accent); color: var(--color-accent-ink);
-    font-weight: 600; font-size: var(--text-sm);
-    padding: 0.5rem 1rem; border-radius: var(--radius-pill);
-    white-space: nowrap;
-    transition: background-color var(--dur-short) var(--ease-out), transform var(--dur-micro) var(--ease-out);
-  }
-  .nav-cta:hover { text-decoration: none; background: var(--color-accent-strong); transform: translateY(-1.5px); }
-  .nav-cta:active { transform: translateY(1px); }
-  @media (max-width: 30rem) { .nav-pill ul { display: none; } }
-
-  /* ————— Marquee fold ————— */
-  .fold {
-    position: relative;
-    min-height: 100dvh;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-start;
-    gap: var(--space-xl);
-    padding: var(--space-xl) var(--page-gutter) var(--space-2xl);
-    background:
-      radial-gradient(90rem 40rem at 82% 12%, color-mix(in oklch, var(--color-accent) 17%, transparent), transparent 70%),
-      radial-gradient(60rem 34rem at 8% 92%, color-mix(in oklch, var(--color-accent) 10%, transparent), transparent 65%);
-  }
-  .fold h1 {
-    margin: var(--space-2xl) 0 var(--space-lg);
-    max-width: 20ch;
-    font: 600 var(--text-marquee)/1.04 var(--font-display);
-    letter-spacing: -0.03em;
-    overflow-wrap: anywhere;
-    min-width: 0;
-  }
-  .fold-tag {
-    display: flex; flex-wrap: wrap; gap: var(--space-sm) var(--space-lg);
-    align-items: baseline; justify-content: space-between;
-    font-size: var(--text-sm);
-    color: var(--color-ink-faint); letter-spacing: 0.02em;
-  }
-  .fold-tag a { color: var(--color-ink-soft); }
-
-  /* Thick divider — the macrostructure's signature break */
-  .divide { border: 0; margin: 0; height: 3px; background: var(--color-rule-faint); }
-  .divide::after { content: ""; }
-
-  /* ————— Shared section rhythm (deliberately uneven) ————— */
-  section { padding-inline: var(--page-gutter); }
-  .section-head { max-width: var(--measure); }
-  .section-head h2 {
-    margin: 0 0 var(--space-sm);
-    font: 600 var(--text-xl)/1.15 var(--font-display);
-    letter-spacing: -0.02em;
-    overflow-wrap: anywhere; min-width: 0;
-  }
-
-  /* ————— Install ————— */
-  .install { padding-block: var(--space-3xl) var(--space-2xl); }
-  .install .section-head { margin-bottom: var(--space-xl); }
-  .code-frame {
-    margin: 0 0 var(--space-lg);
-    border-top: 2px solid var(--color-rule);
-    border-bottom: 1px solid var(--color-rule-faint);
-    background: var(--color-paper-2);
-  }
-  .code-frame .frame-head {
-    display: flex; align-items: center; justify-content: space-between; gap: var(--space-md);
-    padding: var(--space-xs) var(--space-md);
-    border-bottom: 1px solid var(--color-rule-faint);
-    font-family: var(--font-outlier); font-size: var(--text-sm); color: var(--color-ink-faint);
-  }
-  .code-frame pre {
-    margin: 0; padding: var(--space-md);
-    overflow-x: auto;
-    font: 400 0.875rem/1.7 var(--font-outlier);
-    color: var(--color-ink-soft);
-    font-variant-numeric: tabular-nums;
-  }
-  .code-frame .cmd-line { white-space: pre-wrap; overflow-wrap: anywhere; }
-  .caret {
-    display: inline-block; width: 1ch; margin-left: var(--space-3xs);
-    background: var(--color-accent); color: var(--color-accent);
-    animation: blink 1s steps(2) infinite;
-  }
-  @keyframes blink { 50% { opacity: 0; } }
-  .copy-btn {
-    display: inline-flex; align-items: center;
-    border: 1px solid var(--color-rule); background: var(--color-paper-3);
-    color: var(--color-ink-soft);
-    border-radius: var(--radius-input);
-    padding: 0.25rem 0.75rem;
-    font: 500 var(--text-sm) var(--font-body);
-    cursor: pointer; white-space: nowrap;
-    transition: background-color var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out);
-  }
-  .copy-btn:hover { color: var(--color-ink); }
-  .copy-btn:active { transform: translateY(1px); }
-  .copy-btn:disabled { opacity: 0.55; cursor: not-allowed; }
-  .copy-btn[data-state="copied"] { color: var(--color-success); border-color: color-mix(in oklch, var(--color-success) 45%, var(--color-rule)); }
-  .install-alt { margin: var(--space-md) 0 0; color: var(--color-ink-faint); font-size: var(--text-sm); }
-
-  /* CTA row — the one action */
-  .cta-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-lg); margin-top: var(--space-xl); }
-  .btn-primary {
-    display: inline-flex; align-items: center; gap: 0.6rem;
-    background: var(--color-accent); color: var(--color-accent-ink);
-    font: 600 var(--text-md) var(--font-display);
-    padding: 0.75rem 1.75rem; border-radius: var(--radius-pill);
-    white-space: nowrap;
-    transition: background-color var(--dur-short) var(--ease-out), transform var(--dur-micro) var(--ease-out);
-  }
-  .btn-primary:hover { text-decoration: none; background: var(--color-accent-strong); transform: translateY(-1.5px); }
-  .btn-primary:active { transform: translateY(1px); }
-  .btn-primary[aria-disabled="true"] { opacity: 0.55; cursor: not-allowed; }
-  .cta-row .secondary { color: var(--color-ink-soft); white-space: nowrap; }
-
-  /* ————— Analyzer marquee ————— */
-  .analyzer-strip {
-    margin-block: var(--space-xl) 0;
-    padding-block: var(--space-lg);
-    border-block: 1px solid var(--color-rule-faint);
-    overflow: hidden;
-    position: relative;
-    -webkit-mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
-    mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
-  }
-  .analyzer-track {
-    display: flex; gap: var(--space-2xl);
-    width: max-content;
-    animation: marquee 48s linear infinite;
-  }
-  .analyzer-strip:hover .analyzer-track, .analyzer-strip:focus-within .analyzer-track { animation-play-state: paused; }
-  .analyzer-track span {
-    font-size: var(--text-sm);
-    color: var(--color-ink-faint); white-space: nowrap;
-  }
-  .analyzer-track span b { color: var(--color-ink-soft); font-weight: 600; }
-  @keyframes marquee { to { transform: translateX(-50%); } }
+  a { color: var(--ink); text-decoration: none; }
+  a:hover { text-decoration: underline; text-underline-offset: 3px; }
+  :focus-visible { outline: 3px solid var(--red-deep); outline-offset: 3px; }
+  ::selection { background: var(--tape); color: var(--ink); }
   .sr-only {
     position: absolute; width: 1px; height: 1px;
     clip-path: inset(50%); overflow: hidden; white-space: nowrap;
   }
-
-  /* ————— Diagrams — pipeline + lanes ————— */
-  .diagram { margin: 0; display: flex; align-items: center; gap: var(--space-lg); min-width: 0; }
-  .fold .diagram { flex: 1 1 auto; }
-  .machine {
-    position: relative; flex: 1; min-width: 0;
-    border: 1px dashed var(--color-rule);
-    border-radius: var(--radius-card);
-    padding: var(--space-xl) var(--space-lg) var(--space-lg);
-  }
-  .machine-tag {
-    position: absolute; top: -0.65em; left: var(--space-md);
-    background: var(--color-paper); padding-inline: var(--space-xs);
-    font-size: var(--text-sm); color: var(--color-ink-faint);
-    text-transform: uppercase; letter-spacing: 0.1em;
-  }
-  .flow { display: flex; align-items: center; gap: var(--space-md); min-width: 0; }
-  .node {
-    display: grid; gap: var(--space-3xs); justify-items: center; text-align: center;
-    background: var(--color-paper-2); border: 1px solid var(--color-rule);
-    border-radius: var(--radius-input);
-    padding: var(--space-sm) var(--space-md); min-width: 0;
-  }
-  .node b { font-size: var(--text-sm); font-weight: 600; color: var(--color-ink); white-space: nowrap; }
-  .node span { font-size: var(--text-sm); color: var(--color-ink-faint); }
-  .node .glyph { color: var(--color-ink-soft); }
-  .node-exe { background: var(--color-accent); border-color: var(--color-accent); }
-  .node-exe b { color: var(--color-accent-ink); }
-  .node-exe span { color: var(--color-accent-ink); opacity: 0.8; }
-  .link, .link-s { flex: none; width: var(--space-xl); height: 1px; background: var(--color-rule); position: relative; }
-  .link-s { width: var(--space-md); }
-  .link::after, .link-s::after {
-    content: ""; position: absolute; right: 0; top: 50%; transform: translateY(-50%);
-    border-top: 3.5px solid transparent; border-right: 0;
-    border-bottom: 3.5px solid transparent; border-left: 5px solid var(--color-rule);
-  }
-  .analyzers { position: relative; display: grid; gap: var(--space-2xs); padding-inline: var(--space-lg); }
-  .analyzers::before, .analyzers::after {
-    content: ""; position: absolute; top: var(--space-xs); bottom: var(--space-xs);
-    width: 1px; background: var(--color-rule);
-  }
-  .analyzers::before { left: calc(var(--space-lg) / 2); }
-  .analyzers::after { right: calc(var(--space-lg) / 2); }
-  .an {
-    position: relative;
-    background: var(--color-paper-3); border: 1px solid var(--color-rule);
-    border-radius: var(--radius-pill);
-    padding: var(--space-3xs) var(--space-sm);
-    font-size: var(--text-sm); color: var(--color-ink-soft); white-space: nowrap;
-    text-align: center;
-  }
-  .an::before, .an::after {
-    content: ""; position: absolute; top: 50%; width: calc(var(--space-lg) / 2); height: 1px;
-    background: var(--color-rule);
-  }
-  .an::before { left: calc(-0.5 * var(--space-lg)); }
-  .an::after { right: calc(-0.5 * var(--space-lg)); }
-  .cloud-off {
-    flex: none; display: grid; justify-items: center; gap: var(--space-3xs);
-    color: var(--color-ink-faint); padding-inline: var(--space-md); text-align: center;
-  }
-  .cloud-off .cloud-glyph { display: block; }
-  .cloud-off .x-strike { stroke: var(--color-accent); }
-  .cloud-off figcaption, .cloud-off span { font-size: var(--text-sm); }
-
-  /* ————— Why — two lanes, local vs cloud ————— */
-  .why { padding-block: var(--space-2xl) var(--space-3xl); }
-  .why .section-head { margin-bottom: var(--space-xl); }
-  .split { display: grid; gap: var(--space-lg); margin: 0; }
-  .lane {
-    display: grid; gap: var(--space-md);
-    border-radius: var(--radius-card); padding: var(--space-lg);
-  }
-  .lane-local {
-    border: 1px solid color-mix(in oklch, var(--color-accent) 45%, var(--color-rule));
-    background: color-mix(in oklch, var(--color-accent) 6%, var(--color-paper));
-  }
-  .lane-cloud { border: 1px dashed var(--color-rule-faint); }
-  .lane-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-sm) var(--space-md); }
-  .lane-head b { font-size: var(--text-md); font-weight: 600; }
-  .verdict { font-size: var(--text-sm); white-space: nowrap; }
-  .verdict-ok { color: var(--color-success); }
-  .verdict-no { color: var(--color-ink-faint); }
-  .lane-flow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2xs) var(--space-xs); }
-  .chip {
-    background: var(--color-paper-2); border: 1px solid var(--color-rule);
-    border-radius: var(--radius-pill);
-    padding: var(--space-3xs) var(--space-sm);
-    font-size: var(--text-sm); color: var(--color-ink-soft); white-space: nowrap;
-  }
-  .lane-cloud .chip { background: transparent; border-style: dashed; color: var(--color-ink-faint); }
-  .upload-x { text-decoration: line-through; }
-
-  @media (max-width: 48rem) {
-    .diagram { flex-direction: column; align-items: stretch; }
-    .cloud-off { grid-auto-flow: column; justify-items: center; align-items: center; padding-block: var(--space-sm); }
-    .flow { flex-direction: column; align-items: stretch; }
-    .node span { white-space: normal; }
-    .link, .link-s { width: 1px; height: var(--space-lg); align-self: center; }
-    .link::after, .link-s::after {
-      right: auto; top: auto; bottom: 0; left: 50%; transform: translateX(-50%);
-      border-top: 5px solid var(--color-rule); border-right: 3.5px solid transparent;
-      border-bottom: 0; border-left: 3.5px solid transparent;
-    }
-    .analyzers { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-inline: 0; gap: var(--space-2xs); }
-    .analyzers::before, .analyzers::after, .an::before, .an::after { display: none; }
+  .tape {
+    height: 10px;
+    background: repeating-linear-gradient(-45deg, var(--ink) 0 14px, var(--tape) 14px 28px);
   }
 
-  /* ————— Numbers — honest, one quiet band ————— */
-  .numbers { padding-block: var(--space-xl) var(--space-2xl); }
-  .numbers dl {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
-    gap: var(--space-lg) var(--space-xl); margin: 0;
+  /* ————— nav ————— */
+  .nav {
+    position: sticky; top: 0; z-index: 300;
+    background: var(--ink); color: var(--paper);
+    border-bottom: var(--bw) solid var(--ink);
   }
-  .numbers dd { margin: 0; font: 600 var(--text-2xl)/1.1 var(--font-display); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-  .numbers dt { color: var(--color-ink-faint); font-size: var(--text-sm); margin-top: var(--space-2xs); }
+  .nav-in {
+    display: flex; align-items: center; gap: 1.25rem;
+    padding: 0.65rem var(--gutter);
+  }
+  .brand {
+    display: inline-flex; align-items: center; gap: 0.6rem;
+    font: 400 0.95rem/1 var(--font-display);
+    letter-spacing: 0.02em; color: var(--paper); text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .brand:hover { text-decoration: none; color: #fff; }
+  .brand svg { display: block; }
+  .nav-links {
+    display: flex; gap: 1.35rem; margin-left: auto;
+    font: 500 0.72rem/1 var(--font-mono);
+    letter-spacing: 0.14em; text-transform: uppercase;
+  }
+  .nav-links a { color: rgba(243, 240, 233, 0.78); white-space: nowrap; }
+  .nav-links a:hover { color: #fff; text-decoration: none; border-bottom: 2px solid var(--red); }
+  section[id] { scroll-margin-top: 4.75rem; }
+  .nav-cta {
+    background: var(--red); color: #fff;
+    border: 2px solid var(--red);
+    font: 700 0.72rem/1 var(--font-mono);
+    letter-spacing: 0.12em; text-transform: uppercase;
+    padding: 0.55rem 0.95rem;
+    box-shadow: 3px 3px 0 rgba(0,0,0,0.55);
+    transition: transform 120ms ease, box-shadow 120ms ease;
+    white-space: nowrap;
+  }
+  .nav-cta:hover { text-decoration: none; transform: translate(-2px,-2px); box-shadow: 5px 5px 0 rgba(0,0,0,0.55); }
+  .nav-cta:active { transform: translate(2px,2px); box-shadow: 1px 1px 0 rgba(0,0,0,0.55); }
+  .nav-ver {
+    font: 500 0.7rem/1 var(--font-mono); letter-spacing: 0.1em;
+    color: var(--ink); background: var(--tape);
+    border: 2px solid var(--tape); padding: 0.35rem 0.55rem;
+    white-space: nowrap;
+  }
+  @media (max-width: 56rem) { .nav-links { display: none; } }
 
-  /* ————— Ft5 statement footer ————— */
-  .foot-stmt {
-    padding: var(--space-2xl) var(--page-gutter) var(--space-xl);
-    display: grid; gap: var(--space-lg);
-    background: radial-gradient(70rem 30rem at 85% 110%, color-mix(in oklch, var(--color-accent) 8%, transparent), transparent 70%);
+  /* ————— hero ————— */
+  .hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+    gap: clamp(1.5rem, 3vw, 3rem);
+    align-items: center;
+    min-height: calc(100vh - 6rem);
+    min-height: calc(100dvh - 6rem);
+    padding: clamp(2rem, 4vh, 3.5rem) var(--gutter) clamp(2rem, 4vh, 3rem);
   }
-  .foot-stmt .line {
-    margin: 0; max-width: 24ch;
-    font: 600 clamp(1.75rem, 5vw, 3.25rem)/1.05 var(--font-display);
-    letter-spacing: -0.02em;
+  .kicker {
+    display: inline-flex; align-items: center; gap: 0.6rem;
+    font: 700 0.72rem/1.2 var(--font-mono);
+    letter-spacing: 0.18em; text-transform: uppercase;
+    border: var(--bw) solid var(--ink); background: var(--paper);
+    padding: 0.45rem 0.7rem; box-shadow: var(--shadow-s);
+    width: fit-content; max-width: 100%;
+  }
+  .kicker .sq { width: 0.7rem; height: 0.7rem; background: var(--red); flex: none; }
+  h1 {
+    margin: clamp(1.1rem, 2.5vh, 1.75rem) 0 0;
+    font: 400 clamp(2.1rem, 6.2vw, 5.2rem)/0.98 var(--font-display);
+    letter-spacing: -0.015em;
+    text-transform: uppercase;
+    text-wrap: balance;
     overflow-wrap: anywhere; min-width: 0;
   }
-  .foot-meta {
-    display: flex; flex-wrap: wrap; gap: var(--space-sm) var(--space-lg);
-    justify-content: space-between; align-items: baseline;
-    border-top: 1px solid var(--color-rule-faint);
-    padding-top: var(--space-sm);
-    font-size: var(--text-sm); color: var(--color-ink-faint);
+  h1 .red { color: var(--red); }
+  .stamp {
+    display: inline-block;
+    background: var(--red); color: #fff;
+    padding: 0.06em 0.22em 0.1em;
+    transform: rotate(-1.2deg);
+    box-shadow: var(--shadow-s);
+    margin-top: 0.14em;
   }
-  .foot-meta .wordmark { font-family: var(--font-outlier); font-weight: 600; color: var(--color-ink-soft); }
-  .foot-meta nav { display: flex; flex-wrap: wrap; gap: var(--space-md); }
-  .foot-meta nav a { color: var(--color-ink-faint); white-space: nowrap; }
-  .foot-meta nav a:hover { color: var(--color-ink); }
+  .hero-sub {
+    margin: clamp(1rem, 2.2vh, 1.5rem) 0 0;
+    font: 500 clamp(0.9rem, 1.3vw, 1.05rem)/1.5 var(--font-mono);
+    color: var(--ink-soft);
+    max-width: 44ch;
+  }
+  .hero-sub b { color: var(--ink); }
+  .cta-row { display: flex; flex-wrap: wrap; gap: 0.9rem; margin-top: clamp(1.25rem, 2.5vh, 1.75rem); }
+  .btn {
+    display: inline-flex; align-items: center; gap: 0.55rem;
+    font: 700 0.82rem/1 var(--font-mono);
+    letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 0.9rem 1.3rem;
+    border: var(--bw) solid var(--ink);
+    background: var(--paper);
+    box-shadow: var(--shadow-m);
+    transition: transform 120ms ease, box-shadow 120ms ease;
+    white-space: nowrap;
+  }
+  .btn:hover { text-decoration: none; transform: translate(-2px,-2px); box-shadow: 8px 8px 0 var(--ink); }
+  .btn:active { transform: translate(3px,3px); box-shadow: 2px 2px 0 var(--ink); }
+  .btn-red { background: var(--red); color: #fff; }
+  .btn-red:hover { background: var(--red-deep); }
+  .trust {
+    margin: clamp(1.3rem, 3vh, 1.8rem) 0 0;
+    font: 500 0.72rem/1.6 var(--font-mono);
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+  .trust b { color: var(--ink); background: var(--tape); padding: 0.08em 0.4em; }
 
-  /* ————— Reveal — one orchestrated entrance on load, one-shot ————— */
-  .js .reveal { opacity: 0; transform: translateY(8px); animation: reveal var(--dur-long) var(--ease-out) forwards; animation-delay: calc(var(--i, 0) * 70ms); }
-  @keyframes reveal { to { opacity: 1; transform: none; } }
+  /* ————— findings terminal ————— */
+  .term {
+    border: var(--bw) solid var(--ink);
+    background: var(--ink); color: var(--paper);
+    box-shadow: var(--shadow-l);
+    display: grid; grid-template-rows: auto auto 1fr auto;
+    min-width: 0;
+    align-self: stretch;
+  }
+  .term-head {
+    display: flex; align-items: center; gap: 0.75rem;
+    padding: 0.7rem 0.9rem;
+    border-bottom: var(--bw) solid var(--paper);
+    font: 500 0.78rem/1.3 var(--font-mono);
+  }
+  .term-head .dots { display: flex; gap: 0.35rem; flex: none; }
+  .term-head .dots i { width: 0.7rem; height: 0.7rem; border: 1.5px solid rgba(243,240,233,0.4); }
+  .term-head .dots i:first-child { background: var(--red); border-color: var(--red); }
+  .term-head .cmd { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .term-head .live {
+    margin-left: auto; flex: none;
+    font: 700 0.7rem/1 var(--font-mono); letter-spacing: 0.14em;
+    color: var(--ink); background: var(--low); border: 1.5px solid var(--low);
+    padding: 0.28rem 0.5rem;
+  }
+  .term-head .cmd::after {
+    content: "▍"; color: var(--low);
+    animation: blink 1.1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  .term-count {
+    display: flex; flex-wrap: wrap; gap: 0.4rem 0.75rem;
+    padding: 0.6rem 0.9rem;
+    border-bottom: 1.5px dashed rgba(243,240,233,0.35);
+    font: 700 0.7rem/1.4 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase;
+  }
+  .term-count b { color: var(--crit); }
+  .term-count .up { color: var(--low); }
+  .feed {
+    position: relative; overflow: hidden;
+    min-height: clamp(17rem, 30vh, 24rem);
+  }
+  .feed-track {
+    position: absolute; inset: 0 auto auto 0; width: 100%;
+    animation: feed 26s linear infinite;
+  }
+  .term:hover .feed-track, .term:focus-within .feed-track { animation-play-state: paused; }
+  .feed ol { list-style: none; margin: 0; padding: 0; }
+  .fd {
+    display: grid;
+    grid-template-columns: 4.6rem minmax(0, 1fr) auto;
+    gap: 0.7rem; align-items: center;
+    padding: 0.42rem 0.9rem;
+    border-bottom: 1px solid rgba(243, 240, 233, 0.2);
+    font: 400 0.78rem/1.45 var(--font-mono);
+    white-space: nowrap;
+  }
+  .fd .loc { overflow: hidden; text-overflow: ellipsis; }
+  .fd .rule { color: rgba(243,240,233,0.62); font-size: 0.72rem; overflow: hidden; text-overflow: ellipsis; }
+  .sev {
+    font: 700 0.68rem/1 var(--font-mono); letter-spacing: 0.1em;
+    text-align: center; padding: 0.24rem 0.2rem;
+    color: var(--ink); border: 1.5px solid var(--ink);
+    justify-self: start;
+  }
+  .sev-crit { background: var(--crit); }
+  .sev-high { background: var(--high); }
+  .sev-med  { background: var(--med); }
+  .sev-low  { background: var(--low); }
+  .term-bar {
+    padding: 0.65rem 0.9rem;
+    border-top: var(--bw) solid var(--paper);
+    font: 500 0.72rem/1.5 var(--font-mono);
+    display: grid; gap: 0.45rem;
+  }
+  .meter {
+    height: 0.8rem;
+    background: linear-gradient(to right, var(--low) 0 87%, rgba(243,240,233,0.15) 87% 100%);
+    border: 1.5px solid rgba(243,240,233,0.4);
+  }
+  .feed::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2.2rem;
+    background: linear-gradient(to bottom, rgba(21,21,21,0), var(--ink));
+    pointer-events: none;
+  }
+  .term-bar .row { display: flex; justify-content: space-between; gap: 1rem; }
+  .term-bar .row span:last-child { color: rgba(243,240,233,0.62); }
+  @keyframes feed { to { transform: translateY(-50%); } }
+  @media (max-width: 62rem) {
+    .hero { grid-template-columns: 1fr; min-height: 0; }
+    .feed { min-height: 14rem; }
+  }
+  @media (max-width: 40rem) {
+    .fd { grid-template-columns: 3.9rem minmax(0, 1fr); }
+    .fd .rule { display: none; }
+    .term-head .live { display: none; }
+  }
+
+  /* ————— ticker band ————— */
+  .band {
+    background: var(--ink); color: var(--paper);
+    border-block: var(--bw) solid var(--ink);
+    overflow: hidden;
+    padding: 0.7rem 0;
+  }
+  .band-track {
+    display: flex; width: max-content;
+    animation: marquee 30s linear infinite;
+  }
+  .band:hover .band-track { animation-play-state: paused; }
+  .band-track span {
+    font: 700 0.85rem/1 var(--font-mono);
+    letter-spacing: 0.22em; text-transform: uppercase;
+    white-space: nowrap; padding-right: 2.2rem;
+  }
+  .band-track .x { color: var(--red); padding-right: 0.55rem; }
+  @keyframes marquee { to { transform: translateX(-50%); } }
+
+  /* ————— sections ————— */
+  section { padding: clamp(3rem, 7vh, 5.5rem) var(--gutter); }
+  .sec-head {
+    display: flex; align-items: center; gap: 1rem;
+    margin-bottom: clamp(1.5rem, 3vh, 2.5rem);
+  }
+  .sec-head h2 {
+    margin: 0;
+    font: 400 clamp(1.5rem, 3vw, 2.4rem)/1 var(--font-display);
+    text-transform: uppercase; letter-spacing: -0.01em;
+  }
+  .sec-head .idx {
+    font: 700 0.85rem/1 var(--font-mono);
+    color: #fff; background: var(--red);
+    border: 2px solid var(--ink);
+    padding: 0.4rem 0.55rem; letter-spacing: 0.08em;
+    flex: none;
+  }
+  .sec-head .rule { flex: 1; height: var(--bw); background: var(--ink); min-width: 2rem; }
+  .caption {
+    margin: 1.1rem 0 0;
+    font: 500 0.8rem/1.7 var(--font-mono);
+    letter-spacing: 0.02em;
+    color: var(--ink-soft);
+    max-width: 72ch;
+  }
+  .caption b { color: var(--ink); }
+
+  /* ————— pipeline diagram ————— */
+  .pipe {
+    border: var(--bw) solid var(--ink);
+    background: var(--paper);
+    box-shadow: var(--shadow-l);
+    padding: clamp(1.25rem, 2.5vw, 2.25rem);
+  }
+  .flow { display: flex; align-items: center; gap: clamp(0.6rem, 1.5vw, 1.1rem); min-width: 0; }
+  .node {
+    display: grid; gap: 0.3rem; justify-items: center; text-align: center;
+    background: var(--paper);
+    border: var(--bw) solid var(--ink);
+    padding: 0.8rem 0.9rem;
+    min-width: 0; flex: 1;
+    box-shadow: var(--shadow-s);
+  }
+  .node b {
+    font: 400 0.92rem/1.15 var(--font-display);
+    text-transform: uppercase; letter-spacing: 0.01em;
+    overflow-wrap: anywhere;
+  }
+  .node span { font: 500 0.68rem/1.4 var(--font-mono); color: var(--ink-soft); letter-spacing: 0.04em; }
+  .node-red { background: var(--red); }
+  .node-red b { color: #fff; }
+  .node-red span { color: #fff; }
+  .link {
+    flex: none; width: clamp(1.6rem, 3.5vw, 3rem); height: var(--bw);
+    background: var(--ink); position: relative; align-self: center;
+  }
+  .link::after {
+    content: ""; position: absolute; right: -1px; top: 50%;
+    transform: translateY(-50%);
+    border-top: 6px solid transparent; border-bottom: 6px solid transparent;
+    border-left: 9px solid var(--ink);
+  }
+  .link::before {
+    content: ""; position: absolute; top: 50%; left: 0;
+    width: 10px; height: 10px; margin-top: -5px;
+    background: var(--tape); border: 2px solid var(--ink);
+    animation: pulse 2.6s linear infinite;
+  }
+  @keyframes pulse { to { left: calc(100% - 10px); } }
+  .an-stack {
+    flex: 1.25; display: grid; gap: 0.4rem;
+    border-inline: var(--bw) solid var(--ink);
+    padding: 0.6rem clamp(0.7rem, 1.5vw, 1.1rem);
+    min-width: 0;
+  }
+  .an {
+    background: var(--paper-2);
+    border: 2px solid var(--ink);
+    padding: 0.32rem 0.5rem;
+    font: 700 0.68rem/1.3 var(--font-mono); letter-spacing: 0.06em;
+    text-transform: uppercase; text-align: center;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .an b { color: var(--red-deep); }
+  .reports { display: flex; flex-wrap: wrap; gap: 0.35rem; justify-content: center; margin-top: 0.35rem; }
+  .fmt {
+    font: 700 0.7rem/1 var(--font-mono); letter-spacing: 0.08em;
+    border: 2px solid var(--ink); background: var(--tape);
+    padding: 0.28rem 0.4rem;
+  }
+  .profiles {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: clamp(0.6rem, 1.5vw, 1rem);
+    margin-top: clamp(1.25rem, 3vh, 2rem);
+  }
+  .profile {
+    border: 2px solid var(--ink); background: var(--paper-2);
+    padding: 0.75rem 0.85rem;
+    display: grid; gap: 0.3rem;
+  }
+  .profile b { font: 400 0.82rem/1.2 var(--font-display); text-transform: uppercase; }
+  .profile span { font: 500 0.7rem/1.55 var(--font-mono); color: var(--ink-soft); }
+  @media (max-width: 64rem) {
+    .flow { flex-direction: column; align-items: stretch; }
+    .link { width: var(--bw); height: 1.6rem; margin: 0.35rem auto; }
+    .link::after {
+      right: auto; top: auto; bottom: -1px; left: 50%; transform: translateX(-50%);
+      border-left: 6px solid transparent; border-right: 6px solid transparent;
+      border-top: 9px solid var(--ink); border-bottom: 0;
+    }
+    .link::before { animation: pulseV 2.6s linear infinite; left: 50%; margin-left: -5px; top: 0; }
+    @keyframes pulseV { to { top: calc(100% - 10px); } }
+    .an-stack { border-inline: 0; border-block: var(--bw) solid var(--ink); padding-block: 0.6rem; }
+    .profiles { grid-template-columns: 1fr; }
+  }
+
+  /* ————— severity grades ————— */
+  .grades { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: clamp(0.6rem, 1.5vw, 1.1rem); }
+  .grade { border: var(--bw) solid var(--ink); box-shadow: var(--shadow-m); display: grid; gap: 0.4rem; padding: 1rem 0.9rem 0.9rem; }
+  .grade b { font: 400 clamp(1.1rem, 2.2vw, 1.7rem)/1 var(--font-display); text-transform: uppercase; }
+  .grade span { font: 500 0.7rem/1.5 var(--font-mono); color: var(--ink-soft); }
+  .grade .w {
+    justify-self: start;
+    font: 700 0.66rem/1 var(--font-mono);
+    border: 2px solid var(--ink); padding: 0.3rem 0.45rem;
+  }
+  .g-crit b { color: #fff; background: var(--red-deep); padding: 0.05em 0.25em; justify-self: start; }
+  .g-high b { color: var(--ink); background: var(--high); padding: 0.05em 0.25em; justify-self: start; }
+  .g-med  b { color: var(--ink); background: var(--med); padding: 0.05em 0.25em; justify-self: start; }
+  .g-low  b { color: var(--ink); background: var(--low); padding: 0.05em 0.25em; justify-self: start; }
+  .grades-note {
+    margin-top: 1.25rem; border: 2px dashed var(--ink);
+    padding: 0.8rem 1rem;
+    font: 500 0.78rem/1.7 var(--font-mono); color: var(--ink-soft);
+    display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: center;
+  }
+  .grades-note .abc { display: inline-flex; gap: 0.3rem; }
+  .grades-note .abc i {
+    font: 400 1rem/1 var(--font-display); font-style: normal;
+    border: 2px solid var(--ink); padding: 0.28rem 0.5rem;
+    background: var(--paper);
+  }
+  .grades-note .abc i:last-child { background: var(--red); color: #fff; }
+  @media (max-width: 56rem) { .grades { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+  /* ————— language wall ————— */
+  .langwall { padding-inline: 0; }
+  .langwall .sec-head, .langwall .caption { margin-inline: var(--gutter); }
+  .lang-row { overflow: hidden; border-block: var(--bw) solid var(--ink); }
+  .lang-row + .lang-row { border-top: 0; }
+  .lang-row:first-of-type { background: var(--paper); }
+  .lang-row.track-b { background: var(--paper-2); }
+  .lang-track {
+    display: flex; width: max-content;
+    padding: 0.8rem 0;
+    animation: marquee 46s linear infinite;
+  }
+  .track-b .lang-track { animation-direction: reverse; animation-duration: 54s; }
+  .lang-row:hover .lang-track, .lang-row:focus-within .lang-track { animation-play-state: paused; }
+  .lang {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    margin: 0 0.85rem; white-space: nowrap;
+    font: 700 0.82rem/1 var(--font-mono); letter-spacing: 0.04em;
+  }
+  .lang i { width: 0.85rem; height: 0.85rem; border: 2px solid var(--ink); border-radius: 50%; flex: none; }
+
+  /* ————— bento ————— */
+  .bento { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(0.9rem, 2vw, 1.4rem); }
+  .card {
+    border: var(--bw) solid var(--ink);
+    background: var(--paper);
+    box-shadow: var(--shadow-m);
+    padding: 1.1rem 1.05rem 1.05rem;
+    display: grid; gap: 0.65rem; align-content: start;
+    transition: transform 120ms ease, box-shadow 120ms ease;
+  }
+  .card:hover { transform: translate(-2px,-2px); box-shadow: 8px 8px 0 var(--ink); }
+  .card h3 {
+    margin: 0;
+    font: 400 1.02rem/1.15 var(--font-display);
+    text-transform: uppercase;
+  }
+  .card h3 .no { color: var(--red); }
+  .card p { margin: 0; font: 500 0.75rem/1.65 var(--font-mono); color: var(--ink-soft); }
+  .card .diagram {
+    border: 2px solid var(--ink);
+    background: var(--paper-2);
+    padding: 0.6rem 0.65rem;
+    display: flex; flex-wrap: wrap; gap: 0.35rem 0.5rem; align-items: center;
+    font: 700 0.7rem/1.4 var(--font-mono); letter-spacing: 0.05em;
+    margin-top: 0.15rem;
+  }
+  .card .diagram .box { border: 2px solid var(--ink); background: var(--paper); padding: 0.26rem 0.42rem; }
+  .card .diagram .box-em { background: var(--red); color: #fff; }
+  .card .diagram .arr { color: var(--ink-soft); }
+  .card .diagram .dead { text-decoration: line-through; opacity: 0.55; }
+  .card .diagram .fmt { background: var(--tape); }
+  .card .diagram .k {
+    background: var(--ink); color: var(--paper);
+    padding: 0.26rem 0.45rem;
+  }
+  .card .diagram .ok { background: var(--low); }
+  @media (max-width: 70rem) { .bento { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 44rem) { .bento { grid-template-columns: 1fr; } }
+
+  /* ————— install ————— */
+  .install-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(0.9rem, 2vw, 1.4rem); }
+  @media (max-width: 62rem) { .install-grid { grid-template-columns: 1fr; } }
+  .shell {
+    border: var(--bw) solid var(--ink);
+    background: var(--ink); color: var(--paper);
+    box-shadow: var(--shadow-m);
+    display: grid; grid-template-rows: auto 1fr;
+    min-width: 0;
+  }
+  .shell-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+    padding: 0.55rem 0.8rem;
+    border-bottom: var(--bw) solid var(--paper);
+    font: 700 0.7rem/1 var(--font-mono); letter-spacing: 0.14em; text-transform: uppercase;
+  }
+  .copy-btn {
+    font: 700 0.64rem/1 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase;
+    background: var(--paper); color: var(--ink);
+    border: 2px solid var(--paper);
+    padding: 0.4rem 0.7rem; cursor: pointer;
+  }
+  .copy-btn:hover { background: var(--tape); }
+  .copy-btn[data-state="copied"] { background: var(--low); }
+  .shell pre {
+    margin: 0; padding: 1rem 0.9rem;
+    overflow-x: auto;
+    font: 400 0.78rem/1.8 var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  .shell pre .p { color: var(--low); }
+  .shell pre .u { text-decoration: underline; text-decoration-color: rgba(243,240,233,0.45); text-underline-offset: 3px; }
+  .guarantees {
+    display: flex; flex-wrap: wrap; gap: 0.6rem;
+    margin-top: clamp(1.25rem, 3vh, 1.75rem);
+  }
+  .guarantees .btn { box-shadow: var(--shadow-s); font-size: 0.7rem; padding: 0.7rem 0.9rem; background: var(--paper-2); cursor: default; }
+  .guarantees .btn:hover { transform: none; box-shadow: var(--shadow-s); }
+
+  /* ————— cli ————— */
+  .cli-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(0.7rem, 1.5vw, 1.1rem); }
+  @media (max-width: 70rem) { .cli-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 44rem) { .cli-grid { grid-template-columns: 1fr; } }
+  .cmd-card {
+    border: var(--bw) solid var(--ink);
+    background: var(--ink); color: var(--paper);
+    box-shadow: var(--shadow-s);
+    padding: 0.85rem 0.9rem;
+    font: 400 0.76rem/1.7 var(--font-mono);
+    white-space: pre-wrap; overflow-wrap: anywhere;
+    display: grid; gap: 0.45rem; align-content: start;
+  }
+  .cmd-card .what {
+    font: 700 0.7rem/1.5 var(--font-mono);
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--ink); background: var(--tape);
+    padding: 0.3rem 0.5rem; justify-self: start;
+  }
+  .cmd-card .c { color: var(--tape); }
+  .cmd-card .hl { color: var(--low); }
+  .exitline {
+    margin-top: 1.25rem;
+    font: 500 0.74rem/1.8 var(--font-mono); color: var(--ink-soft);
+    border: 2px dashed var(--ink); padding: 0.7rem 0.95rem;
+  }
+  .exitline b { color: var(--ink); }
+
+  /* ————— versus ————— */
+  .vs { border: var(--bw) solid var(--ink); box-shadow: var(--shadow-l); background: var(--paper); }
+  .vs-table { display: grid; grid-template-columns: minmax(7rem, 1.2fr) minmax(0, 1fr) minmax(0, 1fr); }
+  .vs-table > div {
+    padding: 0.85rem 1rem;
+    border-bottom: 2px solid var(--ink);
+    font: 500 0.78rem/1.5 var(--font-mono);
+    display: flex; align-items: center; gap: 0.55rem;
+    min-width: 0;
+  }
+  .vs-table > div:nth-last-child(-n+3) { border-bottom: 0; }
+  .vs-table .hd {
+    font: 400 0.82rem/1.2 var(--font-display);
+    text-transform: uppercase;
+    background: var(--paper-2);
+  }
+  .vs-table .hd-blunt { background: var(--red); color: #fff; }
+  .vs-table .hd-cloud { background: var(--ink); color: var(--paper); }
+  .vs-table .q { font-weight: 700; }
+  .yes { background: var(--low); color: var(--ink); border: 2px solid var(--ink); padding: 0.14rem 0.5rem; font-weight: 700; white-space: nowrap; }
+  .no { background: var(--crit); color: var(--ink); border: 2px solid var(--ink); padding: 0.14rem 0.5rem; font-weight: 700; white-space: nowrap; }
+  .vs-note { padding: 0.85rem 1rem; font: 500 0.72rem/1.6 var(--font-mono); color: var(--ink-soft); border-top: 2px solid var(--ink); }
+  @media (max-width: 44rem) {
+    .vs-table { grid-template-columns: minmax(6rem, 1fr) minmax(0, 1.2fr); }
+    .vs-table > div:nth-child(3n) { display: none; }
+  }
+
+  /* ————— final cta ————— */
+  .final {
+    background: var(--red);
+    border-top: var(--bw) solid var(--ink);
+    border-bottom: var(--bw) solid var(--ink);
+    text-align: center;
+    padding: clamp(3rem, 8vh, 5.5rem) var(--gutter);
+    display: grid; gap: 1.5rem; justify-items: center;
+  }
+  .final h2 {
+    margin: 0;
+    font: 400 clamp(2rem, 5.5vw, 4.2rem)/1 var(--font-display);
+    text-transform: uppercase; color: #fff;
+    text-shadow: 5px 5px 0 var(--ink);
+    max-width: 22ch;
+  }
+  .final .btn { background: var(--ink); color: var(--paper); border-color: var(--ink); box-shadow: 6px 6px 0 rgba(21,21,21,0.45); }
+  .final .btn:hover { box-shadow: 8px 8px 0 rgba(21,21,21,0.45); background: #000; }
+  .final p { margin: 0; font: 500 0.74rem/1.6 var(--font-mono); letter-spacing: 0.14em; text-transform: uppercase; color: #fff; }
+
+  /* ————— footer ————— */
+  footer {
+    background: var(--ink); color: var(--paper);
+    padding: clamp(2.5rem, 6vh, 4rem) var(--gutter) 1.5rem;
+  }
+  .foot-big {
+    font: 400 clamp(1.9rem, 5vw, 3.6rem)/1.02 var(--font-display);
+    text-transform: uppercase;
+    margin: 0 0 2rem;
+  }
+  .foot-big .red { color: var(--red); }
+  .foot-cols {
+    display: flex; flex-wrap: wrap; gap: 1rem 2.5rem;
+    justify-content: space-between; align-items: end;
+    border-top: 2px solid rgba(243,240,233,0.25);
+    padding-top: 1.25rem;
+  }
+  .foot-cols nav { display: flex; flex-wrap: wrap; gap: 0.4rem 1.4rem; }
+  .foot-cols a { color: rgba(243,240,233,0.75); font: 500 0.75rem/1.6 var(--font-mono); letter-spacing: 0.06em; }
+  .foot-cols a:hover { color: #fff; }
+  .foot-meta {
+    margin-top: 1.75rem;
+    font: 400 0.68rem/1.8 var(--font-mono);
+    color: rgba(243,240,233,0.5);
+    letter-spacing: 0.04em;
+  }
 
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
@@ -411,189 +698,394 @@
       animation-iteration-count: 1 !important;
       transition-duration: 150ms !important;
     }
-    .analyzer-track { animation: none; flex-wrap: wrap; width: auto; }
-    .caret { animation: none; }
-    .js .reveal { opacity: 1; transform: none; animation: none; }
+    .feed-track, .band-track, .lang-track, .link::before, .term-head .cmd::after { animation: none !important; }
+    .feed-track { position: static; }
+    .feed { overflow-y: auto; }
+    html { scroll-behavior: auto; }
   }
 </style>
 </head>
-<body>
+<body id="top">
 
-<header>
-  <nav class="nav-pill" aria-label="Primary">
-    <a class="wordmark" href="#top">
-      <svg width="20" height="20" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" class="logo-tile"/><path d="M16 5.2 L23.6 9 L23.6 17.2 C23.6 21 20.2 24.5 16 26.8 C11.8 24.5 8.4 21 8.4 17.2 L8.4 9 Z" fill="none" class="logo-ghost" stroke-width="1"/><path d="M11.8 15.9 L15.2 19.1 L20.6 12.1" fill="none" class="logo-check" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="23.4" cy="7.2" r="1.7" class="logo-dot"/></svg>
-      blunt-code
+<div class="tape" aria-hidden="true"></div>
+
+<nav class="nav" aria-label="Primary">
+  <div class="nav-in">
+    <a class="brand" href="#top">
+      <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" fill="#DA1E28"/><path d="M11.8 15.9 L15.2 19.1 L20.6 12.1" fill="none" stroke="white" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="24.4" cy="7.6" r="2" fill="#151515"/></svg>
+      Blunt&nbsp;Code
     </a>
-    <ul>
-      <li><a href="#install">Install</a></li>
-      <li><a href="#why">Why</a></li>
-      <li><a href="https://github.com/sanketpatel32/Blunt-code">GitHub</a></li>
-    </ul>
-    <a class="nav-cta" href="https://github.com/sanketpatel32/Blunt-code/releases/latest">Download</a>
-  </nav>
-</header>
+    <div class="nav-links">
+      <a href="#scan">How it scans</a>
+      <a href="#coverage">Coverage</a>
+      <a href="#install">Install</a>
+      <a href="#cli">CLI</a>
+      <a href="#why">Why local</a>
+    </div>
+    <span class="nav-ver">v0.16.7</span>
+    <a class="nav-cta" href="https://github.com/sanketpatel32/Blunt-code/releases/latest">Get it</a>
+  </div>
+</nav>
 
-<main id="top">
+<main>
 
-  <section class="fold" aria-label="Blunt Code">
-    <h1 class="reveal" style="--i: 0">Your code never leaves the machine.</h1>
+  <!-- ————— hero ————— -->
+  <section class="hero" aria-label="Blunt Code — local code scanner">
+    <div>
+      <p class="kicker" style="margin:0"><span class="sq" aria-hidden="true"></span>Local-first code scanner for Windows</p>
+      <h1>Your code has <span class="red">problems.</span><br /><span class="stamp">Here they are.</span></h1>
+      <p class="hero-sub"><b>Six analyzers. One honest report. Zero uploads.</b> Blunt Code runs Ruff, Biome, Semgrep, SonarQube, secrets and TODO checks on your machine — and tells you exactly what's wrong, to your face.</p>
+      <div class="cta-row">
+        <a class="btn btn-red" href="#install">Install in 30s ↓</a>
+        <a class="btn" href="https://github.com/sanketpatel32/Blunt-code/releases/latest">Portable ZIP</a>
+        <a class="btn" href="https://github.com/sanketpatel32/Blunt-code">★&nbsp;Star on GitHub</a>
+      </div>
+      <p class="trust"><b>free</b> · MIT · no admin · Windows 10/11 · 726 tests passing</p>
+    </div>
 
-    <figure class="diagram reveal" style="--i: 1" role="img" aria-label="Diagram: your code flows through one local executable, bluntcode.exe, to six bundled analyzers — Ruff, Biome, Semgrep, SonarQube, Secrets, TODO — and returns one report. Everything stays inside your machine; there is no upload.">
-      <div class="machine">
-        <span class="machine-tag">your machine</span>
-        <div class="flow">
-          <div class="node">
-            <svg class="glyph" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7a2 2 0 0 1 2-2h4.2l2 2h7.3a2 2 0 0 1 2 2v8.5a2 2 0 0 1-2 2h-13.5a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
-            <b>your code</b>
-            <span>40+ file types</span>
-          </div>
-          <div class="link" aria-hidden="true"></div>
-          <div class="node node-exe">
-            <b>bluntcode.exe</b>
-            <span>loopback · 127.0.0.1</span>
-          </div>
-          <div class="analyzers" aria-hidden="true">
-            <span class="an">Ruff</span>
-            <span class="an">Biome</span>
-            <span class="an">Semgrep</span>
-            <span class="an">SonarQube</span>
-            <span class="an">Secrets</span>
-            <span class="an">TODO/FIXME</span>
-          </div>
-          <div class="link" aria-hidden="true"></div>
-          <div class="node">
-            <svg class="glyph" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3.5h6.5L19 9v11.5H7z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M13.5 3.5V9H19" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
-            <b>one report</b>
-            <span>findings · history · diffs</span>
-          </div>
+    <section class="term" aria-label="Illustrative findings feed, recreated from a real scan">
+      <div class="term-head">
+        <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span class="cmd">bluntcode scan . --profile deep</span>
+        <span class="live" aria-hidden="true">● scan</span>
+      </div>
+      <div class="term-count">
+        <span><b>516</b> findings</span>
+        <span>6 analyzers</span>
+        <span class="up">0 bytes uploaded</span>
+      </div>
+      <div class="feed">
+        <div class="feed-track" aria-hidden="true">
+          <ol>
+            <li class="fd"><span class="sev sev-crit">CRIT</span><span class="loc">src/.env:4</span><span class="rule">aws-access-key-id · secrets</span></li>
+            <li class="fd"><span class="sev sev-crit">CRIT</span><span class="loc">api/payments.ts:118</span><span class="rule">unsafe-deserialization · semgrep</span></li>
+            <li class="fd"><span class="sev sev-high">HIGH</span><span class="loc">server/db/query.py:72</span><span class="rule">sql-string-concat · semgrep</span></li>
+            <li class="fd"><span class="sev sev-crit">CRIT</span><span class="loc">uploads/jwt.pem:1</span><span class="rule">private-key-committed · secrets</span></li>
+            <li class="fd"><span class="sev sev-high">HIGH</span><span class="loc">web/app/chat.tsx:64</span><span class="rule">postmessage-wildcard · semgrep</span></li>
+            <li class="fd"><span class="sev sev-high">HIGH</span><span class="loc">hooks/useCart.ts:22</span><span class="rule">useExhaustiveDependencies · biome</span></li>
+            <li class="fd"><span class="sev sev-med">MED</span><span class="loc">scripts/import.py:140</span><span class="rule">PLC0415 import-outside-toplevel · ruff</span></li>
+            <li class="fd"><span class="sev sev-med">MED</span><span class="loc">utils/date.ts:31</span><span class="rule">noUnusedVariables · biome</span></li>
+            <li class="fd"><span class="sev sev-med">MED</span><span class="loc">src/legacy/report.js:88</span><span class="rule">cognitive-complexity · sonarqube</span></li>
+            <li class="fd"><span class="sev sev-low">LOW</span><span class="loc">services/auth.go:9</span><span class="rule">TODO(mara): rotate keys · todo</span></li>
+            <li class="fd"><span class="sev sev-low">LOW</span><span class="loc">deploy/Dockerfile:2</span><span class="rule">FIXME: pin base image · todo</span></li>
+            <li class="fd"><span class="sev sev-low">LOW</span><span class="loc">tests/test_app.py:17</span><span class="rule">E741 ambiguous-name · ruff</span></li>
+            <li class="fd"><span class="sev sev-high">HIGH</span><span class="loc">internal/escape.ts:12</span><span class="rule">noDangerouslySetInnerHTML · biome</span></li>
+            <li class="fd"><span class="sev sev-crit">CRIT</span><span class="loc">config/settings.py:8</span><span class="rule">hardcoded-password · semgrep</span></li>
+            <li class="fd"><span class="sev sev-med">MED</span><span class="loc">api/routes.go:203</span><span class="rule">TODO without owner · todo</span></li>
+            <li class="fd"><span class="sev sev-high">HIGH</span><span class="loc">webhooks/stripe.ts:57</span><span class="rule">live-secret-in-code · secrets</span></li>
+          </ol>
+          <ol>
+            <li class="fd"><span class="sev sev-crit">CRIT</span><span class="loc">src/.env:4</span><span class="rule">aws-access-key-id · secrets</span></li>
+            <li class="fd"><span class="sev sev-crit">CRIT</span><span class="loc">api/payments.ts:118</span><span class="rule">unsafe-deserialization · semgrep</span></li>
+            <li class="fd"><span class="sev sev-high">HIGH</span><span class="loc">server/db/query.py:72</span><span class="rule">sql-string-concat · semgrep</span></li>
+            <li class="fd"><span class="sev sev-crit">CRIT</span><span class="loc">uploads/jwt.pem:1</span><span class="rule">private-key-committed · secrets</span></li>
+            <li class="fd"><span class="sev sev-high">HIGH</span><span class="loc">web/app/chat.tsx:64</span><span class="rule">postmessage-wildcard · semgrep</span></li>
+            <li class="fd"><span class="sev sev-high">HIGH</span><span class="loc">hooks/useCart.ts:22</span><span class="rule">useExhaustiveDependencies · biome</span></li>
+            <li class="fd"><span class="sev sev-med">MED</span><span class="loc">scripts/import.py:140</span><span class="rule">PLC0415 import-outside-toplevel · ruff</span></li>
+            <li class="fd"><span class="sev sev-med">MED</span><span class="loc">utils/date.ts:31</span><span class="rule">noUnusedVariables · biome</span></li>
+            <li class="fd"><span class="sev sev-med">MED</span><span class="loc">src/legacy/report.js:88</span><span class="rule">cognitive-complexity · sonarqube</span></li>
+            <li class="fd"><span class="sev sev-low">LOW</span><span class="loc">services/auth.go:9</span><span class="rule">TODO(mara): rotate keys · todo</span></li>
+            <li class="fd"><span class="sev sev-low">LOW</span><span class="loc">deploy/Dockerfile:2</span><span class="rule">FIXME: pin base image · todo</span></li>
+            <li class="fd"><span class="sev sev-low">LOW</span><span class="loc">tests/test_app.py:17</span><span class="rule">E741 ambiguous-name · ruff</span></li>
+            <li class="fd"><span class="sev sev-high">HIGH</span><span class="loc">internal/escape.ts:12</span><span class="rule">noDangerouslySetInnerHTML · biome</span></li>
+            <li class="fd"><span class="sev sev-crit">CRIT</span><span class="loc">config/settings.py:8</span><span class="rule">hardcoded-password · semgrep</span></li>
+            <li class="fd"><span class="sev sev-med">MED</span><span class="loc">api/routes.go:203</span><span class="rule">TODO without owner · todo</span></li>
+            <li class="fd"><span class="sev sev-high">HIGH</span><span class="loc">webhooks/stripe.ts:57</span><span class="rule">live-secret-in-code · secrets</span></li>
+          </ol>
         </div>
       </div>
-      <div class="cloud-off" aria-hidden="true">
-        <svg class="cloud-glyph" width="46" height="32" viewBox="0 0 24 16" aria-hidden="true">
-          <path d="M6.5 15.5a4.5 4.5 0 0 1-.6-8.96 6 6 0 0 1 11.62 1.2A3.75 3.75 0 0 1 17 15.5z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>
-          <path class="x-strike" d="M2.5 14.5 21.5 1.5" fill="none" stroke-width="1.8" stroke-linecap="round"/>
-        </svg>
-        <span>no upload</span>
+      <div class="term-bar">
+        <div class="meter" aria-hidden="true"></div>
+        <div class="row"><span>sonarqube · computing metrics…</span><span>87% · 0 uploaded</span></div>
       </div>
-    </figure>
-
-    <p class="fold-tag reveal" style="--i: 2">
-      <span>blunt code · windows 10/11 · 100% local</span>
-      <a href="#install">install ↓</a>
-    </p>
+    </section>
   </section>
 
-  <hr class="divide" />
-
-  <section class="install" id="install">
-    <div class="section-head">
-      <h2>Install in 30 seconds</h2>
-    </div>
-
-    <div class="code-frame">
-      <div class="frame-head">
-        <span>powershell</span>
-        <button class="copy-btn" type="button" data-copy="ps">Copy</button>
-      </div>
-      <pre id="cmd-ps"><code class="cmd-line">irm https://github.com/sanketpatel32/Blunt-code/releases/latest/download/install-latest.ps1 | iex<span class="caret" aria-hidden="true">▮</span></code></pre>
-    </div>
-
-    <div class="code-frame">
-      <div class="frame-head">
-        <span>cmd</span>
-        <button class="copy-btn" type="button" data-copy="cmd">Copy</button>
-      </div>
-      <pre id="cmd-cmd"><code class="cmd-line">curl -fsSL -o "%TEMP%\install-bluntcode.cmd" https://github.com/sanketpatel32/Blunt-code/releases/latest/download/install.cmd &amp;&amp; "%TEMP%\install-bluntcode.cmd"</code></pre>
-    </div>
-
-    <div class="cta-row">
-      <a class="btn-primary" href="https://github.com/sanketpatel32/Blunt-code/releases/latest">Download for Windows</a>
-      <a class="secondary" href="https://github.com/sanketpatel32/Blunt-code/releases/latest">Portable ZIP + SHA-256 →</a>
-    </div>
-    <p class="install-alt">Sandboxed under <code>%LOCALAPPDATA%</code> — your PATH is never touched.</p>
-  </section>
-
-  <div class="analyzer-strip" aria-label="Bundled analyzers">
+  <!-- ————— ticker band ————— -->
+  <div class="band" aria-label="Blunt Code privacy guarantees">
     <ul class="sr-only">
-      <li>Ruff — Python</li><li>Biome — JS/TS + React</li><li>Semgrep — 25-rule security pack</li><li>SonarQube — polyglot, managed runtime</li><li>Secrets — AWS, GitHub, Slack, JWT, Stripe, OpenAI, Anthropic, Azure</li><li>TODO/FIXME — 40+ file types</li>
+      <li>No cloud</li><li>No account</li><li>No telemetry</li><li>No mercy</li>
     </ul>
-    <div class="analyzer-track" aria-hidden="true">
-      <span><b>Ruff</b> — Python</span><span><b>Biome</b> — JS/TS + React</span><span><b>Semgrep</b> — 25-rule security pack</span><span><b>SonarQube</b> — polyglot, managed runtime</span><span><b>Secrets</b> — 8 credential families</span><span><b>TODO/FIXME</b> — 40+ file types</span>
-      <span><b>Ruff</b> — Python</span><span><b>Biome</b> — JS/TS + React</span><span><b>Semgrep</b> — 25-rule security pack</span><span><b>SonarQube</b> — polyglot, managed runtime</span><span><b>Secrets</b> — 8 credential families</span><span><b>TODO/FIXME</b> — 40+ file types</span>
+    <div class="band-track" aria-hidden="true">
+      <span><i class="x">✕</i>no cloud</span><span><i class="x">✕</i>no account</span><span><i class="x">✕</i>no telemetry</span><span><i class="x">✕</i>no mercy</span>
+      <span><i class="x">✕</i>no cloud</span><span><i class="x">✕</i>no account</span><span><i class="x">✕</i>no telemetry</span><span><i class="x">✕</i>no mercy</span>
+      <span><i class="x">✕</i>no cloud</span><span><i class="x">✕</i>no account</span><span><i class="x">✕</i>no telemetry</span><span><i class="x">✕</i>no mercy</span>
+      <span><i class="x">✕</i>no cloud</span><span><i class="x">✕</i>no account</span><span><i class="x">✕</i>no telemetry</span><span><i class="x">✕</i>no mercy</span>
+      <span><i class="x">✕</i>no cloud</span><span><i class="x">✕</i>no account</span><span><i class="x">✕</i>no telemetry</span><span><i class="x">✕</i>no mercy</span>
+      <span><i class="x">✕</i>no cloud</span><span><i class="x">✕</i>no account</span><span><i class="x">✕</i>no telemetry</span><span><i class="x">✕</i>no mercy</span>
+      <span><i class="x">✕</i>no cloud</span><span><i class="x">✕</i>no account</span><span><i class="x">✕</i>no telemetry</span><span><i class="x">✕</i>no mercy</span>
+      <span><i class="x">✕</i>no cloud</span><span><i class="x">✕</i>no account</span><span><i class="x">✕</i>no telemetry</span><span><i class="x">✕</i>no mercy</span>
     </div>
   </div>
 
-  <section class="why" id="why">
-    <div class="section-head">
-      <h2>Two ways to scan.</h2>
+  <!-- ————— 01 · pipeline ————— -->
+  <section id="scan" aria-labelledby="scan-h">
+    <div class="sec-head">
+      <span class="idx" aria-hidden="true">01</span>
+      <h2 id="scan-h">How it scans</h2>
+      <span class="rule" aria-hidden="true"></span>
     </div>
-    <figure class="split" role="img" aria-label="Diagram: Blunt Code scans locally — code, analyzers, and the report never leave your disk. Cloud scanners require uploading your source to someone else's server.">
-      <div class="lane lane-local">
-        <div class="lane-head">
-          <b>blunt code</b>
-          <span class="verdict verdict-ok">✓ never leaves your disk</span>
+
+    <figure class="pipe" role="img" aria-label="Diagram: your folder flows through bluntcode.exe on loopback 127.0.0.1, fans out to six analyzers — Ruff, Biome, Semgrep, SonarQube, Secrets, TODO — then findings are deduplicated and fingerprinted into a local SQLite database and exported as Markdown, HTML, SARIF, CSV or JSON, or gated in CI.">
+      <div class="flow">
+        <div class="node"><b>Your folder</b><span>39 languages classified</span></div>
+        <span class="link" aria-hidden="true"></span>
+        <div class="node node-red"><b>bluntcode.exe</b><span>loopback · 127.0.0.1 only</span></div>
+        <span class="link" aria-hidden="true"></span>
+        <div class="an-stack">
+          <span class="an"><b>Ruff</b> · python</span>
+          <span class="an"><b>Biome</b> · js / ts / react</span>
+          <span class="an"><b>Semgrep</b> · 25 rules</span>
+          <span class="an"><b>SonarQube</b> · project-wide</span>
+          <span class="an"><b>Secrets</b> · 8 families</span>
+          <span class="an"><b>TODO</b> / FIXME tracker</span>
         </div>
-        <div class="lane-flow">
-          <span class="chip">your code</span>
-          <span class="link-s" aria-hidden="true"></span>
-          <span class="chip">6 analyzers</span>
-          <span class="link-s" aria-hidden="true"></span>
-          <span class="chip">report + history</span>
-        </div>
-      </div>
-      <div class="lane lane-cloud">
-        <div class="lane-head">
-          <b>cloud scanners</b>
-          <span class="verdict verdict-no">✕ source uploaded</span>
-        </div>
-        <div class="lane-flow">
-          <span class="chip">your code</span>
-          <span class="link-s" aria-hidden="true"></span>
-          <span class="chip upload-x">upload</span>
-          <span class="link-s" aria-hidden="true"></span>
-          <span class="chip">cloud</span>
-          <span class="link-s" aria-hidden="true"></span>
-          <span class="chip">findings</span>
+        <span class="link" aria-hidden="true"></span>
+        <div class="node"><b>Dedup + fingerprint</b><span>one finding, once — forever trackable</span></div>
+        <span class="link" aria-hidden="true"></span>
+        <div class="node">
+          <b>One report</b>
+          <div class="reports" aria-hidden="true">
+            <span class="fmt">MD</span><span class="fmt">HTML</span><span class="fmt">SARIF</span><span class="fmt">CSV</span><span class="fmt">JSON</span><span class="fmt">CI&nbsp;GATE</span>
+          </div>
         </div>
       </div>
     </figure>
+
+    <div class="profiles" aria-label="Scan profiles">
+      <div class="profile"><b>Quick</b><span>Ruff + Biome · seconds, pre-commit friendly</span></div>
+      <div class="profile"><b>Standard</b><span>+ Semgrep + SonarQube · the default sweep</span></div>
+      <div class="profile"><b>Deep</b><span>everything + extended rule sets · the full interrogation</span></div>
+    </div>
+
+    <p class="caption">Every analyzer runs sandboxed under <b>%LOCALAPPDATA%\BluntCode\tools</b> — your PATH is never touched, and nothing is ever uploaded.</p>
   </section>
 
-  <section class="numbers" aria-label="By the numbers">
-    <dl>
-      <div><dd>6</dd><dt>bundled analyzers</dt></div>
-      <div><dd>723</dd><dt>automated tests passing</dt></div>
-      <div><dd>0</dd><dt>bytes of telemetry</dt></div>
-      <div><dd>40+</dd><dt>file types scanned</dt></div>
-    </dl>
+  <!-- ————— 02 · graded ————— -->
+  <section aria-labelledby="grades-h" style="padding-top:0">
+    <div class="sec-head">
+      <span class="idx" aria-hidden="true">02</span>
+      <h2 id="grades-h">Nothing hides</h2>
+      <span class="rule" aria-hidden="true"></span>
+    </div>
+
+    <div class="grades">
+      <div class="grade g-crit"><b>Critical</b><span>committed secrets · unsafe deserialization</span><span class="w">weight ×10</span></div>
+      <div class="grade g-high"><b>High</b><span>injection paths · wildcard postMessage</span><span class="w">weight ×5</span></div>
+      <div class="grade g-med"><b>Medium</b><span>code smells · complexity · dead vars</span><span class="w">weight ×2</span></div>
+      <div class="grade g-low"><b>Low</b><span>TODOs · FIXMEs · style nits</span><span class="w">weight ×1</span></div>
+    </div>
+
+    <p class="grades-note">weighted score → repo risk grade, tracked over time
+      <span class="abc" aria-hidden="true"><i>A</i><i>B</i><i>C</i><i>D</i></span>
+      <span>each workspace gets a letter, with trend arrows on the dashboard</span>
+    </p>
+  </section>
+
+  <!-- ————— 03 · language wall ————— -->
+  <section id="coverage" class="langwall" aria-labelledby="cov-h" style="padding-bottom:0;padding-top:clamp(1.75rem,4vh,3rem)">
+    <div class="sec-head">
+      <span class="idx" aria-hidden="true">03</span>
+      <h2 id="cov-h">Coverage wall</h2>
+      <span class="rule" aria-hidden="true"></span>
+    </div>
+  </section>
+
+  <div class="lang-row" aria-label="Deep analysis languages">
+    <ul class="sr-only"><li>Python</li><li>JavaScript</li><li>TypeScript</li><li>React JSX and TSX</li></ul>
+    <div class="lang-track" aria-hidden="true">
+      <span class="lang"><i style="background:#3572A5"></i>Python</span><span class="lang"><i style="background:#F1E05A"></i>JavaScript</span><span class="lang"><i style="background:#3178C6"></i>TypeScript</span><span class="lang"><i style="background:#F1E05A"></i>JSX</span><span class="lang"><i style="background:#3178C6"></i>TSX</span>
+      <span class="lang"><i style="background:#3572A5"></i>Python</span><span class="lang"><i style="background:#F1E05A"></i>JavaScript</span><span class="lang"><i style="background:#3178C6"></i>TypeScript</span><span class="lang"><i style="background:#F1E05A"></i>JSX</span><span class="lang"><i style="background:#3178C6"></i>TSX</span>
+      <span class="lang"><i style="background:#3572A5"></i>Python</span><span class="lang"><i style="background:#F1E05A"></i>JavaScript</span><span class="lang"><i style="background:#3178C6"></i>TypeScript</span><span class="lang"><i style="background:#F1E05A"></i>JSX</span><span class="lang"><i style="background:#3178C6"></i>TSX</span>
+      <span class="lang"><i style="background:#3572A5"></i>Python</span><span class="lang"><i style="background:#F1E05A"></i>JavaScript</span><span class="lang"><i style="background:#3178C6"></i>TypeScript</span><span class="lang"><i style="background:#F1E05A"></i>JSX</span><span class="lang"><i style="background:#3178C6"></i>TSX</span>
+      <span class="lang"><i style="background:#3572A5"></i>Python</span><span class="lang"><i style="background:#F1E05A"></i>JavaScript</span><span class="lang"><i style="background:#3178C6"></i>TypeScript</span><span class="lang"><i style="background:#F1E05A"></i>JSX</span><span class="lang"><i style="background:#3178C6"></i>TSX</span>
+      <span class="lang"><i style="background:#3572A5"></i>Python</span><span class="lang"><i style="background:#F1E05A"></i>JavaScript</span><span class="lang"><i style="background:#3178C6"></i>TypeScript</span><span class="lang"><i style="background:#F1E05A"></i>JSX</span><span class="lang"><i style="background:#3178C6"></i>TSX</span>
+      <span class="lang"><i style="background:#3572A5"></i>Python</span><span class="lang"><i style="background:#F1E05A"></i>JavaScript</span><span class="lang"><i style="background:#3178C6"></i>TypeScript</span><span class="lang"><i style="background:#F1E05A"></i>JSX</span><span class="lang"><i style="background:#3178C6"></i>TSX</span>
+      <span class="lang"><i style="background:#3572A5"></i>Python</span><span class="lang"><i style="background:#F1E05A"></i>JavaScript</span><span class="lang"><i style="background:#3178C6"></i>TypeScript</span><span class="lang"><i style="background:#F1E05A"></i>JSX</span><span class="lang"><i style="background:#3178C6"></i>TSX</span>
+      <span class="lang"><i style="background:#3572A5"></i>Python</span><span class="lang"><i style="background:#F1E05A"></i>JavaScript</span><span class="lang"><i style="background:#3178C6"></i>TypeScript</span><span class="lang"><i style="background:#F1E05A"></i>JSX</span><span class="lang"><i style="background:#3178C6"></i>TSX</span>
+      <span class="lang"><i style="background:#3572A5"></i>Python</span><span class="lang"><i style="background:#F1E05A"></i>JavaScript</span><span class="lang"><i style="background:#3178C6"></i>TypeScript</span><span class="lang"><i style="background:#F1E05A"></i>JSX</span><span class="lang"><i style="background:#3178C6"></i>TSX</span>
+      <span class="lang"><i style="background:#3572A5"></i>Python</span><span class="lang"><i style="background:#F1E05A"></i>JavaScript</span><span class="lang"><i style="background:#3178C6"></i>TypeScript</span><span class="lang"><i style="background:#F1E05A"></i>JSX</span><span class="lang"><i style="background:#3178C6"></i>TSX</span>
+      <span class="lang"><i style="background:#3572A5"></i>Python</span><span class="lang"><i style="background:#F1E05A"></i>JavaScript</span><span class="lang"><i style="background:#3178C6"></i>TypeScript</span><span class="lang"><i style="background:#F1E05A"></i>JSX</span><span class="lang"><i style="background:#3178C6"></i>TSX</span>
+    </div>
+  </div>
+  <div class="lang-row track-b" aria-label="Secrets and TODO coverage: 39 languages">
+    <ul class="sr-only"><li>Go, Java, Kotlin, C#, C, C++, Ruby, PHP, Rust, Swift, Scala, Shell, PowerShell, YAML, TOML, JSON, Dockerfile, .env and more — 39 classified languages</li></ul>
+    <div class="lang-track" aria-hidden="true">
+      <span class="lang"><i style="background:#00ADD8"></i>Go</span><span class="lang"><i style="background:#B07219"></i>Java</span><span class="lang"><i style="background:#A97BFF"></i>Kotlin</span><span class="lang"><i style="background:#178600"></i>C#</span><span class="lang"><i style="background:#555555"></i>C</span><span class="lang"><i style="background:#F34B7D"></i>C++</span><span class="lang"><i style="background:#701516"></i>Ruby</span><span class="lang"><i style="background:#4F5D95"></i>PHP</span><span class="lang"><i style="background:#DEA584"></i>Rust</span><span class="lang"><i style="background:#F05138"></i>Swift</span><span class="lang"><i style="background:#c22d40"></i>Scala</span><span class="lang"><i style="background:#89E051"></i>Shell</span><span class="lang"><i style="background:#012456"></i>PowerShell</span><span class="lang"><i style="background:#CB171E"></i>.env</span><span class="lang"><i style="background:#384D54"></i>Dockerfile</span><span class="lang"><i style="background:#2C666D"></i>YAML</span><span class="lang"><i style="background:#9C4221"></i>TOML</span><span class="lang"><i style="background:#555"></i>PEM keys</span>
+      <span class="lang"><i style="background:#00ADD8"></i>Go</span><span class="lang"><i style="background:#B07219"></i>Java</span><span class="lang"><i style="background:#A97BFF"></i>Kotlin</span><span class="lang"><i style="background:#178600"></i>C#</span><span class="lang"><i style="background:#555555"></i>C</span><span class="lang"><i style="background:#F34B7D"></i>C++</span><span class="lang"><i style="background:#701516"></i>Ruby</span><span class="lang"><i style="background:#4F5D95"></i>PHP</span><span class="lang"><i style="background:#DEA584"></i>Rust</span><span class="lang"><i style="background:#F05138"></i>Swift</span><span class="lang"><i style="background:#c22d40"></i>Scala</span><span class="lang"><i style="background:#89E051"></i>Shell</span><span class="lang"><i style="background:#012456"></i>PowerShell</span><span class="lang"><i style="background:#CB171E"></i>.env</span><span class="lang"><i style="background:#384D54"></i>Dockerfile</span><span class="lang"><i style="background:#2C666D"></i>YAML</span><span class="lang"><i style="background:#9C4221"></i>TOML</span><span class="lang"><i style="background:#555"></i>PEM keys</span>
+      <span class="lang"><i style="background:#00ADD8"></i>Go</span><span class="lang"><i style="background:#B07219"></i>Java</span><span class="lang"><i style="background:#A97BFF"></i>Kotlin</span><span class="lang"><i style="background:#178600"></i>C#</span><span class="lang"><i style="background:#555555"></i>C</span><span class="lang"><i style="background:#F34B7D"></i>C++</span><span class="lang"><i style="background:#701516"></i>Ruby</span><span class="lang"><i style="background:#4F5D95"></i>PHP</span><span class="lang"><i style="background:#DEA584"></i>Rust</span><span class="lang"><i style="background:#F05138"></i>Swift</span><span class="lang"><i style="background:#c22d40"></i>Scala</span><span class="lang"><i style="background:#89E051"></i>Shell</span><span class="lang"><i style="background:#012456"></i>PowerShell</span><span class="lang"><i style="background:#CB171E"></i>.env</span><span class="lang"><i style="background:#384D54"></i>Dockerfile</span><span class="lang"><i style="background:#2C666D"></i>YAML</span><span class="lang"><i style="background:#9C4221"></i>TOML</span><span class="lang"><i style="background:#555"></i>PEM keys</span>
+      <span class="lang"><i style="background:#00ADD8"></i>Go</span><span class="lang"><i style="background:#B07219"></i>Java</span><span class="lang"><i style="background:#A97BFF"></i>Kotlin</span><span class="lang"><i style="background:#178600"></i>C#</span><span class="lang"><i style="background:#555555"></i>C</span><span class="lang"><i style="background:#F34B7D"></i>C++</span><span class="lang"><i style="background:#701516"></i>Ruby</span><span class="lang"><i style="background:#4F5D95"></i>PHP</span><span class="lang"><i style="background:#DEA584"></i>Rust</span><span class="lang"><i style="background:#F05138"></i>Swift</span><span class="lang"><i style="background:#c22d40"></i>Scala</span><span class="lang"><i style="background:#89E051"></i>Shell</span><span class="lang"><i style="background:#012456"></i>PowerShell</span><span class="lang"><i style="background:#CB171E"></i>.env</span><span class="lang"><i style="background:#384D54"></i>Dockerfile</span><span class="lang"><i style="background:#2C666D"></i>YAML</span><span class="lang"><i style="background:#9C4221"></i>TOML</span><span class="lang"><i style="background:#555"></i>PEM keys</span>
+    </div>
+  </div>
+  <section style="padding-top:clamp(1.5rem,3vh,2.5rem)">
+    <p class="caption" style="margin:0"><b>Deep analysis:</b> Python · JavaScript · TypeScript — <b>secrets &amp; TODO checks:</b> all 39 classified languages, including .env files, Dockerfiles and committed PEM keys.</p>
+  </section>
+
+  <!-- ————— 04 · bento ————— -->
+  <section aria-labelledby="get-h" style="padding-top:0">
+    <div class="sec-head">
+      <span class="idx" aria-hidden="true">04</span>
+      <h2 id="get-h">What you get</h2>
+      <span class="rule" aria-hidden="true"></span>
+    </div>
+
+    <div class="bento">
+      <div class="card">
+        <h3><span class="no">/01</span> Nothing leaves</h3>
+        <div class="diagram" aria-hidden="true">
+          <span class="box">your disk</span><span class="arr">→</span><span class="box box-em">127.0.0.1</span><span class="arr">→</span><span class="box">browser</span><span class="arr">·</span><span class="box dead">cloud ✕</span>
+        </div>
+        <p>Loopback-only server. SQLite, reports and logs stay in %LOCALAPPDATA%. No account, no telemetry, works offline after first run.</p>
+      </div>
+      <div class="card">
+        <h3><span class="no">/02</span> Ignore at source</h3>
+        <div class="diagram" aria-hidden="true">
+          <span class="box">// bluntcode:ignore reason: test key</span>
+        </div>
+        <p>Suppress a finding where it lives, with a reason. Or fingerprint-suppress, or commit a .bluntcodeignore — your team's calls, in the repo.</p>
+      </div>
+      <div class="card">
+        <h3><span class="no">/03</span> Baseline CI gates</h3>
+        <div class="diagram" aria-hidden="true">
+          <span class="box">--fail-on high+</span><span class="arr">+</span><span class="box">--baseline last.sarif</span><span class="arr">→</span><span class="box ok">only NEW findings fail</span>
+        </div>
+        <p>Exit codes your pipeline understands: 0 clean, 1 gate tripped, 2 usage, 130 Ctrl+C. --format github writes PR annotations.</p>
+      </div>
+      <div class="card">
+        <h3><span class="no">/04</span> Self-healing</h3>
+        <div class="diagram" aria-hidden="true">
+          <span class="box">bluntcode doctor --fix</span><span class="arr">→</span><span class="box ok">rules + installs repaired</span>
+        </div>
+        <p>Stale rulepacks, interrupted tool downloads, locked data dir — doctor diagnoses and fixes them before you file an issue.</p>
+      </div>
+      <div class="card">
+        <h3><span class="no">/05</span> Reports that ship</h3>
+        <div class="diagram" aria-hidden="true">
+          <span class="fmt">MD</span><span class="fmt">HTML</span><span class="fmt">SARIF</span><span class="fmt">CSV</span><span class="fmt">JSON</span><span class="fmt">GitHub</span>
+        </div>
+        <p>Every export honors your active filters. SARIF in, SARIF out — diff against last scan with --save-baseline.</p>
+      </div>
+      <div class="card">
+        <h3><span class="no">/06</span> Keyboard fast</h3>
+        <div class="diagram" aria-hidden="true">
+          <span class="k">g h/w/t/s/a</span><span class="k">n</span><span class="k">/</span><span class="k">?</span><span class="k">Ctrl+K</span>
+        </div>
+        <p>Navigate, add workspaces, search findings, open the command palette — without touching the mouse.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ————— 05 · install ————— -->
+  <section id="install" aria-labelledby="inst-h">
+    <div class="sec-head">
+      <span class="idx" aria-hidden="true">05</span>
+      <h2 id="inst-h">Install in 30 seconds</h2>
+      <span class="rule" aria-hidden="true"></span>
+    </div>
+
+    <div class="install-grid">
+      <div class="shell">
+        <div class="shell-head">
+          <span>powershell</span>
+          <button class="copy-btn" type="button" data-copy="ps">Copy</button>
+        </div>
+        <pre id="cmd-ps"><span class="p">PS&gt;</span> <span class="u">irm https://github.com/sanketpatel32/Blunt-code/releases/latest/download/install-latest.ps1 | iex</span></pre>
+      </div>
+      <div class="shell">
+        <div class="shell-head">
+          <span>cmd</span>
+          <button class="copy-btn" type="button" data-copy="cmd">Copy</button>
+        </div>
+        <pre id="cmd-cmd"><span class="p">C:\&gt;</span> <span class="u">curl -fsSL -o "%TEMP%\install-bluntcode.cmd" https://github.com/sanketpatel32/Blunt-code/releases/latest/download/install.cmd &amp;&amp; "%TEMP%\install-bluntcode.cmd"</span></pre>
+      </div>
+    </div>
+
+    <div class="guarantees" aria-label="Installer guarantees">
+      <span class="btn">SHA-256 verified</span>
+      <span class="btn">No admin</span>
+      <span class="btn">Start-menu shortcut</span>
+      <span class="btn">Rerun = in-place upgrade</span>
+      <span class="btn">Uninstaller included</span>
+      <a class="btn" href="https://github.com/sanketpatel32/Blunt-code/releases/latest">Portable ZIP + checksum →</a>
+    </div>
+
+    <p class="caption">Installs to <b>%LOCALAPPDATA%\Programs\BluntCode</b>. The app opens <b>http://127.0.0.1:&lt;port&gt;</b> automatically — add a folder, hit scan.</p>
+  </section>
+
+  <!-- ————— 06 · cli ————— -->
+  <section id="cli" aria-labelledby="cli-h" style="padding-top:0">
+    <div class="sec-head">
+      <span class="idx" aria-hidden="true">06</span>
+      <h2 id="cli-h">The blunt CLI</h2>
+      <span class="rule" aria-hidden="true"></span>
+    </div>
+
+    <div class="cli-grid">
+      <div class="cmd-card"><span class="what">quick scan</span><span class="hl">bluntcode</span> scan . --profile quick</div>
+      <div class="cmd-card"><span class="what">ci gate</span><span class="hl">bluntcode</span> scan . --fail-on high+ --baseline last.sarif</div>
+      <div class="cmd-card"><span class="what">pr annotations</span><span class="hl">bluntcode</span> scan . --format github</div>
+      <div class="cmd-card"><span class="what">sarif out</span><span class="hl">bluntcode</span> scan . --format sarif --save-baseline base.sarif</div>
+      <div class="cmd-card"><span class="what">self-heal</span><span class="hl">bluntcode</span> doctor --fix</div>
+      <div class="cmd-card"><span class="what">for ai agents</span><span class="hl">bluntcode</span> agent scan . --profile quick <span class="c"># forces --json --quiet</span></div>
+    </div>
+
+    <p class="exitline">exit <b>0</b> clean · <b>1</b> gate tripped · <b>2</b> usage error · <b>130</b> ctrl+c — plus <b>llm.txt</b> and <b>bluntcode agent</b> helpers, so your AI pair can read findings without a browser.</p>
+  </section>
+
+  <!-- ————— 07 · versus ————— -->
+  <section id="why" aria-labelledby="why-h" style="padding-top:0">
+    <div class="sec-head">
+      <span class="idx" aria-hidden="true">07</span>
+      <h2 id="why-h">Why not a cloud scanner</h2>
+      <span class="rule" aria-hidden="true"></span>
+    </div>
+
+    <div class="vs" role="img" aria-label="Comparison: Blunt Code never uploads your source, needs no account, works offline and is free, while cloud scanners upload your repository on every scan, require accounts and charge per repo.">
+      <div class="vs-table">
+        <div class="hd"></div><div class="hd hd-blunt">Blunt Code</div><div class="hd hd-cloud">Cloud scanners</div>
+        <div class="q">source leaves machine</div><div><span class="yes">never</span></div><div><span class="no">every scan</span></div>
+        <div class="q">account required</div><div><span class="yes">no</span></div><div><span class="no">yes</span></div>
+        <div class="q">works offline</div><div><span class="yes">after first run</span></div><div><span class="no">no</span></div>
+        <div class="q">price</div><div><span class="yes">$0 · MIT</span></div><div><span class="no">per-repo $$</span></div>
+        <div class="q">telemetry</div><div><span class="yes">0 bytes</span></div><div><span class="no">"some"</span></div>
+      </div>
+      <p class="vs-note">Cloud scanners are good tools — they just work by uploading your repository to someone else's server. Blunt Code takes the other deal.</p>
+    </div>
+  </section>
+
+  <!-- ————— final cta ————— -->
+  <section class="final" aria-label="Get Blunt Code">
+    <h2>Scan everything.<br />Send nothing.</h2>
+    <a class="btn" href="#install">Get Blunt Code — free ↓</a>
+    <p>MIT · Windows 10/11 · v0.16.7 · your code never leaves the machine</p>
   </section>
 
 </main>
 
-<footer class="foot-stmt">
-  <p class="line">Scan everything. Send nothing.</p>
-  <div class="foot-meta">
-    <span class="wordmark">blunt-code</span>
+<footer>
+  <p class="foot-big">Blunt by name.<br /><span class="red">Blunt by nature.</span></p>
+  <div class="foot-cols">
     <nav aria-label="Footer">
-      <a href="about/">About</a>
-      <a href="privacy/">Privacy</a>
-      <a href="contact/">Contact</a>
       <a href="https://github.com/sanketpatel32/Blunt-code">GitHub</a>
       <a href="https://github.com/sanketpatel32/Blunt-code/releases">Releases</a>
       <a href="https://github.com/sanketpatel32/Blunt-code/blob/main/CHANGELOG.md">Changelog</a>
       <a href="https://github.com/sanketpatel32/Blunt-code/blob/main/docs/ci.md">CI guide</a>
+      <a href="about/">About</a>
+      <a href="privacy/">Privacy</a>
+      <a href="contact/">Contact</a>
+      <a href="llms.txt">llms.txt</a>
     </nav>
-    <span>© 2026 · MIT · Windows 10/11</span>
+    <span style="font:500 0.75rem/1.6 var(--font-mono); color: rgba(243,240,233,0.75)">■ BLUNTCODE.EXE · 127.0.0.1</span>
   </div>
+  <p class="foot-meta">© 2026 · MIT · Sanket Patel — this site ships zero JavaScript analytics; we literally cannot count you.</p>
 </footer>
 
 <script>
-  // Copy-to-clipboard — the label change is the feedback; no toast.
+  // Copy-to-clipboard — the label change is the feedback; no toast, no tracking.
   document.querySelectorAll(".copy-btn").forEach(function (btn) {
     btn.addEventListener("click", async function () {
       var pre = document.getElementById(btn.dataset.copy === "ps" ? "cmd-ps" : "cmd-cmd");
-      var text = pre ? pre.textContent.replace("▮", "").trim() : "";
+      var text = pre ? pre.textContent.replace(/^(PS>|C:\\>)\s*/, "").trim() : "";
       try {
         await navigator.clipboard.writeText(text);
       } catch {
@@ -612,6 +1104,19 @@
       }, 2500);
     });
   });
+
+  // Findings count-up — one flourish on load; skipped for reduced motion.
+  (function () {
+    var b = document.querySelector(".term-count b");
+    if (!b || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    var target = parseInt(b.textContent, 10) || 0, start = null;
+    requestAnimationFrame(function step(ts) {
+      if (start === null) start = ts;
+      var p = Math.min((ts - start) / 1400, 1);
+      b.textContent = String(Math.round(target * (1 - Math.pow(1 - p, 3))));
+      if (p < 1) requestAnimationFrame(step);
+    });
+  })();
 </script>
 </body>
 </html>
