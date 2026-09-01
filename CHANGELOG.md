@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.3] - 2026-09-01
+
+### Changed
+- **Language badges carry a per-language color dot:** the pills in the dashboard's Languages column (and everywhere else `LanguageBadges` renders) now lead with a GitHub-Linguist-style colored dot — Python blue, Docker blue, Markdown's deep blue and so on — so a workspace's language mix reads at a glance instead of as a wall of same-looking text. Unknown languages fall back to the app accent, and every dot keeps a faint rule-colored ring so it stays visible on both theme surfaces. The workspace cards' language dots switch from positional accent/success/warning colors to the same per-language colors, raw `markdown`/`text` ids get proper "Markdown"/"Text" labels, and the badges are now real `<li>` elements (the old `<Badge/>` children rendered `<div>`s inside the `<ul>`).
+
 ## [0.16.2] - 2026-09-01
 
 ### Fixed
