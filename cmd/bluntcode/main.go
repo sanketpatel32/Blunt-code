@@ -21,12 +21,13 @@ import (
 	"time"
 
 	"bluntcode/internal/api"
+	"bluntcode/internal/build"
 	"bluntcode/internal/config"
 	"bluntcode/internal/doctor"
 	"bluntcode/internal/tools"
 )
 
-const version = "0.16.11"
+const version = build.Version // single source: internal/build/version.go
 
 //go:embed static/*
 var staticFiles embed.FS
@@ -76,7 +77,7 @@ func runServer(args []string) {
 		return
 	}
 	if flags.NArg() > 1 {
-		fmt.Fprintln(os.Stderr, "usage: bluntcode [path] [--no-browser] [--port N]")
+		fmt.Fprintln(os.Stderr, "usage: bluntcode [--no-browser] [--port N] [path]")
 		fmt.Fprintln(os.Stderr, "       bluntcode doctor [--json] [--fix]")
 		fmt.Fprintln(os.Stderr, "       bluntcode config [--json]")
 		fmt.Fprintln(os.Stderr, "       bluntcode scan <path> [--profile quick|standard|deep] [--json] [--timeout 30m] [--quiet] [--fail-on high+] [--max-findings N]")

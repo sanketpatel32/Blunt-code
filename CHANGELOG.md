@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.12] - 2026-09-01
+
+### Fixed
+- **Scan reports no longer mislabel the app version.** A second version constant inside the scan pipeline had drifted to 0.16.7 while the app shipped 0.16.11 — every scan report and API snapshot claimed `bluntcode_version 0.16.7`, and incremental scan reuse wrongly survived version upgrades that should have invalidated it. The version now lives in one place (`internal/build`) that the CLI, API, and scan pipeline all read; bumping `cmd/bluntcode/main.go` alone can never drift again.
+- **Semgrep now self-heals stale rules.** Machines that installed before v0.16.1 carry a rules pack whose invalid YAML semgrep rejects, so every scan failed with no automatic recovery. The readiness check now compares the extracted pack's `RULES_VERSION` marker against the bundled one; a stale pack reads as not-ready and the scan's install path re-extracts the current 25-rule pack automatically — no manual `doctor --fix` needed.
+- **Semgrep failures now say why.** Configuration errors surface from semgrep's JSON output instead of an empty `semgrep exited 7:`.
+- **CLI usage line lists flags before the path** — `bluntcode <path> --no-browser` exited 2 because Go's flag parser stops at the first positional; the usage text now shows the working order (`bluntcode [--no-browser] [--port N] [path]`).
+
 ## [0.16.11] - 2026-09-01
 
 ### Fixed

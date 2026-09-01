@@ -13,6 +13,19 @@ import (
 
 const ID = "semgrep"
 
+// RulesVersion identifies the local rules pack that ships with the binary
+// (see rules.go). Bumped to 2.0.0 when the pack grew from 2 to 20 rules so
+// existing installations re-extract it; 3.1.1 quotes the react-dangerous-html
+// patterns (unquoted "__html: " made the pack invalid YAML) and replaces its
+// "<... />" pattern — invalid semgrep grammar — with a tag-metavariable form,
+// either of which made semgrep reject the whole config so every scan silently
+// lost all semgrep findings. Check compares it against the RULES_VERSION
+// marker inside the extracted rules directory: rules extracted before v0.16.1
+// carry a version whose YAML semgrep rejects, and a stale pack must read as
+// not-ready so the orchestrator's install path re-extracts instead of failing
+// every scan.
+const RulesVersion = "3.1.2"
+
 type Adapter struct{ Executable, Version, RulesPath string }
 
 func New(executable, version, rulesPath string) *Adapter {
@@ -33,6 +46,13 @@ func (a *Adapter) Check(context.Context, analyzers.ToolEnvironment) analyzers.To
 	}
 	if _, err := os.Stat(a.RulesPath); err != nil {
 		return analyzers.ToolStatus{Version: a.Version, Detail: "local ruleset is unavailable"}
+	}
+	// a.RulesPath is the extracted rules directory; its RULES_VERSION marker
+	// must match the pack this binary bundles, or a pre-0.16.1 extraction is
+	// about to fail every scan. Reporting not-ready here lets the
+	// orchestrator's install path re-extract the current pack.
+	if marker, err := os.ReadFile(filepath.Join(a.RulesPath, "RULES_VERSION")); err != nil || string(marker) != RulesVersion+"\n" {
+		return analyzers.ToolStatus{Version: a.Version, Detail: "local ruleset is stale (expected " + RulesVersion + ") — reinstall to re-extract"}
 	}
 	return analyzers.ToolStatus{Ready: true, Version: a.Version}
 }
@@ -134,7 +154,14 @@ type extra struct {
 
 func (a *Adapter) Normalize(_ context.Context, r analyzers.AnalyzerResult) ([]analyzers.Finding, []analyzers.Metric, error) {
 	if r.ExitCode != 0 && r.ExitCode != 1 {
-		return nil, nil, fmt.Errorf("semgrep exited %d: %s", r.ExitCode, strings.TrimSpace(string(r.Stderr)))
+		// Semgrep reports configuration errors in its stdout JSON while stderr
+		// stays empty; surface whichever carries the cause so a failed run is
+		// diagnosable from the analyzer row instead of only from the log file.
+		detail := strings.TrimSpace(string(r.Stderr))
+		if detail == "" {
+			detail = errorHint(r.Stdout)
+		}
+		return nil, nil, fmt.Errorf("semgrep exited %d: %s", r.ExitCode, detail)
 	}
 	var raw result
 	if len(r.Stdout) == 0 {
@@ -185,4 +212,34 @@ func category(s string) analyzers.Category {
 	default:
 		return analyzers.CategoryMaintainability
 	}
+}
+
+// errorHint extracts a human-readable cause from semgrep's JSON stdout, which
+// carries configuration errors as an "error" field when stderr is empty.
+func errorHint(stdout []byte) string {
+	var envelope struct {
+		Error json.RawMessage `json:"error"`
+	}
+	if err := json.Unmarshal(stdout, &envelope); err == nil && len(envelope.Error) > 0 && string(envelope.Error) != "null" {
+		var message string
+		if err := json.Unmarshal(envelope.Error, &message); err == nil && strings.TrimSpace(message) != "" {
+			return truncate(message)
+		}
+		var nested struct {
+			Message string `json:"message"`
+		}
+		if err := json.Unmarshal(envelope.Error, &nested); err == nil && nested.Message != "" {
+			return truncate(nested.Message)
+		}
+		return truncate(strings.TrimSpace(string(envelope.Error)))
+	}
+	return truncate(strings.TrimSpace(string(stdout)))
+}
+
+func truncate(text string) string {
+	runes := []rune(text)
+	if len(runes) > 400 {
+		return string(runes[:400]) + "…"
+	}
+	return text
 }

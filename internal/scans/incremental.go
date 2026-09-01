@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"bluntcode/internal/analyzers"
+	"bluntcode/internal/build"
 	"bluntcode/internal/core"
 	"bluntcode/internal/database"
 )
@@ -39,7 +40,7 @@ import (
 // Keep in lockstep with cmd/bluntcode/main.go's version const: it had drifted
 // at "0.5.0" through 0.16.0, letting incremental findings survive version
 // upgrades that should have invalidated reuse and mislabeling reports.
-const bluntCodeVersion = "0.16.7"
+const bluntCodeVersion = build.Version
 
 // scanHashIdentity is the analyzer configuration a set of file hashes was
 // produced under. Any difference between two scans' identities - a changed

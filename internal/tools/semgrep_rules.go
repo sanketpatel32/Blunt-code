@@ -10,13 +10,9 @@ import (
 
 // SemgrepRulesVersion identifies the local rules copied during managed setup.
 // These rules are authored by Blunt Code, not fetched from the Semgrep registry.
-// Bumped to 2.0.0 when the bundled pack grew from 2 to 20 rules so existing
-// installations re-extract it; 3.1.1 quotes the react-dangerous-html patterns
-// (unquoted "__html: " made the pack invalid YAML) and replaces its "<... />"
-// pattern — invalid semgrep grammar — with a tag-metavariable form, either of
-// which made semgrep reject the whole config so every scan silently lost all
-// semgrep findings.
-const SemgrepRulesVersion = "3.1.2"
+// The version itself lives with the adapter (which also verifies extracted
+// packs against it); this alias keeps the extraction and status code readable.
+const SemgrepRulesVersion = analyzerssemgrep.RulesVersion
 
 // ExtractSemgrepRules writes the bundled local rules atomically into the
 // managed Semgrep directory. A successful scan only needs this local copy.

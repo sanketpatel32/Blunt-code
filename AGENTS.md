@@ -18,6 +18,7 @@ Rules:
 ## versioning (ship rule)
 
 Bump version on every shipment. When shipping something new (feature, fix, docs that users see):
-- Bump `cmd/bluntcode/main.go` `const version`, `web/package.json` (+ `web/package-lock.json` `""` package), `scripts/package.ps1` `$Version`
+- Bump `internal/build/version.go` `const Version` (the SINGLE source — `cmd/bluntcode/main.go` and the scan pipeline derive from it; do not add version constants anywhere else), plus `web/package.json` (+ `web/package-lock.json` `""` package), `scripts/package.ps1` `$Version`
 - Update `CHANGELOG.md`: promote `[Unreleased]` to `## [x.y.z] - YYYY-MM-DD` with Added/Changed/Fixed
 - Commit, `git tag -a vX.Y.Z -m "vX.Y.Z ..."`, `git push origin main`, `git push origin vX.Y.Z`, then `gh release create vX.Y.Z --latest` with `dist/BluntCode-X.Y.Z-windows-amd64.zip` + `.sha256` + `install-latest.ps1`/`install.cmd` via `scripts/package.ps1 -Version X.Y.Z`
+- Build the release zip from the exact tagged commit, not the shared working tree (a paired session's uncommitted edits must never ride a release): `git worktree add <tmp> <commit>` → `go build -o bluntcode.exe ./cmd/bluntcode` → `scripts/package.ps1 -SkipBuild -Version X.Y.Z -OutputDir <repo>\dist` → `git worktree remove <tmp>`
