@@ -14,6 +14,7 @@
 </p>
 
 <p align="center">
+  <a href="https://sanketpatel32.github.io/Blunt-code/">Website</a> ·
   <a href="#-install-in-30-seconds">Install</a> ·
   <a href="#-quick-start">Quick start</a> ·
   <a href="#-cli">CLI</a> ·
@@ -32,13 +33,16 @@
 | **Privacy** | Loopback-only, zero telemetry, local SQLite storage |
 | **Delivery** | Single Windows application with sandboxed analyzers and no global PATH changes |
 | **Coverage** | Python, JavaScript/TypeScript, React, and polyglot SonarQube projects |
-| **Quality** | 259 automated tests passing |
+| **Quality** | 723 automated tests passing (457 Go · 266 web) |
 
-### What's new in 0.7.0 — shadcn clean UI
+### What's new in 0.16.x — analyzers revived, UI decluttered
 
-Tailwind 3.4 · Radix Dialog/Slot · CVA · lucide-react. Ten iterative loops: glass nav `backdrop-blur(16px)`, pill badges `oklch`, table hover `color-mix(in oklch, accent 4%)`, spring toasts with lifetime bar, shimmer skeletons, staggered dialogs. **1869 modules · 259 tests passing · `—` placeholders never `NaN`.**
+- **Analyzer pipeline fixed end-to-end** — semgrep's bundled rulepack (invalid YAML + pattern grammar) and SonarQube's 5-minute compute timeout had silently returned zero findings on every scan. Both fixed, with `doctor --fix` recovery and regression tests guarding the whole class.
+- **Simpler navigation & dashboard** — three primary destinations plus a "More" menu; the dashboard rebuilt around one metric row and the activity feed.
+- **Readable workspaces & reports** — short workspace paths with copy-full-path, per-language color dots on language badges, honest scan-status tones, and a selectable rows-per-page window (25/50/100/200) on the findings table.
+- **WCAG AA contrast guard** — `npm run audit:contrast` fails the build on any shipped color pairing below 4.5:1.
 
-> Previous `0.6.0` shipped global search, risk scores, scan pruning, workspace tags, CSV/SARIF/JSONL exports, and gated CI. See [CHANGELOG.md](CHANGELOG.md).
+> Earlier releases shipped the shadcn/Tailwind UI, global search, risk scores, scan pruning, workspace tags, CSV/SARIF/JSONL exports, and gated CI. See [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
@@ -96,14 +100,14 @@ curl -fsSL -o "%TEMP%\install-bluntcode.cmd" https://github.com/sanketpatel32/Bl
 ```
 Installs to `%LOCALAPPDATA%\Programs\BluntCode`, verifies SHA-256, creates Start Menu shortcut, launches app. No admin.
 
-**Options** `install-latest.ps1 -Version 0.7.0 -Silent -DesktopShortcut -WhatIf -WaitForCloseSeconds 30`
+**Options** `install-latest.ps1 -Version 0.16.5 -Silent -DesktopShortcut -WhatIf -WaitForCloseSeconds 30`
 
 ### Portable ZIP
 
-1. Download `BluntCode-0.7.0-windows-amd64.zip` + `.sha256` from [Releases](https://github.com/sanketpatel32/Blunt-code/releases/latest)
+1. Download `BluntCode-0.16.5-windows-amd64.zip` + `.sha256` from [Releases](https://github.com/sanketpatel32/Blunt-code/releases/latest)
 2. Verify & run:
 ```powershell
-$pkg='.\BluntCode-0.7.0-windows-amd64.zip'
+$pkg='.\BluntCode-0.16.5-windows-amd64.zip'
 if((Get-FileHash $pkg -Algorithm SHA256).Hash -ne (Get-Content "$pkg.sha256").Split()[0]){throw 'checksum mismatch'}
 Expand-Archive $pkg -DestinationPath .\BluntCode -Force; .\BluntCode\BluntCode*\bluntcode.exe
 ```
@@ -230,7 +234,7 @@ Installer auto-cleans Start Menu shortcut and refuses while app is running.
 ```powershell
 go test ./...                # Go vet/build/tests
 cd web; npm test; npm run build
-.\scripts\package.ps1 -Version 0.7.0
+.\scripts\package.ps1 -Version 0.16.5
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) · [docs/architecture.md](docs/architecture.md) — shadcn tokens live in `web/src/tokens.css` (`--color-paper/ink/accent`, `--radius-*`, `--shadow-*`), components in `web/src/components/ui/*`.
