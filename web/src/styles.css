@@ -934,11 +934,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .palette-recent{display:flex;flex-wrap:wrap;gap:var(--space-xs);margin-top:var(--space-sm);padding:var(--space-xs) 0;}
 @media(max-width:48rem){.search-layout{grid-template-columns:1fr;} .search-sidebar.desktop-only{display:none;} }
 
-/* ── Result column picker — collapsed until asked for ──────────── */
-.search-columns { border-bottom: var(--rule) solid var(--color-rule-faint); background: var(--color-surface-muted); }
+/* ── Result column picker — a compact dropdown, not a full-width bar ──
+   As a block it spanned the scrollable table's full width (wider than the
+   viewport); sized to its content it reads as the small control it is, and
+   the open panel overlays the table instead of stretching the trigger. */
+.search-columns { position: relative; display: inline-block; margin: var(--space-2xs); border: var(--rule) solid var(--color-rule-faint); border-radius: var(--radius-button); background: var(--color-surface-muted); }
 .search-columns > summary {
   display: flex; align-items: center; gap: var(--space-xs);
-  padding: var(--space-xs) var(--space-md);
+  padding: var(--space-2xs) var(--space-sm);
   color: var(--color-ink-faint); font: 700 var(--text-2xs) var(--font-mono);
   letter-spacing: .08em; text-transform: uppercase;
   list-style: none; cursor: pointer;
@@ -949,12 +952,13 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .search-columns > summary:hover { color: var(--color-ink); }
 .search-columns > summary:focus-visible { outline: var(--rule-focus) solid var(--color-focus); outline-offset: -2px; }
 .search-columns > summary small {
-  margin-left: auto; color: var(--color-ink-faint);
+  color: var(--color-ink-faint);
   font: 600 var(--text-2xs) var(--font-mono); letter-spacing: .02em; text-transform: none;
 }
 .search-columns-caret { flex: none; width: .85rem; height: .85rem; opacity: .6; transition: transform var(--dur-fast) var(--ease-out); }
 .search-columns[open] > summary .search-columns-caret { transform: rotate(180deg); }
-.search-columns-panel { display: flex; flex-wrap: wrap; gap: var(--space-xs) var(--space-md); padding: 0 var(--space-md) var(--space-sm); }
+.search-columns[open] { border-color: var(--color-rule); }
+.search-columns-panel { position: absolute; top: calc(100% + var(--space-2xs)); left: 0; z-index: 3; display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-xs); min-width: 13rem; padding: var(--space-sm); border: var(--rule) solid var(--color-rule); border-radius: var(--radius-button); background: var(--color-surface); box-shadow: var(--shadow-lg); }
 .search-column-toggle {
   display: inline-flex; align-items: center; gap: var(--space-2xs);
   padding: var(--space-3xs) var(--space-xs);
