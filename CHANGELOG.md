@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.9] - 2026-09-01
+
+### Removed
+- **Dead tool manifest entries and phantom catalog rows are gone.** The download manifest carried six pinned-but-unreachable entries (Gitleaks, OWASP ZAP, Nuclei, OSV Scanner, Trivy, Checkov) — real URLs and checksums, but no analyzer adapter exists, the install API 404s on them, and no code path ever references them. The analyzer catalog likewise advertised seven analyzers that never run under any profile (Snyk, Dependabot, Gitleaks, OSV, Trivy, Checkov, License Scan); the Tools page "Coming soon" section, language coverage matrix, and workspace templates no longer present them. Workspace templates that pre-filled phantom analyzers now pre-fill real ones (Ruff, Biome, Semgrep, SonarQube, Secrets, TODO). The three pentest preview entries remain pending the pentest page rework.
+
 ## [0.16.8] - 2026-09-01
 
 ### Fixed

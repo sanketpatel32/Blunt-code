@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
-import { ANALYZER_CATALOG, analyzerMeta } from '../lib/analyzerCatalog';
+import { analyzerMeta } from '../lib/analyzerCatalog';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 
 export type WorkspaceTemplate = {
@@ -15,11 +15,11 @@ export type WorkspaceTemplate = {
 
 export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
   { id: 'python-fastapi', title: 'Python FastAPI', description: 'API backend with async endpoints, Pydantic models, and pytest.', languages: ['python'], analyzers: ['ruff', 'semgrep', 'secrets', 'sonarqube'], suggestedName: 'FastAPI Service' },
-  { id: 'ts-react', title: 'TypeScript React', description: 'Modern SPA with Vite, React, and strict TypeScript.', languages: ['typescript', 'tsx', 'javascript'], analyzers: ['biome', 'semgrep', 'secrets', 'license-scan'], suggestedName: 'React App' },
-  { id: 'go-cli', title: 'Go CLI', description: 'Command-line tool with Cobra, structured logging, and tests.', languages: ['go'], analyzers: ['semgrep', 'secrets', 'osv-dependencies', 'sonarqube'], suggestedName: 'Go CLI' },
-  { id: 'java-spring', title: 'Java Spring', description: 'Spring Boot service with JPA, security, and Gradle/Maven.', languages: ['java'], analyzers: ['semgrep', 'sonarqube', 'snyk-oss', 'secrets'], suggestedName: 'Spring Service' },
+  { id: 'ts-react', title: 'TypeScript React', description: 'Modern SPA with Vite, React, and strict TypeScript.', languages: ['typescript', 'tsx', 'javascript'], analyzers: ['biome', 'semgrep', 'secrets', 'todo'], suggestedName: 'React App' },
+  { id: 'go-cli', title: 'Go CLI', description: 'Command-line tool with Cobra, structured logging, and tests.', languages: ['go'], analyzers: ['semgrep', 'secrets', 'sonarqube', 'todo'], suggestedName: 'Go CLI' },
+  { id: 'java-spring', title: 'Java Spring', description: 'Spring Boot service with JPA, security, and Gradle/Maven.', languages: ['java'], analyzers: ['semgrep', 'sonarqube', 'secrets', 'todo'], suggestedName: 'Spring Service' },
   { id: 'pentest-lab', title: 'Pentest Lab', description: 'Intentionally vulnerable targets for DAST and manual testing.', languages: ['javascript', 'python', 'php'], analyzers: ['zap-pentest', 'nuclei-pentest', 'burp-pentest', 'semgrep'], suggestedName: 'Pentest Lab' },
-  { id: 'full-hack-suite', title: 'Full Hack Suite', description: 'Polyglot monorepo — run every analyzer across the full catalog.', languages: ['python', 'typescript', 'go', 'java', 'yaml', 'dockerfile'], analyzers: ANALYZER_CATALOG.slice(0, 8).map((a) => a.id), suggestedName: 'Hack Suite' },
+  { id: 'full-hack-suite', title: 'Full Hack Suite', description: 'Polyglot monorepo — run every analyzer across the full catalog.', languages: ['python', 'typescript', 'go', 'java', 'yaml', 'dockerfile'], analyzers: ['ruff', 'biome', 'semgrep', 'sonarqube', 'secrets', 'todo'], suggestedName: 'Hack Suite' },
 ];
 
 export const TEMPLATE_EVENT = 'bluntcode:use-template';

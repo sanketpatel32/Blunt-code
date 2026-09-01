@@ -71,68 +71,6 @@
       "archive_type": "zip",
       "executable": "jdk-21.0.12+8/bin/java.exe",
       "license_url": "https://adoptium.net/about/"
-    },
-    {
-      "tool_id": "gitleaks-secrets",
-      "version": "8.18.0",
-      "platform": "windows-amd64",
-      "source_url": "https://github.com/gitleaks/gitleaks/releases/download/v8.18.0/gitleaks_8.18.0_windows_x64.zip",
-      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "archive_type": "zip",
-      "executable": "gitleaks.exe",
-      "license_url": "https://github.com/gitleaks/gitleaks/blob/master/LICENSE"
-    },
-    {
-      "tool_id": "zap-pentest",
-      "version": "2.15.0",
-      "platform": "windows-amd64",
-      "source_url": "https://github.com/zaproxy/zaproxy/releases/download/v2.15.0/ZAP_2.15.0_Crossplatform.zip",
-      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "archive_type": "zip",
-      "executable": "ZAP_2.15.0/zap.exe",
-      "license_url": "https://github.com/zaproxy/zaproxy/blob/main/LICENSE"
-    },
-    {
-      "tool_id": "nuclei-pentest",
-      "version": "3.3.0",
-      "platform": "windows-amd64",
-      "source_url": "https://github.com/projectdiscovery/nuclei/releases/download/v3.3.0/nuclei_3.3.0_windows_amd64.zip",
-      "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-      "archive_type": "zip",
-      "executable": "nuclei.exe",
-      "license_url": "https://github.com/projectdiscovery/nuclei/blob/main/LICENSE.md"
-    },
-    {
-      "tool_id": "osv-dependencies",
-      "version": "1.8.0",
-      "platform": "windows-amd64",
-      "source_url": "https://github.com/google/osv-scanner/releases/download/v1.8.0/osv-scanner_windows_amd64.zip",
-      "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-      "archive_type": "zip",
-      "executable": "osv-scanner.exe",
-      "license_url": "https://github.com/google/osv-scanner/blob/main/LICENSE"
-    },
-    {
-      "tool_id": "container-trivy",
-      "version": "0.58.0",
-      "platform": "windows-amd64",
-      "source_url": "https://github.com/aquasecurity/trivy/releases/download/v0.58.0/trivy_0.58.0_Windows-64bit.zip",
-      "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-      "archive_type": "zip",
-      "executable": "trivy.exe",
-      "license_url": "https://github.com/aquasecurity/trivy/blob/main/LICENSE"
-    },
-    {
-      "tool_id": "iac-checkov",
-      "version": "3.2.0",
-      "platform": "windows-amd64",
-      "source_url": "https://files.pythonhosted.org/packages/checkov-3.2.0-py3-none-any.whl",
-      "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-      "archive_type": "wheel",
-      "executable": "checkov.exe",
-      "license_url": "https://github.com/bridgecrewio/checkov/blob/main/LICENSE",
-      "install_kind": "uv_tool",
-      "package": "checkov==3.2.0"
     }
   ]
 }
