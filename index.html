@@ -91,15 +91,16 @@
     min-height: 100dvh;
     display: flex;
     flex-direction: column;
-    justify-content: flex-end;
+    justify-content: flex-start;
+    gap: var(--space-xl);
     padding: var(--space-xl) var(--page-gutter) var(--space-2xl);
     background:
       radial-gradient(90rem 40rem at 82% 12%, color-mix(in oklch, var(--color-accent) 17%, transparent), transparent 70%),
       radial-gradient(60rem 34rem at 8% 92%, color-mix(in oklch, var(--color-accent) 10%, transparent), transparent 65%);
   }
   .fold h1 {
-    margin: 0 0 var(--space-lg);
-    max-width: 13ch;
+    margin: var(--space-2xl) 0 var(--space-lg);
+    max-width: 20ch;
     font: 600 var(--text-marquee)/1.04 var(--font-display);
     letter-spacing: -0.03em;
     overflow-wrap: anywhere;
@@ -126,7 +127,6 @@
     letter-spacing: -0.02em;
     overflow-wrap: anywhere; min-width: 0;
   }
-  .section-head p { margin: 0; color: var(--color-ink-soft); max-width: 58ch; }
 
   /* ————— Install ————— */
   .install { padding-block: var(--space-3xl) var(--space-2xl); }
@@ -215,36 +215,111 @@
     clip-path: inset(50%); overflow: hidden; white-space: nowrap;
   }
 
-  /* ————— Why — asymmetric split ————— */
+  /* ————— Diagrams — pipeline + lanes ————— */
+  .diagram { margin: 0; display: flex; align-items: center; gap: var(--space-lg); min-width: 0; }
+  .fold .diagram { flex: 1 1 auto; }
+  .machine {
+    position: relative; flex: 1; min-width: 0;
+    border: 1px dashed var(--color-rule);
+    border-radius: var(--radius-card);
+    padding: var(--space-xl) var(--space-lg) var(--space-lg);
+  }
+  .machine-tag {
+    position: absolute; top: -0.65em; left: var(--space-md);
+    background: var(--color-paper); padding-inline: var(--space-xs);
+    font-size: var(--text-sm); color: var(--color-ink-faint);
+    text-transform: uppercase; letter-spacing: 0.1em;
+  }
+  .flow { display: flex; align-items: center; gap: var(--space-md); min-width: 0; }
+  .node {
+    display: grid; gap: var(--space-3xs); justify-items: center; text-align: center;
+    background: var(--color-paper-2); border: 1px solid var(--color-rule);
+    border-radius: var(--radius-input);
+    padding: var(--space-sm) var(--space-md); min-width: 0;
+  }
+  .node b { font-size: var(--text-sm); font-weight: 600; color: var(--color-ink); white-space: nowrap; }
+  .node span { font-size: var(--text-sm); color: var(--color-ink-faint); }
+  .node .glyph { color: var(--color-ink-soft); }
+  .node-exe { background: var(--color-accent); border-color: var(--color-accent); }
+  .node-exe b { color: var(--color-accent-ink); }
+  .node-exe span { color: var(--color-accent-ink); opacity: 0.8; }
+  .link, .link-s { flex: none; width: var(--space-xl); height: 1px; background: var(--color-rule); position: relative; }
+  .link-s { width: var(--space-md); }
+  .link::after, .link-s::after {
+    content: ""; position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+    border-top: 3.5px solid transparent; border-right: 0;
+    border-bottom: 3.5px solid transparent; border-left: 5px solid var(--color-rule);
+  }
+  .analyzers { position: relative; display: grid; gap: var(--space-2xs); padding-inline: var(--space-lg); }
+  .analyzers::before, .analyzers::after {
+    content: ""; position: absolute; top: var(--space-xs); bottom: var(--space-xs);
+    width: 1px; background: var(--color-rule);
+  }
+  .analyzers::before { left: calc(var(--space-lg) / 2); }
+  .analyzers::after { right: calc(var(--space-lg) / 2); }
+  .an {
+    position: relative;
+    background: var(--color-paper-3); border: 1px solid var(--color-rule);
+    border-radius: var(--radius-pill);
+    padding: var(--space-3xs) var(--space-sm);
+    font-size: var(--text-sm); color: var(--color-ink-soft); white-space: nowrap;
+    text-align: center;
+  }
+  .an::before, .an::after {
+    content: ""; position: absolute; top: 50%; width: calc(var(--space-lg) / 2); height: 1px;
+    background: var(--color-rule);
+  }
+  .an::before { left: calc(-0.5 * var(--space-lg)); }
+  .an::after { right: calc(-0.5 * var(--space-lg)); }
+  .cloud-off {
+    flex: none; display: grid; justify-items: center; gap: var(--space-3xs);
+    color: var(--color-ink-faint); padding-inline: var(--space-md); text-align: center;
+  }
+  .cloud-off .cloud-glyph { display: block; }
+  .cloud-off .x-strike { stroke: var(--color-accent); }
+  .cloud-off figcaption, .cloud-off span { font-size: var(--text-sm); }
+
+  /* ————— Why — two lanes, local vs cloud ————— */
   .why { padding-block: var(--space-2xl) var(--space-3xl); }
-  .why-grid {
-    display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-    gap: var(--space-2xl) var(--space-3xl);
-    align-items: start;
+  .why .section-head { margin-bottom: var(--space-xl); }
+  .split { display: grid; gap: var(--space-lg); margin: 0; }
+  .lane {
+    display: grid; gap: var(--space-md);
+    border-radius: var(--radius-card); padding: var(--space-lg);
   }
-  .why-lede h2 {
-    margin: var(--space-md) 0 0;
-    font: 600 var(--text-display-s)/1.08 var(--font-display);
-    letter-spacing: -0.025em;
-    overflow-wrap: anywhere; min-width: 0;
+  .lane-local {
+    border: 1px solid color-mix(in oklch, var(--color-accent) 45%, var(--color-rule));
+    background: color-mix(in oklch, var(--color-accent) 6%, var(--color-paper));
   }
-  .why-lede p { color: var(--color-ink-soft); max-width: 45ch; }
-  .why-rows { display: grid; gap: var(--space-xl); }
-  .why-row { display: grid; gap: var(--space-2xs); border-top: 1px solid var(--color-rule-faint); padding-top: var(--space-md); }
-  .why-row .without { color: var(--color-ink-faint); }
-  .why-row .with { color: var(--color-ink); }
-  .why-row .with::before {
-    content: ""; display: inline-block; width: 8px; height: 8px;
-    margin-inline-end: var(--space-sm);
-    background: var(--color-accent);
+  .lane-cloud { border: 1px dashed var(--color-rule-faint); }
+  .lane-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-sm) var(--space-md); }
+  .lane-head b { font-size: var(--text-md); font-weight: 600; }
+  .verdict { font-size: var(--text-sm); white-space: nowrap; }
+  .verdict-ok { color: var(--color-success); }
+  .verdict-no { color: var(--color-ink-faint); }
+  .lane-flow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2xs) var(--space-xs); }
+  .chip {
+    background: var(--color-paper-2); border: 1px solid var(--color-rule);
+    border-radius: var(--radius-pill);
+    padding: var(--space-3xs) var(--space-sm);
+    font-size: var(--text-sm); color: var(--color-ink-soft); white-space: nowrap;
   }
-  .why-row code {
-    font-family: var(--font-outlier); font-size: 0.82em;
-    background: var(--color-paper-2); border: 1px solid var(--color-rule-faint);
-    border-radius: 5px; padding: var(--space-3xs) var(--space-2xs); color: var(--color-ink-soft);
-  }
+  .lane-cloud .chip { background: transparent; border-style: dashed; color: var(--color-ink-faint); }
+  .upload-x { text-decoration: line-through; }
+
   @media (max-width: 48rem) {
-    .why-grid { grid-template-columns: minmax(0, 1fr); gap: var(--space-xl); }
+    .diagram { flex-direction: column; align-items: stretch; }
+    .cloud-off { grid-auto-flow: column; justify-items: center; align-items: center; padding-block: var(--space-sm); }
+    .flow { flex-direction: column; align-items: stretch; }
+    .node span { white-space: normal; }
+    .link, .link-s { width: 1px; height: var(--space-lg); align-self: center; }
+    .link::after, .link-s::after {
+      right: auto; top: auto; bottom: 0; left: 50%; transform: translateX(-50%);
+      border-top: 5px solid var(--color-rule); border-right: 3.5px solid transparent;
+      border-bottom: 0; border-left: 3.5px solid transparent;
+    }
+    .analyzers { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-inline: 0; gap: var(--space-2xs); }
+    .analyzers::before, .analyzers::after, .an::before, .an::after { display: none; }
   }
 
   /* ————— Numbers — honest, one quiet band ————— */
@@ -317,6 +392,46 @@
 
   <section class="fold" aria-label="Blunt Code">
     <h1 class="reveal" style="--i: 0">Your code never leaves the machine.</h1>
+
+    <figure class="diagram reveal" style="--i: 1" role="img" aria-label="Diagram: your code flows through one local executable, bluntcode.exe, to six bundled analyzers — Ruff, Biome, Semgrep, SonarQube, Secrets, TODO — and returns one report. Everything stays inside your machine; there is no upload.">
+      <div class="machine">
+        <span class="machine-tag">your machine</span>
+        <div class="flow">
+          <div class="node">
+            <svg class="glyph" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7a2 2 0 0 1 2-2h4.2l2 2h7.3a2 2 0 0 1 2 2v8.5a2 2 0 0 1-2 2h-13.5a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+            <b>your code</b>
+            <span>40+ file types</span>
+          </div>
+          <div class="link" aria-hidden="true"></div>
+          <div class="node node-exe">
+            <b>bluntcode.exe</b>
+            <span>loopback · 127.0.0.1</span>
+          </div>
+          <div class="analyzers" aria-hidden="true">
+            <span class="an">Ruff</span>
+            <span class="an">Biome</span>
+            <span class="an">Semgrep</span>
+            <span class="an">SonarQube</span>
+            <span class="an">Secrets</span>
+            <span class="an">TODO/FIXME</span>
+          </div>
+          <div class="link" aria-hidden="true"></div>
+          <div class="node">
+            <svg class="glyph" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3.5h6.5L19 9v11.5H7z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M13.5 3.5V9H19" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+            <b>one report</b>
+            <span>findings · history · diffs</span>
+          </div>
+        </div>
+      </div>
+      <div class="cloud-off" aria-hidden="true">
+        <svg class="cloud-glyph" width="46" height="32" viewBox="0 0 24 16" aria-hidden="true">
+          <path d="M6.5 15.5a4.5 4.5 0 0 1-.6-8.96 6 6 0 0 1 11.62 1.2A3.75 3.75 0 0 1 17 15.5z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>
+          <path class="x-strike" d="M2.5 14.5 21.5 1.5" fill="none" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        <span>no upload</span>
+      </div>
+    </figure>
+
     <p class="fold-tag reveal" style="--i: 2">
       <span>blunt code · windows 10/11 · 100% local</span>
       <a href="#install">install ↓</a>
@@ -328,7 +443,6 @@
   <section class="install" id="install">
     <div class="section-head">
       <h2>Install in 30 seconds</h2>
-      <p>One line, no admin. Verifies SHA-256, adds a Start Menu shortcut, and launches. Rerunning it later upgrades in place.</p>
     </div>
 
     <div class="code-frame">
@@ -351,7 +465,7 @@
       <a class="btn-primary" href="https://github.com/sanketpatel32/Blunt-code/releases/latest">Download for Windows</a>
       <a class="secondary" href="https://github.com/sanketpatel32/Blunt-code/releases/latest">Portable ZIP + SHA-256 →</a>
     </div>
-    <p class="install-alt">Installs to <code>%LOCALAPPDATA%\Programs\BluntCode</code>. Tools are sandboxed under <code>%LOCALAPPDATA%\BluntCode\tools</code> — your PATH is never touched.</p>
+    <p class="install-alt">Sandboxed under <code>%LOCALAPPDATA%</code> — your PATH is never touched.</p>
   </section>
 
   <div class="analyzer-strip" aria-label="Bundled analyzers">
@@ -365,30 +479,39 @@
   </div>
 
   <section class="why" id="why">
-    <div class="why-grid">
-      <div class="why-lede">
-        <h2>One exe instead of four PATH fights.</h2>
-        <p>Ruff, Biome, Semgrep, SonarQube, secrets and TODO tracking — one app, one report, one loopback server.</p>
-      </div>
-      <div class="why-rows">
-        <div class="why-row">
-          <span class="without">Four linters, four installs, four PATH fights</span>
-          <span class="with">One <code>bluntcode.exe</code> — analyzers pinned and sandboxed, global PATH untouched</span>
-        </div>
-        <div class="why-row">
-          <span class="without">Findings scattered across terminals</span>
-          <span class="with">One report — Markdown, HTML, SARIF, CSV, JSON; filter by tool, rule, severity, path</span>
-        </div>
-        <div class="why-row">
-          <span class="without">Cloud gates that ship your source</span>
-          <span class="with">Loopback only — SQLite and reports stay on disk, offline mode after first download</span>
-        </div>
-        <div class="why-row">
-          <span class="without">“Fix later” that never sticks</span>
-          <span class="with">Suppressions that ship with the repo — <code>bluntcode:ignore</code>, fingerprints, <code>.bluntcodeignore</code></span>
-        </div>
-      </div>
+    <div class="section-head">
+      <h2>Two ways to scan.</h2>
     </div>
+    <figure class="split" role="img" aria-label="Diagram: Blunt Code scans locally — code, analyzers, and the report never leave your disk. Cloud scanners require uploading your source to someone else's server.">
+      <div class="lane lane-local">
+        <div class="lane-head">
+          <b>blunt code</b>
+          <span class="verdict verdict-ok">✓ never leaves your disk</span>
+        </div>
+        <div class="lane-flow">
+          <span class="chip">your code</span>
+          <span class="link-s" aria-hidden="true"></span>
+          <span class="chip">6 analyzers</span>
+          <span class="link-s" aria-hidden="true"></span>
+          <span class="chip">report + history</span>
+        </div>
+      </div>
+      <div class="lane lane-cloud">
+        <div class="lane-head">
+          <b>cloud scanners</b>
+          <span class="verdict verdict-no">✕ source uploaded</span>
+        </div>
+        <div class="lane-flow">
+          <span class="chip">your code</span>
+          <span class="link-s" aria-hidden="true"></span>
+          <span class="chip upload-x">upload</span>
+          <span class="link-s" aria-hidden="true"></span>
+          <span class="chip">cloud</span>
+          <span class="link-s" aria-hidden="true"></span>
+          <span class="chip">findings</span>
+        </div>
+      </div>
+    </figure>
   </section>
 
   <section class="numbers" aria-label="By the numbers">
