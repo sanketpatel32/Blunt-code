@@ -103,22 +103,28 @@ func (s *Service) executeAnalyzer(ctx context.Context, scan core.Scan, work core
 	// Profile tiers:
 	//   quick    - ruff and biome only: a fast language-specific pass that
 	//              skips semgrep and sonarqube entirely.
-	//   standard - every analyzer with its default rules, including ruff's
-	//              built-in default rule set (E4, E7, E9, F).
+	//   standard - every code analyzer with its default rules, including
+	//              ruff's built-in default rule set (E4, E7, E9, F);
+	//              deep-only analyzers (osv-dependencies, later trivy and
+	//              checkov) are recorded as skipped.
 	//   deep     - every analyzer, with ruff's rule selection widened via
 	//              --select for a broader correctness and maintainability
 	//              sweep. Biome, semgrep, and sonarqube already run their
 	//              full configuration in every non-quick tier, so ruff is
 	//              the only analyzer that changes behavior here.
 	if !profileAllowsAnalyzer(scan.Profile, adapter.ID()) {
-		s.emit(scan.ID, "analyzer.skipped", map[string]any{"analyzer_id": adapter.ID(), "reason": "Quick profile runs language-specific analyzers only."})
+		reason := "Quick profile runs language-specific analyzers only."
+		if scan.Profile != analyzers.ProfileQuick {
+			reason = "Deep-only analyzer: runs on deep scans."
+		}
+		s.emit(scan.ID, "analyzer.skipped", map[string]any{"analyzer_id": adapter.ID(), "reason": reason})
 		return analyzerSkipped
 	}
 	started := time.Now()
 	s.emit(scan.ID, "analyzer.started", map[string]any{"analyzer_id": adapter.ID(), "name": adapter.DisplayName()})
 	_ = s.db.UpdateScanState(context.Background(), scan.ID, "running", "")
 	status := adapter.Check(ctx, analyzers.ToolEnvironment{ToolsDir: s.toolsDir})
-	if !status.Ready && s.tools != nil && (adapter.ID() == "ruff" || adapter.ID() == "biome" || adapter.ID() == "gitleaks-secrets" || adapter.ID() == "semgrep" || adapter.ID() == "sonarqube") {
+	if !status.Ready && s.tools != nil && (adapter.ID() == "ruff" || adapter.ID() == "biome" || adapter.ID() == "gitleaks-secrets" || adapter.ID() == "osv-dependencies" || adapter.ID() == "semgrep" || adapter.ID() == "sonarqube") {
 		s.emit(scan.ID, "scan.stage", map[string]any{"stage": "Preparing " + adapter.DisplayName()})
 		if installErr := s.tools.Ensure(ctx, adapter.ID()); installErr == nil {
 			status = adapter.Check(ctx, analyzers.ToolEnvironment{ToolsDir: s.toolsDir})

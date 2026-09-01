@@ -138,9 +138,21 @@ func hashSelectedFiles(root string, files []core.FileEntry) map[string]string {
 	return hashes
 }
 
+// deepOnlyAnalyzerIDs lists analyzers that query external advisory databases
+// or image registries and therefore run only on deep scans; standard scans
+// record them as skipped instead of running a half-capability pass.
+var deepOnlyAnalyzerIDs = map[string]bool{
+	"osv-dependencies": true,
+	// container-trivy and iac-checkov join this set when they register.
+}
+
 // profileAllowsAnalyzer mirrors the profile gating in executeAnalyzer: the
-// quick tier runs only the language-specific analyzers.
+// quick tier runs only the language-specific analyzers, and deep-only
+// analyzers wait for the deep tier.
 func profileAllowsAnalyzer(profile, analyzerID string) bool {
+	if deepOnlyAnalyzerIDs[analyzerID] {
+		return profile == analyzers.ProfileDeep
+	}
 	return profile != analyzers.ProfileQuick || analyzerID == "ruff" || analyzerID == "biome"
 }
 

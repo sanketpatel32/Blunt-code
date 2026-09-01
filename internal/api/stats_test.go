@@ -185,7 +185,7 @@ func TestGlobalStatsIncludesToolReadiness(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 		t.Fatalf("invalid stats payload: %v: %s", err, response.Body.String())
 	}
-	if body.Tools == nil || body.Tools.Total != 5 || body.Tools.Ready != 0 {
+	if body.Tools == nil || body.Tools.Total != 6 || body.Tools.Ready != 0 {
 		t.Fatalf("tools section must count every known tool and the ready ones: %#v", body.Tools)
 	}
 	if keys := topLevelKeys(t, response.Body.Bytes()); !equalKeys(keys, []string{"findings", "generated_at", "risk_grades", "scans", "suppressions", "tools", "workspaces"}) {

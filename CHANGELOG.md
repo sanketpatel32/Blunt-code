@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.14] - 2026-09-01
+
+### Added
+- **OSV Scanner 2.5.1 is the eighth analyzer — dependency CVEs, for real.** Deep scans now walk the workspace for dependency manifests and lockfiles (npm, PyPI/poetry/uv, Go modules, Maven, NuGet, Composer, RubyGems, cargo) and report every known OSV advisory against each pinned version, linked back to osv.dev. The scanner is a pinned, SHA256-verified managed download that auto-installs on first deep scan; advisories keep their GHSA/CVE/PYSEC id as the rule id and map labeled severities through CVSS scores when the label is missing.
+- **Deep-only analyzers are now recorded as skipped on standard scans** instead of silently half-running: the Tools catalog marks OSV as deep-profile, and a standard scan emits a skip event with the reason "Deep-only analyzer: runs on deep scans." and records no analyzer run for it
+
 ## [0.16.13] - 2026-09-01
 
 ### Added
