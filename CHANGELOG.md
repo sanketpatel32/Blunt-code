@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.6] - 2026-09-01
+
+### Changed
+- **Workspace section nav is a horizontal bar above the content:** the left rail spent 13rem+ of every workspace page's width on three links. Overview and Files & rules now get the full content width, with the section links as pills in a slim bar at the top.
+- **Latest analysis and Scan history stack on the workspace page** instead of sitting side by side — the analysis card was mostly empty and cramped the history table beside it.
+- **Scan report page decluttered:** the page title no longer renders the raw state string (it reads "Completed with warnings", not "completed with warnings"); the analyzer list appears once instead of twice (failed analyzers show their error message inline under the category chip); and the flow panel says "How the analysis ran" once a scan is finished instead of "What is happening now".
+- **Workspaces filters and sort share one toolbar row** — search/tag inputs on the left, sort controls on the right, wrapping intact on narrow widths.
+- **The search column picker is a compact dropdown:** as a full-width bar it stretched to the findings table's own width (~1860px), wider than the page.
+- **Language coverage matrix lost its duplicate count row:** the per-language analyzer count was shown under each column header *and* as a bottom "Analyzers" row with identical numbers; the header count stays.
+
+### Removed
+- The Files & rules explainer paragraph ("Choose source paths to analyze…") — static instructions that pushed the tree down.
+
 ## [0.16.5] - 2026-09-01
 
 ### Removed
