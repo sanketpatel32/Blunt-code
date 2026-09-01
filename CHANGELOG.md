@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.4] - 2026-09-01
+
+### Changed
+- **Scan status badges get explicit, honest tones:** the dashboard table's status badge rendered raw state text ("completed with warnings") in a neutral gray, and the workspace cards' badge mis-toned the same state as green via a string-includes guess. A shared `scanStateDisplay` mapping now drives both: completed renders green, **completed-with-warnings renders amber**, failed/cancelled red, running/queued/pending accent, unknown states a neutral outline — each with a sentence-case label ("Completed with warnings", not "completed_with_warnings") kept on one line. The activity feed and history views already toned correctly and are unchanged.
+
 ## [0.16.3] - 2026-09-01
 
 ### Changed
