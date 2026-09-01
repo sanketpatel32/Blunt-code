@@ -1,6 +1,6 @@
 # Blunt Code — llm.txt for AI agents
 
-> Blunt Code is a local-first code quality & security analyzer for Windows. One `bluntcode.exe` runs Ruff, Biome, Gitleaks, Semgrep, SonarQube, and OSV Scanner, Trivy, and Checkov on deep scans, plus built-in secrets/TODO detectors on loopback 127.0.0.1 (no cloud, no telemetry). Use headless `bluntcode scan` for automation/CI.
+> Blunt Code is a local-first code quality & security analyzer for Windows. One `bluntcode.exe` runs Ruff, Biome, Gitleaks, Semgrep, SonarQube, and OSV Scanner, Trivy, and Checkov on deep scans, plus built-in secrets/TODO/license detectors on loopback 127.0.0.1 (no cloud, no telemetry). Use headless `bluntcode scan` for automation/CI.
 
 - **Version:** 0.7.0 (2026-08-26) — shadcn UI (Tailwind+Radix+CVA+lucide)
 - **Repo:** https://github.com/sanketpatel32/Blunt-code
@@ -126,7 +126,7 @@ Auth: none (loopback). Rate limit: token bucket 30/30m on mutations -> `429 RATE
 ## Scan profiles & analyzers
 
 - **quick:** ruff+biome
-- **standard:** +gitleaks +semgrep (25-rule local pack) +sonarqube (polyglot, 10m startup, env `BLUNTCODE_SONAR_STARTUP_TIMEOUT`)
+- **standard:** +gitleaks +semgrep (25-rule local pack) +sonarqube +license-scan (built-in copyleft/conflict/undeclared detection) (polyglot, 10m startup, env `BLUNTCODE_SONAR_STARTUP_TIMEOUT`)
 - **deep:** standard + ruff extended `E,W,F,B,SIM,C4,RET,ARG,PLR` + osv-dependencies (OSV Scanner lockfile CVE scan) + container-trivy (Trivy CVE/secrets/misconfig filesystem scan) + iac-checkov (Checkov Terraform/Dockerfile/K8s/CloudFormation policy scan)
 - **secrets:** AWS/GH/Slack/Google/JWT/Stripe/OpenAI/Anthropic/Azure, entropy + placeholder filtering, msg = `prefix + length` never secret
 - **todo:** `TODO|FIXME|HACK|XXX|BUG` whole-word, case-sensitive, 200 chars, follower heuristics

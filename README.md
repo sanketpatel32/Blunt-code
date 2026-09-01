@@ -33,7 +33,7 @@
 
 ## 🔍 What is this?
 
-- **Ten analyzers, one app.** Ruff, Biome, Gitleaks, Semgrep, SonarQube, OSV Scanner (deep), Trivy (deep), Checkov (deep), plus built-in secrets + TODO/FIXME trackers — one installer, zero `PATH` fights, no global Python/Java/Node.
+- **Eleven analyzers, one app.** Ruff, Biome, Gitleaks, Semgrep, SonarQube, OSV Scanner (deep), Trivy (deep), Checkov (deep), plus built-in secrets, TODO/FIXME, and license detectors — one installer, zero `PATH` fights, no global Python/Java/Node.
 - **Everything stays on your machine.** Loopback-only server (`127.0.0.1`), findings in local SQLite, reports on disk. Offline after the first tool download.
 - **Built for real workflows.** Suppress at the source line, gate CI on `--fail-on high+`, diff against a baseline, export SARIF — then get back to writing code.
 
@@ -50,6 +50,7 @@ flowchart LR
     C --> D7["OSV Scanner"]
     C --> D8["Trivy"]
     C --> D9["Checkov"]
+    C --> D10["License"]
     C --> D6["TODO"]
     D1 --> E["Dedup + fingerprint"]
     D2 --> E
@@ -60,6 +61,7 @@ flowchart LR
     D7 --> E
     D8 --> E
     D9 --> E
+    D10 --> E
     D6 --> E
     E --> F[("SQLite<br>local db")]
     F --> G["Reports<br>MD · HTML · SARIF · CSV · JSON"]
@@ -121,7 +123,7 @@ Keyboard: `g h/w/t/s/a` navigate · `n` add workspace · `/` search · `?` help 
 | | |
 |---|---|
 | **Private by design** | Loopback server, zero telemetry, SQLite at `%LOCALAPPDATA%\BluntCode\bluntcode.db` |
-| **Batteries included** | Ruff (Python), Biome (JS/TS + React auto-domain), Gitleaks (directory-wide secrets), Semgrep (25-rule security pack), SonarQube (polyglot), OSV Scanner (dependency CVEs, deep), Trivy (CVEs + secrets + Dockerfile/IaC misconfigs, deep), Checkov (Terraform/K8s/CloudFormation policies, deep), in-binary **secrets** (AWS, GitHub, Slack, JWT, Stripe, OpenAI, Anthropic, Azure) + **TODO/FIXME** trackers across 40+ file types |
+| **Batteries included** | Ruff (Python), Biome (JS/TS + React auto-domain), Gitleaks (directory-wide secrets), Semgrep (25-rule security pack), SonarQube (polyglot), OSV Scanner (dependency CVEs, deep), Trivy (CVEs + secrets + Dockerfile/IaC misconfigs, deep), Checkov (Terraform/K8s/CloudFormation policies, deep), in-binary **secrets** (AWS, GitHub, Slack, JWT, Stripe, OpenAI, Anthropic, Azure) + **TODO/FIXME** trackers across 40+ file types + **license** detector (copyleft, conflicts, undeclared) |
 | **Dashboard that helps** | Overview cards, activity feed with severity dots, risk grades `A–D` (critical×10/high×5/med×2/low×1) with trend, severity bars, stacked history, suppressions panel |
 | **Workspaces that scale** | Tag chips with `+N` overflow, debounced tag filter, sort by Name / Last scan / Findings, 51→2 queries at 50 workspaces |
 | **Reports you can use** | Sticky filter toolbar, severity-tinted row edges, removable chips, `page`/`page_size` toggles (25/50/100/200 rows), hostile-corpus HTML-escaped |
@@ -205,6 +207,7 @@ bluntcode agent scan "C:\my-app" --profile quick --fail-on high+  # forces --jso
 | **SonarQube** | Polyglot project-wide | Code smells, hotspots, metrics (cold boot ≤10 min, `BLUNTCODE_SONAR_STARTUP_TIMEOUT`) |
 | **Secrets** (built-in) | 40+ types inc. `.env`/Dockerfile/YAML | AWS, GitHub, Slack, JWT, Stripe, OpenAI, Anthropic, Azure |
 | **TODO** (built-in) | Code & config where comments exist | `TODO/FIXME/HACK/XXX/BUG` with owner `TODO(jane):` |
+| **License Scanner** (built-in) | LICENSE/COPYING + package.json/pyproject/Cargo/composer | Copyleft (AGPL high, GPL medium), file-vs-manifest conflicts, undeclared workspaces |
 
 **Profiles** · Quick `Ruff+Biome` · Standard `+Gitleaks+Semgrep+SonarQube` · Deep `+OSV+Trivy+Checkov+Ruff extended`
 

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.17] - 2026-09-01
+
+### Added
+- **License Scanner is the eleventh analyzer — built-in, in-process, no download.** It reconciles the workspace's license file (LICENSE, COPYING, and common variants, classified by canonical-text probes onto SPDX ids) with the license declared in package.json, pyproject.toml, Cargo.toml, or composer.json, and flags what matters: strong copyleft (AGPL/SSPL high, GPL medium), weak copyleft (LGPL/MPL), file-vs-manifest conflicts, UNLICENSED/Proprietary markers, and workspaces that declare no license at all. Permissive and consistent workspaces stay green.
+
 ## [0.16.16] - 2026-09-01
 
 ### Added

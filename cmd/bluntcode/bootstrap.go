@@ -24,6 +24,7 @@ import (
 	"bluntcode/internal/analyzers/secrets"
 	"bluntcode/internal/analyzers/semgrep"
 	"bluntcode/internal/analyzers/sonarqube"
+	"bluntcode/internal/analyzers/license"
 	"bluntcode/internal/analyzers/todo"
 	"bluntcode/internal/config"
 	"bluntcode/internal/core"
@@ -136,6 +137,7 @@ func openCore() (core *appCore, release func(), err error) {
 	if !appSettings.Offline {
 		_ = registry.Register(secrets.New())
 		_ = registry.Register(todo.New())
+		_ = registry.Register(license.New())
 	}
 	scanService := scans.New(db, registry, bus, paths.ReportsDir, paths.ToolsDir, toolService)
 	app := &appCore{

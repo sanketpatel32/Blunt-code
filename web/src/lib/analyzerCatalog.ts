@@ -37,6 +37,7 @@ export const ANALYZER_CATALOG: AnalyzerMeta[] = [
   { id: 'iac-checkov', displayName: 'Checkov', category: 'iac', languages: ['yaml', 'json', 'dockerfile'], severityDefault: 'medium', icon: 'Blocks', docUrl: 'https://www.checkov.io/', enabledByProfile: ['deep'], description: 'Infrastructure-as-code policy scan: Terraform, Dockerfile, Kubernetes, CloudFormation (deep).' },
   { id: 'secrets', displayName: 'Secrets', category: 'secrets', languages: [...ALL_LANGUAGES] as unknown as string[], severityDefault: 'critical', icon: 'KeyRound', docUrl: 'https://docs.bluntcode.local/analyzers/secrets', enabledByProfile: ['standard', 'deep'], description: 'Built-in credential and secret detection.' },
   { id: 'todo', displayName: 'Todo Scanner', category: 'maintainability', languages: [...ALL_LANGUAGES] as unknown as string[], severityDefault: 'info', icon: 'ListTodo', docUrl: 'https://docs.bluntcode.local/analyzers/todo', enabledByProfile: ['standard', 'deep'], description: 'Tracks TODO/FIXME and tech-debt markers.' },
+  { id: 'license-scan', displayName: 'License Scanner', category: 'license', languages: ['json', 'toml', 'markdown', 'text'], severityDefault: 'info', icon: 'Scale', docUrl: 'https://docs.bluntcode.local/analyzers/license', enabledByProfile: ['standard', 'deep'], description: 'Built-in license detection: classifies LICENSE files and manifest declarations, flags copyleft and conflicts.' },
 ];
 
 const catalogMap = new Map(ANALYZER_CATALOG.map((m) => [m.id, m]));

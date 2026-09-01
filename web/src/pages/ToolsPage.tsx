@@ -24,7 +24,7 @@ const operationVerbs: Record<ToolOperation, string> = { install: 'installed', re
 // In-process analyzers bundled with the app. They are not managed downloads,
 // so the tools API never lists them — presenting them as "coming soon" hides
 // two analyzers that already run on every standard/deep scan.
-const BUILT_IN_IDS = new Set(['secrets', 'todo']);
+const BUILT_IN_IDS = new Set(['secrets', 'todo', 'license-scan']);
 
 const categoryIcons: Record<string, React.ElementType> = {
   lint: Wrench, style: Palette, security: Shield, pentest: Zap, secrets: KeyRound, maintainability: Gauge,
