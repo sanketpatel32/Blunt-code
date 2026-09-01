@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { href, type Route } from '../lib/router';
 import type { Theme } from '../hooks/useTheme';
 import { Button } from './ui/button';
@@ -10,15 +10,22 @@ import { useReducedMotion } from '../hooks/useReducedMotion';
 
 /**
  * The three places people actually live in. Everything else moves behind
- * "More": eight equal-weight links made every navigation a scan-and-choose,
- * and half of them are set-once destinations (Tools, Settings, About).
+ * "More" — but only when the viewport is too narrow to show the whole bar;
+ * with room to spare every link sits flat in the nav (see the measure row).
  */
 const PRIMARY_PAGES: ReadonlyArray<Route['page']> = ['home', 'workspaces', 'search'];
+
+/** Approximate width of the "More ▾" toggle; the hysteresis reserve that keeps
+ *  the flat ⇄ overflow switch from oscillating at the exact fit boundary. */
+const MORE_RESERVE_PX = 96;
 
 export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleTheme, onShowShortcuts, seqArmed = false }: { route: Route; onNavigate: (route: Route) => void; onAdd: () => void; onClose: () => void; theme: Theme; onToggleTheme: () => void; onShowShortcuts?: () => void; seqArmed?: boolean }) {
   const { t, locale, setLocale } = useT();
   const reduced = useReducedMotion();
   const moreRef = useRef<HTMLDetailsElement>(null);
+  const navRef = useRef<HTMLElement>(null);
+  const measureRef = useRef<HTMLDivElement>(null);
+  const [flat, setFlat] = useState(true);
   const items: Array<[Route, string]> = [
     [{ page: 'home' }, t('nav.home')],
     [{ page: 'workspaces' }, t('nav.workspaces')],
@@ -29,8 +36,6 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
     [{ page: 'settings' }, t('nav.settings')],
     [{ page: 'about' }, t('nav.about')],
   ];
-  // Order is load-bearing: primary links, then the "More" disclosure, then the
-  // secondary links — so "About" stays the last anchor in the nav.
   const primary = items.filter(([next]) => PRIMARY_PAGES.includes(next.page));
   const secondary = items.filter(([next]) => !PRIMARY_PAGES.includes(next.page));
   const secondaryActive = secondary.some(([next]) => next.page === route.page);
@@ -52,6 +57,35 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
     };
   }, []);
 
+  // Dynamic overflow: an off-screen copy of the full link row measures its
+  // natural width; the nav goes flat while that fits and collapses into "More"
+  // only when space runs out. The reserve is applied on the flat side only, so
+  // the toggle's own width cannot push it back and forth at the boundary.
+  useEffect(() => {
+    const nav = navRef.current;
+    const measure = measureRef.current;
+    if (!nav || !measure) return;
+    const check = () => {
+      // No layout information (jsdom tests, hidden header): keep the current
+      // mode — deciding on zero widths would oscillate forever.
+      if (nav.clientWidth === 0) return;
+      const needed = measure.scrollWidth;
+      if (flat) {
+        if (needed > nav.clientWidth - MORE_RESERVE_PX) setFlat(false);
+      } else if (needed <= nav.clientWidth) {
+        setFlat(true);
+      }
+    };
+    check();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', check);
+      return () => window.removeEventListener('resize', check);
+    }
+    const observer = new ResizeObserver(check);
+    observer.observe(nav);
+    return () => observer.disconnect();
+  }, [flat, locale, route.page]);
+
   const link = ([next, label]: [Route, string]) => (
     <a
       key={label}
@@ -62,6 +96,12 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
     >
       {label}
     </a>
+  );
+
+  const measureLink = ([, label]: [Route, string]) => (
+    // A span, not an anchor: same nav-link metrics for measuring, but no
+    // href/click semantics — querySelector('a') must only ever find real links.
+    <span key={label} className="nav-link" aria-hidden="true">{label}</span>
   );
 
   return (
@@ -75,32 +115,39 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
         </svg>
         <b>Blunt Code</b>
       </a>
-      <nav aria-label="Main navigation">
-        <div className="nav-primary">{primary.map(link)}</div>
-        {/* biome-ignore lint/a11y/useKeyWithClickEvents: <details> is natively keyboard-operable through its summary; this onClick only closes the open menu after a link inside it is chosen. */}
-        <details
-          className="nav-more"
-          ref={moreRef}
-          data-active={secondaryActive ? 'true' : 'false'}
-          onClick={(event) => { if ((event.target as HTMLElement).closest('a, button') && moreRef.current) moreRef.current.open = false; }}
-        >
-          <summary className="nav-more-toggle">
-            {t('nav.more')}
-            <ChevronDown className="nav-more-chevron" aria-hidden="true" />
-          </summary>
-          <div className="nav-more-panel">
-            <div className="nav-more-group">{secondary.map(link)}</div>
-            {/* Closing the app is terminal and rare, so it leaves the action bar
-                for the foot of the overflow — reachable at every width, where
-                styles.css used to hide it below 63rem. */}
-            <div className="nav-more-foot">
-              <Button variant="ghost" size="sm" className="close-app" onClick={onClose}>{t('common.closeApp')}</Button>
-            </div>
-          </div>
-        </details>
+      <nav ref={navRef} aria-label="Main navigation">
+        <div className="nav-primary nav-measure" ref={measureRef} aria-hidden="true">{items.map(measureLink)}</div>
+        {flat ? (
+          <div className="nav-primary">{items.map(link)}</div>
+        ) : (
+          <>
+            <div className="nav-primary">{primary.map(link)}</div>
+            {/* biome-ignore lint/a11y/useKeyWithClickEvents: <details> is natively keyboard-operable through its summary; this onClick only closes the open menu after a link inside it is chosen. */}
+            <details
+              className="nav-more"
+              ref={moreRef}
+              data-active={secondaryActive ? 'true' : 'false'}
+              onClick={(event) => { if ((event.target as HTMLElement).closest('a, button') && moreRef.current) moreRef.current.open = false; }}
+            >
+              <summary className="nav-more-toggle">
+                {t('nav.more')}
+                <ChevronDown className="nav-more-chevron" aria-hidden="true" />
+              </summary>
+              <div className="nav-more-panel">
+                <div className="nav-more-group">{secondary.map(link)}</div>
+                {/* Closing the app is terminal and rare, so it rides at the foot
+                    of the overflow menu in narrow mode. */}
+                <div className="nav-more-foot">
+                  <Button variant="ghost" size="sm" className="close-app" onClick={onClose}>{t('common.closeApp')}</Button>
+                </div>
+              </div>
+            </details>
+          </>
+        )}
       </nav>
       <div className="nav-actions">
         {seqArmed && <span className="seq-hint" aria-hidden="true">g…</span>}
+        {flat && <Button variant="ghost" size="sm" className="close-app" onClick={onClose}>{t('common.closeApp')}</Button>}
         <NotificationsCenter />
         {/* Preferences are chosen once and then never touched. They read as one
             cohesive group instead of four competing buttons — and every one of

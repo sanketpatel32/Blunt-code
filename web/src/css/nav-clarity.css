@@ -175,3 +175,20 @@
 @media (prefers-reduced-motion: reduce) {
   .nav-more-chevron, .nav-more-toggle, a.nav-link { transition: none; }
 }
+
+/* ── Dynamic overflow ("More" only when space runs out) ────────── */
+.app-nav { position: relative; }
+
+/* Off-screen twin of the full link row: same classes, same metrics, so its
+   scrollWidth is the natural width of every link rendered flat. */
+.app-nav .nav-measure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 0;
+  visibility: hidden;
+  pointer-events: none;
+  overflow: hidden;
+  white-space: nowrap;
+  min-width: 0;
+}
