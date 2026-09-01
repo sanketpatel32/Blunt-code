@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { Scan, Severity, Tool } from '../types';
-import { languageNames } from '../lib/format';
+import { languageNames, languageColor } from '../lib/format';
 import { useCountUp } from '../hooks/useCountUp';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
@@ -56,7 +56,8 @@ export function PrivacyNotice() {
 
 export function LanguageBadges({ languages }: { languages?: string[] }) {
   return languages?.length
-    ? <ul className="badges flex flex-wrap gap-1.5" aria-label="Detected languages">{languages.map((language) => <Badge key={language} variant="outline" className="rounded-full">{languageNames[language] ?? language}</Badge>)}</ul>
+    // Real <li> elements: the old <Badge/> children rendered <div>s inside this <ul>.
+    ? <ul className="badges flex flex-wrap gap-1.5" aria-label="Detected languages">{languages.map((language) => <li key={language} className="badge"><i className="lang-dot" aria-hidden="true" style={{ background: languageColor(language) }} />{languageNames[language] ?? language}</li>)}</ul>
     : <span className="muted">No supported source languages found</span>;
 }
 

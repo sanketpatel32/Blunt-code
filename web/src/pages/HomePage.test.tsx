@@ -183,3 +183,15 @@ describe('HomePage workspace paths', () => {
     Reflect.deleteProperty(window.navigator, 'clipboard');
   });
 });
+
+describe('HomePage language badges', () => {
+  it('renders one colored-dot badge per detected language', async () => {
+    const host = await render(homeFetchMock({ scans: [], total: 0, summary }, { items: [{ id: 'ws-1', name: 'Polyglot', root_path: 'C:\\code\\poly', languages: ['python', 'dockerfile', 'exoticlang'], latest_scan: null }] }));
+    const badges = [...host.querySelectorAll('.workspace-languages .badges li')];
+    expect(badges.map((badge) => badge.textContent)).toEqual(['Python', 'Dockerfile', 'exoticlang']);
+    const dots = [...host.querySelectorAll('.workspace-languages .badges .lang-dot')] as HTMLElement[];
+    expect(dots).toHaveLength(3);
+    expect(dots[0].style.background).toBe('rgb(53, 114, 165)'); // python #3572A5
+    expect(dots[2].style.background).not.toContain('#'); // unknown language falls back to the accent token
+  });
+});

@@ -210,6 +210,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 /* ── Badges & states ───────────────────────────────────────────── */
 .badges { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
+/* Per-language color dot (lib/format.ts languageColor) — also used by .ws-lang-dot on cards. */
+.lang-dot { flex: none; width: .55rem; height: .55rem; border-radius: 50%; box-shadow: 0 0 0 1px var(--color-rule-faint); }
+.badges .badge { gap: var(--space-3xs); }
 .badge, .severity, .state {
   display: inline-flex; align-items: center; width: max-content;
   padding: var(--space-3xs) var(--space-sm);
@@ -775,6 +778,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .filters { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-sm); margin-top: var(--space-md); padding: var(--space-lg); border: var(--rule) solid var(--color-rule); border-radius: var(--radius-lg); background: var(--color-surface-muted); }
 .filters label { display: grid; gap: var(--space-xs); font: 700 var(--text-xs) var(--font-mono); letter-spacing: .02em; color: var(--color-ink-faint); text-transform: uppercase; }
 .findings-pagination { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); margin-top: var(--space-md); padding: var(--space-sm) 0; color: var(--color-ink-soft); font-size: var(--text-sm); }
+.findings-pagination .page-size { display: inline-flex; align-items: center; gap: var(--space-xs); margin-right: var(--space-sm); }
+.findings-pagination .page-size select { min-height: 2rem; padding: 0 var(--space-sm); border: var(--rule) solid var(--color-rule-strong); border-radius: var(--radius-button); background: var(--color-surface); color: var(--color-ink); font-size: var(--text-sm); font-weight: 500; }
 .inline-warning { display: flex; flex-wrap: wrap; gap: var(--space-xs) var(--space-md); margin: var(--space-md) 0; padding: var(--space-sm) var(--space-md); border: var(--rule) solid color-mix(in oklch, var(--color-warning) 35%, var(--color-rule)); border-radius: var(--radius-md); background: var(--color-warning-soft); color: var(--color-ink); font-size: var(--text-sm); }
 .data-folders { display: flex; align-items: center; justify-content: space-between; gap: var(--space-lg); padding: var(--space-lg) 0; border-bottom: var(--rule) solid var(--color-rule-faint); }
 .data-folders h3 { margin: 0 0 var(--space-2xs); font-size: var(--text-sm); font-weight: 700; }

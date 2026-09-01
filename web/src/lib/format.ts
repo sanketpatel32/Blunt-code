@@ -72,7 +72,36 @@ export const languageNames: Record<string, string> = {
   json: 'JSON', jsonc: 'JSONC', json5: 'JSON5', yaml: 'YAML', yml: 'YAML',
   toml: 'TOML', xml: 'XML', ini: 'INI', cfg: 'Config', conf: 'Config',
   env: 'Environment File', properties: 'Properties', tf: 'Terraform', dockerfile: 'Dockerfile',
+  markdown: 'Markdown', text: 'Text',
 };
+
+/** GitHub-Linguist-style colors so language badges read at a glance; unknown
+ *  languages fall back to the app accent. Values chosen to stay visible on
+ *  both theme surfaces (the dot also carries a faint rule-colored ring). */
+export const languageColors: Record<string, string> = {
+  go: '#00ADD8', golang: '#00ADD8', mod: '#00ADD8',
+  javascript: '#f1e05a', jsx: '#f1e05a', mjs: '#f1e05a', cjs: '#f1e05a',
+  typescript: '#3178c6', tsx: '#3178c6', mts: '#3178c6', cts: '#3178c6',
+  python: '#3572A5', pyi: '#3572A5',
+  java: '#b07219', kotlin: '#A97BFF', scala: '#c22d40', groovy: '#4298b8',
+  c: '#8a8a8a', h: '#8a8a8a', cpp: '#f34b7d', cc: '#f34b7d', cxx: '#f34b7d', hpp: '#f34b7d', hh: '#f34b7d',
+  csharp: '#178600', cs: '#178600', razor: '#178600', fs: '#34750c', vb: '#945db7',
+  ruby: '#701516', php: '#4F5D95', perl: '#0298c3', lua: '#3b5bdb', r: '#198CE7', swift: '#F05138',
+  dart: '#00B4AB', rust: '#dea584', ex: '#6e4a7e', exs: '#6e4a7e', erl: '#a90533',
+  haskell: '#5e5086', hs: '#5e5086', clojure: '#db5855', clj: '#db5855',
+  shell: '#89e051', bash: '#89e051', zsh: '#89e051', ps1: '#0e7cd1', psm1: '#0e7cd1', bat: '#C1F12E', cmd: '#C1F12E',
+  sql: '#e38c00', graphql: '#e10098', gql: '#e10098', proto: '#8cbf3f',
+  html: '#e34c26', htm: '#e34c26', vue: '#41b883', svelte: '#ff3e00', astro: '#ff5a03',
+  css: '#663399', scss: '#c6538c', sass: '#c6538c', less: '#2f5aa8',
+  json: '#8a8a8a', jsonc: '#8a8a8a', json5: '#8a8a8a', yaml: '#cb171e', yml: '#cb171e',
+  toml: '#9c4221', xml: '#0060ac', ini: '#a1a1aa', cfg: '#a1a1aa', conf: '#a1a1aa',
+  env: '#ecd53f', properties: '#a1a1aa', tf: '#844FBA', dockerfile: '#2496ED',
+  markdown: '#083fa1', text: '#94a3b8',
+};
+
+export function languageColor(id: string): string {
+  return languageColors[id] ?? 'var(--color-accent)';
+}
 
 export const analyzerDisplayNames: Record<string, string> = { biome: 'Biome', ruff: 'Ruff', semgrep: 'Semgrep', sonarqube: 'SonarQube' };
 

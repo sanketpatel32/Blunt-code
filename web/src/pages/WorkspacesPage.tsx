@@ -15,7 +15,7 @@ import { Badge } from '../components/ui/badge';
 import { FolderIcon } from '../components/icons';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
 import { MoreHorizontal, ShieldCheck } from 'lucide-react';
-import { languageNames } from '../lib/format';
+import { languageNames, languageColor } from '../lib/format';
 import { SkeletonCards } from '../components/skeletons';
 import { ConfirmationDialog } from '../components/dialogs';
 import { WorkspaceTemplates } from '../components/WorkspaceTemplates';
@@ -126,7 +126,7 @@ function WorkspaceCard({ workspace, go, notify, onRemoved }: { workspace: Worksp
             {/* The visible "Languages" caption above labels this row; an aria-label
                 on a plain div is dropped by assistive tech anyway. */}
             {langs.map((l) => (
-              <span key={l} className="ws-lang-dot"><i aria-hidden="true" />{languageNames[l] ?? l}</span>
+              <span key={l} className="ws-lang-dot"><i aria-hidden="true" style={{ background: languageColor(l) }} />{languageNames[l] ?? l}</span>
             ))}
           </div>
         ) : (
