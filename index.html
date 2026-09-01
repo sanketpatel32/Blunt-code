@@ -4,9 +4,9 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Blunt Code — your code has problems. Here they are.</title>
-<meta name="description" content="Six analyzers, one honest report, zero uploads. Ruff · Biome · Semgrep · SonarQube · Secrets · TODO in one loopback app for Windows. No cloud, no account, no telemetry." />
+<meta name="description" content="Eleven analyzers, one honest report, zero uploads. Ruff · Biome · Semgrep · SonarQube · gitleaks · Trivy · OSV · Checkov · secrets · TODO · licenses in one loopback app for Windows. No cloud, no account, no telemetry." />
 <meta property="og:title" content="Blunt Code — your code has problems. Here they are." />
-<meta property="og:description" content="Six analyzers. One honest report. Zero uploads. Free, local-first code scanning for Windows." />
+<meta property="og:description" content="Eleven analyzers. One honest report. Zero uploads. Free, local-first code scanning for Windows." />
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://sanketpatel32.github.io/Blunt-code/" />
 <meta property="og:image" content="https://sanketpatel32.github.io/Blunt-code/og-image.png" />
@@ -22,10 +22,10 @@
   "name": "Blunt Code",
   "alternateName": "blunt-code",
   "url": "https://sanketpatel32.github.io/Blunt-code/",
-  "description": "Local code quality & security for Windows: Ruff, Biome, Semgrep, SonarQube, secrets and TODO tracking in one loopback desktop app. No cloud, no account, no telemetry.",
+  "description": "Local code quality & security for Windows: Ruff, Biome, Semgrep, SonarQube, gitleaks, OSV, Trivy, Checkov, license, secrets and TODO tracking in one loopback desktop app. No cloud, no account, no telemetry.",
   "applicationCategory": "DeveloperApplication",
   "operatingSystem": "Windows 10, Windows 11",
-  "softwareVersion": "0.16.7",
+  "softwareVersion": "0.16.18",
   "downloadUrl": "https://github.com/sanketpatel32/Blunt-code/releases/latest",
   "isAccessibleForFree": true,
   "license": "https://github.com/sanketpatel32/Blunt-code/blob/main/LICENSE",
@@ -36,7 +36,12 @@
     "Semgrep — 25-rule security pack",
     "SonarQube — managed local runtime",
     "Secrets detection — 8 credential families",
-    "TODO/FIXME tracking — 40+ file types"
+    "TODO/FIXME tracking — 40+ file types",
+    "Gitleaks — repo-wide secrets sweep",
+    "OSV Scanner — dependency CVEs",
+    "Trivy — CVEs, secrets and misconfigurations",
+    "Checkov — infrastructure-as-code policies",
+    "License Scanner — copyleft and conflict detection"
   ],
   "author": { "@type": "Person", "name": "Sanket Patel", "url": "https://github.com/sanketpatel32" },
   "publisher": {
@@ -722,7 +727,7 @@
       <a href="#cli">CLI</a>
       <a href="#why">Why local</a>
     </div>
-    <span class="nav-ver">v0.16.7</span>
+    <span class="nav-ver" data-ver>v0.16.18</span>
     <a class="nav-cta" href="https://github.com/sanketpatel32/Blunt-code/releases/latest">Get it</a>
   </div>
 </nav>
@@ -734,7 +739,7 @@
     <div>
       <p class="kicker" style="margin:0"><span class="sq" aria-hidden="true"></span>Local-first code scanner for Windows</p>
       <h1>Your code has <span class="red">problems.</span><br /><span class="stamp">Here they are.</span></h1>
-      <p class="hero-sub"><b>Six analyzers. One honest report. Zero uploads.</b> Blunt Code runs Ruff, Biome, Semgrep and SonarQube, plus built-in secrets and TODO checks, on your machine — and tells you exactly what's wrong, to your face.</p>
+      <p class="hero-sub"><b>Eleven analyzers. One honest report. Zero uploads.</b> Blunt Code runs Ruff, Biome, Semgrep and SonarQube — plus gitleaks, Trivy, OSV, Checkov, license, secrets and TODO checks — on your machine, and tells you exactly what's wrong, to your face.</p>
       <div class="cta-row">
         <a class="btn btn-red" href="#install">Install in 30s ↓</a>
         <a class="btn" href="https://github.com/sanketpatel32/Blunt-code/releases/latest">Portable ZIP</a>
@@ -751,7 +756,7 @@
       </div>
       <div class="term-count">
         <span><b>516</b> findings</span>
-        <span>6 analyzers</span>
+        <span>11 analyzers</span>
         <span class="up">0 bytes uploaded</span>
       </div>
       <div class="feed">
@@ -773,6 +778,8 @@
             <li class="fd"><span class="sev sev-crit">CRIT</span><span class="loc">config/settings.py:8</span><span class="rule">hardcoded-password · semgrep</span></li>
             <li class="fd"><span class="sev sev-med">MED</span><span class="loc">api/routes.go:203</span><span class="rule">TODO without owner · todo</span></li>
             <li class="fd"><span class="sev sev-high">HIGH</span><span class="loc">webhooks/stripe.ts:57</span><span class="rule">live-secret-in-code · secrets</span></li>
+            <li class="fd"><span class="sev sev-crit">CRIT</span><span class="loc">infra/main.tf:41</span><span class="rule">public-s3-acl · checkov</span></li>
+            <li class="fd"><span class="sev sev-high">HIGH</span><span class="loc">package-lock.json:312</span><span class="rule">GHSA-8q4j-8m2x · osv</span></li>
           </ol>
           <ol>
             <li class="fd"><span class="sev sev-crit">CRIT</span><span class="loc">src/.env:4</span><span class="rule">aws-access-key-id · secrets</span></li>
@@ -791,6 +798,8 @@
             <li class="fd"><span class="sev sev-crit">CRIT</span><span class="loc">config/settings.py:8</span><span class="rule">hardcoded-password · semgrep</span></li>
             <li class="fd"><span class="sev sev-med">MED</span><span class="loc">api/routes.go:203</span><span class="rule">TODO without owner · todo</span></li>
             <li class="fd"><span class="sev sev-high">HIGH</span><span class="loc">webhooks/stripe.ts:57</span><span class="rule">live-secret-in-code · secrets</span></li>
+            <li class="fd"><span class="sev sev-crit">CRIT</span><span class="loc">infra/main.tf:41</span><span class="rule">public-s3-acl · checkov</span></li>
+            <li class="fd"><span class="sev sev-high">HIGH</span><span class="loc">package-lock.json:312</span><span class="rule">GHSA-8q4j-8m2x · osv</span></li>
           </ol>
         </div>
       </div>
@@ -826,7 +835,7 @@
       <span class="rule" aria-hidden="true"></span>
     </div>
 
-    <figure class="pipe" role="img" aria-label="Diagram: your folder flows through bluntcode.exe on loopback 127.0.0.1, fans out to six analyzers — Ruff, Biome, Semgrep, SonarQube, Secrets, TODO — then findings are deduplicated and fingerprinted into a local SQLite database and exported as Markdown, HTML, SARIF, CSV or JSON, or gated in CI.">
+    <figure class="pipe" role="img" aria-label="Diagram: your folder flows through bluntcode.exe on loopback 127.0.0.1, fans out to eleven analyzers — Ruff, Biome, Semgrep, SonarQube, Secrets, TODO, plus gitleaks, OSV, Trivy, Checkov and license scanning — then findings are deduplicated and fingerprinted into a local SQLite database and exported as Markdown, HTML, SARIF, CSV or JSON, or gated in CI.">
       <div class="flow">
         <div class="node"><b>Your folder</b><span>39 languages classified</span></div>
         <span class="link" aria-hidden="true"></span>
@@ -839,6 +848,9 @@
           <span class="an"><b>SonarQube</b> · project-wide</span>
           <span class="an"><b>Secrets</b> · 8 families</span>
           <span class="an"><b>TODO</b> / FIXME tracker</span>
+          <span class="an"><b>gitleaks</b> · secrets sweep</span>
+          <span class="an"><b>osv · trivy</b> · dependency CVEs</span>
+          <span class="an"><b>checkov · licenses</b> · deep scans</span>
         </div>
         <span class="link" aria-hidden="true"></span>
         <div class="node"><b>Dedup + fingerprint</b><span>one finding, once — forever trackable</span></div>
@@ -855,7 +867,7 @@
     <div class="profiles" aria-label="Scan profiles">
       <div class="profile"><b>Quick</b><span>Ruff + Biome · seconds, pre-commit friendly</span></div>
       <div class="profile"><b>Standard</b><span>+ Semgrep + SonarQube · the default sweep</span></div>
-      <div class="profile"><b>Deep</b><span>everything + extended rule sets · the full interrogation</span></div>
+      <div class="profile"><b>Deep</b><span>all eleven + extended rule sets · the full interrogation</span></div>
     </div>
 
     <p class="caption">Every analyzer runs sandboxed under <b>%LOCALAPPDATA%\BluntCode\tools</b> — your PATH is never touched, and nothing is ever uploaded.</p>
@@ -1057,7 +1069,7 @@
   <section class="final" aria-label="Get Blunt Code">
     <h2>Scan everything.<br />Send nothing.</h2>
     <a class="btn" href="#install">Get Blunt Code — free ↓</a>
-    <p>MIT · Windows 10/11 · v0.16.7 · your code never leaves the machine</p>
+    <p>MIT · Windows 10/11 · <span data-ver>v0.16.18</span> · your code never leaves the machine</p>
   </section>
 
 </main>
@@ -1116,6 +1128,32 @@
       b.textContent = String(Math.round(target * (1 - Math.pow(1 - p, 3))));
       if (p < 1) requestAnimationFrame(step);
     });
+  })();
+  // Version auto-sync — the page ships with the latest release hardcoded
+  // (no-JS fallback); this keeps it truthful between site updates by asking
+  // GitHub. Any failure leaves the shipped value in place, silently.
+  (function () {
+    fetch("https://api.github.com/repos/sanketpatel32/Blunt-code/releases/latest", {
+      headers: { Accept: "application/vnd.github+json" }
+    })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (rel) {
+        var m = rel && rel.tag_name ? rel.tag_name.match(/(\d+\.\d+\.\d+)/) : null;
+        if (!m) return;
+        var v = m[1];
+        document.querySelectorAll("[data-ver]").forEach(function (el) {
+          el.textContent = "v" + v;
+        });
+        var ld = document.querySelector('script[type="application/ld+json"]');
+        if (ld) {
+          try {
+            var o = JSON.parse(ld.textContent);
+            o.softwareVersion = v;
+            ld.textContent = JSON.stringify(o);
+          } catch (e) {}
+        }
+      })
+      .catch(function () {});
   })();
 </script>
 </body>

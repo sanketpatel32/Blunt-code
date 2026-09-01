@@ -1,8 +1,8 @@
 # Blunt Code
 
-> Local code quality & security for Windows — Ruff, Biome, Semgrep, SonarQube, secrets detection and TODO/FIXME tracking bundled in one loopback desktop app. No cloud, no account, no telemetry; source code never leaves the machine.
+> Local code quality & security for Windows — Ruff, Biome, Semgrep, SonarQube, gitleaks, OSV Scanner, Trivy, Checkov, secrets detection, license scanning and TODO/FIXME tracking bundled in one loopback desktop app. No cloud, no account, no telemetry; source code never leaves the machine.
 
-Blunt Code is a free, open-source (MIT) Windows desktop app that runs six pinned analyzers — Ruff, Biome, Semgrep, SonarQube, a secrets scanner, and a TODO/FIXME tracker — behind a single `bluntcode.exe` and a loopback-only web UI, then merges their findings into one local report (Markdown, HTML, SARIF, CSV, JSON) with scan history and diffing.
+Blunt Code is a free, open-source (MIT) Windows desktop app that runs eleven pinned analyzers — Ruff, Biome, Semgrep, SonarQube, gitleaks, OSV Scanner, Trivy, Checkov, a license scanner, a secrets scanner, and a TODO/FIXME tracker — behind a single `bluntcode.exe` and a loopback-only web UI, then merges their findings into one local report (Markdown, HTML, SARIF, CSV, JSON) with scan history and diffing.
 
 ## When to use
 
