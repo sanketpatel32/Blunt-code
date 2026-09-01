@@ -255,14 +255,16 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .not-found-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-sm); }
 
 /* ── Workspace sidebar — premium rail ───────────────────────── */
-.workspace-page { display: grid; grid-template-columns: minmax(11rem, 13.5rem) minmax(0, 1fr); gap: var(--space-2xl); }
-.workspace-context { position: sticky; top: calc(var(--nav-h) + var(--space-md)); align-self: start; padding: var(--space-md); border: var(--rule) solid var(--color-rule-faint); border-radius: var(--radius-card); background: var(--color-surface); box-shadow: var(--shadow-card); }
-.workspace-context .eyebrow { margin: 0 0 var(--space-sm); }
-.workspace-context ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; }
-.workspace-context-link { display: flex; align-items: center; gap: var(--space-sm); width: 100%; padding: var(--space-sm) var(--space-sm); border: 0; border-left: 3px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--color-ink-soft); font-size: var(--text-sm); font-weight: 550; text-align: left; transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out); }
+/* One column: the section nav lives in a horizontal bar above the content —
+   a left rail spent 13rem+ of width on three links. */
+.workspace-page { display: grid; grid-template-columns: 1fr; gap: var(--space-lg); }
+.workspace-context { position: static; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs) var(--space-md); padding: var(--space-2xs) var(--space-sm); border: var(--rule) solid var(--color-rule-faint); border-radius: var(--radius-card); background: var(--color-surface); box-shadow: var(--shadow-card); }
+.workspace-context .eyebrow { margin: 0; }
+.workspace-context ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: row; flex-wrap: wrap; gap: var(--space-2xs); }
+.workspace-context-link { display: inline-flex; align-items: center; gap: var(--space-sm); width: auto; padding: var(--space-2xs) var(--space-sm); border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--color-ink-soft); font-size: var(--text-sm); font-weight: 550; text-align: left; transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out); }
 .workspace-context-link:hover { background: var(--color-surface-muted); color: var(--color-ink); }
-.workspace-context-link.active { background: var(--color-accent-soft); color: var(--color-ink); font-weight: 600; border-left-color: var(--color-accent); }
-:root[data-theme='dark'] .workspace-context-link.active { background: var(--color-surface-muted); color: var(--color-ink); border-left-color: var(--color-accent); }
+.workspace-context-link.active { background: var(--color-accent-soft); color: var(--color-ink); font-weight: 600; }
+:root[data-theme='dark'] .workspace-context-link.active { background: var(--color-surface-muted); color: var(--color-ink); }
 .workspace-context-icon { display: grid; place-items: center; width: 1.1rem; height: 1.1rem; flex: none; }
 .workspace-context-icon svg { width: 1rem; height: 1rem; }
 .workspace-context-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
