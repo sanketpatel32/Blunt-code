@@ -1,12 +1,16 @@
 <p align="center">
-  <img src="web/public/bluntcode-mark.svg" alt="Blunt Code" width="84" />
+  <img src="web/public/bluntcode-mark.svg" alt="Blunt Code mark" width="96" />
 </p>
 
 <h1 align="center">Blunt Code</h1>
-<p align="center"><strong>Local code quality & security — no cloud, no account, no telemetry.</strong><br/>Ruff · Biome · Semgrep · SonarQube · Secrets · TODO — one loopback app for Windows.</p>
 
 <p align="center">
-  <a href="https://github.com/sanketpatel32/Blunt-code/releases"><img src="https://img.shields.io/github/v/release/sanketpatel32/Blunt-code?label=version&color=1a1a1e" alt="release" /></a>
+  <strong>Your code has problems. Blunt Code names them.</strong><br/>
+  Local-first code quality & security scanning for Windows — no cloud, no account, no telemetry.
+</p>
+
+<p align="center">
+  <a href="https://github.com/sanketpatel32/Blunt-code/releases"><img src="https://img.shields.io/github/v/release/sanketpatel32/Blunt-code?label=version&color=1a1a1a" alt="release" /></a>
   <img src="https://img.shields.io/badge/platform-Windows%2010%2F11-0a66ff" alt="platform" />
   <img src="https://img.shields.io/badge/privacy-100%25%20local-0a6522" alt="privacy" />
   <img src="https://img.shields.io/badge/license-MIT-8a8a8a" alt="license" />
@@ -15,80 +19,50 @@
 
 <p align="center">
   <a href="https://sanketpatel32.github.io/Blunt-code/">Website</a> ·
-  <a href="#-install-in-30-seconds">Install</a> ·
+  <a href="#-install">Install</a> ·
   <a href="#-quick-start">Quick start</a> ·
+  <a href="#-features">Features</a> ·
   <a href="#-cli">CLI</a> ·
+  <a href="#-analyzers--profiles">Analyzers</a> ·
+  <a href="#-privacy">Privacy</a> ·
   <a href="docs/ci.md">CI guide</a> ·
-  <a href="docs/configuration.md">Config</a> ·
   <a href="CHANGELOG.md">Changelog</a>
 </p>
 
 ---
 
-## Product snapshot
+## 🔍 What is this?
 
-| | |
-|---|---|
-| **Purpose** | One local workspace for code quality, security findings, suppressions, history, and CI gates |
-| **Privacy** | Loopback-only, zero telemetry, local SQLite storage |
-| **Delivery** | Single Windows application with sandboxed analyzers and no global PATH changes |
-| **Coverage** | Python, JavaScript/TypeScript, React, and polyglot SonarQube projects |
-| **Quality** | 723 automated tests passing (457 Go · 266 web) |
+- **Six analyzers, one app.** Ruff, Biome, Semgrep, SonarQube, plus built-in secrets + TODO/FIXME trackers — one installer, zero `PATH` fights, no global Python/Java/Node.
+- **Everything stays on your machine.** Loopback-only server (`127.0.0.1`), findings in local SQLite, reports on disk. Offline after the first tool download.
+- **Built for real workflows.** Suppress at the source line, gate CI on `--fail-on high+`, diff against a baseline, export SARIF — then get back to writing code.
 
-### What's new in 0.16.x — analyzers revived, UI decluttered
-
-- **Analyzer pipeline fixed end-to-end** — semgrep's bundled rulepack (invalid YAML + pattern grammar) and SonarQube's 5-minute compute timeout had silently returned zero findings on every scan. Both fixed, with `doctor --fix` recovery and regression tests guarding the whole class.
-- **Simpler navigation & dashboard** — three primary destinations plus a "More" menu; the dashboard rebuilt around one metric row and the activity feed.
-- **Readable workspaces & reports** — short workspace paths with copy-full-path, per-language color dots on language badges, honest scan-status tones, and a selectable rows-per-page window (25/50/100/200) on the findings table.
-- **WCAG AA contrast guard** — `npm run audit:contrast` fails the build on any shipped color pairing below 4.5:1.
-
-> Earlier releases shipped the shadcn/Tailwind UI, global search, risk scores, scan pruning, workspace tags, CSV/SARIF/JSONL exports, and gated CI. See [CHANGELOG.md](CHANGELOG.md).
-
----
-
-## Why Blunt Code
-
-| Without it | With Blunt Code |
-|---|---|
-| Four linters, four installs, four `PATH` fights | One `bluntcode.exe` — tools sandboxed under `%LOCALAPPDATA%\BluntCode\tools`, never touches global `PATH` |
-| Findings scattered across terminals | One report: Markdown / HTML / SARIF / CSV / JSON, filterable by tool · rule · severity · path |
-| Cloud gate that ships your source | `127.0.0.1` only. SQLite + reports stay on disk. Offline mode after first download |
-| "Fix later" that never sticks | `bluntcode:ignore` at the source, fingerprint suppressions, `.bluntcodeignore` committed with the repo |
+```mermaid
+flowchart LR
+    A["Your folder"] --> B["bluntcode.exe<br>loopback 127.0.0.1"]
+    B --> C["Analyzers"]
+    C --> D1["Ruff"]
+    C --> D2["Biome"]
+    C --> D3["Semgrep"]
+    C --> D4["SonarQube"]
+    C --> D5["Secrets"]
+    C --> D6["TODO"]
+    D1 --> E["Dedup + fingerprint"]
+    D2 --> E
+    D3 --> E
+    D4 --> E
+    D5 --> E
+    D6 --> E
+    E --> F[("SQLite<br>local db")]
+    F --> G["Reports<br>MD · HTML · SARIF · CSV · JSON"]
+    F --> H["CI gate<br>exit 0 · 1 · 2"]
+```
 
 ---
 
-## Features
+## 🚀 Install
 
-**Private by design** — loopback server, zero telemetry, SQLite at `%LOCALAPPDATA%\BluntCode\bluntcode.db`.
-
-**Batteries included** — Ruff (Python), Biome (JS/TS + React domain auto-detect), Semgrep (20-rule pack), SonarQube (polyglot), plus in-binary **secrets** (AWS, GitHub, Slack, JWT, Stripe, OpenAI, Anthropic, Azure) and **TODO/FIXME** trackers across 40+ file types (Go, Java, Kotlin, C#, PHP, Rust, Swift, YAML, TOML, `.env`, Dockerfile, PEM…).
-
-**Dashboard that actually helps** — global overview cards (`/api/v1/stats`), recent activity feed with severity dots, risk grades `A–D` (critical×10/high×5/med×2/low×1) with trend, severity distribution bars, stacked history, and suppressions panel (search by reason/fingerprint).
-
-**Workspaces that scale** — up to 3 tag chips `+N` overflow, `Filter by tag` debounced 200ms, sort by Name / Last scan / Findings, `Filter by tag` + `Sort` stay in sync, 51→2 queries optimisation at 50 workspaces.
-
-**Reports you can use** — sticky filter toolbar, severity-tinted row edges, removable chips, toggles `page`/`page_size` (50 rows), `—` placeholders for missing data, hostile-corpus HTML-escaped.
-
-**CLI built for CI** — `bluntcode scan <path> --profile quick|standard|deep --fail-on high+ --max-findings 50 --baseline ./last.sarif --format sarif|jsonl|markdown|github --output findings.csv --jobs 2 --incremental --watch`, exit `0/1/2/130`.
-
-> Full flags: `bluntcode help` · CI recipe: [docs/ci.md](docs/ci.md)
-
----
-
-## System requirements
-
-| | |
-|---|---|
-| **OS** | Windows 10 / 11 64-bit (amd64) |
-| **Rights** | Standard user — no admin |
-| **Network** | Online only first run (tools download). Offline after |
-| **Deps** | None — no global Python/Java/Node required |
-
----
-
-## Install in 30 seconds
-
-### One-line installer (recommended)
+**One-line installer (recommended)**
 
 PowerShell (`Win+R` → `powershell`):
 ```powershell
@@ -100,22 +74,20 @@ curl -fsSL -o "%TEMP%\install-bluntcode.cmd" https://github.com/sanketpatel32/Bl
 ```
 Installs to `%LOCALAPPDATA%\Programs\BluntCode`, verifies SHA-256, creates Start Menu shortcut, launches app. No admin.
 
-**Options** `install-latest.ps1 -Version 0.16.5 -Silent -DesktopShortcut -WhatIf -WaitForCloseSeconds 30`
+**Options** `install-latest.ps1 -Version 0.16.7 -Silent -DesktopShortcut -WhatIf -WaitForCloseSeconds 30`
 
-### Portable ZIP
+**Portable ZIP**
 
-1. Download `BluntCode-0.16.5-windows-amd64.zip` + `.sha256` from [Releases](https://github.com/sanketpatel32/Blunt-code/releases/latest)
+1. Download `BluntCode-0.16.7-windows-amd64.zip` + `.sha256` from [Releases](https://github.com/sanketpatel32/Blunt-code/releases/latest)
 2. Verify & run:
 ```powershell
-$pkg='.\BluntCode-0.16.5-windows-amd64.zip'
+$pkg='.\BluntCode-0.16.7-windows-amd64.zip'
 if((Get-FileHash $pkg -Algorithm SHA256).Hash -ne (Get-Content "$pkg.sha256").Split()[0]){throw 'checksum mismatch'}
 Expand-Archive $pkg -DestinationPath .\BluntCode -Force; .\BluntCode\BluntCode*\bluntcode.exe
 ```
 > `irm | iex` never saves a `.ps1`, so ExecutionPolicy doesn't apply. For a saved `uninstall.ps1`: `powershell -ExecutionPolicy Bypass -File .\uninstall.ps1`.
 
-### From source
-
-Requires Go 1.26+ and Node 18+:
+**From source** — Go 1.26+ and Node 18+:
 ```powershell
 git clone https://github.com/sanketpatel32/Blunt-code.git; cd Blunt-code
 .\scripts\build.ps1; .\bluntcode.exe
@@ -123,7 +95,7 @@ git clone https://github.com/sanketpatel32/Blunt-code.git; cd Blunt-code
 
 ---
 
-## Quick start
+## ⚡ Quick start
 
 1. **Launch** from Start Menu or `bluntcode.exe` → opens `http://127.0.0.1:<port>` automatically
 2. **Add workspace** → pick a project folder
@@ -136,7 +108,31 @@ Keyboard: `g h/w/t/s/a` navigate · `n` add workspace · `/` search · `?` help 
 
 ---
 
-## CLI
+## ✨ Features
+
+| | |
+|---|---|
+| **Private by design** | Loopback server, zero telemetry, SQLite at `%LOCALAPPDATA%\BluntCode\bluntcode.db` |
+| **Batteries included** | Ruff (Python), Biome (JS/TS + React auto-domain), Semgrep (25-rule security pack), SonarQube (polyglot), in-binary **secrets** (AWS, GitHub, Slack, JWT, Stripe, OpenAI, Anthropic, Azure) + **TODO/FIXME** trackers across 40+ file types |
+| **Dashboard that helps** | Overview cards, activity feed with severity dots, risk grades `A–D` (critical×10/high×5/med×2/low×1) with trend, severity bars, stacked history, suppressions panel |
+| **Workspaces that scale** | Tag chips with `+N` overflow, debounced tag filter, sort by Name / Last scan / Findings, 51→2 queries at 50 workspaces |
+| **Reports you can use** | Sticky filter toolbar, severity-tinted row edges, removable chips, `page`/`page_size` toggles (25/50/100/200 rows), hostile-corpus HTML-escaped |
+| **CI-grade CLI** | Profiles, gates, baselines, watch mode — see [CLI](#-cli) |
+| **Tested** | 726 automated tests (457 Go · 269 web) |
+
+<details><summary><strong>What's new in 0.16.x</strong> — analyzers revived, UI decluttered</summary>
+
+- **Analyzer pipeline fixed end-to-end** — semgrep's bundled rulepack (invalid YAML + pattern grammar) and SonarQube's 5-minute compute timeout had silently returned zero findings on every scan. Both fixed, with `doctor --fix` recovery and regression tests guarding the whole class.
+- **Simpler navigation & dashboard** — three primary destinations plus a "More" menu; the dashboard rebuilt around one metric row and the activity feed.
+- **Readable workspaces & reports** — short workspace paths with copy-full-path, per-language color dots, honest scan-status tones, and a rows-per-page window (25/50/100/200) on the findings table.
+- **WCAG AA contrast guard** — `npm run audit:contrast` fails the build on any shipped color pairing below 4.5:1.
+
+> Earlier releases shipped the shadcn/Tailwind UI, global search, risk scores, scan pruning, workspace tags, CSV/SARIF/JSONL exports, and gated CI. See [CHANGELOG.md](CHANGELOG.md).
+</details>
+
+---
+
+## 💻 CLI
 
 ```powershell
 bluntcode "C:\Projects\my-app" --no-browser --port 52160
@@ -152,11 +148,30 @@ bluntcode scan "C:\my-app" --jobs 2 --incremental --watch
 bluntcode config              # resolved paths, overrides, tool versions
 ```
 
-`--fail-on` gates **new** findings only when `--baseline` is set. See [docs/ci.md](docs/ci.md).
+`--fail-on` gates **new** findings only when `--baseline` is set. Full flags: `bluntcode help` · CI recipe: [docs/ci.md](docs/ci.md).
 
-### 🤖 For AI agents
+**Exit codes** · `0` scan completed · `1` failed, cancelled, timed out, or a `--fail-on`/`--max-findings` gate tripped · `2` usage error (bad flags, invalid values) · `130` stopped with Ctrl+C
 
-Blunt Code ships `llm.txt` / `llms.txt` ([llmstxt.org](https://llmstxt.org)) and `bluntcode agent` helpers — all machine-readable, no browser needed.
+### In CI — GitHub Actions
+
+```yaml
+quality:
+  runs-on: windows-latest
+  steps:
+    - uses: actions/checkout@v4
+    - name: Blunt Code gate
+      shell: pwsh
+      run: |
+        curl.exe -fsSL -o blunt.zip https://github.com/sanketpatel32/Blunt-code/releases/latest/download/BluntCode-0.16.7-windows-amd64.zip
+        Expand-Archive blunt.zip -DestinationPath .\blunt
+        .\blunt\BluntCode*\bluntcode.exe scan . --format github --fail-on high+
+```
+
+`--format github` emits workflow commands, so findings appear as inline PR annotations; a tripped gate exits `1` and fails the build. Windows-only runner required. Full workflow (incl. `LOCALAPPDATA` isolation): [docs/ci.md](docs/ci.md).
+
+### For AI agents
+
+Blunt Code ships `llm.txt` / `llms.txt` ([llmstxt.org](https://llmstxt.org)) and `bluntcode agent` helpers — machine-readable, no browser needed.
 
 ```powershell
 bluntcode llm                  # cat llm.txt (same as llms.txt)
@@ -164,17 +179,17 @@ bluntcode agent docs           # same — agent guide to stdout
 bluntcode agent scan "C:\my-app" --profile quick --fail-on high+  # forces --json --quiet, progress on stderr
 ```
 
-`llm.txt` lives at repo root and at `http://127.0.0.1:<port>/llm.txt` when UI is running, plus embedded in binary (`go:embed llm.txt`). See `llm.txt:1` for full JSON schemas, API endpoints, exit codes, and PowerShell examples.
+`llm.txt` lives at the repo root and at `http://127.0.0.1:<port>/llm.txt` when the UI is running, plus embedded in the binary. See `llm.txt:1` for full JSON schemas, API endpoints, exit codes, and PowerShell examples.
 
 ---
 
-## Analyzers & profiles
+## 🧪 Analyzers & profiles
 
 | Analyzer | Languages | Checks |
 |---|---|---|
 | **Ruff** | Python | Lint, style, bugbear, `SIM/C4/RET/ARG/PLR` in Deep |
 | **Biome** 2.5.6 | JS/TS, React auto-domain | Format, correctness, React hooks |
-| **Semgrep** | Python, JS/TS | 20-rule security pack (injection, deserialization, secrets, `postMessage`) |
+| **Semgrep** | Python, JS/TS | 25-rule security pack (injection, deserialization, secrets, `postMessage`) |
 | **SonarQube** | Polyglot project-wide | Code smells, hotspots, metrics (cold boot ≤10 min, `BLUNTCODE_SONAR_STARTUP_TIMEOUT`) |
 | **Secrets** (built-in) | 40+ types inc. `.env`/Dockerfile/YAML | AWS, GitHub, Slack, JWT, Stripe, OpenAI, Anthropic, Azure |
 | **TODO** (built-in) | Code & config where comments exist | `TODO/FIXME/HACK/XXX/BUG` with owner `TODO(jane):` |
@@ -185,7 +200,15 @@ Ignore at source: `// bluntcode:ignore` or `// bluntcode:ignore secrets.aws-acce
 
 ---
 
-## Data & privacy
+## 🔒 Privacy
+
+```text
+┌─────────────┐    ┌────────────────────┐    ┌──────────────┐
+│  your disk  │◀──▶│ bluntcode.exe      │◀──▶│ your browser │
+└─────────────┘    │ loopback 127.0.0.1 │    └──────────────┘
+                   └─────────┬──────────┘
+                             ✕  cloud · telemetry · accounts — never
+```
 
 ```
 %LOCALAPPDATA%\BluntCode
@@ -195,17 +218,28 @@ Ignore at source: `// bluntcode:ignore` or `// bluntcode:ignore secrets.aws-acce
 └── tools\            # ruff, biome, semgrep, sonarqube (manifest-hashed)
 ```
 
-Loopback only (`127.0.0.1`), no account, no telemetry. Open folders from **Settings → Data folders**. Full layout: [docs/configuration.md](docs/configuration.md).
+Loopback only (`127.0.0.1`), no account, no telemetry. Open folders from **Settings → Data folders**. Full layout: [docs/configuration.md](docs/configuration.md) · policy: [docs/privacy.md](docs/privacy.md).
 
 ---
 
-## Documentation
+## 📋 Requirements
+
+| | |
+|---|---|
+| **OS** | Windows 10 / 11 64-bit (amd64) |
+| **Rights** | Standard user — no admin |
+| **Network** | Online only first run (tools download). Offline after |
+| **Deps** | None — no global Python/Java/Node required |
+
+---
+
+## 📚 Documentation
 
 - [CI](docs/ci.md) · [Ignoring findings](docs/ignoring-findings.md) · [Configuration](docs/configuration.md) · [Architecture](docs/architecture.md) · [Analyzers](docs/analyzers.md) · [Privacy](docs/privacy.md) · [Release](docs/release.md)
 
 ---
 
-## Troubleshooting
+## 🛠 Troubleshooting
 
 <details><summary>PowerShell blocks a saved script</summary>
 
@@ -218,7 +252,7 @@ Loopback only (`127.0.0.1`), no account, no telemetry. Open folders from **Setti
 
 ---
 
-## Uninstall
+## 🗑️ Uninstall
 
 ```powershell
 cd "$env:LOCALAPPDATA\Programs\BluntCode"
@@ -229,20 +263,22 @@ Installer auto-cleans Start Menu shortcut and refuses while app is running.
 
 ---
 
-## Contributing
+## 🤝 Contributing
 
 ```powershell
 go test ./...                # Go vet/build/tests
 cd web; npm test; npm run build
-.\scripts\package.ps1 -Version 0.16.5
+.\scripts\package.ps1 -Version 0.16.7
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) · [docs/architecture.md](docs/architecture.md) — shadcn tokens live in `web/src/tokens.css` (`--color-paper/ink/accent`, `--radius-*`, `--shadow-*`), components in `web/src/components/ui/*`.
 
 ---
 
-## License
+## 📄 License
 
 MIT — see [LICENSE](LICENSE). Third-party analyzers keep their licenses — see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+---
 
 <p align="center"><sub>Built for Windows. Audited for hostile corpora, tabular-nums, sticky glass headers, and 0 horizontal scroll at 320px.</sub></p>
