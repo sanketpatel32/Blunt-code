@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.10] - 2026-09-01
+
+### Fixed
+- **The pentest page no longer fabricates results.** Every template carried hardcoded fake run history (e.g. Log4Shell showing "fail · 2 findings · 890ms" as if it had executed) — all of it is stripped; every template now truthfully reads "not run". Hacking-test buttons are relabeled **Preview** (they never executed anything), and the page copy no longer claims ZAP/Nuclei/Burp analyzers run on deep scans — the three pentest preview rows are gone from the analyzer catalog, so the Tools page "Coming soon" section is gone too. The catalog now lists exactly the six analyzers that really run.
+- **"Run pentest" became "Run deep scan" with a workspace picker.** It previously fired a deep scan at the first workspace it found with no way to choose and no navigation; now you pick the workspace in the header, the scan you started opens when it launches, and the status message says plainly that static analyzers run today and DAST is planned.
+
 ## [0.16.9] - 2026-09-01
 
 ### Removed

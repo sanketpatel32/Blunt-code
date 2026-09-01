@@ -18,7 +18,7 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
   { id: 'ts-react', title: 'TypeScript React', description: 'Modern SPA with Vite, React, and strict TypeScript.', languages: ['typescript', 'tsx', 'javascript'], analyzers: ['biome', 'semgrep', 'secrets', 'todo'], suggestedName: 'React App' },
   { id: 'go-cli', title: 'Go CLI', description: 'Command-line tool with Cobra, structured logging, and tests.', languages: ['go'], analyzers: ['semgrep', 'secrets', 'sonarqube', 'todo'], suggestedName: 'Go CLI' },
   { id: 'java-spring', title: 'Java Spring', description: 'Spring Boot service with JPA, security, and Gradle/Maven.', languages: ['java'], analyzers: ['semgrep', 'sonarqube', 'secrets', 'todo'], suggestedName: 'Spring Service' },
-  { id: 'pentest-lab', title: 'Pentest Lab', description: 'Intentionally vulnerable targets for DAST and manual testing.', languages: ['javascript', 'python', 'php'], analyzers: ['zap-pentest', 'nuclei-pentest', 'burp-pentest', 'semgrep'], suggestedName: 'Pentest Lab' },
+  { id: 'pentest-lab', title: 'Pentest Lab', description: 'Intentionally vulnerable targets for DAST and manual testing.', languages: ['javascript', 'python', 'php'], analyzers: ['semgrep', 'secrets', 'todo', 'sonarqube'], suggestedName: 'Pentest Lab' },
   { id: 'full-hack-suite', title: 'Full Hack Suite', description: 'Polyglot monorepo — run every analyzer across the full catalog.', languages: ['python', 'typescript', 'go', 'java', 'yaml', 'dockerfile'], analyzers: ['ruff', 'biome', 'semgrep', 'sonarqube', 'secrets', 'todo'], suggestedName: 'Hack Suite' },
 ];
 
