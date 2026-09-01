@@ -111,11 +111,6 @@ export function LanguageCoverage({ compact }: { compact?: boolean }) {
                 </tr>
               );
             })}
-            <tr className="bg-[var(--color-surface-muted)] font-semibold">
-              <td>Analyzers</td>
-              {visibleLangs.map((lang) => <td key={lang} className="text-center tabular-nums">{analyzerCountFor(lang)}</td>)}
-              <td className="text-center">—</td>
-            </tr>
           </tbody>
         </table>
       </div>
