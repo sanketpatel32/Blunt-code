@@ -51,31 +51,3 @@ export function downloadJiraCsv(findings: Finding[], filename = "jira-import.csv
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-
-/** External stub URL for "Create Jira issue" per finding — opens Jira create screen prefilled. */
-export function buildJiraIssueUrl(finding: Finding): string {
-  const msg = finding.message ?? "";
-  const summary = encodeURIComponent((finding.title ?? finding.rule_id ?? msg).slice(0, 120));
-  const loc = findingLocation(finding as never);
-  const desc = encodeURIComponent(`${msg}\n\nLocation: ${loc}${finding.remediation ? `\nRemediation: ${finding.remediation}` : ""}\nAnalyzer: ${finding.analyzer_id ?? ""}${finding.rule_id ? ` Rule: ${finding.rule_id}` : ""}`);
-  const priority = encodeURIComponent(jiraPriority((finding.severity as string) ?? ""));
-  const labels = encodeURIComponent(finding.analyzer_id ?? "");
-  // Generic Atlassian Cloud create-issue URL stub; users replace host in settings.
-  return `https://example.atlassian.net/secure/CreateIssueDetails!init.jspa?summary=${summary}&description=${desc}&priority=${priority}&labels=${labels}`;
-}
-
-export function JiraCreateIssueLink({ finding }: { finding: Finding }) {
-  const href = buildJiraIssueUrl(finding);
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer noopener"
-      className="text-button"
-      aria-label={`Create Jira issue for ${finding.title ?? finding.rule_id ?? "finding"}`}
-      title="Create Jira issue (external stub)"
-    >
-      Jira ↗
-    </a>
-  );
-}
