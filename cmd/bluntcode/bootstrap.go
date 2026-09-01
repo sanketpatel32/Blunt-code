@@ -18,6 +18,7 @@ import (
 	"bluntcode/internal/analyzers/biome"
 	"bluntcode/internal/analyzers/gitleaks"
 	analyzersosv "bluntcode/internal/analyzers/osv"
+	analyzerstrivy "bluntcode/internal/analyzers/trivy"
 	"bluntcode/internal/analyzers/ruff"
 	"bluntcode/internal/analyzers/secrets"
 	"bluntcode/internal/analyzers/semgrep"
@@ -115,6 +116,11 @@ func openCore() (core *appCore, release func(), err error) {
 	_ = registry.Register(biome.New(filepath.Join(paths.ToolsDir, "biome", "2.5.6", "biome.exe"), "2.5.6"))
 	_ = registry.Register(gitleaks.New(filepath.Join(paths.ToolsDir, "gitleaks-secrets", "8.30.1", "gitleaks.exe"), "8.30.1"))
 	_ = registry.Register(analyzersosv.New(filepath.Join(paths.ToolsDir, "osv-dependencies", "2.5.1", "osv-scanner.exe"), "2.5.1"))
+	// trivy's vulnerability DB decompresses to ~1.3 GB, so its cache is pinned
+	// inside the app data dir instead of trivy's user-wide %LOCALAPPDATA% default.
+	trivyAdapter := analyzerstrivy.New(filepath.Join(paths.ToolsDir, "container-trivy", "0.74.0", "trivy.exe"), "0.74.0")
+	trivyAdapter.CacheDir = filepath.Join(paths.DataDir, "trivy-cache")
+	_ = registry.Register(trivyAdapter)
 	_ = registry.Register(semgrep.New(semgrepExecutable, semgrepVersion, semgrepRules))
 	_ = registry.Register(managedSonar)
 	// bluntcode:ignore

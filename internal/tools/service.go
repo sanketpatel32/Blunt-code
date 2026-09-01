@@ -65,6 +65,8 @@ func toolName(id string) string {
 		return "Gitleaks"
 	case "osv-dependencies":
 		return "OSV Scanner"
+	case "container-trivy":
+		return "Trivy"
 	case "semgrep":
 		return "Semgrep"
 	case "sonarqube":
@@ -74,7 +76,7 @@ func toolName(id string) string {
 	}
 }
 func (s *Service) All() []Status {
-	ids := []string{"ruff", "biome", "gitleaks-secrets", "osv-dependencies", "semgrep", "sonarqube"}
+	ids := []string{"ruff", "biome", "gitleaks-secrets", "osv-dependencies", "container-trivy", "semgrep", "sonarqube"}
 	out := make([]Status, 0, len(ids))
 	for _, id := range ids {
 		out = append(out, s.Status(id))

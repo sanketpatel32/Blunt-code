@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.15] - 2026-09-01
+
+### Added
+- **Trivy 0.74.0 is the ninth analyzer — CVEs, secrets, and misconfigurations in one filesystem sweep, on deep scans.** Trivy walks the workspace for dependency manifests, exposed credentials, and Dockerfile/IaC misconfigurations (`--scanners vuln,secret,misconfig`) and normalizes all three into findings with CVSS-backed severities. The binary is a pinned, SHA256-verified managed download; its ~1.3 GB decompressed vulnerability DB is cached inside the app data dir (`trivy-cache`), and after the first download scans run with `--skip-db-update` for a 3-4x faster pass. Standard scans skip it as deep-only, like OSV Scanner.
+
 ## [0.16.14] - 2026-09-01
 
 ### Added

@@ -143,7 +143,8 @@ func hashSelectedFiles(root string, files []core.FileEntry) map[string]string {
 // record them as skipped instead of running a half-capability pass.
 var deepOnlyAnalyzerIDs = map[string]bool{
 	"osv-dependencies": true,
-	// container-trivy and iac-checkov join this set when they register.
+	"container-trivy":  true,
+	// iac-checkov joins this set when it registers.
 }
 
 // profileAllowsAnalyzer mirrors the profile gating in executeAnalyzer: the

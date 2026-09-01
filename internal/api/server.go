@@ -2166,7 +2166,7 @@ func (s *Server) installTool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
-	if id != "ruff" && id != "biome" && id != "gitleaks-secrets" && id != "osv-dependencies" && id != "semgrep" && id != "sonarqube" {
+	if id != "ruff" && id != "biome" && id != "gitleaks-secrets" && id != "osv-dependencies" && id != "container-trivy" && id != "semgrep" && id != "sonarqube" {
 		fail(w, 404, "TOOL_NOT_FOUND", "Tool was not found.")
 		return
 	}

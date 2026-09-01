@@ -41,6 +41,16 @@
       "license_url": "https://github.com/google/osv-scanner/blob/main/LICENSE"
     },
     {
+      "tool_id": "container-trivy",
+      "version": "0.74.0",
+      "platform": "windows-amd64",
+      "source_url": "https://github.com/aquasecurity/trivy/releases/download/v0.74.0/trivy_0.74.0_windows-64bit.zip",
+      "sha256": "94c40e0696e4b907a74b7b2e1438d5d72ebaca83115817407f568a002d520842",
+      "archive_type": "zip",
+      "executable": "trivy.exe",
+      "license_url": "https://github.com/aquasecurity/trivy/blob/v0.74.0/LICENSE"
+    },
+    {
       "tool_id": "uv",
       "version": "0.11.16",
       "platform": "windows-amd64",
