@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.2] - 2026-09-01
+
+### Fixed
+- **Dashboard and workspace-card paths rendered the full Windows path:** a deep project path (`C:\Users\…\src\Suremed_agent\complete_prod`) consumed the whole workspace cell and pushed real content out of view. Both surfaces now show the path's last two segments behind an ellipsis (`…\Suremed_agent\complete_prod`) — paths shallow enough that an ellipsis would save nothing stay whole — with the full path still available in the hover tooltip and via a new copy button beside it that puts the complete path on the clipboard (inline check confirmation, legacy fallback for plain-http loopback). Also cleans up three a11y lint errors the 0.16.1 clarity pass shipped in the workspaces sort bar: a semantic `fieldset` instead of `role="group"`, no `aria-sort` on buttons (the `aria-pressed` + sr-only text already carry the state), and no `aria-label` on a plain `div`.
+
 ## [0.16.1] - 2026-08-31
 
 ### Changed
