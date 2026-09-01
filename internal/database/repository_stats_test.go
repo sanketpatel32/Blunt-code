@@ -191,3 +191,103 @@ func TestStatsRiskGradeBoundaries(t *testing.T) {
 		})
 	}
 }
+
+// TestScanRowsCarryPersistedSeverityCounts pins the regression behind the
+// all-zero scan summaries: CompleteScan persists the severity split, and every
+// scan-row reader (Scan, Scans, LatestScans, RecentScans) must hand it back so
+// the API payloads carry the counts the UI renders. In-flight scans hydrate as
+// zeros because CompleteScan is the only writer of the split.
+func TestScanRowsCarryPersistedSeverityCounts(t *testing.T) {
+	db, err := Open(context.Background(), filepath.Join(t.TempDir(), "bluntcode.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+
+	alpha, err := db.CreateWorkspace(ctx, core.Workspace{Name: "Alpha", RootPath: "C:/alpha"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	beta, err := db.CreateWorkspace(ctx, core.Workspace{Name: "Beta", RootPath: "C:/beta"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	completed := statsScan(t, db, alpha.ID, "completed", time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC),
+		statsFinding("S-C1", analyzers.SeverityCritical), statsFinding("S-C2", analyzers.SeverityCritical),
+		statsFinding("S-H", analyzers.SeverityHigh), statsFinding("S-M", analyzers.SeverityMedium),
+		statsFinding("S-L", analyzers.SeverityLow), statsFinding("S-I", analyzers.SeverityInfo))
+	other, err := db.CreateScan(ctx, core.Scan{WorkspaceID: beta.ID, State: "queued"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Pin the queued row between the two completed scans so recency-based
+	// readers (LatestScans, RecentScans) never race the wall clock.
+	if _, err := db.SQL.ExecContext(ctx, `UPDATE scans SET started_at=? WHERE id=?`, time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC).UTC().Format(time.RFC3339Nano), other.ID); err != nil {
+		t.Fatal(err)
+	}
+	statsScan(t, db, beta.ID, "completed", time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC),
+		statsFinding("B-H", analyzers.SeverityHigh))
+
+	assertSplit := func(label string, s core.Scan, critical, high, medium, low, info int) {
+		t.Helper()
+		if s.CriticalCount != critical || s.HighCount != high || s.MediumCount != medium || s.LowCount != low || s.InfoCount != info {
+			t.Fatalf("%s severity split = %d/%d/%d/%d/%d, want %d/%d/%d/%d/%d", label,
+				s.CriticalCount, s.HighCount, s.MediumCount, s.LowCount, s.InfoCount, critical, high, medium, low, info)
+		}
+		if total := critical + high + medium + low + info; s.TotalFindings != total {
+			t.Fatalf("%s total_findings = %d, want %d", label, s.TotalFindings, total)
+		}
+	}
+
+	detail, err := db.Scan(ctx, completed.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertSplit("Scan(completed)", detail, 2, 1, 1, 1, 1)
+
+	queued, err := db.Scan(ctx, other.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertSplit("Scan(queued)", queued, 0, 0, 0, 0, 0)
+
+	history, err := db.Scans(ctx, alpha.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) != 1 {
+		t.Fatalf("alpha history must hold exactly the completed scan, got %d rows", len(history))
+	}
+	assertSplit("Scans(alpha)", history[0], 2, 1, 1, 1, 1)
+
+	latest, err := db.LatestScans(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(latest) != 2 {
+		t.Fatalf("LatestScans must resolve one scan per workspace, got %d", len(latest))
+	}
+	assertSplit("LatestScans(alpha)", latest[alpha.ID], 2, 1, 1, 1, 1)
+	assertSplit("LatestScans(beta)", latest[beta.ID], 0, 1, 0, 0, 0)
+
+	feed, _, err := db.RecentScans(ctx, RecentScansFilter{Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	byID := map[string]RecentScan{}
+	for _, item := range feed {
+		byID[item.ID] = item
+	}
+	if row, ok := byID[completed.ID]; !ok {
+		t.Fatal("RecentScans must include the completed alpha scan")
+	} else {
+		assertSplit("RecentScans(completed)", row.Scan, 2, 1, 1, 1, 1)
+	}
+	if row, ok := byID[other.ID]; !ok {
+		t.Fatal("RecentScans must include the queued beta scan")
+	} else {
+		assertSplit("RecentScans(queued)", row.Scan, 0, 0, 0, 0, 0)
+	}
+}

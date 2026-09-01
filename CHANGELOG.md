@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.18] - 2026-09-01
+
+### Fixed
+- **Scan summaries show their severity split again.** Every scan-shaped API surface — the scan detail page, the workspace scan history, the dashboard's recent-scans feed, and the workspace list's latest-analysis cards — returned `critical_count` through `info_count` as zero (or missing) even when the scan had hundreds of severity-bearing findings, because the scan-row readers never selected the five severity columns that completion persists. The counts were always correct in the database and in the dashboard/trend rollups; only the per-scan payloads were hollow. Scan detail, history, feed, and latest-scan responses now carry the persisted split (suppressed findings excluded, in-flight scans zero until completion).
+
 ## [0.16.17] - 2026-09-01
 
 ### Added

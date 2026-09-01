@@ -2491,3 +2491,55 @@ func TestScanCompareEndpointDiffsAgainstPreviousOrExplicitScan(t *testing.T) {
 		t.Fatalf("invalid with id must 400: %d", response.Code)
 	}
 }
+
+// TestGetScanReturnsPersistedSeverityCounts pins the all-zero scan-summary
+// regression: the scan detail payload must carry the severity split
+// CompleteScan persisted, because the UI reads critical_count..info_count
+// straight off the scan object.
+func TestGetScanReturnsPersistedSeverityCounts(t *testing.T) {
+	s := testServer(t)
+	ctx := context.Background()
+	work, err := s.db.CreateWorkspace(ctx, core.Workspace{RootPath: t.TempDir(), Name: "Example"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scan, err := s.db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: "queued"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := []analyzers.Finding{
+		finding("ruff", "C1", "src/c1.py", "critical one", analyzers.SeverityCritical, analyzers.CategorySecurity),
+		finding("ruff", "C2", "src/c2.py", "critical two", analyzers.SeverityCritical, analyzers.CategorySecurity),
+		finding("ruff", "H1", "src/h1.py", "high one", analyzers.SeverityHigh, analyzers.CategorySecurity),
+		finding("ruff", "M1", "src/m1.py", "medium one", analyzers.SeverityMedium, analyzers.CategoryCorrectness),
+		finding("ruff", "L1", "src/l1.py", "low one", analyzers.SeverityLow, analyzers.CategoryStyle),
+		finding("ruff", "I1", "src/i1.py", "info one", analyzers.SeverityInfo, analyzers.CategoryStyle),
+	}
+	if _, err := s.db.SaveAnalyzerResult(ctx, scan.ID, database.AnalyzerRunInput{AnalyzerID: "ruff", Version: "test", State: "succeeded"}, items, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.db.CompleteScan(ctx, scan.ID, "completed", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+scan.ID, nil)
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("scan detail: %d %s", response.Code, response.Body.String())
+	}
+	var payload struct {
+		CriticalCount int `json:"critical_count"`
+		HighCount     int `json:"high_count"`
+		MediumCount   int `json:"medium_count"`
+		LowCount      int `json:"low_count"`
+		InfoCount     int `json:"info_count"`
+		TotalFindings int `json:"total_findings"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.CriticalCount != 2 || payload.HighCount != 1 || payload.MediumCount != 1 || payload.LowCount != 1 || payload.InfoCount != 1 || payload.TotalFindings != 6 {
+		t.Fatalf("scan detail severity split = %+v, want 2/1/1/1/1 with total 6", payload)
+	}
+}

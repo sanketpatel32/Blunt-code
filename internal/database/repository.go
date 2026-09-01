@@ -384,8 +384,37 @@ func (d *DB) CreateScanWithFiles(ctx context.Context, scan core.Scan, files []co
 	}
 	return scan, nil
 }
+// scanSelectColumns lists every scans column hydrated into core.Scan, in the
+// exact order hydrateScanRow reads them. The optional alias qualifies the
+// table on joined queries (e.g. "scans").
+func scanSelectColumns(alias string) string {
+	prefix := ""
+	if alias != "" {
+		prefix = alias + "."
+	}
+	columns := []string{"id", "workspace_id", "state", "profile", "started_at", "finished_at", "candidate_file_count", "selected_file_count", "total_findings", "critical_count", "high_count", "medium_count", "low_count", "info_count"}
+	for i, column := range columns {
+		columns[i] = prefix + column
+	}
+	return strings.Join(columns, ",") + `,COALESCE(` + prefix + `error_summary,''),` + prefix + `snapshot_json`
+}
+
+// hydrateScanRow scans one row selected via scanSelectColumns into s — the
+// persisted severity split, nullable timestamps, and immutable snapshot
+// included. It accepts *sql.Row and *sql.Rows alike.
+func hydrateScanRow(row interface{ Scan(dest ...any) error }, s *core.Scan) error {
+	var started, finished sql.NullString
+	if err := row.Scan(&s.ID, &s.WorkspaceID, &s.State, &s.Profile, &started, &finished, &s.CandidateFileCount, &s.SelectedFileCount, &s.TotalFindings, &s.CriticalCount, &s.HighCount, &s.MediumCount, &s.LowCount, &s.InfoCount, &s.ErrorSummary, &s.SnapshotJSON); err != nil {
+		return err
+	}
+	s.StartedAt, _ = parseNullableTime(started)
+	s.FinishedAt, _ = parseNullableTime(finished)
+	hydrateScanSnapshot(s)
+	return nil
+}
+
 func (d *DB) Scans(ctx context.Context, workspaceID string) ([]core.Scan, error) {
-	rows, err := d.SQL.QueryContext(ctx, `SELECT id,workspace_id,state,profile,started_at,finished_at,candidate_file_count,selected_file_count,total_findings,COALESCE(error_summary,''),snapshot_json FROM scans WHERE workspace_id=? ORDER BY started_at DESC, id DESC`, workspaceID)
+	rows, err := d.SQL.QueryContext(ctx, `SELECT `+scanSelectColumns("")+` FROM scans WHERE workspace_id=? ORDER BY started_at DESC, id DESC`, workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -393,13 +422,9 @@ func (d *DB) Scans(ctx context.Context, workspaceID string) ([]core.Scan, error)
 	result := make([]core.Scan, 0)
 	for rows.Next() {
 		var s core.Scan
-		var st, fin sql.NullString
-		if err := rows.Scan(&s.ID, &s.WorkspaceID, &s.State, &s.Profile, &st, &fin, &s.CandidateFileCount, &s.SelectedFileCount, &s.TotalFindings, &s.ErrorSummary, &s.SnapshotJSON); err != nil {
+		if err := hydrateScanRow(rows, &s); err != nil {
 			return nil, err
 		}
-		s.StartedAt, _ = parseNullableTime(st)
-		s.FinishedAt, _ = parseNullableTime(fin)
-		hydrateScanSnapshot(&s)
 		result = append(result, s)
 	}
 	return result, rows.Err()
@@ -412,7 +437,7 @@ func (d *DB) Scans(ctx context.Context, workspaceID string) ([]core.Scan, error)
 // just to read scans[0] (measured at 50 workspaces: 51 queries loading all
 // rows and snapshots vs 2 queries here).
 func (d *DB) LatestScans(ctx context.Context) (map[string]core.Scan, error) {
-	rows, err := d.SQL.QueryContext(ctx, `SELECT id,workspace_id,state,profile,started_at,finished_at,candidate_file_count,selected_file_count,total_findings,COALESCE(error_summary,''),snapshot_json FROM scans WHERE id IN (SELECT id FROM (SELECT id,ROW_NUMBER() OVER (PARTITION BY workspace_id ORDER BY started_at DESC,id DESC) AS recency FROM scans) ranked WHERE recency=1)`)
+	rows, err := d.SQL.QueryContext(ctx, `SELECT `+scanSelectColumns("")+` FROM scans WHERE id IN (SELECT id FROM (SELECT id,ROW_NUMBER() OVER (PARTITION BY workspace_id ORDER BY started_at DESC,id DESC) AS recency FROM scans) ranked WHERE recency=1)`)
 	if err != nil {
 		return nil, err
 	}
@@ -420,13 +445,9 @@ func (d *DB) LatestScans(ctx context.Context) (map[string]core.Scan, error) {
 	result := make(map[string]core.Scan)
 	for rows.Next() {
 		var s core.Scan
-		var st, fin sql.NullString
-		if err := rows.Scan(&s.ID, &s.WorkspaceID, &s.State, &s.Profile, &st, &fin, &s.CandidateFileCount, &s.SelectedFileCount, &s.TotalFindings, &s.ErrorSummary, &s.SnapshotJSON); err != nil {
+		if err := hydrateScanRow(rows, &s); err != nil {
 			return nil, err
 		}
-		s.StartedAt, _ = parseNullableTime(st)
-		s.FinishedAt, _ = parseNullableTime(fin)
-		hydrateScanSnapshot(&s)
 		result[s.WorkspaceID] = s
 	}
 	return result, rows.Err()
@@ -434,14 +455,9 @@ func (d *DB) LatestScans(ctx context.Context) (map[string]core.Scan, error) {
 
 func (d *DB) Scan(ctx context.Context, id string) (core.Scan, error) {
 	var s core.Scan
-	var st, fin sql.NullString
-	err := d.SQL.QueryRowContext(ctx, `SELECT id,workspace_id,state,profile,started_at,finished_at,candidate_file_count,selected_file_count,total_findings,COALESCE(error_summary,''),snapshot_json FROM scans WHERE id=?`, id).Scan(&s.ID, &s.WorkspaceID, &s.State, &s.Profile, &st, &fin, &s.CandidateFileCount, &s.SelectedFileCount, &s.TotalFindings, &s.ErrorSummary, &s.SnapshotJSON)
-	if err != nil {
+	if err := hydrateScanRow(d.SQL.QueryRowContext(ctx, `SELECT `+scanSelectColumns("")+` FROM scans WHERE id=?`, id), &s); err != nil {
 		return s, err
 	}
-	s.StartedAt, _ = parseNullableTime(st)
-	s.FinishedAt, _ = parseNullableTime(fin)
-	hydrateScanSnapshot(&s)
 	return s, nil
 }
 
@@ -516,7 +532,7 @@ func (d *DB) RecentScans(ctx context.Context, filter RecentScansFilter) ([]Recen
 		return nil, 0, err
 	}
 	queryArgs := append(append([]any(nil), args...), filter.Limit)
-	rows, err := d.SQL.QueryContext(ctx, `SELECT scans.id,scans.workspace_id,scans.state,scans.profile,scans.started_at,scans.finished_at,scans.candidate_file_count,scans.selected_file_count,scans.total_findings,COALESCE(scans.error_summary,''),scans.snapshot_json,COALESCE(workspaces.name,'') FROM scans JOIN workspaces ON workspaces.id=scans.workspace_id`+where+` ORDER BY scans.started_at DESC,scans.id DESC LIMIT ?`, queryArgs...)
+	rows, err := d.SQL.QueryContext(ctx, `SELECT `+scanSelectColumns("scans")+`,COALESCE(workspaces.name,'') FROM scans JOIN workspaces ON workspaces.id=scans.workspace_id`+where+` ORDER BY scans.started_at DESC,scans.id DESC LIMIT ?`, queryArgs...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -525,11 +541,13 @@ func (d *DB) RecentScans(ctx context.Context, filter RecentScansFilter) ([]Recen
 	for rows.Next() {
 		var item RecentScan
 		var started, finished sql.NullString
-		if err := rows.Scan(&item.ID, &item.WorkspaceID, &item.State, &item.Profile, &started, &finished, &item.CandidateFileCount, &item.SelectedFileCount, &item.TotalFindings, &item.ErrorSummary, &item.SnapshotJSON, &item.WorkspaceName); err != nil {
+		if err := rows.Scan(&item.ID, &item.WorkspaceID, &item.State, &item.Profile, &started, &finished, &item.CandidateFileCount, &item.SelectedFileCount, &item.TotalFindings, &item.CriticalCount, &item.HighCount, &item.MediumCount, &item.LowCount, &item.InfoCount, &item.ErrorSummary, &item.SnapshotJSON, &item.WorkspaceName); err != nil {
 			return nil, 0, err
 		}
 		item.StartedAt, _ = parseNullableTime(started)
 		item.FinishedAt, _ = parseNullableTime(finished)
+		// The snapshot manifest stays deliberately unhydrated here (see
+		// RecentScan); the scan detail endpoint serves it in full.
 		result = append(result, item)
 	}
 	return result, total, rows.Err()

@@ -55,7 +55,15 @@ type Scan struct {
 	CandidateFileCount int           `json:"candidate_file_count"`
 	SelectedFileCount  int           `json:"selected_file_count"`
 	TotalFindings      int           `json:"total_findings"`
-	ErrorSummary       string        `json:"error_summary,omitempty"`
+	// Severity split persisted once by CompleteScan; zero until the scan
+	// finishes. Suppressed findings are excluded, so the split can disagree
+	// with a raw findings query on the same scan.
+	CriticalCount int           `json:"critical_count"`
+	HighCount     int           `json:"high_count"`
+	MediumCount   int           `json:"medium_count"`
+	LowCount      int           `json:"low_count"`
+	InfoCount     int           `json:"info_count"`
+	ErrorSummary  string        `json:"error_summary,omitempty"`
 	Snapshot           *ScanSnapshot `json:"snapshot,omitempty"`
 	SnapshotJSON       string        `json:"-"`
 }
