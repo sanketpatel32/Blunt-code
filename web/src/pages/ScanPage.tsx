@@ -4,13 +4,12 @@ import type { AnalyzerRun, Finding, Scan } from '../types';
 import type { Route } from '../lib/router';
 import type { Notice } from '../lib/notice';
 import { message } from '../lib/notice';
-import { analyzerName, date, elapsed, findingLocation } from '../lib/format';
+import { analyzerName, date, elapsed, findingLocation, scanStateDisplay } from '../lib/format';
 import { eventCopy, isTerminalScanState, liveHeadline, stageLabels, type ScanEvent } from '../lib/scanEvents';
 import { useLoad } from '../hooks/useLoad';
 import { useTicker } from '../hooks/useTicker';
 import { ErrorPanel, Loading, SeverityCounts } from '../components/ui';
 import { SkeletonLines } from '../components/skeletons';
-import { AnalyzerStatuses } from './WorkspaceDetailPage';
 import { ReportView } from './report/ReportView';
 import { pushNotification } from '../lib/notifications';
 import { analyzerMeta, categoryColor, CATEGORY_LABELS } from '../lib/analyzerCatalog';
@@ -67,7 +66,7 @@ export function ScanPage({ id, notify }: { id: string; go?: (r: Route) => void; 
   if (scan.loading) return <div className="page"><Loading /></div>;
   if (scan.error) return <div className="page"><ErrorPanel error={scan.error} retry={scan.reload} /></div>;
   if (!current) return <div className="page"><Loading /></div>;
-  const headline = terminal ? current.state.replaceAll('_', ' ') : liveHeadline(events, current.state);
+  const headline = terminal ? scanStateDisplay(current.state).label : liveHeadline(events, current.state);
   const reportedFindings = events.reduce((total, event) => total + (event.type === 'analyzer.completed' ? event.findings ?? 0 : 0), 0);
   const findingsSoFar = Math.max(current.total_findings ?? 0, reportedFindings);
   return <div className="page scan-page">
@@ -93,7 +92,6 @@ export function ScanPage({ id, notify }: { id: string; go?: (r: Route) => void; 
         <SeverityCounts scan={current} />
         <LiveAnalyzerStrip runs={current.analyzer_runs} events={events} />
         {current.error_summary && <div className="inline-warning">{current.error_summary}</div>}
-        <AnalyzerStatuses runs={current.analyzer_runs} />
       </aside>
     </section>
     {terminal && (current.fixed_count ?? 0) > 0 && <WhatChanged scanId={id} fixedCount={current.fixed_count ?? 0} />}
@@ -152,10 +150,12 @@ export function LiveAnalyzerStrip({ runs, events }: { runs?: AnalyzerRun[]; even
         <ul className="live-analyzers" aria-label={`${cat} analyzers`}>
           {items.map((pill, pIdx) => {
             const skipped = pill.status === 'skipped';
-            return <li key={pill.id} title={skipped ? (pill.message || 'Skipped — no applicable files or not enabled for this profile') : undefined} className={reduced ? '' : 'live-pill-enter'} style={reduced ? undefined : { animationDelay: `${(gIdx * items.length + pIdx) * 40}ms`, willChange: 'transform, opacity' } as never}>
+            const failed = pill.status === 'failed';
+            return <li key={pill.id} title={skipped || failed ? (pill.message || (skipped ? 'Skipped — no applicable files or not enabled for this profile' : 'Failed')) : undefined} className={reduced ? '' : 'live-pill-enter'} style={reduced ? undefined : { animationDelay: `${(gIdx * items.length + pIdx) * 40}ms`, willChange: 'transform, opacity' } as never}>
               <span className="badge"><i className="category-dot" style={{ background: categoryColor((analyzerMeta(pill.id)?.category ?? 'security') as never) } as never} aria-hidden="true" />{pill.id}</span>
               <span className={`state ${pill.status}`}>{pill.status}</span>
               {skipped && <span className="text-xs" style={{ color: 'var(--color-ink-faint)', marginLeft: '4px' }} role="note">skipped: {pill.message || 'no applicable files'}</span>}
+              {failed && pill.message && <span className="text-xs" style={{ color: 'var(--color-danger)', marginLeft: '4px' }} role="note">{pill.message}</span>}
             </li>;
           })}
         </ul>
@@ -191,6 +191,10 @@ function ScanStageList({ scan, events }: { scan: Scan; events: ScanEvent[] }) {
   const active = !isTerminalScanState(scan.state) ? entries.at(-1) : undefined;
   const status = active?.type === 'analyzer.started' ? `${active.name ?? active.analyzer_id ?? 'Analyzer'} is checking your code` : active ? eventCopy(active) : scan.state === 'interrupted' ? 'Scan interrupted — completed checks are still available.' : scan.state.replaceAll('_', ' ');
   const reduced = useReducedMotion();
+  const terminal = isTerminalScanState(scan.state);
   const terminalDone = scan.state === 'completed';
-  return <section className="stage-list"><header><div><p className="eyebrow">Analysis flow</p><h2>What is happening now</h2></div><span>{entries.length} update{entries.length === 1 ? '' : 's'}</span></header><p className={`flow-now ${active ? 'active' : ''}`} role="status" aria-live="polite"><i aria-hidden="true" />{status}</p>{terminalDone && <ConfettiStub show={terminalDone} />}<ol className="scan-flow">{entries.map((event, index) => { const state = event.type.includes('failed') ? 'failed' : event.type.includes('completed') ? 'done' : event.type.includes('cancelled') ? 'interrupted' : index === entries.length - 1 && !isTerminalScanState(scan.state) ? 'current' : ''; return <li className={`${state} ${reduced ? '' : 'stage-enter'}`} key={event.seq ?? `${event.type}-${event.at}`} style={reduced ? undefined : { animationDelay: `${index * 40}ms`, willChange: 'transform, opacity' } as never}><i className={`flow-marker flow-marker-spring ${state === 'current' ? 'current' : ''}`} aria-hidden="true" style={reduced ? undefined : { willChange: 'transform' } as never} /><div><strong>{eventCopy(event)}</strong><small style={{ fontVariantNumeric: 'tabular-nums' } as never}>{mediumTime.format(event.at)}</small></div></li>; })}</ol></section>;
+  // On completed/failed scans the status line just repeats the page title's
+  // outcome; interrupted keeps it — it carries the "partial report saved" note.
+  const showStatus = !terminal || scan.state === 'interrupted';
+  return <section className="stage-list"><header><div><p className="eyebrow">Analysis flow</p><h2>{terminal ? 'How the analysis ran' : 'What is happening now'}</h2></div><span>{entries.length} update{entries.length === 1 ? '' : 's'}</span></header>{showStatus && <p className={`flow-now ${active ? 'active' : ''}`} role="status" aria-live="polite"><i aria-hidden="true" />{status}</p>}{terminalDone && <ConfettiStub show={terminalDone} />}<ol className="scan-flow">{entries.map((event, index) => { const state = event.type.includes('failed') ? 'failed' : event.type.includes('completed') ? 'done' : event.type.includes('cancelled') ? 'interrupted' : index === entries.length - 1 && !isTerminalScanState(scan.state) ? 'current' : ''; return <li className={`${state} ${reduced ? '' : 'stage-enter'}`} key={event.seq ?? `${event.type}-${event.at}`} style={reduced ? undefined : { animationDelay: `${index * 40}ms`, willChange: 'transform, opacity' } as never}><i className={`flow-marker flow-marker-spring ${state === 'current' ? 'current' : ''}`} aria-hidden="true" style={reduced ? undefined : { willChange: 'transform' } as never} /><div><strong>{eventCopy(event)}</strong><small style={{ fontVariantNumeric: 'tabular-nums' } as never}>{mediumTime.format(event.at)}</small></div></li>; })}</ol></section>;
 }
