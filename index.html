@@ -734,13 +734,13 @@
     <div>
       <p class="kicker" style="margin:0"><span class="sq" aria-hidden="true"></span>Local-first code scanner for Windows</p>
       <h1>Your code has <span class="red">problems.</span><br /><span class="stamp">Here they are.</span></h1>
-      <p class="hero-sub"><b>Six analyzers. One honest report. Zero uploads.</b> Blunt Code runs Ruff, Biome, Semgrep, SonarQube, secrets and TODO checks on your machine — and tells you exactly what's wrong, to your face.</p>
+      <p class="hero-sub"><b>Six analyzers. One honest report. Zero uploads.</b> Blunt Code runs Ruff, Biome, Semgrep and SonarQube, plus built-in secrets and TODO checks, on your machine — and tells you exactly what's wrong, to your face.</p>
       <div class="cta-row">
         <a class="btn btn-red" href="#install">Install in 30s ↓</a>
         <a class="btn" href="https://github.com/sanketpatel32/Blunt-code/releases/latest">Portable ZIP</a>
         <a class="btn" href="https://github.com/sanketpatel32/Blunt-code">★&nbsp;Star on GitHub</a>
       </div>
-      <p class="trust"><b>free</b> · MIT · no admin · Windows 10/11 · 726 tests passing</p>
+      <p class="trust"><b>free</b> · MIT · no admin · Windows 10/11 · 726 automated tests</p>
     </div>
 
     <section class="term" aria-label="Illustrative findings feed, recreated from a real scan">
@@ -865,7 +865,7 @@
   <section aria-labelledby="grades-h" style="padding-top:0">
     <div class="sec-head">
       <span class="idx" aria-hidden="true">02</span>
-      <h2 id="grades-h">Nothing hides</h2>
+      <h2 id="grades-h">Every finding, weighed</h2>
       <span class="rule" aria-hidden="true"></span>
     </div>
 
@@ -876,9 +876,9 @@
       <div class="grade g-low"><b>Low</b><span>TODOs · FIXMEs · style nits</span><span class="w">weight ×1</span></div>
     </div>
 
-    <p class="grades-note">weighted score → repo risk grade, tracked over time
+    <p class="grades-note">weighted score → one letter grade per workspace, tracked over time
       <span class="abc" aria-hidden="true"><i>A</i><i>B</i><i>C</i><i>D</i></span>
-      <span>each workspace gets a letter, with trend arrows on the dashboard</span>
+      <span>trend arrows on the dashboard show whether you're fixing things or breaking them</span>
     </p>
   </section>
 
@@ -918,7 +918,7 @@
     </div>
   </div>
   <section style="padding-top:clamp(1.5rem,3vh,2.5rem)">
-    <p class="caption" style="margin:0"><b>Deep analysis:</b> Python · JavaScript · TypeScript — <b>secrets &amp; TODO checks:</b> all 39 classified languages, including .env files, Dockerfiles and committed PEM keys.</p>
+    <p class="caption" style="margin:0"><b>Deep scans:</b> Python · JavaScript · TypeScript. <b>Secrets &amp; TODO:</b> all 39 classified languages — .env files, Dockerfiles, even committed PEM keys.</p>
   </section>
 
   <!-- ————— 04 · bento ————— -->
@@ -963,7 +963,7 @@
         <div class="diagram" aria-hidden="true">
           <span class="fmt">MD</span><span class="fmt">HTML</span><span class="fmt">SARIF</span><span class="fmt">CSV</span><span class="fmt">JSON</span><span class="fmt">GitHub</span>
         </div>
-        <p>Every export honors your active filters. SARIF in, SARIF out — diff against last scan with --save-baseline.</p>
+        <p>Every export honors your active filters. --save-baseline snapshots this scan, so the next one flags only what's new — not what you already know.</p>
       </div>
       <div class="card">
         <h3><span class="no">/06</span> Keyboard fast</h3>
@@ -1049,7 +1049,7 @@
         <div class="q">price</div><div><span class="yes">$0 · MIT</span></div><div><span class="no">per-repo $$</span></div>
         <div class="q">telemetry</div><div><span class="yes">0 bytes</span></div><div><span class="no">"some"</span></div>
       </div>
-      <p class="vs-note">Cloud scanners are good tools — they just work by uploading your repository to someone else's server. Blunt Code takes the other deal.</p>
+      <p class="vs-note">Cloud scanners are good tools — as long as "scan" means "upload the repo to someone else's server." Blunt Code takes the other deal.</p>
     </div>
   </section>
 
