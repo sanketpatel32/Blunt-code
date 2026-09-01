@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.13] - 2026-09-01
+
+### Added
+- **Gitleaks 8.30.1 joins the managed pipeline.** The Tools page's Gitleaks row is real now: a pinned, SHA256-verified gitleaks download ships behind the same installer as Ruff and Biome, auto-installs on first standard/deep scan, and runs a directory-wide secrets sweep (`--no-git`) over the whole workspace — not just discovery-selected files — honoring the workspace's own `.gitleaks.toml` and `.gitleaksignore`. Findings land with the same shape as every analyzer (rotate-and-move-to-a-manager remediation, severity by credential class: AWS keys and private keys critical, everything else high), secret values stay redacted to a 4-character preview + length + entropy, and the scratch report holding full values is deleted as soon as it is parsed.
+
 ## [0.16.12] - 2026-09-01
 
 ### Fixed

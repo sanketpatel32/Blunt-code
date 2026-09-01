@@ -118,7 +118,7 @@ func (s *Service) executeAnalyzer(ctx context.Context, scan core.Scan, work core
 	s.emit(scan.ID, "analyzer.started", map[string]any{"analyzer_id": adapter.ID(), "name": adapter.DisplayName()})
 	_ = s.db.UpdateScanState(context.Background(), scan.ID, "running", "")
 	status := adapter.Check(ctx, analyzers.ToolEnvironment{ToolsDir: s.toolsDir})
-	if !status.Ready && s.tools != nil && (adapter.ID() == "ruff" || adapter.ID() == "biome" || adapter.ID() == "semgrep" || adapter.ID() == "sonarqube") {
+	if !status.Ready && s.tools != nil && (adapter.ID() == "ruff" || adapter.ID() == "biome" || adapter.ID() == "gitleaks-secrets" || adapter.ID() == "semgrep" || adapter.ID() == "sonarqube") {
 		s.emit(scan.ID, "scan.stage", map[string]any{"stage": "Preparing " + adapter.DisplayName()})
 		if installErr := s.tools.Ensure(ctx, adapter.ID()); installErr == nil {
 			status = adapter.Check(ctx, analyzers.ToolEnvironment{ToolsDir: s.toolsDir})

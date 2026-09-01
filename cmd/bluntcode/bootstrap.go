@@ -16,6 +16,7 @@ import (
 
 	"bluntcode/internal/analyzers"
 	"bluntcode/internal/analyzers/biome"
+	"bluntcode/internal/analyzers/gitleaks"
 	"bluntcode/internal/analyzers/ruff"
 	"bluntcode/internal/analyzers/secrets"
 	"bluntcode/internal/analyzers/semgrep"
@@ -111,6 +112,7 @@ func openCore() (core *appCore, release func(), err error) {
 	// Analyzer adapters only execute Blunt Code-managed paths; no PATH lookup is used.
 	_ = registry.Register(ruff.New(filepath.Join(paths.ToolsDir, "ruff", "0.16.0", "ruff.exe"), "0.16.0"))
 	_ = registry.Register(biome.New(filepath.Join(paths.ToolsDir, "biome", "2.5.6", "biome.exe"), "2.5.6"))
+	_ = registry.Register(gitleaks.New(filepath.Join(paths.ToolsDir, "gitleaks-secrets", "8.30.1", "gitleaks.exe"), "8.30.1"))
 	_ = registry.Register(semgrep.New(semgrepExecutable, semgrepVersion, semgrepRules))
 	_ = registry.Register(managedSonar)
 	// bluntcode:ignore

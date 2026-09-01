@@ -61,6 +61,8 @@ func toolName(id string) string {
 		return "Ruff"
 	case "biome":
 		return "Biome"
+	case "gitleaks-secrets":
+		return "Gitleaks"
 	case "semgrep":
 		return "Semgrep"
 	case "sonarqube":
@@ -70,7 +72,7 @@ func toolName(id string) string {
 	}
 }
 func (s *Service) All() []Status {
-	ids := []string{"ruff", "biome", "semgrep", "sonarqube"}
+	ids := []string{"ruff", "biome", "gitleaks-secrets", "semgrep", "sonarqube"}
 	out := make([]Status, 0, len(ids))
 	for _, id := range ids {
 		out = append(out, s.Status(id))

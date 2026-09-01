@@ -1,0 +1,42 @@
+[
+ {
+  "RuleID": "generic-api-key",
+  "Description": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+  "StartLine": 3,
+  "EndLine": 3,
+  "StartColumn": 2,
+  "EndColumn": 35,
+  "Match": "REDACTED",
+  "Secret": "REDACTED",
+  "File": "C:/Users/sanpa/AppData/Local/Temp/bluntcode-tooldev/gitleaks/fixture/.env",
+  "SymlinkFile": "",
+  "Commit": "",
+  "Entropy": 4.2776136,
+  "Author": "",
+  "Email": "",
+  "Date": "",
+  "Message": "",
+  "Tags": [],
+  "Fingerprint": "C:/Users/sanpa/AppData/Local/Temp/bluntcode-tooldev/gitleaks/fixture/.env:generic-api-key:3"
+ },
+ {
+  "RuleID": "aws-access-token",
+  "Description": "Identified a pattern that may indicate AWS credentials, risking unauthorized cloud resource access and data breaches on AWS platforms.",
+  "StartLine": 3,
+  "EndLine": 3,
+  "StartColumn": 23,
+  "EndColumn": 42,
+  "Match": "REDACTED",
+  "Secret": "REDACTED",
+  "File": "C:/Users/sanpa/AppData/Local/Temp/bluntcode-tooldev/gitleaks/fixture/config.py",
+  "SymlinkFile": "",
+  "Commit": "",
+  "Entropy": 3.8841836,
+  "Author": "",
+  "Email": "",
+  "Date": "",
+  "Message": "",
+  "Tags": [],
+  "Fingerprint": "C:/Users/sanpa/AppData/Local/Temp/bluntcode-tooldev/gitleaks/fixture/config.py:aws-access-token:3"
+ }
+]
