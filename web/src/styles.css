@@ -311,7 +311,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .workspace-confetti i:nth-child(6){ left: 88%; background: var(--color-success); animation-delay: 60ms; }
 @keyframes confetti-fall { 0% { opacity: 0; transform: translateY(-10px) rotate(0deg); } 15% { opacity: 1; } 100% { opacity: 0; transform: translateY(48px) rotate(180deg); } }
 @media (prefers-reduced-motion: reduce) { .premium-card, .workspace-confetti i, .skeleton-chart { animation: none !important; } .premium-card { will-change: auto; } }
-.split-section { display: grid; grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr); gap: var(--space-2xl); align-items: start; }
+/* Single consumer: the workspace page's Latest analysis + Scan history cards.
+   They stack — side by side, the mostly-empty analysis card wasted a column
+   next to the wide history table. */
+.split-section { display: grid; grid-template-columns: 1fr; gap: var(--space-xl); align-items: start; }
 .split-section > div { min-width: 0; }
 .split-section .table-wrap { max-width: 100%; }
 /* history-pagination moved to css/history.css — bento nav */
