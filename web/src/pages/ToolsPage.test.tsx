@@ -80,6 +80,35 @@ describe('ToolsPage readiness strip', () => {
   });
 });
 
+describe('ToolsPage built-in analyzers', () => {
+  it('lists secrets and todo as built-in with no install actions, not as coming soon', async () => {
+    const { host } = await renderPage(toolsMock());
+    const section = host.querySelector('section[aria-label="Built-in analyzers"]')!;
+    expect(section.querySelector('h3')!.textContent).toBe('Built-in analyzers');
+    const rows = [...section.querySelectorAll('tbody tr')];
+    expect(rows.map((r) => r.textContent)).toEqual(expect.arrayContaining([expect.stringContaining('Secrets'), expect.stringContaining('Todo Scanner')]));
+    for (const row of rows) {
+      expect(row.querySelector('.state.ready')!.textContent).toBe('Built-in');
+      expect(row.textContent).not.toContain('Coming soon');
+    }
+    const actions = [...section.querySelectorAll('button')];
+    expect(actions.filter((button) => ['Install', 'Repair', 'Update'].includes(button.textContent!))).toHaveLength(0);
+  });
+
+  it('keeps the coming-soon section free of the built-in analyzers', async () => {
+    const { host } = await renderPage(toolsMock());
+    const comingSoon = host.querySelector('section[aria-label="Coming soon analyzers"]');
+    if (comingSoon) {
+      // Category headers legitimately repeat words like "Secrets"; only the
+      // tool-name cells must not contain the built-ins.
+      const names = [...comingSoon.querySelectorAll('tbody tr td:first-child strong')].map((cell) => cell.childNodes[0].textContent);
+      expect(names).not.toContain('Secrets');
+      expect(names).not.toContain('Todo Scanner');
+    }
+    expect(host.textContent).not.toContain('Secrets not installed');
+  });
+});
+
 describe('ToolsPage actions', () => {
   it('keeps install firing the same POST endpoint and success notice as before', async () => {
     const fetchMock = toolsMock((input) => (input.endsWith('/tools/semgrep/install') ? json({ id: 'semgrep', ready: true, can_install: false }) : json({})));

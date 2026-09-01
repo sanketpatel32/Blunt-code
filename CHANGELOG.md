@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.8] - 2026-09-01
+
+### Fixed
+- **The Tools page no longer buries the built-in Secrets and TODO/FIXME analyzers in "Coming soon".** Both already run on every standard and deep scan, but because they're bundled in-process (nothing to install) the tools API never listed them, so the page showed them as "Not installed" placeholders with disabled install buttons. They now sit in their own "Built-in analyzers" section with a permanent Built-in status and no install actions. The Secrets catalog entry also no longer claims to run on quick scans — quick runs Ruff and Biome only.
+
 ## [0.16.7] - 2026-09-01
 
 ### Changed

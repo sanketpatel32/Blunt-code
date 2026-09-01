@@ -21,6 +21,11 @@ const operationLabels: Record<ToolOperation, string> = { install: 'Install', rep
 const operationBusyLabels: Record<ToolOperation, string> = { install: 'Installing…', repair: 'Repairing…', update: 'Updating…' };
 const operationVerbs: Record<ToolOperation, string> = { install: 'installed', repair: 'repaired', update: 'updated' };
 
+// In-process analyzers bundled with the app. They are not managed downloads,
+// so the tools API never lists them — presenting them as "coming soon" hides
+// two analyzers that already run on every standard/deep scan.
+const BUILT_IN_IDS = new Set(['secrets', 'todo']);
+
 const categoryIcons: Record<string, React.ElementType> = {
   lint: Wrench, style: Palette, security: Shield, pentest: Zap, secrets: KeyRound, maintainability: Gauge,
   dependencies: Package, container: Container, iac: FileCog, license: Scale,
@@ -82,11 +87,6 @@ export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r
   async function action(tool: Tool, operation: ToolOperation) { setBusy({ tool: tool.id, operation }); try { await api.toolAction(tool.id, operation); await tools.reload(); notify({ kind: 'info', text: `${tool.name?.trim() || tool.id}: ${operationVerbs[operation]}.` }); } catch (e) { notify({ kind: 'error', text: message(e) }); } finally { setBusy(undefined); } }
 
   const backend = tools.data ?? [];
-  const merged: Tool[] = useMemo(() => {
-    const ids = new Set(backend.map((t) => t.id));
-    const placeholders: Tool[] = ANALYZER_CATALOG.filter((a) => !ids.has(a.id)).map((a) => ({ id: a.id, name: a.displayName, ready: false, can_install: false, detail: 'Coming soon — managed install', description: a.description }));
-    return [...backend, ...placeholders];
-  }, [backend]);
 
   const grouped = useMemo(() => {
     const map = new Map<AnalyzerCategory, Tool[]>();
@@ -99,10 +99,12 @@ export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r
     return map;
   }, [backend]);
 
+  const builtIns = useMemo(() => ANALYZER_CATALOG.filter((a) => BUILT_IN_IDS.has(a.id)), []);
+
   const placeholderGrouped = useMemo(() => {
     const map = new Map<AnalyzerCategory, Tool[]>();
     const ids = new Set(backend.map((t) => t.id));
-    for (const a of ANALYZER_CATALOG.filter((x) => !ids.has(x.id))) {
+    for (const a of ANALYZER_CATALOG.filter((x) => !ids.has(x.id) && !BUILT_IN_IDS.has(x.id))) {
       const tool: Tool = { id: a.id, name: a.displayName, ready: false, can_install: false, detail: 'Coming soon — managed install' };
       const cat = a.category;
       const arr = map.get(cat) ?? [];
@@ -114,6 +116,9 @@ export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r
 
   return <div className="page"><header className="page-heading"><div><p className="eyebrow">Managed tools</p><h1>Analysis tools</h1><p>Blunt Code keeps tool setup private and local. Install or repair only when needed.</p></div></header>{tools.loading ? <SkeletonTable rows={4} cols={5} className="tool-table" /> : tools.error ? <ErrorPanel error={tools.error} retry={tools.reload} /> : !backend.length ? <Empty title="No managed tools" icon={<WrenchIcon />}>Tool status appears here after the backend registers analyzers.</Empty> : <><ReadinessStrip tools={backend} busy={busy} />
     {[...grouped.entries()].map(([cat, list]) => <CategoryAccordion key={cat} category={cat} tools={list} busy={busy} onAction={action} />)}
+    {builtIns.length > 0 && <section className="builtin-analyzers" aria-label="Built-in analyzers"><h3 className="text-sm font-semibold mt-4">Built-in analyzers</h3><p className="text-xs text-[var(--color-ink-soft)]">Bundled in-process — nothing to install. They run on standard and deep scans (skipped in offline mode).</p>
+      <div className="builtin-table table-wrap"><table><thead><tr><th scope="col">Tool</th><th scope="col">Status</th><th scope="col">Languages</th><th scope="col">Details</th></tr></thead><tbody>{builtIns.map((a) => <tr key={a.id}><td><strong className="flex items-center gap-1.5">{a.displayName}<span className="badge text-[10px]" style={{ borderColor: categoryColor(a.category), color: categoryColor(a.category) }}>{a.category}</span></strong></td><td><span className="state ready">Built-in</span></td><td><span className="flex flex-wrap gap-1">{a.languages.slice(0, 3).map((l) => <span key={l} className="badge text-[10px]">{l}</span>)}<span className="badge text-[10px]">+{a.languages.length - 3} more</span></span></td><td className="text-xs max-w-[18rem] truncate" title={a.description}>{a.description}</td></tr>)}</tbody></table></div>
+    </section>}
     {placeholderGrouped.size > 0 && <section className="coming-soon" aria-label="Coming soon analyzers"><h3 className="text-sm font-semibold mt-4">Coming soon — managed install</h3><p className="text-xs text-[var(--color-ink-soft)]">Additional analyzers from the catalog will appear here when available.</p>{[...placeholderGrouped.entries()].map(([cat, list]) => <CategoryAccordion key={`soon-${cat}`} category={cat} tools={list} busy={busy} onAction={action} tableClassName="coming-soon-table" />)}</section>}
     <LanguageCoverage />
     <PentestSection go={go} />
