@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Privacy — Blunt Code</title>
+<meta name="description" content="Blunt Code privacy practices: this website sets no cookies and runs no analytics; the desktop app scans locally with no telemetry and never uploads your code." />
+<link rel="canonical" href="https://sanketpatel32.github.io/Blunt-code/privacy/" />
+<meta property="og:title" content="Privacy — Blunt Code" />
+<meta property="og:description" content="No cookies, no analytics, no telemetry; scanning is local and code never leaves the machine." />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://sanketpatel32.github.io/Blunt-code/privacy/" />
+<meta property="og:image" content="https://sanketpatel32.github.io/Blunt-code/og-image.png" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230F172A'/%3E%3Cpath d='M11.8 15.9 L15.2 19.1 L20.6 12.1' fill='none' stroke='white' stroke-width='2.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='23.4' cy='7.2' r='1.7' fill='%233B82F6'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="tokens.css" />
+<style>
+  * { box-sizing: border-box; }
+  html, body { overflow-x: clip; }
+  body {
+    margin: 0;
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font: 400 var(--text-base)/1.65 var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--color-accent); text-decoration: none; }
+  a:hover { text-decoration: underline; text-underline-offset: 2px; }
+  :focus-visible { outline: 2px solid var(--color-focus); outline-offset: 3px; }
+  .page { padding: var(--space-3xl) var(--page-gutter) var(--space-2xl); max-width: 46rem; margin: 0 auto; }
+  .back {
+    display: inline-flex; align-items: center; gap: var(--space-2xs);
+    font-family: var(--font-outlier); font-weight: 600; font-size: var(--text-sm);
+    color: var(--color-ink-soft); white-space: nowrap;
+  }
+  .back:hover { color: var(--color-accent-strong); text-decoration: none; }
+  h1 {
+    margin: var(--space-lg) 0 var(--space-lg);
+    font: 600 var(--text-display-s)/1.08 var(--font-display);
+    letter-spacing: -0.025em;
+    overflow-wrap: anywhere; min-width: 0;
+  }
+  h2 { margin: var(--space-xl) 0 var(--space-xs); font: 600 var(--text-lg)/1.2 var(--font-display); letter-spacing: -0.01em; }
+  p { margin: 0 0 var(--space-sm); color: var(--color-ink-soft); }
+  p strong { color: var(--color-ink); font-weight: 600; }
+  .foot {
+    margin-top: var(--space-2xl); padding-top: var(--space-sm);
+    border-top: 1px solid var(--color-rule-faint);
+    display: flex; flex-wrap: wrap; gap: var(--space-sm) var(--space-lg);
+    justify-content: space-between; font-size: var(--text-sm); color: var(--color-ink-faint);
+  }
+  .foot nav { display: flex; flex-wrap: wrap; gap: var(--space-md); }
+  .foot a { color: var(--color-ink-faint); white-space: nowrap; }
+  .foot a:hover { color: var(--color-ink); }
+</style>
+</head>
+<body>
+<main class="page">
+  <a class="back" href="/Blunt-code/">← blunt-code</a>
+  <h1>Privacy</h1>
+  <p><strong>Short version: this website sets no cookies and runs no analytics. The desktop app scans everything on your machine, sends nothing, and has no telemetry.</strong></p>
+
+  <h2>This website</h2>
+  <p>These pages are static files hosted on GitHub Pages. There are no cookies, no tracking scripts, no analytics or telemetry of any kind, and no third-party embeds — the only external requests a browser makes are the two web fonts used for typography. Like every web host, GitHub’s servers record standard request data (IP address, user agent, timestamp) when you fetch a page; that data is processed by GitHub under its own <a href="https://docs.github.com/en/site-policy/privacy-policies/github-privacy-statement">Privacy Statement</a>, not by us, and we never receive it.</p>
+
+  <h2>The desktop app</h2>
+  <p>Blunt Code runs entirely on your computer. Every analyzer — Ruff, Biome, Semgrep, SonarQube, the secrets scanner and the TODO tracker — executes locally, and the app’s interface is served on a loopback address (127.0.0.1) that only your own machine can reach. Scan results and history live in a local database under <code>%LOCALAPPDATA%\BluntCode</code>. There is no account system, no telemetry, no crash reporting and no “phone home”: after the analyzer tools are downloaded from their official sources on first run, the app works fully offline. <strong>Your source code is never uploaded anywhere — there is no upload path in the product.</strong></p>
+
+  <h2>Where data lives</h2>
+  <p>Everything the app writes — scan reports, history, logs, and the sandboxed analyzer tools — stays in folders under <code>%LOCALAPPDATA%\BluntCode</code>. Uninstalling removes the app; the uninstaller asks before touching your scan data. If you participate in a public discussion on GitHub, what you post there is public and governed by GitHub’s terms.</p>
+
+  <div class="foot">
+    <span>© 2026 · MIT</span>
+    <nav aria-label="Site">
+      <a href="/Blunt-code/">Home</a>
+      <a href="/Blunt-code/about/">About</a>
+      <a href="/Blunt-code/contact/">Contact</a>
+      <a href="https://github.com/sanketpatel32/Blunt-code">GitHub</a>
+    </nav>
+  </div>
+</main>
+</body>
+</html>

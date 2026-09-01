@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>About — Blunt Code</title>
+<meta name="description" content="What Blunt Code is, who maintains it, and why it scans locally. An open-source (MIT) local code quality and security app for Windows." />
+<link rel="canonical" href="https://sanketpatel32.github.io/Blunt-code/about/" />
+<meta property="og:title" content="About — Blunt Code" />
+<meta property="og:description" content="What Blunt Code is, who maintains it, and why it scans locally." />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://sanketpatel32.github.io/Blunt-code/about/" />
+<meta property="og:image" content="https://sanketpatel32.github.io/Blunt-code/og-image.png" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230F172A'/%3E%3Cpath d='M11.8 15.9 L15.2 19.1 L20.6 12.1' fill='none' stroke='white' stroke-width='2.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='23.4' cy='7.2' r='1.7' fill='%233B82F6'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="tokens.css" />
+<style>
+  * { box-sizing: border-box; }
+  html, body { overflow-x: clip; }
+  body {
+    margin: 0;
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font: 400 var(--text-base)/1.65 var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--color-accent); text-decoration: none; }
+  a:hover { text-decoration: underline; text-underline-offset: 2px; }
+  :focus-visible { outline: 2px solid var(--color-focus); outline-offset: 3px; }
+  .page { padding: var(--space-3xl) var(--page-gutter) var(--space-2xl); max-width: 46rem; margin: 0 auto; }
+  .back {
+    display: inline-flex; align-items: center; gap: var(--space-2xs);
+    font-family: var(--font-outlier); font-weight: 600; font-size: var(--text-sm);
+    color: var(--color-ink-soft); white-space: nowrap;
+  }
+  .back:hover { color: var(--color-accent-strong); text-decoration: none; }
+  h1 {
+    margin: var(--space-lg) 0 var(--space-lg);
+    font: 600 var(--text-display-s)/1.08 var(--font-display);
+    letter-spacing: -0.025em;
+    overflow-wrap: anywhere; min-width: 0;
+  }
+  h2 { margin: var(--space-xl) 0 var(--space-xs); font: 600 var(--text-lg)/1.2 var(--font-display); letter-spacing: -0.01em; }
+  p { margin: 0 0 var(--space-sm); color: var(--color-ink-soft); }
+  p strong { color: var(--color-ink); font-weight: 600; }
+  .foot {
+    margin-top: var(--space-2xl); padding-top: var(--space-sm);
+    border-top: 1px solid var(--color-rule-faint);
+    display: flex; flex-wrap: wrap; gap: var(--space-sm) var(--space-lg);
+    justify-content: space-between; font-size: var(--text-sm); color: var(--color-ink-faint);
+  }
+  .foot nav { display: flex; flex-wrap: wrap; gap: var(--space-md); }
+  .foot a { color: var(--color-ink-faint); white-space: nowrap; }
+  .foot a:hover { color: var(--color-ink); }
+</style>
+</head>
+<body>
+<main class="page">
+  <a class="back" href="/Blunt-code/">← blunt-code</a>
+  <h1>About Blunt Code</h1>
+
+  <h2>What it is</h2>
+  <p><strong>Blunt Code is a free, open-source desktop app for Windows that checks code quality and security without sending your code anywhere.</strong> It bundles six analyzers — Ruff for Python, Biome for JavaScript, TypeScript and React, Semgrep with a curated security rulepack, a managed SonarQube runtime, a secrets scanner covering eight credential families, and a TODO/FIXME tracker that reads over 40 file types — behind one executable and a local web interface. Findings from all six merge into a single report you can export as Markdown, HTML, SARIF, CSV or JSON, with scan history and diffs over time.</p>
+
+  <h2>Who maintains it</h2>
+  <p>Blunt Code is built by <a href="https://github.com/sanketpatel32">Sanket Patel</a> and published as open source under the MIT license at <a href="https://github.com/sanketpatel32/Blunt-code">github.com/sanketpatel32/Blunt-code</a>. Releases ship as a portable ZIP with SHA-256 checksums and a one-line installer that verifies them. Development history, roadmap notes and every change are public in the repository’s commit log and <a href="https://github.com/sanketpatel32/Blunt-code/blob/main/CHANGELOG.md">changelog</a>.</p>
+
+  <h2>Why local-first</h2>
+  <p>The project starts from one position: <strong>getting quality signals on your code should not require handing your code to someone else’s server.</strong> Cloud scanners work by uploading your repository; Blunt Code runs every analyzer on your own machine, serves its interface on a loopback address, and stores results in a local database. After the analyzer tools are downloaded on first run, everything works offline. There is no account, no upload path, and no telemetry — the design goal is that the answer to “where does my code go?” is always “nowhere.”</p>
+
+  <div class="foot">
+    <span>© 2026 · MIT</span>
+    <nav aria-label="Site">
+      <a href="/Blunt-code/">Home</a>
+      <a href="/Blunt-code/privacy/">Privacy</a>
+      <a href="/Blunt-code/contact/">Contact</a>
+      <a href="https://github.com/sanketpatel32/Blunt-code">GitHub</a>
+    </nav>
+  </div>
+</main>
+</body>
+</html>

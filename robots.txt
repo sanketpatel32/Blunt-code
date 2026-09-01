@@ -1,0 +1,49 @@
+# Blunt Code — https://sanketpatel32.github.io/Blunt-code/
+# Local code quality & security for Windows. Open source, MIT.
+
+# Explicit allows for AI/agent crawlers — this site publishes static
+# marketing and documentation content only; crawl it freely.
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: DeepSeekBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Perplexity-User
+Allow: /
+
+User-agent: Amazonbot
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+User-agent: meta-externalagent
+Allow: /
+
+User-agent: ora-agent
+Allow: /
+
+# Everyone else: no restrictions.
+User-agent: *
+Allow: /
+
+Sitemap: https://sanketpatel32.github.io/Blunt-code/sitemap.xml
