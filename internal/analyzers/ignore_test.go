@@ -50,11 +50,11 @@ func TestIgnoreSuppressed(t *testing.T) {
 		prevLine string
 		want     bool
 	}{
-		{"bare directive on the finding's line", aws, `aws_key = "AKIA1234567890ABCDEF" # bluntcode:ignore`, "", true},
+		{"bare directive on the finding's line", aws, `aws_key = "AKIA` + `1234567890ABCDEF" # bluntcode:ignore`, "", true},
 		{"bare directive on the previous line", "todo.todo", "x = 1", "# bluntcode:ignore", true},
-		{"targeted directive on the finding's line, matching rule", "secrets.jwt", `token := "eyJhbGci.x.y" // bluntcode:ignore secrets.jwt`, "", true},
+		{"targeted directive on the finding's line, matching rule", "secrets.jwt", `token := "eyJ` + `hbGci.x.y" // bluntcode:ignore secrets.jwt`, "", true},
 		{"targeted directive on the previous line, matching rule", "todo.fixme", "# FIXME: handle empty input", "# bluntcode:ignore todo.fixme", true},
-		{"targeted directive on the finding's line, different rule", aws, `aws_key = "AKIA1234567890ABCDEF" # bluntcode:ignore secrets.jwt`, "", false},
+		{"targeted directive on the finding's line, different rule", aws, `aws_key = "AKIA` + `1234567890ABCDEF" # bluntcode:ignore secrets.jwt`, "", false},
 		{"targeted directive on the previous line, different rule", "todo.fixme", "# FIXME: handle empty input", "# bluntcode:ignore todo.hack", false},
 		{"directive naming another analyzer's rule leaves the finding visible", "todo.todo", "// TODO: x // bluntcode:ignore secrets.aws-access-key-id", "", false},
 		{"unknown word after the directive is inert, not bare", "todo.todo", "# TODO: x", "# bluntcode:ignore oops", false},

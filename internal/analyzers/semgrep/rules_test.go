@@ -13,6 +13,13 @@ func TestBundledRulepackParsesAndValidates(t *testing.T) {
 	if strings.ContainsRune(pack, '\r') {
 		t.Fatal("bundled rulepack must keep LF line endings")
 	}
+	// The "<... X ... />" idiom is invalid semgrep JavaScript grammar: semgrep
+	// rejects the whole config file for it, silently killing every rule. The
+	// working form is "<$TAG ... X ...>...</$TAG>". This raw check guards the
+	// grammar class the purpose-built YAML parser cannot see.
+	if strings.Contains(pack, "<... ") || strings.Contains(pack, " ... />") {
+		t.Fatal(`bundled rulepack uses the invalid "<... ... />" pattern idiom`)
+	}
 	rules, err := parseRulepack(pack)
 	if err != nil {
 		t.Fatalf("parse bundled rulepack: %v", err)
@@ -107,6 +114,19 @@ func TestParseRulepackParsesPackConstructs(t *testing.T) {
 	}
 	if _, err := parseRulepack("rules: 5"); err == nil {
 		t.Fatal("expected error for non-list rules value")
+	}
+	// libyaml rejects a plain scalar containing ": " as an ambiguous mapping;
+	// semgrep parses the pack with libyaml, so the pack must quote such values
+	// and this parser must reject them the same way.
+	const colonPlain = `rules:
+  - id: blunt-code.python.x
+    languages: [python]
+    severity: ERROR
+    message: m
+    pattern: <... dangerouslySetInnerHTML = { __html: $V } ... />
+`
+	if _, err := parseRulepack(colonPlain); err == nil {
+		t.Fatal("expected error for a plain scalar containing ': '")
 	}
 }
 

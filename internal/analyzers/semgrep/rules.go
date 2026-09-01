@@ -86,7 +86,10 @@ func validateRulepack(rules []rule) error {
 // parseRulepack parses the rulepack YAML. The pack is generated in a fixed
 // YAML subset (block mappings and sequences, flow sequences of scalars,
 // quoted or plain scalars), which this small purpose-built parser covers
-// without pulling a YAML dependency into the module.
+// without pulling a YAML dependency into the module. Plain scalars that
+// contain ": " are rejected because libyaml — what semgrep actually parses
+// the pack with — treats the colon as a mapping marker there and fails the
+// whole file; such values must be quoted.
 func parseRulepack(src string) ([]rule, error) {
 	root, err := parseYAML(src)
 	if err != nil {
@@ -264,6 +267,9 @@ func parseMapBlock(lines []yamlLine, i, indent int) (*yamlNode, int, error) {
 		if !ok {
 			return nil, i, fmt.Errorf("yaml: expected key-value line, got %q", lines[i].text)
 		}
+		if isIllegalPlainScalar(value) {
+			return nil, i, fmt.Errorf("yaml: %q has a plain value containing ': ' or ending in ':' — quote it (libyaml, and therefore semgrep, rejects the file otherwise)", lines[i].text)
+		}
 		var child *yamlNode
 		if value == "" {
 			if i+1 < len(lines) && lines[i+1].indent > indent {
@@ -298,6 +304,17 @@ func parseNestedBlock(lines []yamlLine, i, parentIndent int) (*yamlNode, int, er
 		return &yamlNode{isScalar: true}, i, nil
 	}
 	return parseBlock(lines, i, lines[i].indent)
+}
+
+// isIllegalPlainScalar reports whether an inline mapping value is a plain
+// (unquoted, non-flow) scalar that libyaml would refuse: one containing
+// ": " or ending in ":". Quoted scalars and flow sequences are legal with
+// colons, so they pass.
+func isIllegalPlainScalar(v string) bool {
+	if v == "" || v[0] == '"' || v[0] == '\'' || v[0] == '[' {
+		return false
+	}
+	return strings.Contains(v, ": ") || strings.HasSuffix(v, ":")
 }
 
 // splitKeyValue splits "key: value" on the first unquoted colon.

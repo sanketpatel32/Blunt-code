@@ -1,13 +1,24 @@
+import { useEffect, useRef } from 'react';
 import { href, type Route } from '../lib/router';
 import type { Theme } from '../hooks/useTheme';
 import { Button } from './ui/button';
-import { HelpCircle, Moon, Sun, Plus, Languages } from 'lucide-react';
+import { HelpCircle, Moon, Sun, Plus, Languages, ChevronDown } from 'lucide-react';
 import { NotificationsCenter } from './NotificationsCenter';
 import { cn } from '../lib/utils';
 import { LOCALES, useT } from '../lib/i18n';
+import { useReducedMotion } from '../hooks/useReducedMotion';
+
+/**
+ * The three places people actually live in. Everything else moves behind
+ * "More": eight equal-weight links made every navigation a scan-and-choose,
+ * and half of them are set-once destinations (Tools, Settings, About).
+ */
+const PRIMARY_PAGES: ReadonlyArray<Route['page']> = ['home', 'workspaces', 'search'];
 
 export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleTheme, onShowShortcuts, seqArmed = false }: { route: Route; onNavigate: (route: Route) => void; onAdd: () => void; onClose: () => void; theme: Theme; onToggleTheme: () => void; onShowShortcuts?: () => void; seqArmed?: boolean }) {
   const { t, locale, setLocale } = useT();
+  const reduced = useReducedMotion();
+  const moreRef = useRef<HTMLDetailsElement>(null);
   const items: Array<[Route, string]> = [
     [{ page: 'home' }, t('nav.home')],
     [{ page: 'workspaces' }, t('nav.workspaces')],
@@ -18,8 +29,43 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
     [{ page: 'settings' }, t('nav.settings')],
     [{ page: 'about' }, t('nav.about')],
   ];
+  // Order is load-bearing: primary links, then the "More" disclosure, then the
+  // secondary links — so "About" stays the last anchor in the nav.
+  const primary = items.filter(([next]) => PRIMARY_PAGES.includes(next.page));
+  const secondary = items.filter(([next]) => !PRIMARY_PAGES.includes(next.page));
+  const secondaryActive = secondary.some(([next]) => next.page === route.page);
+
+  // `<details>` alone leaves a floating panel open after you click away, which
+  // reads as a stuck overlay. Close on outside pointer, on Escape, and after
+  // navigating to one of the links inside.
+  useEffect(() => {
+    const close = () => { if (moreRef.current) moreRef.current.open = false; };
+    const onPointerDown = (event: Event) => {
+      if (moreRef.current && !moreRef.current.contains(event.target as Node)) close();
+    };
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') close(); };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, []);
+
+  const link = ([next, label]: [Route, string]) => (
+    <a
+      key={label}
+      href={href(next)}
+      className={cn('nav-link', route.page === next.page ? 'active' : '')}
+      aria-current={route.page === next.page ? 'page' : undefined}
+      onClick={(event) => { event.preventDefault(); onNavigate(next); }}
+    >
+      {label}
+    </a>
+  );
+
   return (
-    <header className="app-nav">
+    <header className={cn('app-nav', reduced && 'nav-no-motion')}>
       <a className="brand group" href="/" onClick={(event) => { event.preventDefault(); onNavigate({ page: 'home' }); }}>
         <svg className="brand-mark transition-transform group-hover:scale-[1.02] group-active:scale-[0.99]" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
           <rect width="32" height="32" rx="8" fill="var(--color-brand-mark)" />
@@ -30,43 +76,51 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
         <b>Blunt Code</b>
       </a>
       <nav aria-label="Main navigation">
-        {items.map(([next, label]) => (
-          <a
-            key={label}
-            href={href(next)}
-            className={cn(route.page === next.page ? 'active' : '')}
-            aria-current={route.page === next.page ? 'page' : undefined}
-            onClick={(event) => { event.preventDefault(); onNavigate(next); }}
-          >
-            {label}
-          </a>
-        ))}
+        <div className="nav-primary">{primary.map(link)}</div>
+        <details
+          className="nav-more"
+          ref={moreRef}
+          data-active={secondaryActive ? 'true' : 'false'}
+          onClick={(event) => { if ((event.target as HTMLElement).closest('a, button') && moreRef.current) moreRef.current.open = false; }}
+        >
+          <summary className="nav-more-toggle">
+            {t('nav.more')}
+            <ChevronDown className="nav-more-chevron" aria-hidden="true" />
+          </summary>
+          <div className="nav-more-panel">
+            <div className="nav-more-group">{secondary.map(link)}</div>
+            {/* Closing the app is terminal and rare, so it leaves the action bar
+                for the foot of the overflow — reachable at every width, where
+                styles.css used to hide it below 63rem. */}
+            <div className="nav-more-foot">
+              <Button variant="ghost" size="sm" className="close-app" onClick={onClose}>{t('common.closeApp')}</Button>
+            </div>
+          </div>
+        </details>
       </nav>
       <div className="nav-actions">
         {seqArmed && <span className="seq-hint" aria-hidden="true">g…</span>}
-        {/* Loop 122 · this control was `hidden sm:`, so below 640px there was no
-            way to change language at all. It now hides only below md, and
-            Settings carries a full-width language row for phone widths. */}
-        <label className="hidden md:inline-flex items-center gap-1 text-[var(--color-ink-soft)]" aria-label={t('common.language')}>
-          <Languages className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <select value={locale} onChange={(e) => setLocale(e.target.value as never)} className="h-[2.15rem] rounded-[var(--radius-button)] border border-[var(--color-rule)] bg-[var(--color-surface)] px-2 text-xs font-mono font-semibold">
-            {LOCALES.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
-          </select>
-        </label>
         <NotificationsCenter />
-        <Button variant="outline" size="icon" className="nav-shortcuts rounded-[var(--radius-button)] h-[2.15rem] w-[2.15rem] border-[var(--color-rule)] hover:border-[var(--color-rule-strong)]" onClick={() => onShowShortcuts?.()} title={t('common.shortcuts')} aria-label={t('common.shortcuts')}>
-          <HelpCircle className="h-4 w-4" />
-        </Button>
-        {/* Loop 121 · dark mode was unreachable on phones: the only toggle in the
-            app carried `hidden sm:`. The label already collapses below 68rem, so
-            the button is safe to show at every width as an icon. */}
-        <Button variant="outline" size="sm" className="theme-toggle" onClick={onToggleTheme} aria-pressed={theme === 'dark'} title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}>
-          {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          <span className="theme-toggle-label">{theme === 'dark' ? 'Light' : 'Dark'}</span>
-        </Button>
-        <Button variant="ghost" size="sm" className="close-app hidden lg:inline-flex" onClick={onClose}>
-          {t('common.closeApp')}
-        </Button>
+        {/* Preferences are chosen once and then never touched. They read as one
+            cohesive group instead of four competing buttons — and every one of
+            them is still reachable from the command palette (Ctrl/Cmd+K). */}
+        <div className="nav-utils">
+          <label className="nav-util nav-lang" aria-label={t('common.language')}>
+            <Languages className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <select value={locale} onChange={(e) => setLocale(e.target.value as never)} className="nav-lang-select" title={t('common.language')}>
+              {LOCALES.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
+            </select>
+          </label>
+          <Button variant="ghost" size="icon" className="nav-shortcuts" onClick={() => onShowShortcuts?.()} title={t('common.shortcuts')} aria-label={t('common.shortcuts')}>
+            <HelpCircle className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="sm" className="theme-toggle" onClick={onToggleTheme} aria-pressed={theme === 'dark'} title={theme === 'dark' ? t('common.switchToLight') : t('common.switchToDark')}>
+            {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            {/* Icon-only in the cluster, but the name has to stay in the DOM:
+                it is the button's accessible label, not just decoration. */}
+            <span className="theme-toggle-label sr-only">{theme === 'dark' ? t('common.themeLight') : t('common.themeDark')}</span>
+          </Button>
+        </div>
         <Button onClick={onAdd} size="sm" className="add shadow-[var(--shadow-accent)] active:shadow-sm">
           <Plus className="h-4 w-4" /> <span className="hidden sm:inline">{t('common.addWorkspace')}</span><span className="sm:hidden">{t('common.add')}</span>
         </Button>

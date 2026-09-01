@@ -28,6 +28,7 @@ coverage/
 .bluntcode-backup-*
 bc-install-test-*
 graphify-out/
+.mimosa/
 .hallmark/
 blunt-work/
 .workbuddy-ai/

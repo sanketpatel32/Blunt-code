@@ -1,4 +1,5 @@
-import { Suspense, lazy, useState } from 'react';
+import { Suspense, lazy, useState, type ReactNode } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { api } from '../api';
 import type { AnalyzerRun, RiskProfile } from '../types';
 import type { Route } from '../lib/router';
@@ -11,14 +12,15 @@ import { ScanIcon } from '../components/icons';
 import { SkeletonCards, SkeletonTable } from '../components/skeletons';
 import { SeverityTrendSection } from '../components/SeverityTrendChart';
 import { SuppressionsSection } from '../components/SuppressionsPanel';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../components/ui/accordion';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { ConfirmationDialog } from '../components/dialogs';
 import { WorkspaceContextSidebar } from '../components/WorkspaceContext';
 import { HistoryTable } from './HistoryPage';
 import { analyzerMeta, categoryColor, CATEGORY_LABELS } from '../lib/analyzerCatalog';
 import { languageCoverageFromLanguages, severityCountsFromSummary, trendPointsFromScans } from '../lib/chartData';
-import { Sparkles, Copy, Check, ShieldAlert, BarChart3, Clock as ClockIcon, AlertTriangle, Layers, FileSearch, History as HistoryIcon, ShieldCheck } from 'lucide-react';
+import { useReducedMotion } from '../hooks/useReducedMotion';
+import { Sparkles, Copy, Check, ShieldAlert, BarChart3, AlertTriangle, Layers, FileSearch, History as HistoryIcon, ShieldCheck } from 'lucide-react';
 
 /**
  * Loop 142 · this used to inline `oklch(62% 0.18 285)` as the fourth entry, which
@@ -51,6 +53,7 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
   const [pruneKeep, setPruneKeep] = useState(20);
   const [pruning, setPruning] = useState(false);
   const [copied, setCopied] = useState(false);
+  const reduced = useReducedMotion();
   const latest = workspace.data?.latest_scan ?? scans.data?.[0];
   const isCompleted = latest?.state === 'completed' || latest?.state === 'completed_with_warnings';
   async function start() { try { const scan = await api.startScan(id, profile); go({ page: 'scan', id: scan.id }); } catch (e) { notify({ kind: 'error', text: message(e) }); } }
@@ -68,9 +71,10 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
   const item = workspace.data;
   if (!item) return <div className="page"><Loading /></div>;
   const sparkVals = (v:number)=>[Math.max(0,v-2),Math.max(0,v-1),v,Math.max(0,v-1),Math.max(0,v)];
+  const criticalHigh = (latest?.critical_count ?? 0) + (latest?.high_count ?? 0);
   return <div className="page workspace-page"><WorkspaceContextSidebar id={id} current={{ page: 'workspace', id }} onNavigate={go} /><div className="workspace-page-body">
-    {/* Hero bento card */}
-    <header className={`workspace-hero-bento ${isCompleted ? 'confetti' : ''}`}>
+    {/* 1 · Identify — who this is. No actions: acting is the next zone's job. */}
+    <header className="workspace-hero-bento workspace-hero-identity">
       <div className="workspace-hero-main">
         <p className="eyebrow">Workspace</p>
         <h1 className="workspace-hero-title">{item.name}</h1>
@@ -85,52 +89,108 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
           {/* keep LanguageBadges for tests/assistive but visually hidden */}
           <span className="sr-only"><LanguageBadges languages={item.languages} /></span>
         </div>
-        {isCompleted && <div className="workspace-confetti" aria-hidden="true"><i /><i /><i /><i /><i /><i /></div>}
-      </div>
-      <div className="workspace-next">
-        <span className="workspace-next-kicker">Next step</span>
-        <strong className="workspace-next-title">Run a fresh analysis</strong>
-        <p className="workspace-next-desc">Scan with the latest rules. Results stay local.</p>
-        <label className="profile-picker">Profile{' '}<select value={profile} onChange={(event) => setProfile(event.target.value)} aria-label="Scan profile">{['quick', 'standard', 'deep'].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
-        <button type="button" className="button primary workspace-run" onClick={start}><Sparkles className="h-4 w-4" />Run scan</button>
-        {latest && <a className="workspace-view-report" href={latest ? `/scans/${latest.id}` : '#'} onClick={(e)=>{e.preventDefault(); latest && go({page:'scan', id:latest.id})}}>View last report →</a>}
+        {isCompleted && !reduced && <div className="workspace-confetti" aria-hidden="true"><i /><i /><i /><i /><i /><i /></div>}
       </div>
     </header>
-    <div className="workspace-toolbar"><div className="toolbar-left"><button type="button" className="button ghost" onClick={() => go({ page: 'files', id })}>Configure files</button><button type="button" className="button ghost" disabled={!latest} onClick={() => latest && go({ page: 'scan', id: latest.id })}>View last report</button></div><div className="toolbar-right">{latest && <a className="button secondary" href={api.markdownUrl(latest.id)}>Export Markdown</a>}<DropdownMenu><DropdownMenuTrigger className="button secondary">More ▾</DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onSelect={openSettings}>Workspace settings</DropdownMenuItem><DropdownMenuItem onSelect={()=>setPruneOpen(true)}>Prune history…</DropdownMenuItem><DropdownMenuSeparator/><DropdownMenuItem className="text-[var(--color-danger)]" onSelect={()=>setDeleteOpen(true)}>Remove workspace</DropdownMenuItem></DropdownMenuContent></DropdownMenu></div></div>
+
+    {/* 2 · Act — one primary action, everything else quietly grouped beside it. */}
+    <div className="workspace-toolbar workspace-action-rail">
+      <div className="action-rail-primary">
+        <label className="profile-picker">Profile{' '}<select value={profile} onChange={(event) => setProfile(event.target.value)} aria-label="Scan profile">{['quick', 'standard', 'deep'].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
+        <button type="button" className="button primary workspace-run" onClick={start}><Sparkles className="h-4 w-4" />Run scan</button>
+      </div>
+      <div className="action-rail-secondary">
+        <button type="button" className="button ghost" onClick={() => go({ page: 'files', id })}>Configure files</button>
+        <button type="button" className="button ghost" disabled={!latest} onClick={() => latest && go({ page: 'scan', id: latest.id })}>View last report</button>
+        {latest && <a className="button ghost" href={api.markdownUrl(latest.id)}>Export Markdown</a>}
+        <DropdownMenu>
+          <DropdownMenuTrigger className="button ghost workspace-more-trigger">More ▾</DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={openSettings}>Workspace settings</DropdownMenuItem>
+            <DropdownMenuItem onSelect={()=>setPruneOpen(true)}>Prune history…</DropdownMenuItem>
+            <DropdownMenuSeparator/>
+            <DropdownMenuItem className="workspace-danger-item" onSelect={()=>setDeleteOpen(true)}>Remove workspace</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </div>
     {pruneOpen && <form className="settings-editor" onSubmit={(event) => { event.preventDefault(); void prune(); }} aria-label="Prune scan history"><label>Keep newest<input type="number" min={1} max={100} value={pruneKeep} onChange={(event) => setPruneKeep(Number(event.target.value))} /></label><div className="editor-actions"><button type="submit" className="button primary" disabled={pruning}>Delete older scans</button><button type="button" className="button secondary" onClick={() => setPruneOpen(false)}>Cancel</button></div></form>}
     {editing && <form className="settings-editor" onSubmit={(event) => { event.preventDefault(); saveSettings(); }} aria-label="Workspace settings"><label>Name<input value={nameDraft} onChange={(event) => setNameDraft(event.target.value)} maxLength={80} /></label><label>Default profile<select value={profileDraft} onChange={(event) => setProfileDraft(event.target.value)}>{['quick', 'standard', 'deep'].map((value) => <option key={value} value={value}>{value}</option>)}</select></label><div className="editor-actions"><button type="submit" className="button primary" disabled={savingSettings}>Save</button><button type="button" className="button secondary" onClick={() => setEditing(false)}>Cancel</button></div></form>}
-    {!latest && scans.loading ? <SkeletonCards count={6} /> : <section className="summary-grid premium" aria-label="Latest scan summary">
-      <RiskCard risk={risk.data} />
-      <PremiumSummaryCard label="Critical + high" value={(latest?.critical_count ?? 0) + (latest?.high_count ?? 0)} tone="high" icon={<ShieldAlert className="h-4 w-4" />} spark={sparkVals((latest?.critical_count ?? 0)+(latest?.high_count ?? 0))} delay={1} />
-      <PremiumSummaryCard label="Medium" value={latest?.medium_count ?? 0} tone="medium" icon={<AlertTriangle className="h-4 w-4" />} spark={sparkVals(latest?.medium_count ?? 0)} delay={2} />
-      <PremiumSummaryCard label="Low + info" value={(latest?.low_count ?? 0) + (latest?.info_count ?? 0)} icon={<Layers className="h-4 w-4" />} spark={sparkVals((latest?.low_count ?? 0)+(latest?.info_count ?? 0))} delay={3} />
-      <PremiumSummaryCard label="Total findings" value={latest?.total_findings ?? 0} icon={<BarChart3 className="h-4 w-4" />} spark={sparkVals(latest?.total_findings ?? 0)} delay={4} />
-      <PremiumSummaryCard label="New" value={latest?.new_count ?? 0} icon={<FileSearch className="h-4 w-4" />} spark={sparkVals(latest?.new_count ?? 0)} delay={5} />
-      <PremiumSummaryCard label="Fixed" value={latest?.fixed_count ?? 0} icon={<ShieldCheck className="h-4 w-4" />} spark={sparkVals(latest?.fixed_count ?? 0)} delay={6} />
+
+    {/* 3 · Verdict — three headline numbers; the rest are one click away. */}
+    {!latest && scans.loading ? <SkeletonCards count={6} /> : <section className={`workspace-verdict ${reduced ? '' : 'is-animated'}`} aria-label="Latest scan summary">
+      <div className="summary-grid premium">
+        <RiskCard risk={risk.data} />
+        <PremiumSummaryCard label="Critical + high" value={criticalHigh} tone="high" icon={<ShieldAlert className="h-4 w-4" />} spark={sparkVals(criticalHigh)} delay={1} />
+        <PremiumSummaryCard label="Total findings" value={latest?.total_findings ?? 0} icon={<BarChart3 className="h-4 w-4" />} spark={sparkVals(latest?.total_findings ?? 0)} delay={2} />
+      </div>
+      <Disclosure label="All severity counts" hint={`${latest?.total_findings ?? 0} findings`}>
+        <div className="summary-grid premium">
+          <PremiumSummaryCard label="Medium" value={latest?.medium_count ?? 0} tone="medium" icon={<AlertTriangle className="h-4 w-4" />} spark={sparkVals(latest?.medium_count ?? 0)} delay={1} />
+          <PremiumSummaryCard label="Low + info" value={(latest?.low_count ?? 0) + (latest?.info_count ?? 0)} icon={<Layers className="h-4 w-4" />} spark={sparkVals((latest?.low_count ?? 0)+(latest?.info_count ?? 0))} delay={2} />
+          <PremiumSummaryCard label="New" value={latest?.new_count ?? 0} icon={<FileSearch className="h-4 w-4" />} spark={sparkVals(latest?.new_count ?? 0)} delay={3} />
+          <PremiumSummaryCard label="Fixed" value={latest?.fixed_count ?? 0} icon={<ShieldCheck className="h-4 w-4" />} spark={sparkVals(latest?.fixed_count ?? 0)} delay={4} />
+        </div>
+      </Disclosure>
     </section>}
-    <Suspense fallback={<div className="skeleton-chart" aria-busy="true" />}>
-      <AnalyticsCharts
-        trends={trendPointsFromScans(scans.data ?? [])}
-        severityCounts={severityCountsFromSummary({ critical_count: latest?.critical_count, high_count: latest?.high_count, medium_count: latest?.medium_count, low_count: latest?.low_count, info_count: latest?.info_count })}
-        languages={languageCoverageFromLanguages(item.languages)}
-      />
-    </Suspense>
-    <LanguageDistributionDonut languages={languageCoverageFromLanguages(item.languages)} workspaceId={id} go={go} />
-    <SeverityTrendSection workspaceId={id} />
-    <Accordion type="single" collapsible className="workspace-card-accordion">
-      <AccordionItem value="dependency-graph">
-        <AccordionTrigger className="text-sm font-semibold">Dependency graph</AccordionTrigger>
-        <AccordionContent>
-          <Suspense fallback={<SkeletonCards count={1} variant="chart" />}>
-            <DependencyGraph languages={item.languages} />
-          </Suspense>
-        </AccordionContent>
-      </AccordionItem>
-    </Accordion>
-    {latest && <ComplianceSection scanId={latest.id} go={go} />}
-    <SuppressionsSection workspaceId={id} notify={notify} />
+
+    {/* 4 · Insights — five diagnostics share one card, one on screen at a time.
+        Radix only mounts the selected panel, so the lazy chunks stay unloaded
+        until someone actually asks for them. */}
+    <Tabs defaultValue="trends" className="workspace-insights">
+      <div className="workspace-insights-head">
+        <h2>Insights</h2>
+        <TabsList>
+          <TabsTrigger value="trends">Trends</TabsTrigger>
+          <TabsTrigger value="severity">Severity</TabsTrigger>
+          <TabsTrigger value="languages">Languages</TabsTrigger>
+          <TabsTrigger value="dependencies">Dependencies</TabsTrigger>
+          <TabsTrigger value="compliance">Compliance</TabsTrigger>
+        </TabsList>
+      </div>
+      <TabsContent value="trends">
+        <Suspense fallback={<div className="skeleton-chart" aria-busy="true" />}>
+          <AnalyticsCharts
+            trends={trendPointsFromScans(scans.data ?? [])}
+            severityCounts={severityCountsFromSummary({ critical_count: latest?.critical_count, high_count: latest?.high_count, medium_count: latest?.medium_count, low_count: latest?.low_count, info_count: latest?.info_count })}
+            languages={languageCoverageFromLanguages(item.languages)}
+          />
+        </Suspense>
+      </TabsContent>
+      <TabsContent value="severity"><SeverityTrendSection workspaceId={id} /></TabsContent>
+      <TabsContent value="languages">
+        {item.languages?.length
+          ? <LanguageDistributionDonut languages={languageCoverageFromLanguages(item.languages)} workspaceId={id} go={go} />
+          : <Empty title="No languages detected" icon={<FileSearch />}>Run a scan to see how this project is split across languages.</Empty>}
+      </TabsContent>
+      <TabsContent value="dependencies">
+        <Suspense fallback={<SkeletonCards count={1} variant="chart" />}>
+          <DependencyGraph languages={item.languages} />
+        </Suspense>
+      </TabsContent>
+      <TabsContent value="compliance">
+        {latest
+          ? <ComplianceSection scanId={latest.id} go={go} />
+          : <Empty title="Nothing to map yet" icon={<ScanIcon />}>Compliance mapping needs a completed scan.</Empty>}
+      </TabsContent>
+    </Tabs>
+
+    {/* 5 · Activity — what ran, and what it found. */}
     <section className="split-section workspace-history-section"><div className="workspace-section-card"><h2>Latest analysis</h2>{latest ? <><p className="muted">{latest.state.replaceAll('_', ' ')} · {date(latest.finished_at ?? latest.started_at)}</p>{latest.error_summary && <div className="inline-warning">Warning: {latest.error_summary}</div>}<AnalyzerStatuses runs={latest.analyzer_runs} /></> : <Empty title="Ready when you are" icon={<ScanIcon />}>Run the first scan to get a combined report.</Empty>}</div><div className="workspace-section-card"><h2>Scan history</h2>{scans.loading ? <SkeletonTable rows={4} cols={10} /> : scans.error ? <ErrorPanel error={scans.error} retry={scans.reload} /> : <HistoryTable scans={scans.data ?? []} go={go} />}</div></section>
-  {deleteOpen && <ConfirmationDialog title="Remove this workspace?" description="This removes the saved workspace, file rules, and local scan history from Blunt Code. Your project files will not be changed." confirmLabel="Remove workspace" busy={deleting} onCancel={() => setDeleteOpen(false)} onConfirm={remove} />}</div></div>;
+
+    {/* 6 · Housekeeping — set once, then ignored. */}
+    <SuppressionsSection workspaceId={id} notify={notify} />
+  </div>
+  {deleteOpen && <ConfirmationDialog title="Remove this workspace?" description="This removes the saved workspace, file rules, and local scan history from Blunt Code. Your project files will not be changed." confirmLabel="Remove workspace" busy={deleting} onCancel={() => setDeleteOpen(false)} onConfirm={remove} />}</div>;
+}
+
+/** Collapsed-by-default section; children mount on first open so lazy panels are never fetched for someone who does not look. */
+function Disclosure({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+  const [mounted, setMounted] = useState(false);
+  return <details className="workspace-disclosure" onToggle={(event) => { if (event.currentTarget.open) setMounted(true); }}>
+    <summary className="workspace-disclosure-toggle"><ChevronDown className="workspace-disclosure-caret" aria-hidden="true" />{label}{hint && <small>{hint}</small>}</summary>
+    {mounted && <div className="workspace-disclosure-panel">{children}</div>}
+  </details>;
 }
 
 function MiniSparkline({ values }: { values: number[] }) {
@@ -144,8 +204,8 @@ function MiniSparkline({ values }: { values: number[] }) {
   return <svg viewBox={`0 0 ${w} ${h}`} width={64} height={20} aria-hidden="true" className="premium-sparkline"><polyline fill="none" stroke="var(--color-accent)" strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round" points={pts.join(' ')} /></svg>;
 }
 
-function PremiumSummaryCard({ label, value, tone, icon, spark, delay }: { label: string; value: number; tone?: string; icon: React.ReactNode; spark: number[]; delay: number }) {
-  return <div className={`summary-card premium-card ${tone ?? ''}`} style={{ animationDelay: `${delay*40}ms` } as React.CSSProperties}>
+function PremiumSummaryCard({ label, value, tone, icon, spark, delay }: { label: string; value: number; tone?: string; icon: ReactNode; spark: number[]; delay: number }) {
+  return <div className={`summary-card premium-card ${tone ?? ''}`} style={{ animationDelay: `${delay*40}ms` }}>
     <span className="premium-card-icon">{icon}</span>
     <strong>{value}</strong>
     <span>{label}</span>

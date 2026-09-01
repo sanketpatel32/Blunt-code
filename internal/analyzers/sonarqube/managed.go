@@ -365,7 +365,10 @@ func (c *APIClient) EnsureProject(ctx context.Context, key, name string) error {
 	return err
 }
 func (c *APIClient) WaitForTask(ctx context.Context, id string) error {
-	deadline := time.Now().Add(5 * time.Minute)
+	// A first analysis after server boot (fresh DB, plugin init, ES indexing)
+	// regularly exceeds five minutes on thousand-file workspaces; the scan's
+	// own --timeout context still bounds the overall wait.
+	deadline := time.Now().Add(20 * time.Minute)
 	for time.Now().Before(deadline) {
 		var payload struct {
 			Task struct {

@@ -1,0 +1,194 @@
+/* ════════════════════════════════════════════════════════════════════
+   DASHBOARD CLARITY — HomePage information-architecture pass
+   Companion to pages/HomePage.tsx. Loaded after styles.css so these rules
+   win on source order; every selector is scoped to .dashboard-page so it
+   also wins on specificity. Tokens only — dark mode keeps working.
+
+   Structure: heading · primary (headline metrics + severity disclosure) ·
+   primary (activity) · secondary (projects) · tertiary (charts disclosure
+   + tool nudge). One vertical rhythm, owned by flex `gap`, not per-section
+   margins.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* ── Rhythm ────────────────────────────────────────────────────── */
+/* styles.css gives each dashboard section its own margin-top; the flex gap
+   below replaces all of them so every zone is separated by one value. */
+.dashboard-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xl);
+  padding-bottom: var(--space-3xl);
+}
+
+.dashboard-page > .dashboard-heading,
+.dashboard-page > .dashboard-primary,
+.dashboard-page > .dashboard-activity,
+.dashboard-page > .dashboard-list,
+.dashboard-page > .dashboard-tertiary {
+  margin: 0;
+}
+
+/* ── Heading ───────────────────────────────────────────────────── */
+/* Was a duplicated inline style on both render branches. */
+.dashboard-page > .dashboard-heading {
+  padding-bottom: var(--space-lg);
+  border-top: var(--rule-strong) solid transparent;
+  border-image: var(--color-accent-gradient) 1;
+}
+
+.dashboard-primary,
+.dashboard-tertiary {
+  display: grid;
+  gap: var(--space-md);
+}
+
+/* ── Headline metric row ───────────────────────────────────────── */
+.dashboard-page .dashboard-summary {
+  margin: 0;
+  gap: var(--space-sm);
+}
+
+/* Stagger lives in CSS, not in five inline animationDelay values. */
+@keyframes dashboard-rise {
+  from { opacity: 0; transform: translate3d(0, 8px, 0); }
+  to { opacity: 1; transform: none; }
+}
+
+.dashboard-primary.is-animated > .dashboard-summary > * {
+  animation: dashboard-rise var(--dur-slow) var(--ease-out-quart) both;
+}
+.dashboard-primary.is-animated > .dashboard-summary > *:nth-child(1) { animation-delay: 0ms; }
+.dashboard-primary.is-animated > .dashboard-summary > *:nth-child(2) { animation-delay: calc(1 * var(--dur-stagger)); }
+.dashboard-primary.is-animated > .dashboard-summary > *:nth-child(3) { animation-delay: calc(2 * var(--dur-stagger)); }
+.dashboard-primary.is-animated > .dashboard-summary > *:nth-child(4) { animation-delay: calc(3 * var(--dur-stagger)); }
+.dashboard-primary.is-animated > .dashboard-summary > *:nth-child(5) { animation-delay: calc(4 * var(--dur-stagger)); }
+
+/* ── Progressive disclosure ────────────────────────────────────── */
+.dashboard-disclosure {
+  border: var(--rule) solid var(--color-rule-faint);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.dashboard-disclosure > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md);
+  color: var(--color-ink-soft);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: -.005em;
+  list-style: none;
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.dashboard-disclosure > summary::-webkit-details-marker { display: none; }
+.dashboard-disclosure > summary::marker { content: ''; }
+.dashboard-disclosure > summary:hover { color: var(--color-ink); background: var(--color-surface-muted); }
+.dashboard-disclosure > summary:focus-visible { outline: var(--rule-focus) solid var(--color-focus); outline-offset: 2px; }
+
+.dashboard-disclosure[open] > summary { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.dashboard-disclosure[open] > summary:not(:only-child) {
+  border-bottom: var(--rule) solid var(--color-rule-faint);
+  color: var(--color-ink);
+}
+
+.dashboard-disclosure > summary small {
+  margin-left: auto;
+  color: var(--color-ink-faint);
+  font: 600 var(--text-xs) var(--font-mono);
+  letter-spacing: .02em;
+}
+
+.dashboard-disclosure-caret {
+  flex: none;
+  width: .9rem;
+  height: .9rem;
+  opacity: .6;
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.dashboard-disclosure[open] > summary .dashboard-disclosure-caret { transform: rotate(180deg); }
+
+.dashboard-disclosure-panel { padding: var(--space-md); }
+
+/* Severity breakdown: the bar and legend are reused verbatim from
+   components/StatsOverview, so only the wrapper is new. */
+.dashboard-severity .dashboard-disclosure-panel { padding: var(--space-md) var(--space-lg); }
+
+/* ── Tertiary: tool readiness nudge ────────────────────────────── */
+/* Was a full-width card sized like a primary section; it is a status line. */
+.dashboard-tools-nudge {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: var(--space-xs) var(--space-md);
+  border: var(--rule) solid var(--color-rule-faint);
+  border-radius: var(--radius-button);
+  background: var(--color-surface-muted);
+  color: var(--color-ink-faint);
+  font-size: var(--text-xs);
+}
+
+.dashboard-tools-nudge strong { color: var(--color-ink); font-weight: 700; }
+
+.dashboard-tools-nudge .button { margin-left: auto; flex: none; }
+
+.dashboard-tools-dot {
+  flex: none;
+  width: .5rem;
+  height: .5rem;
+  border-radius: 50%;
+  background: var(--color-warning);
+}
+.dashboard-tools-dot[data-state='ready'] { background: var(--color-success); }
+
+/* ── Row: the name is the link, two actions at most ────────────── */
+.workspace-actions.row-actions { gap: var(--space-2xs); }
+
+/* The project name carries the navigation, so "Details" is gone. It still
+   needs to read as a link rather than inert text. */
+.workspace-project-link {
+  display: inline-block;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: none;
+  color: var(--color-ink);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: -.01em;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+.workspace-project-link:hover { color: var(--color-accent-strong); text-decoration: underline; text-underline-offset: 2px; }
+.workspace-project-link:focus-visible { outline: var(--rule-focus) solid var(--color-focus); outline-offset: 2px; }
+
+/* Removal stays visible but quiet — the confirmation dialog is the guard, so
+   hiding it in a menu only cost discoverability. */
+.row-remove {
+  color: var(--color-ink-faint);
+  font-size: var(--text-xs);
+}
+.row-remove:hover { color: var(--color-danger); background: var(--color-danger-soft); }
+
+/* ── Narrow viewports ──────────────────────────────────────────── */
+@media (max-width: 48rem) {
+  .dashboard-page { gap: var(--space-xl); }
+  .dashboard-tools-nudge { flex-wrap: wrap; }
+  .dashboard-tools-nudge .button { margin-left: 0; }
+}
+
+/* ── Reduced motion ────────────────────────────────────────────── */
+/* Belt-and-braces: HomePage also drops `.is-animated` when the hook says so. */
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-primary > .dashboard-summary > *,
+  .dashboard-disclosure-caret,
+  .dashboard-disclosure > summary { animation: none; transition: none; }
+}

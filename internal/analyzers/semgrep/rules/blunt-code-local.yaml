@@ -169,9 +169,9 @@ rules:
       category: security
     patterns:
       - pattern-either:
-          - pattern: <... dangerouslySetInnerHTML = { __html: $VALUE } ... />
-          - pattern: $ELEMENT.dangerouslySetInnerHTML = { __html: $VALUE }
-      - pattern-not: "<... dangerouslySetInnerHTML = { __html: \"...\" } ... />"
+          - pattern: "<$TAG ... dangerouslySetInnerHTML={{ __html: $VALUE }} ...>...</$TAG>"
+          - pattern: "$ELEMENT.dangerouslySetInnerHTML = { __html: $VALUE }"
+      - pattern-not: "<$TAG ... dangerouslySetInnerHTML={{ __html: \"...\" }} ...>...</$TAG>"
       - pattern-not: "$ELEMENT.dangerouslySetInnerHTML = { __html: \"...\" }"
   - id: blunt-code.javascript.sql-string-format
     languages: [javascript, typescript]
@@ -243,7 +243,6 @@ rules:
       category: security
     pattern-either:
       - pattern: $W.postMessage($DATA, "*")
-      - pattern: $W.postMessage($DATA, "*")
       - pattern: $W.postMessage($DATA)
   - id: blunt-code.javascript.javascript-url-href
     languages: [javascript, typescript]
@@ -252,5 +251,5 @@ rules:
     metadata:
       category: security
     pattern-either:
-      - pattern: "<... href = \"javascript:...\" ... />"
+      - pattern: "<$TAG ... href=\"javascript:...\" ...>...</$TAG>"
       - pattern: "$ELEMENT.href = \"javascript:...\""

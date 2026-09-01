@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { api } from '../api';
 import type { SearchedFinding } from '../types';
 import type { Route } from '../lib/router';
@@ -19,6 +20,13 @@ const SEARCH_DEBOUNCE_MS = 250;
 const SEVERITIES = ['critical', 'high', 'medium', 'low', 'info'] as const;
 const ANALYZERS = ['ruff', 'biome', 'semgrep', 'sonarqube', 'secrets', 'todo'] as const;
 const STATUSES = ['new', 'persistent'] as const;
+/** Column key -> label shown in the column picker. The key is state, the label is UI. */
+const SEARCH_COLUMNS = [
+  ['severity', 'Severity'],
+  ['finding', 'Finding'],
+  ['location', 'Location'],
+  ['actions', 'Actions'],
+] as const;
 
 function useSavedSearches() {
   const key = 'bluntcode.savedSearches';
@@ -92,6 +100,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
   useEffect(()=>{ setQueryGroup(filterToQueryGroup({ severity:[...severities].join(','), category:'', analyzer, rule:'', path:workspace, status, q:query } as FindingFilter)); },[severities, analyzer, status, workspace, query]);
 
   const state = useLoad(() => api.searchFindings(params), [params.q, params.severity, params.analyzer, params.page, params.status]);
+  const hiddenColumnCount = SEARCH_COLUMNS.filter(([key]) => !visibleCols[key]).length;
   const items = state.data?.items ?? [];
   const total = state.data?.total ?? 0;
   const pageSize = state.data?.page_size ?? SEARCH_PAGE_SIZE;
@@ -177,7 +186,26 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
           : state.error ? <ErrorPanel error={state.error} retry={state.reload} />
             : total === 0 ? <Empty title="No matching findings" icon={<MagnifierIcon />}>Run a scan or loosen the filters — only scans already stored on this computer are searched.</Empty>
               : <>
-                <div className="table-wrap overflow-x-auto overscroll-x-contain"><div className="flex justify-end gap-1 border-b border-[var(--color-rule-faint)] bg-[var(--color-surface-muted)] p-1.5"><span className="mr-1 self-center font-mono text-[0.65rem] font-bold uppercase tracking-widest text-[var(--color-ink-faint)]">Columns</span>{Object.keys(visibleCols).map(k=> <label key={k} className="inline-flex items-center gap-1 rounded-[var(--radius-button)] border border-[var(--color-rule)] bg-[var(--color-surface)] px-2 py-0.5 text-xs"><input type="checkbox" checked={visibleCols[k as keyof typeof visibleCols]} onChange={()=> setVisibleCols(v=>({...v,[k]:!v[k as keyof typeof v]}))} />{k}</label>)}</div><table className="search-results"><caption className="sr-only">Global search results</caption><thead className="sticky top-0 z-[1] bg-[var(--color-surface-muted)]"><tr>{visibleCols.severity && <th scope="col">Severity</th>}{visibleCols.finding && <th scope="col">Finding</th>}{visibleCols.location && <th scope="col">Location</th>}{visibleCols.actions && <th scope="col"><span className="sr-only">Actions</span></th>}</tr></thead><tbody>
+                <div className="table-wrap overflow-x-auto overscroll-x-contain">
+                  {/* Hiding a column is a taste call most people never make, so
+                      it no longer sits open above every result set — and the
+                      labels are words, not the internal state keys. */}
+                  <details className="search-columns">
+                    <summary className="search-columns-toggle">
+                      <ChevronDown className="search-columns-caret" aria-hidden="true" />
+                      Columns
+                      <small>{hiddenColumnCount ? `${hiddenColumnCount} hidden` : 'All shown'}</small>
+                    </summary>
+                    <div className="search-columns-panel">
+                      {SEARCH_COLUMNS.map(([key, label]) => (
+                        <label key={key} className="search-column-toggle">
+                          <input type="checkbox" checked={visibleCols[key]} onChange={() => setVisibleCols(v=>({...v,[key]:!v[key]}))} />
+                          {label}
+                        </label>
+                      ))}
+                    </div>
+                  </details>
+                <table className="search-results"><caption className="sr-only">Global search results</caption><thead className="sticky top-0 z-[1] bg-[var(--color-surface-muted)]"><tr>{visibleCols.severity && <th scope="col">Severity</th>}{visibleCols.finding && <th scope="col">Finding</th>}{visibleCols.location && <th scope="col">Location</th>}{visibleCols.actions && <th scope="col"><span className="sr-only">Actions</span></th>}</tr></thead><tbody>
                   {items.map((finding: SearchedFinding) => <tr key={`${finding.scan_id}:${finding.id}`}>
                     <td><span className={`severity ${finding.severity}`}>{finding.severity}</span></td>
                     <td className="finding-summary">{finding.title ? <strong>{finding.title}</strong> : null}<span>{finding.message}</span>{finding.rule_id ? <code className="badge">{finding.rule_id}</code> : null}</td>

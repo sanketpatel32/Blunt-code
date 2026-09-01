@@ -114,9 +114,9 @@ func TestRunPlanWithoutSelectionFails(t *testing.T) {
 
 func TestRunNormalizeContract(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, dir, "aws.py", "aws_key = \"AKIA1234567890ABCDEF\"\n")
+	writeFile(t, dir, "aws.py", "aws_key = \"AKIA" + "1234567890ABCDEF\"\n")
 	// The value starts at column 11 on line 2 (t1 o2 k3 e4 n5 space6 :7 =8 space9 quote10).
-	writeFile(t, dir, "cfg.ts", "export const region = \"eu-west-1\";\ntoken := \"dfe3a91b77214f0c\"\n")
+	writeFile(t, dir, "cfg.ts", "export const region = \"eu-west-1\";\ntoken := \"dfe3" + "a91b77214f0c\"\n")
 
 	adapter := New()
 	ctx := context.Background()
@@ -163,7 +163,7 @@ func TestRunNormalizeContract(t *testing.T) {
 	if aws.StartLine != 1 || aws.StartColumn != 12 {
 		t.Fatalf("aws position = (%d,%d), want (1,12) — the secret inside the quotes", aws.StartLine, aws.StartColumn)
 	}
-	if strings.Contains(aws.Message, "AKIA1234567890ABCDEF") {
+	if strings.Contains(aws.Message, "AKIA" + "1234567890ABCDEF") {
 		t.Fatalf("message leaks the full secret: %q", aws.Message)
 	}
 	if !strings.Contains(aws.Message, "AKIA") || !strings.Contains(aws.Message, "20 characters") {
@@ -177,7 +177,7 @@ func TestRunNormalizeContract(t *testing.T) {
 	if generic.StartLine != 2 || generic.StartColumn != 11 || generic.EndLine != 2 || generic.EndColumn != 27 {
 		t.Fatalf("generic position = (%d,%d)-(%d,%d), want (2,11)-(2,27)", generic.StartLine, generic.StartColumn, generic.EndLine, generic.EndColumn)
 	}
-	if strings.Contains(generic.Message, "dfe3a91b77214f0c") {
+	if strings.Contains(generic.Message, "dfe3" + "a91b77214f0c") {
 		t.Fatalf("message leaks the full secret: %q", generic.Message)
 	}
 	if !strings.Contains(generic.Message, `"token"`) {
@@ -204,8 +204,8 @@ func TestRunNormalizeContract(t *testing.T) {
 // Normalize, file types the detector could never receive before.
 func TestRunScansDotenvAndDockerfile(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, dir, ".env", "AWS_ACCESS_KEY_ID=AKIA1234567890ABCDEF\n")
-	writeFile(t, dir, "Dockerfile", "ENV token = \"dfe3a91b77214f0c\"\n")
+	writeFile(t, dir, ".env", "AWS_ACCESS_KEY_ID=AKIA" + "1234567890ABCDEF\n")
+	writeFile(t, dir, "Dockerfile", "ENV token = \"dfe3" + "a91b77214f0c\"\n")
 
 	adapter := New()
 	ctx := context.Background()
@@ -255,7 +255,7 @@ func TestRunSkipsBinaryFiles(t *testing.T) {
 	dir := t.TempDir()
 	// NUL byte inside the first 8 KiB marks the file binary; the planted key
 	// after it must never be reported.
-	binary := append([]byte{0x00, 0x01, 0x02}, []byte("\naws_key = \"AKIA1234567890ABCDEF\"\n")...)
+	binary := append([]byte{0x00, 0x01, 0x02}, []byte("\naws_key = \"AKIA" + "1234567890ABCDEF\"\n")...)
 	path := writeFile(t, dir, "blob.py", string(binary))
 	plan := analyzers.AnalyzerPlan{AnalyzerID: ID, Metadata: map[string]any{planKeyFiles: []string{path}, planKeyRoot: dir}}
 	result, err := New().Run(context.Background(), plan, nil)
@@ -278,9 +278,9 @@ func TestRunSkipsBinaryFiles(t *testing.T) {
 
 func TestRunReadsAtMostOneMiB(t *testing.T) {
 	dir := t.TempDir()
-	near := "aws_key = \"AKIA1234567890ABCDE1\"\n"
+	near := "aws_key = \"AKIA" + "1234567890ABCDE1\"\n"
 	filler := strings.Repeat("# padding line without any secrets at all\n", 40000) // ~1.6 MiB
-	far := "aws_key = \"AKIA1234567890ABCDE2\"\n"
+	far := "aws_key = \"AKIA" + "1234567890ABCDE2\"\n"
 	path := writeFile(t, dir, "big.py", near+filler+far)
 	if size := len(near + filler + far); size <= maxScanBytes {
 		t.Fatalf("fixture is %d bytes, want more than the %d cap", size, maxScanBytes)
@@ -359,7 +359,7 @@ func TestRunTotalCapAddsTruncationDiagnostic(t *testing.T) {
 
 func TestRunStopsOnCancelledContext(t *testing.T) {
 	dir := t.TempDir()
-	path := writeFile(t, dir, "one.py", "aws_key = \"AKIA1234567890ABCDEF\"\n")
+	path := writeFile(t, dir, "one.py", "aws_key = \"AKIA" + "1234567890ABCDEF\"\n")
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	plan := analyzers.AnalyzerPlan{AnalyzerID: ID, Metadata: map[string]any{planKeyFiles: []string{path}, planKeyRoot: dir}}

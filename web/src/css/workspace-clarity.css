@@ -1,0 +1,292 @@
+/* ════════════════════════════════════════════════════════════════════
+   WORKSPACE CLARITY — WorkspaceDetailPage information-architecture pass
+   Companion to pages/WorkspaceDetailPage.tsx. Loaded after styles.css so
+   these rules win on source order; the zones below are also scoped under
+   .workspace-page-body so they win on specificity. Tokens only — dark mode
+   keeps working.
+
+   Reading order, one value of vertical rhythm between every zone:
+     1 Identify    hero (name, path, languages) — no actions
+     2 Act         Run scan is primary; navigation lives in a quiet tray
+     3 Verdict     three headline numbers + one severity disclosure
+     4 Insights    five diagnostics, one on screen at a time (tabs)
+     5 Activity    latest analysis + scan history
+     6 Housekeeping  suppressions
+   ════════════════════════════════════════════════════════════════════ */
+
+/* ── Rhythm ────────────────────────────────────────────────────── */
+/* styles.css gave the toolbar a negative margin and the summary grid /
+   history section their own margins. The flex gap replaces all of them so
+   every zone is separated by exactly one value. */
+.workspace-page-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xl);
+  padding-bottom: var(--space-3xl);
+}
+
+.workspace-page-body > * { margin: 0; }
+.workspace-page-body > .workspace-history-section { margin: 0; }
+.workspace-page-body > .workspace-verdict > .summary-grid { margin: 0; }
+
+/* ── 1 · Identify ──────────────────────────────────────────────── */
+/* The "Next step" panel moved into the action rail, so the hero is a
+   single-column identity block instead of a two-column bento. */
+.workspace-hero-bento.workspace-hero-identity {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-sm);
+  padding: var(--space-lg) var(--space-xl);
+}
+
+.workspace-hero-identity .workspace-hero-title { font-size: var(--text-2xl); }
+.workspace-hero-identity .workspace-lang-dots { margin-top: var(--space-sm); }
+
+/* ── 2 · Act ───────────────────────────────────────────────────── */
+/* One primary action on the left; every secondary/navigational action is
+   grouped into a single muted tray so the row reads as two things, not
+   four. Destructive actions stay inside the More menu. */
+.workspace-toolbar.workspace-action-rail {
+  align-items: center;
+  gap: var(--space-md);
+  margin: 0;
+  padding: var(--space-sm) var(--space-md);
+  border: var(--rule) solid var(--color-rule-faint);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.workspace-action-rail .action-rail-primary,
+.workspace-action-rail .action-rail-secondary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.workspace-action-rail .action-rail-secondary {
+  gap: var(--space-3xs);
+  margin: 0;
+  padding: var(--space-3xs);
+  border: var(--rule) solid var(--color-rule-faint);
+  border-radius: var(--radius-button);
+  background: var(--color-surface-muted);
+}
+
+/* styles.css stretches the run button to 100% of the old 20rem panel. */
+.workspace-action-rail .workspace-run {
+  width: auto;
+  min-height: 2.6rem;
+  padding: 0 var(--space-xl);
+}
+
+.workspace-action-rail .action-rail-secondary .button {
+  min-height: 2.15rem;
+  padding: 0 var(--space-md);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-ink-soft);
+}
+.workspace-action-rail .action-rail-secondary .button:hover { color: var(--color-ink); }
+
+.workspace-action-rail .workspace-more-trigger { padding: 0 var(--space-sm); }
+
+/* The destructive row is the only red in the menu, and it keeps its tint
+   on hover/focus instead of inverting to the default highlight. */
+.workspace-danger-item { color: var(--color-danger); }
+.workspace-danger-item[data-highlighted],
+.workspace-danger-item:focus { background: var(--color-danger-soft); color: var(--color-danger); }
+
+/* Prune / settings editors: no rule existed for .settings-editor before,
+   so both forms were unstyled blocks of inputs. */
+.settings-editor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-md);
+  margin: 0;
+  padding: var(--space-md) var(--space-lg);
+  border: var(--rule) solid var(--color-rule-faint);
+  border-left: var(--rule-strong) solid var(--color-accent);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+.settings-editor label {
+  display: grid;
+  gap: var(--space-2xs);
+  color: var(--color-ink-faint);
+  font: 600 var(--text-2xs) var(--font-mono);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.settings-editor input,
+.settings-editor select {
+  min-height: 2.35rem;
+  padding: 0 var(--space-sm);
+  border: var(--rule) solid var(--color-rule-strong);
+  border-radius: var(--radius-button);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-size: var(--text-sm);
+  text-transform: none;
+}
+.settings-editor .editor-actions { display: flex; gap: var(--space-sm); margin-left: auto; }
+
+/* ── 3 · Verdict ───────────────────────────────────────────────── */
+.workspace-verdict { display: grid; gap: var(--space-md); }
+
+/* Three headline numbers, not seven. .summary-grid.premium sets a 3-up
+   grid already; restated here at higher specificity for source-order
+   independence. */
+.workspace-verdict > .summary-grid.premium {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-md);
+}
+
+/* .risk-hero spans two columns and lays out as a row, which only worked in
+   the old 2x3 bento. Inside a 3-up headline row it wraps: icon + grade +
+   score on one line, the label beneath. */
+.workspace-verdict .risk-hero {
+  grid-column: auto;
+  flex-flow: row wrap;
+  align-items: baseline;
+  gap: var(--space-2xs) var(--space-sm);
+}
+.workspace-verdict .risk-hero > span:last-child { flex: 1 0 100%; }
+.workspace-verdict .risk-hero .risk-grade { font-size: 2rem; }
+.workspace-verdict .risk-hero .risk-score { font-size: 1.75rem; }
+
+/* Stagger lives in CSS (see PremiumSummaryCard) so reduced motion can
+   switch the whole grid off at once. */
+@keyframes workspace-rise {
+  from { opacity: 0; transform: translate3d(0, 8px, 0); }
+  to { opacity: 1; transform: none; }
+}
+.workspace-verdict.is-animated > .summary-grid > .premium-card {
+  animation: workspace-rise var(--dur-slow) var(--ease-out-quart) both;
+}
+.workspace-verdict.is-animated > .summary-grid > .premium-card:nth-child(1) { animation-delay: 0ms; }
+.workspace-verdict.is-animated > .summary-grid > .premium-card:nth-child(2) { animation-delay: calc(1 * var(--dur-stagger)); }
+.workspace-verdict.is-animated > .summary-grid > .premium-card:nth-child(3) { animation-delay: calc(2 * var(--dur-stagger)); }
+
+/* ── Progressive disclosure ────────────────────────────────────── */
+.workspace-disclosure {
+  border: var(--rule) solid var(--color-rule-faint);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+.workspace-disclosure > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md);
+  color: var(--color-ink-soft);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+  transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.workspace-disclosure > summary::-webkit-details-marker { display: none; }
+.workspace-disclosure > summary::marker { content: ''; }
+.workspace-disclosure > summary:hover { background: var(--color-surface-muted); color: var(--color-ink); }
+.workspace-disclosure > summary:focus-visible { outline: var(--rule-focus) solid var(--color-focus); outline-offset: 2px; }
+
+.workspace-disclosure > summary small {
+  margin-left: auto;
+  color: var(--color-ink-faint);
+  font: 600 var(--text-xs) var(--font-mono);
+}
+
+.workspace-disclosure-caret {
+  flex: none;
+  width: .9rem;
+  height: .9rem;
+  opacity: .6;
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.workspace-disclosure[open] > summary .workspace-disclosure-caret { transform: rotate(180deg); }
+
+.workspace-disclosure[open] > summary {
+  border-bottom: var(--rule) solid var(--color-rule-faint);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  color: var(--color-ink);
+}
+
+.workspace-disclosure-panel { padding: var(--space-md); }
+
+/* Four disclosed cards, auto-fitting so they never form a lonely orphan row. */
+.workspace-disclosure-panel > .summary-grid.premium {
+  grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
+  margin: 0;
+}
+
+/* ── 4 · Insights ──────────────────────────────────────────────── */
+/* Five diagnostics share one card. Radix only mounts the selected panel,
+   so the lazy DependencyGraph / ComplianceMatrix chunks stay unloaded. */
+.workspace-insights {
+  border: var(--rule) solid var(--color-rule-faint);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+  overflow: clip;
+}
+
+.workspace-insights-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-lg) 0;
+  border-bottom: var(--rule) solid var(--color-rule-faint);
+}
+.workspace-insights-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: -.02em;
+}
+
+/* The tab strip carries the card's bottom rule; its own underline overlays
+   it so the active tab appears to sit on the border. */
+.workspace-insights-head [role='tablist'] {
+  gap: var(--space-lg);
+  margin-bottom: calc(var(--rule) * -1);
+  border-bottom-color: transparent;
+}
+.workspace-insights-head [role='tab'] {
+  padding: var(--space-sm) 2px;
+  font-size: var(--text-sm);
+}
+
+.workspace-insights [role='tabpanel'] { margin-top: 0; padding: var(--space-lg); }
+.workspace-insights [role='tabpanel']:focus-visible { outline-offset: -2px; }
+
+/* ── 5 · Activity ──────────────────────────────────────────────── */
+/* The split keeps its two-column shape; only the stray margin went away. */
+.workspace-page-body > .workspace-history-section { align-items: start; }
+
+/* ── Narrow viewports ──────────────────────────────────────────── */
+@media (max-width: 60rem) {
+  .workspace-page-body { gap: var(--space-xl); }
+  .workspace-hero-bento.workspace-hero-identity { padding: var(--space-md) var(--space-lg); }
+  .workspace-action-rail .action-rail-secondary { width: 100%; }
+  .workspace-verdict > .summary-grid.premium { grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
+  .workspace-insights-head { padding: var(--space-sm) var(--space-md) 0; }
+  .workspace-insights [role='tabpanel'] { padding: var(--space-md); }
+  .settings-editor .editor-actions { margin-left: 0; }
+}
+
+/* ── Reduced motion ────────────────────────────────────────────── */
+/* Belt-and-braces: the page also drops `.is-animated` (and skips the
+   confetti) when useReducedMotion says so. */
+@media (prefers-reduced-motion: reduce) {
+  .workspace-verdict.is-animated > .summary-grid > .premium-card,
+  .workspace-disclosure-caret,
+  .workspace-disclosure > summary { animation: none; transition: none; }
+}

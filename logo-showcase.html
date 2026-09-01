@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Blunt Code — Logo Variants</title>
+<style>
+:root{--paper:oklch(98.6% 0.005 260);--ink:oklch(17% 0.016 268);--muted:oklch(96% 0.007 260);--rule:oklch(92% 0.006 260);--accent:oklch(56% 0.22 268);--card:0 1px 3px oklch(17% 0.016 268 / .06),0 4px 16px oklch(17% 0.016 268 / .04)}
+*{box-sizing:border-box}html{overflow-x:clip;background:var(--paper)}body{margin:0;font-family:IBM Plex Sans,system-ui,sans-serif;color:var(--ink);background:var(--paper);line-height:1.5}
+.wrap{max-width:86rem;margin:0 auto;padding:2.5rem 1.5rem 4rem}
+h1{margin:0;font:700 clamp(2rem,3vw,2.6rem)/0.95 IBM Plex Sans;letter-spacing:-.04em}
+.sub{max-width:38rem;color:oklch(42% .013 268);margin:.6rem 0 2rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(16rem,1fr));gap:1rem}
+.card{border:1px solid var(--rule);background:#fff;border-radius:1rem;box-shadow:var(--card);padding:1.2rem;display:grid;gap:.9rem}
+.mark{width:88px;height:88px;border-radius:18px;display:grid;place-items:center;background:#fff;border:1px solid var(--rule);box-shadow:var(--card)}
+.mark svg{width:64px;height:64px}
+.card h3{margin:0;font:700 .95rem/1.2 IBM Plex Sans;letter-spacing:-.02em}
+.card p{margin:0;color:oklch(42% .013 268);font-size:.82rem;line-height:1.5}
+.badge{display:inline-flex;padding:.15rem .5rem;border:1px solid var(--rule);border-radius:999px;background:oklch(97% .005 260);font:600 .68rem IBM Plex Mono;letter-spacing:.02em}
+.pick{margin-top:1.8rem;padding:1rem 1.2rem;border:1px solid var(--rule);border-radius:1rem;background:#fff;box-shadow:var(--card)}
+</style></head><body><div class="wrap">
+<h1>Blunt Code — logo variants</h1>
+<p class="sub">Local code analysis for Windows. Concept: blunt = direct, decisive, shield. Security + code quality. 6 variants, distinct pattern families, all work at 16px favicon → 512px store.</p>
+<div class="grid">
+
+<!-- V1 Shield + Chevron — security -->
+<div class="card">
+<div class="mark">
+<svg viewBox="0 0 100 100" role="img" aria-label="V1 Shield Chevron"><rect width="100" height="100" rx="22" fill="#0F172A"/><path d="M50 18 L78 30 L78 58 C78 71 65 83 50 90 C35 83 22 71 22 58 L22 30 Z" fill="none" stroke="white" stroke-opacity=".08" stroke-width="2"/><path d="M38 48 L50 60 L64 38" fill="none" stroke="white" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="72" cy="22" r="5" fill="#3B82F6"/></svg>
+</div>
+<h3>V1 — Shield Chevron <span class="badge">security</span></h3>
+<p>Shield = protection, Windows security. Chevron check = passed analysis. Dot = live scan. Most explicit for pentest/hacking suite. Works as app icon (shield silhouette).</p>
+</div>
+
+<!-- V2 Blunt Chisel — literal -->
+<div class="card">
+<div class="mark">
+<svg viewBox="0 0 100 100"><rect width="100" height="100" rx="22" fill="#0F172A"/><g stroke="white" stroke-linecap="round" stroke-linejoin="round"><path d="M36 72 L64 28" stroke-width="7" opacity=".96"/><path d="M44 24 L56 24 L68 36 L68 48 Z" fill="#3B82F6" stroke="none"/><circle cx="30" cy="78" r="3.5" fill="#3B82F6"/></g></svg>
+</div>
+<h3>V2 — Blunt Chisel <span class="badge">literal</span></h3>
+<p>Literal blunt edge: chisel tip = blunt, not sharp. Direct, decisive tool. Diagonal cut creates dynamic B shape. Memorable, owns the name.</p>
+</div>
+
+<!-- V3 Brackets + Check — code quality -->
+<div class="card">
+<div class="mark">
+<svg viewBox="0 0 100 100"><rect width="100" height="100" rx="22" fill="#0F172A"/><g fill="none" stroke="white" stroke-linecap="round" stroke-linejoin="round"><path d="M32 30 L22 50 L32 70" stroke-width="5.5"/><path d="M68 30 L78 50 L68 70" stroke-width="5.5"/><path d="M42 68 L50 78 L60 48" stroke="#3B82F6" stroke-width="5.5"/></g></svg>
+</div>
+<h3>V3 — Brackets Check <span class="badge">code quality</span></h3>
+<p>Code brackets { } + check = lint passed. Most devtool-native. Instant "code analysis" read at 16px. Balanced, not aggressive.</p>
+</div>
+
+<!-- V4 B Monogram — brand -->
+<div class="card">
+<div class="mark">
+<svg viewBox="0 0 100 100"><rect width="100" height="100" rx="22" fill="#0F172A"/><g fill="white"><path d="M32 28 H58 C66 28 72 33 72 41 C72 47 68 51 62 52.5 C69 53.5 74 58 74 65 C74 73 67 78 58 78 H32 Z M42 38 V50 H56 C60 50 62 48 62 44 C62 40 60 38 56 38 H42 Z M42 58 V68 H58 C62 68 64 66 64 62 C64 58 62 56 58 56 H42 Z"/><circle cx="76" cy="20" r="4" fill="#3B82F6"/></g></svg>
+</div>
+<h3>V4 — B Monogram <span class="badge">brand</span></h3>
+<p>Letter B = Blunt. Two bowls = blunt double-edge. Strongest brand recall, works as favicon letter. Most minimal, timeless.</p>
+</div>
+
+<!-- V5 Network Nodes — analysis flow -->
+<div class="card">
+<div class="mark">
+<svg viewBox="0 0 100 100"><rect width="100" height="100" rx="22" fill="#0F172A"/><g fill="none" stroke="white" stroke-linecap="round"><path d="M28 72 Q50 72 50 50 T 72 28" stroke-width="3" opacity=".9"/><circle cx="28" cy="72" r="7" fill="white"/><circle cx="50" cy="50" r="8" fill="#3B82F6"/><circle cx="72" cy="28" r="6" fill="white"/><circle cx="50" cy="50" r="2.2" fill="#0F172A"/></g></svg>
+</div>
+<h3>V5 — Analysis Flow <span class="badge">graph</span></h3>
+<p>Three nodes + path = scan pipeline: files → analysis → report. Mirrors DependencyGraph in app. Best for data-story (trends, findings).</p>
+</div>
+
+<!-- V6 Blunt Line — editorial -->
+<div class="card">
+<div class="mark">
+<svg viewBox="0 0 100 100"><rect width="100" height="100" rx="22" fill="#0F172A"/><g stroke-linecap="square"><rect x="22" y="22" width="56" height="56" rx="10" fill="none" stroke="white" stroke-opacity=".12" stroke-width="2"/><line x1="32" y1="44" x2="68" y2="44" stroke="white" stroke-width="5" opacity=".96"/><line x1="32" y1="56" x2="52" y2="56" stroke="#3B82F6" stroke-width="5"/><line x1="32" y1="68" x2="60" y2="68" stroke="white" stroke-width="3.5" opacity=".35"/></g></svg>
+</div>
+<h3>V6 — Blunt Line <span class="badge">editorial</span></h3>
+<p>Blunt = flat end, not pointed. Three lines = code lines, bottom faint = blunt. Most minimal editorial, Hallmark-friendly.</p>
+</div>
+
+</div>
+<div class="pick">
+<strong>Recommendation:</strong> <b>V1 Shield Chevron</b> — only one that signals security + Windows + pentest (your 22 hacking tests) at a glance, shield silhouette owns app icon, check gives positive "all clear" vibe, dot = live. As fallback keep <b>V3 Brackets</b> for devtool pages and <b>V4 B</b> for 16px favicon. All use same palette: <code>#0F172A ink</code> + <code>#3B82F6 accent oklch(56% 0.22 268)</code> + <code>white</code> — matches tokens <code>var(--color-brand-mark/accent)</code>.
+</div>
+</div></body></html>

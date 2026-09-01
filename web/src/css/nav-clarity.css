@@ -1,0 +1,177 @@
+/* ════════════════════════════════════════════════════════════════════
+   NAV CLARITY — header information-architecture pass
+   Companion to components/AppShell.tsx. Loaded after styles.css so these
+   rules win on specificity/source order; tokens only, so dark mode holds.
+   Structure: brand · primary nav (3) + "More" disclosure · utility cluster · CTA
+   ════════════════════════════════════════════════════════════════════ */
+
+/* ── Primary rail ──────────────────────────────────────────────── */
+/* styles.css gives `.app-nav nav` an overflow-x scroller for the old eight-link
+   rail, and an overflow ancestor clips the absolutely-positioned "More" panel
+   even when the trigger itself is `overflow: visible`. With three links plus
+   "More" the scroller is no longer needed, so drop it on the nav itself. */
+.app-nav nav { overflow: visible; }
+
+.app-nav .nav-primary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+  overflow: visible;
+}
+
+.app-nav nav a.nav-link {
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-button);
+}
+
+/* ── "More" disclosure ─────────────────────────────────────────── */
+.nav-more { position: relative; }
+
+.app-nav .nav-more > .nav-more-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-button);
+  color: var(--color-ink-soft);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: -.005em;
+  white-space: nowrap;
+  list-style: none;
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+.app-nav .nav-more > .nav-more-toggle::-webkit-details-marker { display: none; }
+.app-nav .nav-more > .nav-more-toggle::marker { content: ''; }
+.app-nav .nav-more > .nav-more-toggle:hover { color: var(--color-ink); background: var(--color-surface-muted); }
+.nav-more > .nav-more-toggle:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+
+/* The active route lives inside the collapsed panel — surface it here so the
+   user can still tell where they are. */
+.app-nav .nav-more[data-active='true'] > .nav-more-toggle {
+  color: var(--color-accent-strong);
+  background: var(--color-accent-soft);
+  box-shadow: inset 0 0 0 var(--rule) var(--color-accent);
+}
+
+.nav-more-chevron {
+  width: .85rem;
+  height: .85rem;
+  opacity: .65;
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.nav-more[open] > .nav-more-toggle .nav-more-chevron { transform: rotate(180deg); }
+
+.app-nav .nav-more-panel {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + var(--space-2xs));
+  right: 0;
+  display: grid;
+  gap: var(--space-3xs);
+  min-width: 11.5rem;
+  padding: var(--space-xs);
+  border: var(--rule) solid var(--color-rule);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.nav-more-group { display: grid; gap: var(--space-3xs); }
+
+.app-nav .nav-more-panel a {
+  display: block;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-button);
+}
+
+/* ── Terminal action, demoted out of the action bar ─────────────── */
+.nav-more-foot {
+  display: flex;
+  margin-top: var(--space-3xs);
+  padding-top: var(--space-2xs);
+  border-top: var(--rule) solid var(--color-rule-faint);
+}
+/* styles.css hides `.close-app` below 63rem; inside the disclosure it must
+   stay reachable at every width. */
+.app-nav .nav-more .close-app {
+  display: inline-flex;
+  width: 100%;
+  justify-content: flex-start;
+  color: var(--color-danger);
+}
+.app-nav .nav-more .close-app:hover {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
+/* ── Action cluster vs. primary CTA ────────────────────────────── */
+.app-nav .nav-actions { gap: var(--space-md); }
+
+/* Utility controls read as one cohesive group, clearly separate from the
+   single dominant "Add workspace" CTA. */
+.nav-utils {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  padding: var(--space-3xs);
+  border-radius: var(--radius-button);
+  background: var(--color-surface-muted);
+}
+
+/* Inside the cluster every control drops its own chrome: the group is the
+   visual container, so repeating a border per control doubles the noise. */
+.nav-utils .nav-util,
+.nav-utils .nav-shortcuts,
+.nav-utils .theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  min-height: 2rem;
+  padding: 0 var(--space-xs);
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  box-shadow: none;
+  color: var(--color-ink-faint);
+  transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.nav-utils .nav-util:hover,
+.nav-utils .nav-shortcuts:hover,
+.nav-utils .theme-toggle:hover {
+  background: var(--color-surface);
+  color: var(--color-ink);
+}
+
+.nav-utils .nav-shortcuts { width: 2rem; justify-content: center; padding: 0; }
+
+.nav-lang-select {
+  max-width: 3.4rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: 700 var(--text-xs) var(--font-mono);
+  cursor: pointer;
+}
+.nav-lang-select:focus-visible { outline: var(--rule-focus) solid var(--color-focus); outline-offset: 2px; }
+
+/* ── Narrow viewports ──────────────────────────────────────────── */
+@media (max-width: 68rem) {
+  .app-nav .nav-primary { gap: var(--space-2xs); }
+}
+@media (max-width: 48rem) {
+  .app-nav .nav-primary { justify-content: flex-start; }
+  .app-nav .nav-more-panel { right: auto; left: 0; }
+  .app-nav .nav-actions { gap: var(--space-sm); }
+}
+
+/* ── Reduced motion (belt-and-braces with the global media query; the
+      hook also covers the class the component sets) ───────────────── */
+.app-nav.nav-no-motion .nav-more-chevron,
+.app-nav.nav-no-motion .nav-more-toggle,
+.app-nav.nav-no-motion a.nav-link { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .nav-more-chevron, .nav-more-toggle, a.nav-link { transition: none; }
+}

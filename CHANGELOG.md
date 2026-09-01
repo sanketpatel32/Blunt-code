@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-08-31
+
+### Changed
+- **Navigation reduced to three primary destinations plus a "More" menu:** Home, Workspaces and Search stay as direct links; Tools, Pentest, Rules, Settings and About move into a "More" disclosure that also carries Close app (which styles.css used to hide below 63rem entirely). Eight equal-weight links made every navigation a scan-and-choose, and half of them are set-once destinations. The menu closes on outside click, Escape, and after picking a link, and its label ships localized in all six UI languages.
+- **Dashboard rebuilt around one metric row and the activity feed:** the separate StatsOverview block is gone (it repeated numbers the summary row already shows), a severity breakdown folds behind a disclosure, and the per-card inline animation styles moved to reduced-motion-aware CSS.
+- **Workspace page hero split into identify / act zones:** the hero card is now title-and-status only, the scan profile + "Run scan" pair becomes the single primary action with every other action grouped beside it, the lower sections switch from accordion to tabs, and the completion confetti is skipped for reduced-motion users.
+- **Search column picker collapsed by default:** hiding columns is a taste call most people never make, so the picker is now a "Columns" disclosure showing how many are hidden, with human labels instead of internal state keys.
+- **Workspaces filter bar simplified:** the dead "Filters" button and the tag dropdown that duplicated the tag text box are gone, and the result count appears only while a filter is active.
+
+### Fixed
+- **Scan page right panel pushed off-screen after a scan completed:** `.scan-page` is a grid with no explicit columns, so its single implicit `auto` track sized itself to the widest child's content — once the terminal report (with its wide findings table) rendered, the whole page grew ~450px past the container, and `overflow-x: clip` on html/body cut the right side off with no scrollbar. The "Results so far" panel was unreadable without zooming out. The page track is now `minmax(0, 1fr)` so it never exceeds the container; the findings table keeps scrolling inside its own `.table-wrap`.
+- **Semgrep returned zero findings on every scan:** the bundled local rulepack was invalid twice over — unquoted `__html: ` scalars made the YAML unparsable, and the `react-dangerous-html` / `javascript-url-href` rules used `<... X ... />`, which is not valid semgrep pattern grammar. Either failure makes semgrep reject the whole config file, silently disabling all 25 rules. Patterns rewritten to valid grammar (verified with `semgrep --validate` and behavior-tested against live JSX), pack version bumped to 3.1.2, `doctor --fix` re-extracts it, and the rulepack tests now reject both the `": "` plain-scalar YAML class and the `<... ... />` grammar class so this cannot ship silently again. Also deduplicated a repeated `postMessage` pattern.
+- **Incremental scans never invalidated across Blunt Code upgrades:** `internal/scans` carried its own hardcoded version constant stuck at `0.5.0` while releases reached 0.16.x, so the incremental-identity cache key never changed between builds and reports mislabeled the version. Now kept in lockstep with the `cmd/bluntcode/main.go` version const (with a comment saying so).
+- **SonarQube findings dropped with "compute task timed out" on first analysis:** the compute-engine wait had a hardcoded 5-minute deadline, which a first analysis after server boot (fresh DB, plugin init, ES indexing) regularly exceeds on thousand-file workspaces. Raised to 20 minutes; the scan's `--timeout` context still bounds the overall wait.
+
 ## [0.16.0] - 2026-08-29
 
 ### Added
