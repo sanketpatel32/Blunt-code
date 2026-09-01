@@ -398,12 +398,17 @@
     text-transform: uppercase; letter-spacing: 0.01em;
     overflow-wrap: anywhere;
   }
+  /* the .exe tail wraps as one unbreakable chunk: "BLUNTCODE." / "EXE",
+     never the mid-word "BLUNTCODE.E / XE" */
+  .node b b { white-space: nowrap; }
   .node span { font: 500 0.68rem/1.4 var(--font-mono); color: var(--ink-soft); letter-spacing: 0.04em; }
   .node-red { background: var(--red); }
   .node-red b { color: #fff; }
   .node-red span { color: #fff; }
   .link {
-    flex: none; width: clamp(1.6rem, 3.5vw, 3rem); height: var(--bw);
+    /* 3px, not var(--bw): a fractional track scatters line/chip/head across
+       device pixels at 125% scaling and the assembly renders off-axis */
+    flex: none; width: clamp(1.6rem, 3.5vw, 3rem); height: 3px;
     background: var(--ink); position: relative; align-self: center;
   }
   .link::after {
@@ -418,7 +423,8 @@
     background: var(--tape); border: 2px solid var(--ink);
     animation: pulse 2.6s linear infinite;
   }
-  @keyframes pulse { to { left: calc(100% - 10px); } }
+  /* chip docks just before the 9px arrowhead — calc(100% - 10px) parked it on the head */
+  @keyframes pulse { to { left: calc(100% - 19px); } }
   .an-stack {
     flex: 1.25; display: grid; gap: 0.4rem;
     border-inline: var(--bw) solid var(--ink);
@@ -454,14 +460,16 @@
   .profile span { font: 500 0.7rem/1.55 var(--font-mono); color: var(--ink-soft); }
   @media (max-width: 64rem) {
     .flow { flex-direction: column; align-items: stretch; }
-    .link { width: var(--bw); height: 1.6rem; margin: 0.35rem auto; }
+    .link { width: 3px; height: 2rem; margin: 0.35rem auto; }
     .link::after {
       right: auto; top: auto; bottom: -1px; left: 50%; transform: translateX(-50%);
       border-left: 6px solid transparent; border-right: 6px solid transparent;
       border-top: 9px solid var(--ink); border-bottom: 0;
     }
-    .link::before { animation: pulseV 2.6s linear infinite; left: 50%; margin-left: -5px; top: 0; }
-    @keyframes pulseV { to { top: calc(100% - 10px); } }
+    /* margin: 0 0 0 -5px — the base margin-top:-5px must be reset or the chip
+       rides 5px above its track and floats off the line */
+    .link::before { animation: pulseV 2.6s linear infinite; left: 50%; margin: 0 0 0 -5px; top: 0; }
+    @keyframes pulseV { to { top: calc(100% - 19px); } }
     .an-stack { border-inline: 0; border-block: var(--bw) solid var(--ink); padding-block: 0.6rem; }
     .profiles { grid-template-columns: 1fr; }
   }
@@ -839,7 +847,7 @@
       <div class="flow">
         <div class="node"><b>Your folder</b><span>39 languages classified</span></div>
         <span class="link" aria-hidden="true"></span>
-        <div class="node node-red"><b>bluntcode.exe</b><span>loopback · 127.0.0.1 only</span></div>
+        <div class="node node-red"><b>bluntcode.<b>exe</b></b><span>loopback · 127.0.0.1 only</span></div>
         <span class="link" aria-hidden="true"></span>
         <div class="an-stack">
           <span class="an"><b>Ruff</b> · python</span>
