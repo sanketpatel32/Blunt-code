@@ -30,7 +30,6 @@ const RuleStudioPage = lazy(() => import('./pages/RuleStudioPage').then((m) => (
 // Preload heavy chunks in parallel (no waterfall): hints only, safe if fail
 void import('./pages/PentestPage');
 void import('./pages/RuleStudioPage');
-void import('./components/AnalyticsCharts');
 void import('./components/DependencyGraph');
 void import('./components/AutoFixPanel');
 import { AboutPage } from './pages/AboutPage';

@@ -43,9 +43,9 @@ describe('Blunt Code home', () => {
     expect(host.textContent).toContain('TypeScript');
     expect(host.textContent).toContain('8 findings');
     expect(host.textContent).not.toContain('No analysis yet');
-    expect(host.textContent).toContain('1 of 1 tools ready');
-    expect(host.querySelector('.workspace-table table')).not.toBeNull();
-    expect(host.textContent).toContain('Last scan');
+    expect(host.textContent).toContain('1 of 1 engines ready');
+    expect(host.querySelector('.ledger-list')).not.toBeNull();
+    expect(host.textContent).toContain('Completed');
     const remove = [...host.querySelectorAll('button')].find((button) => button.textContent === 'Remove');
     expect(remove).toBeDefined();
     await act(async () => { remove!.click(); });
@@ -117,8 +117,8 @@ describe('Blunt Code home', () => {
     const statuses = [...host.querySelectorAll('[role="status"][aria-busy="true"]')];
     expect(statuses.length).toBeGreaterThan(0);
     for (const status of statuses) expect(status.textContent).toContain('Loading…');
-    expect(host.querySelector('.skeleton-table.workspace-table table')).not.toBeNull();
-    expect(host.querySelectorAll('.skeleton-table.workspace-table tbody tr')).toHaveLength(6);
+    expect(host.querySelector('.skeleton-table.board-skeleton table')).not.toBeNull();
+    expect(host.querySelectorAll('.skeleton-table.board-skeleton tbody tr')).toHaveLength(5);
     expect(host.querySelector('.skeleton-lines')).not.toBeNull();
   });
 

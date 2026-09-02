@@ -1,83 +1,110 @@
-import { Suspense, lazy, useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { api } from '../api';
-import type { RecentScanItem, Severity, Workspace, Tool } from '../types';
+import type { RecentScanItem, Severity, Tool, Workspace } from '../types';
 import type { Route } from '../lib/router';
 import type { Notice } from '../lib/notice';
 import { message } from '../lib/notice';
-import { date, relativeTime, scanStateDisplay, languageColor, languageNames } from '../lib/format';
+import { date, languageColor, languageNames, relativeTime, scanStateDisplay } from '../lib/format';
 import { useLoad } from '../hooks/useLoad';
-import { Empty, ErrorPanel, LanguageBadges, SummaryCard, PrivacyNotice } from '../components/ui';
+import { Empty, ErrorPanel, PrivacyNotice } from '../components/ui';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-import { FolderIcon, ScanIcon, CheckShieldIcon, SparkleIcon, MagnifierIcon } from '../components/icons';
 import { SkeletonCards, SkeletonLines, SkeletonTable } from '../components/skeletons';
 import { ConfirmationDialog } from '../components/dialogs';
 import { WorkspaceTemplates } from '../components/WorkspaceTemplates';
-import { useReducedMotion } from '../hooks/useReducedMotion';
-import { MiniSparkline } from '../components/MiniSparkline';
+import { PageHeader } from '../components/PageHeader';
 import { PathCopy } from '../components/PathCopy';
 import { ScanActionDropdown } from '../components/ScanActionDropdown';
-import {
-  Shield,
-  ShieldAlert,
-  ShieldCheck,
-  Zap,
-  Play,
-  Search,
-  FolderPlus,
-  Activity,
-  BarChart3,
-  Layers,
-  SlidersHorizontal,
-  ChevronRight,
-  Filter,
-  CheckCircle2,
-  AlertTriangle,
-  Clock,
-  Cpu,
-  LayoutGrid,
-  List as ListIcon,
-  RefreshCw,
-  FolderOpen,
-  Lock,
-  Flame,
-  ArrowUpRight,
-  Terminal,
-  Sparkles
-} from 'lucide-react';
+import { FolderIcon, ScanIcon } from '../components/icons';
+import { Activity, ChevronRight, FolderOpen, FolderPlus, Play } from 'lucide-react';
 
-import { SEVERITY_ORDER, languageCoverageFromLanguages, severityCountsFromSummary, trendPointsFromScans, type SeverityCounts } from '../lib/chartData';
+import { SEVERITY_ORDER, trendPointsFromScans } from '../lib/chartData';
+import { GRADE_BANDS, bandFor, riskGrade, riskScore, severityCountsOf } from '../lib/risk';
 
-const AnalyticsCharts = lazy(() => import('../components/AnalyticsCharts').then((m) => ({ default: m.AnalyticsCharts })));
+const FEED_LIMIT = 10;
 
-const ACTIVITY_FEED_LIMIT = 10;
+type FeedFilter = 'all' | 'running' | 'completed' | 'warnings';
 
-type ActivityFilter = 'all' | 'running' | 'completed' | 'warnings';
-type ProjectViewMode = 'table' | 'cards';
+/** Only terminal scans with a full findings table count toward current risk. */
+function currentScan(workspace: Workspace) {
+  const scan = workspace.latest_scan;
+  return scan && (scan.state === 'completed' || scan.state === 'completed_with_warnings') ? scan : undefined;
+}
 
 export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd: () => void; notify: (n: Notice) => void }) {
   const workspaces = useLoad(api.workspaces, []);
   const tools = useLoad(api.tools, []);
   const recent = useLoad(api.recentScans, []);
-  const readyTools = tools.data?.filter((tool) => tool.ready).length ?? 0;
+
   const scans = recent.data?.scans ?? [];
   const summary = recent.data?.summary;
   const latestWorkspaceId = scans[0]?.workspace_id;
+  const readyTools = tools.data?.filter((tool) => tool.ready).length ?? 0;
+  const totalTools = tools.data?.length ?? 0;
 
   const [quickScanning, setQuickScanning] = useState(false);
-  const [projectFilter, setProjectFilter] = useState('');
-  const [activityFilter, setActivityFilter] = useState<ActivityFilter>('all');
-  const [projectView, setProjectView] = useState<ProjectViewMode>('table');
   const [pickingFolder, setPickingFolder] = useState(false);
-
-  const reduced = useReducedMotion();
+  const [ledgerFilter, setLedgerFilter] = useState('');
+  const [feedFilter, setFeedFilter] = useState<FeedFilter>('all');
 
   // First run = nothing added and nothing ever scanned; any saved workspace or
-  // history row means the full dashboard has something to show.
+  // history row means the board has something to show.
   const firstRun = !workspaces.loading && !workspaces.error && !workspaces.data?.length
     && !(recent.data?.scans?.length);
+
+  // ── The verdict: one score from the latest completed scan of each workspace ──
+  const ledgerBase = useMemo(() => {
+    return (workspaces.data ?? []).map((workspace) => {
+      const current = currentScan(workspace);
+      const score = current ? riskScore(severityCountsOf(current)) : null;
+      return { workspace, current, score, total: current?.total_findings ?? 0 };
+    });
+  }, [workspaces.data]);
+
+  const verdict = useMemo(() => {
+    const counts: Record<Severity, number> = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
+    let reported = 0; // total_findings straight from the scans, for rows whose severity counts are missing
+    for (const row of ledgerBase) {
+      if (!row.current) continue;
+      counts.critical += row.current.critical_count ?? 0;
+      counts.high += row.current.high_count ?? 0;
+      counts.medium += row.current.medium_count ?? 0;
+      counts.low += row.current.low_count ?? 0;
+      counts.info += row.current.info_count ?? 0;
+      reported += row.current.total_findings ?? 0;
+    }
+    const tallied = counts.critical + counts.high + counts.medium + counts.low + counts.info;
+    const score = riskScore(counts);
+    const scanned = ledgerBase.filter((row) => row.current).length;
+    return { counts, score, grade: riskGrade(score), scanned, totalFindings: tallied > 0 ? tallied : reported };
+  }, [ledgerBase]);
+
+  // ── The ledger: workspaces ranked by risk, unscanned last ──
+  const ledgerRows = useMemo(() => {
+    const query = ledgerFilter.trim().toLowerCase();
+    const matching = query
+      ? ledgerBase.filter((row) =>
+          row.workspace.name.toLowerCase().includes(query) ||
+          row.workspace.root_path.toLowerCase().includes(query) ||
+          row.workspace.languages?.some((language) => language.toLowerCase().includes(query)))
+      : ledgerBase;
+    const scored = matching
+      .filter((row) => row.score !== null)
+      .sort((a, b) => (b.score! - a.score!) || (b.total - a.total) || a.workspace.name.localeCompare(b.workspace.name));
+    const unscored = matching
+      .filter((row) => row.score === null)
+      .sort((a, b) => a.workspace.name.localeCompare(b.workspace.name));
+    return [...scored, ...unscored];
+  }, [ledgerBase, ledgerFilter]);
+
+  const feedRows = useMemo(() => {
+    return scans.filter((scan) => {
+      if (feedFilter === 'running') return scan.state === 'running' || scan.state === 'queued';
+      if (feedFilter === 'completed') return scan.state === 'completed';
+      if (feedFilter === 'warnings') return scan.state === 'completed_with_warnings' || scan.state === 'failed' || scan.state === 'cancelled';
+      return true;
+    });
+  }, [scans, feedFilter]);
 
   async function quickScan() {
     if (!latestWorkspaceId || quickScanning) return;
@@ -108,74 +135,23 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
     }
   }
 
-  // Filtered recent activity
-  const filteredScans = useMemo(() => {
-    return scans.filter((scan) => {
-      if (activityFilter === 'running') return scan.state === 'running' || scan.state === 'queued';
-      if (activityFilter === 'completed') return scan.state === 'completed';
-      if (activityFilter === 'warnings') return scan.state === 'completed_with_warnings' || scan.state === 'failed' || scan.state === 'cancelled';
-      return true;
-    });
-  }, [scans, activityFilter]);
-
-  // Filtered workspaces
-  const filteredWorkspaces = useMemo(() => {
-    const list = workspaces.data ?? [];
-    if (!projectFilter.trim()) return list;
-    const q = projectFilter.toLowerCase().trim();
-    return list.filter((w) =>
-      w.name.toLowerCase().includes(q) ||
-      w.root_path.toLowerCase().includes(q) ||
-      w.languages?.some((l) => l.toLowerCase().includes(q))
-    );
-  }, [workspaces.data, projectFilter]);
-
-  // Security Posture Score & Rating (0-100)
-  const posture = useMemo(() => {
-    if (!summary || summary.total_findings === 0) {
-      return { score: 100, grade: 'A+', label: 'Fortified & Clean', color: 'var(--color-success)', tone: 'positive' };
-    }
-    const critical = summary.critical_count ?? 0;
-    const high = summary.high_count ?? 0;
-    const medium = summary.medium_count ?? 0;
-    const total = summary.total_findings ?? 0;
-    
-    // Deduct points based on severity weights
-    let penalty = critical * 25 + high * 12 + medium * 3;
-    let computedScore = Math.max(12, Math.round(100 - penalty));
-
-    if (critical === 0 && high === 0 && total <= 10) {
-      return { score: Math.max(90, computedScore), grade: 'A', label: 'Strong Security Posture', color: 'var(--color-success)', tone: 'positive' };
-    }
-    if (critical === 0 && high <= 2) {
-      return { score: Math.max(78, computedScore), grade: 'B+', label: 'Good · Minor Vulnerabilities', color: 'var(--color-accent)', tone: 'neutral' };
-    }
-    if (critical <= 2 && high <= 6) {
-      return { score: Math.max(60, computedScore), grade: 'B', label: 'Moderate Risk Detected', color: 'var(--color-warning)', tone: 'warning' };
-    }
-    if (critical <= 5) {
-      return { score: Math.max(40, computedScore), grade: 'C', label: 'Elevated Vulnerability Risk', color: 'var(--color-warning)', tone: 'warning' };
-    }
-    return { score: Math.max(15, computedScore), grade: 'D', label: 'Critical Attention Required', color: 'var(--color-danger)', tone: 'danger' };
-  }, [summary]);
-
   if (firstRun) {
     return (
-      <div className="page dashboard-page">
-        <header className="dashboard-heading">
-          <div className="dashboard-heading-main">
-            <p className="eyebrow">Dashboard</p>
-            <h1>Workspaces</h1>
-            <p>Run a local scan, then follow every result in one place.</p>
-          </div>
-          <div className="dashboard-actions">
-            <Button variant="outline" onClick={() => void handlePickFolder()} disabled={pickingFolder}>
-              <FolderOpen className="mr-1.5 h-4 w-4" />
-              {pickingFolder ? 'Opening…' : 'Browse folder…'}
-            </Button>
-            <Button onClick={onAdd}>+ Add workspace</Button>
-          </div>
-        </header>
+      <div className="page board-page">
+        <PageHeader
+          eyebrow="Dashboard"
+          title="Risk board"
+          description="Scan a project locally, then track its risk here."
+          actions={
+            <>
+              <Button variant="outline" onClick={() => void handlePickFolder()} disabled={pickingFolder}>
+                <FolderOpen className="mr-1.5 h-4 w-4" />
+                {pickingFolder ? 'Opening…' : 'Browse folder…'}
+              </Button>
+              <Button onClick={onAdd}>+ Add workspace</Button>
+            </>
+          }
+        />
 
         <Empty
           title="Point Blunt Code at a project"
@@ -199,285 +175,143 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
     );
   }
 
-  return (
-    <div className="page dashboard-page">
-      {/* ── Top Cyber Command Hero Deck ── */}
-      <section className="dashboard-hero-deck" aria-label="Security & Posture Overview">
-        <div className="dashboard-hero-content">
-          <div className="dashboard-heading-main">
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <p className="eyebrow">Dashboard</p>
-              <span className="dashboard-live-indicator">
-                <i className="dashboard-live-dot" />
-                {(summary?.active_scans ?? 0) > 0
-                  ? `${summary?.active_scans} active scan${(summary?.active_scans ?? 0) === 1 ? '' : 's'} running`
-                  : 'Local engine ready'}
-              </span>
-              <span className="telemetry-pill hidden sm:inline-flex">
-                <Lock className="h-3 w-3 text-[var(--color-accent-strong)]" />
-                <span>100% Offline &amp; Private</span>
-              </span>
-            </div>
-            <h1>Workspaces</h1>
-            <p>Run a local scan, then follow every result in one place.</p>
-          </div>
+  const activeScans = summary?.active_scans ?? 0;
+  const verdictTallied = verdict.scanned > 0;
 
-          <div className="dashboard-actions">
+  return (
+    <div className="page board-page">
+      <PageHeader
+        eyebrow="Dashboard"
+        title="Risk board"
+        description="Latest completed scan per workspace, ranked by weighted risk."
+        badge={activeScans > 0 ? (
+          <span className="board-live">
+            <i className="board-live-dot" aria-hidden="true" />
+            {activeScans} scan{activeScans === 1 ? '' : 's'} running
+          </span>
+        ) : undefined}
+        actions={
+          <>
             <Button
               variant="outline"
               onClick={() => void quickScan()}
               disabled={!latestWorkspaceId || quickScanning}
               title={latestWorkspaceId ? 'Run a scan on the most recently scanned workspace' : undefined}
-              className="quick-scan-btn"
             >
               <Play className={`mr-1.5 h-3.5 w-3.5 ${quickScanning ? 'animate-spin' : ''}`} />
               {quickScanning ? 'Starting scan…' : 'Scan latest workspace'}
             </Button>
-            <Button onClick={onAdd} className="add-workspace-btn">
+            <Button onClick={onAdd}>
               <FolderPlus className="mr-1.5 h-4 w-4" />
               + Add workspace
             </Button>
-          </div>
-        </div>
+          </>
+        }
+      />
 
-        {/* Posture Meter Dial */}
-        <div className="dashboard-posture-banner">
-          <div className="posture-dial-wrap">
-            <svg viewBox="0 0 80 80" className="posture-svg-ring" aria-hidden="true">
-              <circle cx="40" cy="40" r="34" className="posture-ring-bg" />
-              <circle
-                cx="40"
-                cy="40"
-                r="34"
-                className="posture-ring-fill"
-                stroke={posture.color}
-                strokeDasharray={213.6}
-                strokeDashoffset={213.6 - (213.6 * posture.score) / 100}
-              />
-            </svg>
-            <div className="posture-grade-label">
-              <span className="posture-grade" style={{ color: posture.color }}>{posture.grade}</span>
-              <span className="posture-score-num">{posture.score}/100</span>
-            </div>
+      {/* ── Verdict: how risky is the code right now ── */}
+      {workspaces.loading ? (
+        <div className="board-verdict-loading"><SkeletonCards count={1} variant="metric" /></div>
+      ) : (
+        <section className="board-verdict" aria-label="Current risk across your workspaces">
+          <div className="verdict-grade" data-grade={verdictTallied ? verdict.grade : 'none'}>
+            <span className="verdict-letter" aria-hidden="true">{verdictTallied ? verdict.grade : '–'}</span>
+            <span className="verdict-score">
+              {verdictTallied ? (
+                <>score <strong className="tabular-nums">{verdict.score}</strong></>
+              ) : (
+                'not graded yet'
+              )}
+            </span>
           </div>
-          <div className="posture-meta">
-            <div className="flex items-center gap-2">
-              <span className="posture-title">Security Health Index</span>
-              <span className="posture-badge" data-tone={posture.tone}>{posture.label}</span>
-            </div>
-            <p className="posture-desc">
-              Continuous weighted risk assessment calculated across all scanned repositories.
+
+          <div className="verdict-main">
+            <p className="verdict-line">
+              {verdictTallied ? (
+                <>
+                  <strong>{bandFor(verdict.grade).label}.</strong>{' '}
+                  {verdict.totalFindings} finding{verdict.totalFindings === 1 ? '' : 's'} across the latest completed scan
+                  of {verdict.scanned} workspace{verdict.scanned === 1 ? '' : 's'}.
+                </>
+              ) : workspaces.data?.length ? (
+                <>No completed scans yet — run a scan to grade your code.</>
+              ) : (
+                <>Add a workspace to start grading your code.</>
+              )}
             </p>
-          </div>
-          <div className="posture-quick-stats">
-            <div className="posture-stat-item">
-              <span className="posture-stat-val text-[var(--color-danger)]">{summary?.critical_count ?? 0}</span>
-              <span className="posture-stat-lbl">Critical</span>
-            </div>
-            <div className="posture-stat-item">
-              <span className="posture-stat-val text-[var(--color-warning)]">{summary?.high_count ?? 0}</span>
-              <span className="posture-stat-lbl">High</span>
-            </div>
-            <div className="posture-stat-item">
-              <span className="posture-stat-val text-[var(--color-accent)]">{readyTools}</span>
-              <span className="posture-stat-lbl">Engines</span>
-            </div>
-          </div>
-        </div>
-      </section>
 
-      {/* ── Primary Zone: KPI Metric Cards Grid ── */}
-      <div className={`dashboard-primary ${reduced ? '' : 'is-animated'}`}>
-        {recent.loading ? (
-          <div className="dashboard-summary-loading">
-            <SkeletonCards count={5} variant="metric" />
-          </div>
-        ) : summary && (
-          <section className="summary-grid dashboard-summary" aria-label="Scan activity summary">
-            {/* Card 1: Active scans */}
-            <article className="summary-card card-hover-lift">
-              <div className="flex items-center justify-between">
-                <strong className="tabular-nums">
-                  {summary.active_scans ?? 0}
-                  {(summary.active_scans ?? 0) > 0 && <i className="pulse-dot" aria-hidden="true" />}
-                </strong>
-                <span className="metric-icon-badge" title="Live background scan engine">
-                  <Activity className="h-4 w-4 text-[var(--color-accent)]" />
+            <div
+              className="verdict-bands"
+              role="img"
+              aria-label={`Grade ${verdictTallied ? verdict.grade : 'none'} at score ${verdictTallied ? verdict.score : 0}. Bands: ${GRADE_BANDS.map((band) => `${band.grade} ${band.range}`).join(', ')}.`}
+            >
+              {GRADE_BANDS.map((band) => (
+                <span key={band.grade} className="verdict-band" data-grade={band.grade} data-active={verdictTallied && verdict.grade === band.grade || undefined}>
+                  <b>{band.grade}</b>
+                  <small>{band.range}</small>
                 </span>
-              </div>
-              <span>Active scans</span>
-            </article>
+              ))}
+            </div>
 
-            {/* Card 2: Critical + high */}
-            <SummaryCard
-              label="Critical + high"
-              value={(summary.critical_count ?? 0) + (summary.high_count ?? 0)}
-              tone="high"
-            />
+            <SeverityTally counts={verdict.counts} total={verdict.totalFindings} onExplore={() => go({ page: 'search' })} />
+          </div>
 
-            {/* Card 3: Total findings */}
-            <SummaryCard label="Total findings" value={summary.total_findings ?? 0} />
+          <dl className="verdict-rail" aria-label="Scan activity at a glance">
+            <div className="rail-stat">
+              <dt>Active scans</dt>
+              <dd className="tabular-nums">
+                {activeScans}
+                {activeScans > 0 && <i className="pulse-dot" aria-hidden="true" />}
+              </dd>
+            </div>
+            <div className="rail-stat">
+              <dt>Scans this week</dt>
+              <dd className="tabular-nums">{summary?.scans_last_7d ?? 0}</dd>
+            </div>
+            <div className="rail-stat">
+              <dt>Workspaces scanned</dt>
+              <dd className="tabular-nums">
+                {verdict.scanned} <span className="rail-of">of {workspaces.data?.length ?? 0}</span>
+              </dd>
+            </div>
+            <div className="rail-stat">
+              <dt>Engines</dt>
+              <dd className="tabular-nums">
+                {readyTools} <span className="rail-of">of {totalTools}</span>
+              </dd>
+            </div>
+          </dl>
+        </section>
+      )}
 
-            {/* Card 4: Scans this week */}
-            <SummaryCard label="Scans this week" value={summary.scans_last_7d ?? 0} />
-
-            {/* Card 5: Workspaces scanned */}
-            <article className="summary-card card-hover-lift">
-              <div className="flex items-center justify-between">
-                <strong className="tabular-nums">
-                  {summary.workspaces_scanned ?? 0}
-                  <span className="summary-of"> of {summary.workspaces_total ?? 0}</span>
-                </strong>
-                <span className="metric-icon-badge" title="Registered codebases scanned">
-                  <Layers className="h-4 w-4 text-[var(--color-ink-soft)]" />
-                </span>
-              </div>
-              <span>Workspaces scanned</span>
-            </article>
-          </section>
-        )}
-
-        {/* Global Severity Spectrum & Breakdown Bar */}
-        {summary && (
-          <SeverityBreakdown
-            counts={severityCountsFromSummary(summary)}
-            total={summary.total_findings ?? 0}
-            onFilterFindings={() => go({ page: 'search' })}
-          />
-        )}
-      </div>
-
-      {/* ── Two-Column Main Content Zone: Activity Feed + Project Hub ── */}
-      <div className="dashboard-main-grid">
-        {/* Left Column: Recent Activity Feed */}
-        <section className="dashboard-activity" aria-labelledby="recent-scans">
-          <header className="dashboard-section-header">
+      {/* ── Two questions side by side: where is the risk · what happened lately ── */}
+      <div className="board-columns">
+        <section className="board-panel board-ledger" aria-labelledby="ledger-heading">
+          <header className="board-panel-head">
             <div>
-              <h2 id="recent-scans" className="dashboard-section-title">
-                <Activity className="h-4 w-4 text-[var(--color-accent)]" />
-                Recent activity
-              </h2>
-              <p className="dashboard-section-sub">
-                {scans.length
-                  ? `Last ${Math.min(scans.length, ACTIVITY_FEED_LIMIT)} scans across your projects.`
-                  : 'Every scan across your projects lands here.'}
+              <h2 id="ledger-heading" className="board-panel-title">Where the risk is</h2>
+              <p className="board-panel-sub">
+                Ranked by weighted risk — critical ×10, high ×5, medium ×2, low ×1.
               </p>
             </div>
-
-            {scans.length > 0 && (
-              <div className="activity-filter-tabs">
-                {(['all', 'running', 'completed', 'warnings'] as ActivityFilter[]).map((tab) => (
-                  <button
-                    key={tab}
-                    type="button"
-                    className={`activity-tab-btn ${activityFilter === tab ? 'active' : ''}`}
-                    onClick={() => setActivityFilter(tab)}
-                  >
-                    {tab === 'all' ? 'All' : tab.charAt(0).toUpperCase() + tab.slice(1)}
-                  </button>
-                ))}
-              </div>
+            {ledgerBase.length > 4 && (
+              <label className="board-filter">
+                <span className="sr-only">Filter workspaces by name or language</span>
+                <input
+                  type="text"
+                  placeholder="Filter…"
+                  value={ledgerFilter}
+                  onChange={(e) => setLedgerFilter(e.target.value)}
+                />
+              </label>
             )}
           </header>
 
-          {recent.loading ? (
-            <SkeletonTable rows={4} cols={4} className="activity-table" />
-          ) : recent.error ? (
-            <p className="muted activity-unavailable">
-              Recent activity is unavailable right now. Your workspaces are unaffected.
-            </p>
-          ) : !scans.length ? (
-            <Empty title="No scans yet" icon={<ScanIcon />}>
-              Run a scan to follow what changed across your projects.
-            </Empty>
-          ) : !filteredScans.length ? (
-            <div className="empty-filter-state">
-              <p className="text-sm text-[var(--color-ink-soft)]">No scans matching the "{activityFilter}" filter.</p>
-              <Button variant="ghost" size="sm" onClick={() => setActivityFilter('all')}>
-                Show all activity
-              </Button>
-            </div>
-          ) : (
-            <ol className="activity-feed">
-              {filteredScans.slice(0, ACTIVITY_FEED_LIMIT).map((scan) => (
-                <ActivityRow key={scan.id} scan={scan} go={go} />
-              ))}
-            </ol>
-          )}
-        </section>
-
-        {/* Right Column: Project Workspaces Hub */}
-        <section className="dashboard-list" aria-labelledby="recent-workspaces">
-          <header className="dashboard-section-header">
-            <div>
-              <h2 id="recent-workspaces" className="dashboard-section-title">
-                <Layers className="h-4 w-4 text-[var(--color-accent)]" />
-                Recent projects
-              </h2>
-              <p className="dashboard-section-sub">
-                {workspaces.data?.length ? `${workspaces.data.length} saved locally` : 'Choose a project to begin.'}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2 flex-wrap">
-              {workspaces.data && workspaces.data.length > 2 && (
-                <div className="project-search-wrap">
-                  <Search className="project-search-icon h-3.5 w-3.5" />
-                  <input
-                    type="text"
-                    placeholder="Filter projects…"
-                    value={projectFilter}
-                    onChange={(e) => setProjectFilter(e.target.value)}
-                    className="project-search-input"
-                    aria-label="Filter projects by name or language"
-                  />
-                  {projectFilter && (
-                    <button
-                      type="button"
-                      className="project-search-clear"
-                      onClick={() => setProjectFilter('')}
-                      aria-label="Clear filter"
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {workspaces.data && workspaces.data.length > 0 && (
-                <div className="view-mode-toggle" role="group" aria-label="Project view mode">
-                  <button
-                    type="button"
-                    className={`view-toggle-btn ${projectView === 'table' ? 'active' : ''}`}
-                    onClick={() => setProjectView('table')}
-                    title="Table view"
-                    aria-label="Table view"
-                  >
-                    <ListIcon className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    className={`view-toggle-btn ${projectView === 'cards' ? 'active' : ''}`}
-                    onClick={() => setProjectView('cards')}
-                    title="Cards view"
-                    aria-label="Cards view"
-                  >
-                    <LayoutGrid className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              )}
-
-              <Button variant="ghost" size="sm" onClick={() => go({ page: 'workspaces' })}>
-                All workspaces
-              </Button>
-            </div>
-          </header>
-
           {workspaces.loading ? (
-            <SkeletonTable rows={6} cols={5} className="workspace-table" />
+            <SkeletonTable rows={5} cols={4} className="board-skeleton" />
           ) : workspaces.error ? (
             <ErrorPanel error={workspaces.error} retry={workspaces.reload} />
-          ) : !workspaces.data?.length ? (
+          ) : !ledgerBase.length ? (
             <Empty
               title="No workspaces yet"
               icon={<FolderIcon />}
@@ -485,114 +319,101 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
             >
               Choose a folder. Blunt Code never changes your source files.
             </Empty>
-          ) : !filteredWorkspaces.length ? (
-            <div className="empty-filter-state">
-              <p className="text-sm text-[var(--color-ink-soft)]">No projects match "{projectFilter}".</p>
-              <Button variant="ghost" size="sm" onClick={() => setProjectFilter('')}>
-                Clear filter
-              </Button>
+          ) : !ledgerRows.length ? (
+            <div className="board-empty-filter">
+              <p>No workspaces match “{ledgerFilter}”.</p>
+              <Button variant="ghost" size="sm" onClick={() => setLedgerFilter('')}>Clear filter</Button>
             </div>
-          ) : projectView === 'cards' ? (
-            <div className="workspace-cards-grid">
-              {filteredWorkspaces.slice(0, 6).map((workspace) => (
-                <WorkspaceGridCard
-                  key={workspace.id}
-                  workspace={workspace}
+          ) : (
+            <ol className="ledger-list">
+              {ledgerRows.map((row) => (
+                <LedgerRow
+                  key={row.workspace.id}
+                  workspace={row.workspace}
+                  score={row.score}
                   go={go}
                   notify={notify}
                   onRemoved={workspaces.reload}
                 />
               ))}
+            </ol>
+          )}
+
+          <footer className="board-panel-foot">
+            <Button variant="ghost" size="sm" onClick={() => go({ page: 'workspaces' })}>
+              All workspaces <ChevronRight className="ml-0.5 h-3.5 w-3.5" />
+            </Button>
+          </footer>
+        </section>
+
+        <section className="board-panel board-activity" aria-labelledby="activity-heading">
+          <header className="board-panel-head">
+            <div>
+              <h2 id="activity-heading" className="board-panel-title">
+                <Activity className="h-4 w-4 text-[var(--color-accent)]" />
+                What happened lately
+              </h2>
+              <p className="board-panel-sub">Every scan lands here, newest first.</p>
+            </div>
+            {scans.length > 0 && (
+              <div className="feed-filters" role="group" aria-label="Filter recent activity">
+                {(['all', 'running', 'completed', 'warnings'] as FeedFilter[]).map((filter) => (
+                  <button
+                    key={filter}
+                    type="button"
+                    className={`feed-filter-btn ${feedFilter === filter ? 'active' : ''}`}
+                    aria-pressed={feedFilter === filter}
+                    onClick={() => setFeedFilter(filter)}
+                  >
+                    {filter === 'all' ? 'All' : filter === 'warnings' ? 'Warnings' : filter.charAt(0).toUpperCase() + filter.slice(1)}
+                  </button>
+                ))}
+              </div>
+            )}
+          </header>
+
+          {recent.loading ? (
+            <div className="board-skeleton"><SkeletonLines lines={5} /></div>
+          ) : recent.error ? (
+            <p className="muted board-soft-error">
+              Recent activity is unavailable right now. Your workspaces are unaffected.
+            </p>
+          ) : !scans.length ? (
+            <Empty title="No scans yet" icon={<ScanIcon />}>
+              Run a scan to follow what changed across your projects.
+            </Empty>
+          ) : !feedRows.length ? (
+            <div className="board-empty-filter">
+              <p>No scans matching the “{feedFilter}” filter.</p>
+              <Button variant="ghost" size="sm" onClick={() => setFeedFilter('all')}>Show all activity</Button>
             </div>
           ) : (
-            <WorkspaceTable
-              workspaces={filteredWorkspaces.slice(0, 6)}
-              go={go}
-              notify={notify}
-              onRemoved={workspaces.reload}
-            />
+            <>
+              <TrendBars scans={scans} />
+              <ol className="feed-list">
+                {feedRows.slice(0, FEED_LIMIT).map((scan) => (
+                  <FeedRow key={scan.id} scan={scan} go={go} />
+                ))}
+              </ol>
+            </>
           )}
         </section>
       </div>
 
-      {/* ── Tertiary Zone: Visual Analytics & Tool Readiness Suite ── */}
-      <div className="dashboard-tertiary">
-        <section className="dashboard-trends" aria-label="Trends and language coverage">
-          <div className="dashboard-trends-header">
-            <div>
-              <h2 className="dashboard-section-title">
-                <BarChart3 className="h-4 w-4 text-[var(--color-accent)]" />
-                Security &amp; Quality Analytics
-              </h2>
-              <p className="dashboard-section-sub">Continuous findings trend, distribution, and code coverage.</p>
-            </div>
-          </div>
-          <Suspense fallback={<SkeletonCards count={3} variant="chart" />}>
-            <AnalyticsCharts
-              trends={trendPointsFromScans(scans)}
-              severityCounts={severityCountsFromSummary(summary)}
-              languages={languageCoverageFromLanguages(
-                workspaces.data
-                  ?.flatMap((w) => w.languages ?? [])
-                  .filter((v, i, a) => a.indexOf(v) === i)
-                  .slice(0, 6)
-              )}
-            />
-          </Suspense>
-        </section>
-
-        {/* Tool Readiness & Engine Radar */}
-        <ToolReadiness
-          ready={readyTools}
-          total={tools.data?.length ?? 0}
-          tools={tools.data ?? []}
-          loading={tools.loading}
-          error={tools.error}
-          retry={tools.reload}
-          go={go}
-        />
-      </div>
+      {/* ── Engines strip: real tool readiness, nothing invented ── */}
+      <EnginesFoot tools={tools.data ?? []} ready={readyTools} total={totalTools} loading={tools.loading} error={tools.error} retry={tools.reload} go={go} />
     </div>
   );
 }
 
-/** Severity split of the findings the headline row counts — interactive with direct drill-down */
-function SeverityBreakdown({
-  counts,
-  total,
-  onFilterFindings
-}: {
-  counts: SeverityCounts;
-  total: number;
-  onFilterFindings?: () => void;
-}) {
+/** Global severity tally with drill-down into findings search. */
+function SeverityTally({ counts, total, onExplore }: { counts: Record<Severity, number>; total: number; onExplore: () => void }) {
   const present = SEVERITY_ORDER.filter((severity) => counts[severity] > 0);
-  const label = `Current findings by severity: ${
-    present.length ? present.map((severity) => `${counts[severity]} ${severity}`).join(', ') : 'none yet'
-  }`;
+  const label = `Current findings by severity: ${present.length ? present.map((severity) => `${counts[severity]} ${severity}`).join(', ') : 'none yet'}`;
 
   return (
-    <section className="dashboard-severity" aria-label={label}>
-      <div className="dashboard-severity-head">
-        <div className="flex items-center gap-2">
-          <ShieldAlert className="h-4 w-4 text-[var(--color-danger)]" />
-          <h3 className="font-display font-semibold">Severity breakdown</h3>
-        </div>
-        <div className="flex items-center gap-3">
-          <small className="tabular-nums font-medium">{total} findings</small>
-          {total > 0 && onFilterFindings && (
-            <button
-              type="button"
-              className="text-xs font-semibold text-[var(--color-accent-strong)] hover:underline flex items-center gap-0.5"
-              onClick={onFilterFindings}
-            >
-              Explore findings <ChevronRight className="h-3 w-3" />
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className="severity-stack severity-bar" role="img" aria-label={label} title={label}>
+    <div className="verdict-tally">
+      <div className="severity-stack verdict-bar" role="img" aria-label={label} title={label}>
         {total > 0 &&
           present.map((severity) => (
             <i
@@ -602,119 +423,79 @@ function SeverityBreakdown({
             />
           ))}
       </div>
-
-      <ul className="severity-legend">
-        {SEVERITY_ORDER.map((severity) => (
-          <li key={severity} className={counts[severity] > 0 ? severity : 'zero'}>
-            <i className={`seg-${severity}`} aria-hidden="true" />
-            <span className="capitalize">{severity}</span>
-            <span className="legend-count tabular-nums">{counts[severity]}</span>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-/** Tool readiness demoted from a full-width card to a sleek interactive status hub */
-function ToolReadiness({
-  ready,
-  total,
-  tools,
-  loading,
-  error,
-  retry,
-  go
-}: {
-  ready: number;
-  total: number;
-  tools: Tool[];
-  loading: boolean;
-  error?: string;
-  retry: () => void;
-  go: (r: Route) => void;
-}) {
-  if (loading) {
-    return (
-      <div className="dashboard-tools-nudge">
-        <SkeletonLines lines={1} />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="dashboard-tools-nudge">
-        Tool status is unavailable right now.{' '}
-        <button type="button" className="text-button" onClick={retry}>
-          Try again
-        </button>
-      </div>
-    );
-  }
-
-  const allReady = total > 0 && ready === total;
-
-  return (
-    <div className="dashboard-tools-nudge">
-      <i className="dashboard-tools-dot" data-state={allReady ? 'ready' : 'partial'} aria-hidden="true" />
-      <span className="dashboard-tools-text">
-        <strong>
-          {ready} of {total}
-        </strong>{' '}
-        tools ready · managed locally, nothing leaves this computer
-      </span>
-
-      {tools.length > 0 && (
-        <div className="dashboard-tools-pills hidden sm:flex items-center gap-1.5 ml-2">
-          {tools.slice(0, 5).map((tool) => (
-            <span
-              key={tool.id}
-              className={`tool-mini-chip ${tool.ready ? 'ready' : 'pending'}`}
-              title={`${tool.id}: ${tool.ready ? 'Ready' : 'Not installed'}`}
-            >
-              {tool.id}
-            </span>
+      <div className="verdict-legend-row">
+        <ul className="verdict-legend">
+          {SEVERITY_ORDER.map((severity) => (
+            <li key={severity} className={counts[severity] > 0 ? severity : 'zero'}>
+              <i className={`seg-${severity}`} aria-hidden="true" />
+              <span className="capitalize">{severity}</span>
+              <span className="legend-count tabular-nums">{counts[severity]}</span>
+            </li>
           ))}
-          {tools.length > 5 && <span className="text-[0.65rem] text-[var(--color-ink-faint)]">+{tools.length - 5}</span>}
-        </div>
-      )}
-
-      <Button variant="ghost" size="sm" onClick={() => go({ page: 'tools' })}>
-        Manage tools
-      </Button>
+        </ul>
+        {total > 0 && (
+          <button type="button" className="verdict-explore text-button" onClick={onExplore}>
+            Explore findings <ChevronRight className="h-3 w-3" />
+          </button>
+        )}
+      </div>
     </div>
   );
 }
 
-function ActivityRow({ scan, go }: { scan: RecentScanItem; go: (r: Route) => void }) {
-  const timestamp = scan.finished_at ?? scan.started_at;
-  const findings = scan.total_findings ?? 0;
+/** Honest micro-chart: findings per recent scan, oldest → newest. Real totals only. */
+function TrendBars({ scans }: { scans: RecentScanItem[] }) {
+  const points = trendPointsFromScans(scans);
+  if (points.length < 2) return null;
+  const max = Math.max(...points.map((point) => point.total), 1);
+  const label = `Findings per recent scan, oldest to newest: ${points.map((point) => point.total).join(', ')}`;
 
   return (
-    <li className="activity-row">
+    <div className="board-trend">
+      <p className="board-trend-label">Findings per recent scan</p>
+      <div className="trend-bars" role="img" aria-label={label} title={label}>
+        {points.map((point, index) => (
+          <i
+            key={index}
+            style={{ height: `${Math.max(6, Math.round((point.total / max) * 100))}%` }}
+            title={`${point.label}: ${point.total}`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function FeedRow({ scan, go }: { scan: RecentScanItem; go: (r: Route) => void }) {
+  const timestamp = scan.finished_at ?? scan.started_at;
+  const findings = scan.total_findings ?? 0;
+  const state = scanStateDisplay(scan.state);
+
+  return (
+    <li className="feed-row">
       <button
         type="button"
-        className="activity-workspace"
+        className="feed-workspace"
         onClick={() => go({ page: 'workspace', id: scan.workspace_id })}
         title={`Open ${scan.workspace_name || 'Workspace'}`}
       >
         <span className="truncate">{scan.workspace_name || 'Workspace'}</span>
       </button>
-
       <button
         type="button"
-        className="activity-detail"
+        className="feed-detail"
         onClick={() => go({ page: 'scan', id: scan.id })}
         title={`View scan results for ${scan.workspace_name || 'Workspace'}`}
       >
-        <span className={`state ${scan.state}`}>{scan.state.replaceAll('_', ' ')}</span>
-        {scan.profile && <span className="badge profile-badge">{scan.profile}</span>}
-        <span className="activity-findings">
+        <span className={`feed-state ${state.variant}`}>{state.label}</span>
+        {scan.profile && <span className="feed-profile">{scan.profile}</span>}
+        <span className="feed-findings">
           <SeverityDots scan={scan} />
-          {findings} {findings === 1 ? 'finding' : 'findings'}
+          <span className="feed-findings-text">
+            {findings} {findings === 1 ? 'finding' : 'findings'}
+          </span>
         </span>
-        <span className="activity-time" title={timestamp ? date(timestamp) : undefined}>
+        <span className="feed-time" title={timestamp ? date(timestamp) : undefined}>
           {relativeTime(timestamp)}
         </span>
       </button>
@@ -748,66 +529,44 @@ function SeverityDots({ scan }: { scan: RecentScanItem }) {
   );
 }
 
-function WorkspaceTable({
-  workspaces,
-  go,
-  notify,
-  onRemoved
-}: {
-  workspaces: Workspace[];
-  go: (r: Route) => void;
-  notify: (n: Notice) => void;
-  onRemoved: () => void;
-}) {
+/** Ledger rows cap language chips at four plus an overflow count; the full list stays available in the overflow tooltip. */
+function LedgerLanguages({ languages }: { languages?: string[] }) {
+  if (!languages?.length) return <span className="muted">No languages detected</span>;
+  const shown = languages.slice(0, 4);
+  const rest = languages.slice(4);
   return (
-    <div className="workspace-table table-wrap max-w-full overflow-x-auto overscroll-x-contain">
-      <Table>
-        <TableHeader sticky>
-          <TableRow>
-            <TableHead>Project</TableHead>
-            <TableHead>Languages</TableHead>
-            <TableHead>Last scan</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>
-              <span className="sr-only">Actions</span>
-            </TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {workspaces.map((workspace) => (
-            <WorkspaceTableRow
-              key={workspace.id}
-              workspace={workspace}
-              go={go}
-              notify={notify}
-              onRemoved={onRemoved}
-            />
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+    <ul className="badges flex flex-wrap gap-1.5 ledger-languages" aria-label="Detected languages">
+      {shown.map((language) => (
+        <li key={language} className="badge">
+          <i className="lang-dot" aria-hidden="true" style={{ background: languageColor(language) }} />
+          {languageNames[language] ?? language}
+        </li>
+      ))}
+      {rest.length > 0 && (
+        <li className="badge ledger-lang-more" title={`Also detected: ${rest.map((language) => languageNames[language] ?? language).join(', ')}`}>
+          +{rest.length}
+        </li>
+      )}
+    </ul>
   );
 }
 
-function sparkValues(seed: number): number[] {
-  // Deterministic 7-point history from scan total — no extra fetch, stable per workspace.
-  const base = [0.45, 0.62, 0.51, 0.78, 0.66, 0.84, 0.71];
-  return base.map((b) => Math.round(Math.max(2, b * (8 + (seed % 9)) + (seed % 3))));
-}
-
-function WorkspaceTableRow({
+function LedgerRow({
   workspace,
+  score,
   go,
   notify,
   onRemoved
 }: {
   workspace: Workspace;
+  score: number | null;
   go: (r: Route) => void;
   notify: (n: Notice) => void;
   onRemoved: () => void;
 }) {
   const scan = workspace.latest_scan;
-  const status = scanStateDisplay(scan?.state);
+  const current = currentScan(workspace);
+  const state = scanStateDisplay(scan?.state);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -824,181 +583,106 @@ function WorkspaceTableRow({
     }
   }
 
+  const counts: Array<[Severity, number | undefined]> = [
+    ['critical', current?.critical_count],
+    ['high', current?.high_count],
+    ['medium', current?.medium_count],
+    ['low', current?.low_count],
+    ['info', current?.info_count]
+  ];
+  const present = counts.filter(([, count]) => (count ?? 0) > 0);
+  const total = current?.total_findings ?? present.reduce((sum, [, count]) => sum + (count ?? 0), 0);
+  const breakdown = present.length ? present.map(([severity, count]) => `${count} ${severity}`).join(', ') : 'none';
+  const grade = score !== null ? riskGrade(score) : null;
+
   return (
-    <>
-      <TableRow className="group">
-        <TableCell className="workspace-project">
-          <button
-            type="button"
-            className="workspace-project-link"
-            onClick={() => go({ page: 'workspace', id: workspace.id })}
-          >
-            {workspace.name}
-          </button>
-          <PathCopy path={workspace.root_path} />
-        </TableCell>
-        <TableCell className="workspace-languages">
-          <LanguageBadges languages={workspace.languages} />
-        </TableCell>
-        <TableCell className="workspace-last-scan tabular-nums">
+    <li className="ledger-row" data-scored={score !== null || undefined}>
+      <span className="ledger-grade" data-grade={grade ?? 'none'} aria-hidden="true">
+        {grade ?? '–'}
+      </span>
+      {grade && (
+        <span className="sr-only">
+          {bandFor(grade).label}, weighted score {score}.
+        </span>
+      )}
+
+      <div className="ledger-identity">
+        <button
+          type="button"
+          className="ledger-name"
+          onClick={() => go({ page: 'workspace', id: workspace.id })}
+        >
+          {workspace.name}
+        </button>
+        <PathCopy path={workspace.root_path} />
+        <LedgerLanguages languages={workspace.languages} />
+      </div>
+
+      <div className="ledger-mid">
+        {current ? (
+          <>
+            <span className="severity-stack ledger-bar" role="img" aria-label={`Findings by severity: ${breakdown}`} title={breakdown}>
+              {present.map(([severity, count]) => (
+                <i key={severity} className={`seg-${severity}`} style={{ width: `${Math.round(((count ?? 0) * 1000) / Math.max(total, 1)) / 10}%` }} />
+              ))}
+            </span>
+            <span className="ledger-count tabular-nums">
+              {total} {total === 1 ? 'finding' : 'findings'}
+            </span>
+          </>
+        ) : (
+          <span className="ledger-never">
+            {scan ? 'Scan ' + state.label.toLowerCase() : 'Never scanned'}
+          </span>
+        )}
+      </div>
+
+      <div className="ledger-meta">
+        {current ? (
+          <span className="ledger-score tabular-nums" title="Weighted risk score: critical ×10, high ×5, medium ×2, low ×1">
+            {score} <small>risk</small>
+          </span>
+        ) : (
+          <span className="ledger-score ledger-score-none">—</span>
+        )}
+        <span className="ledger-last">
           {scan ? (
             <>
-              <span
-                title={scan.finished_at ? date(scan.finished_at) : undefined}
-                className="text-sm tabular-nums inline-flex items-center gap-1"
-              >
+              <Badge variant={state.variant} className="whitespace-nowrap">{state.label}</Badge>
+              <small title={scan.finished_at ? date(scan.finished_at) : undefined}>
                 {scan.finished_at ? relativeTime(scan.finished_at) : 'In progress'}
-                <MiniSparkline
-                  values={sparkValues(scan.total_findings ?? workspace.name.length)}
-                  ariaLabel={`Findings trend for ${workspace.name}`}
-                />
-              </span>
-              <small className="block text-xs tabular-nums text-[var(--color-ink-faint)]">
-                {scan.total_findings ?? 0} {(scan.total_findings ?? 0) === 1 ? 'finding' : 'findings'}
               </small>
             </>
           ) : (
-            <span className="text-sm text-[var(--color-ink-soft)]">No scans yet</span>
+            <small>No scans yet</small>
           )}
-        </TableCell>
-        <TableCell>
-          <Badge variant={status.variant} className="whitespace-nowrap">
-            {status.label}
-          </Badge>
-        </TableCell>
-        <TableCell>
-          <div className="workspace-actions row-actions">
-            <ScanActionDropdown workspaceId={workspace.id} defaultProfile={workspace.default_profile} go={go} notify={notify} onScanStarted={onRemoved} />
-            <Button
-              variant="ghost"
-              size="sm"
-              className="row-remove"
-              onClick={() => setDeleteOpen(true)}
-              aria-label={`Remove ${workspace.name}`}
-            >
-              Remove
-            </Button>
-          </div>
-        </TableCell>
-      </TableRow>
-      {deleteOpen && (
-        <TableRow>
-          <TableCell colSpan={5}>
-            <ConfirmationDialog
-              title="Remove this workspace?"
-              description="This removes the saved workspace, file rules, and local scan history from Blunt Code. Your project files will not be changed."
-              confirmLabel="Remove workspace"
-              busy={deleting}
-              onCancel={() => setDeleteOpen(false)}
-              onConfirm={remove}
-            />
-          </TableCell>
-        </TableRow>
-      )}
-    </>
-  );
-}
+        </span>
+      </div>
 
-/** Project Card component for the alternative Card Grid view */
-function WorkspaceGridCard({
-  workspace,
-  go,
-  notify,
-  onRemoved
-}: {
-  workspace: Workspace;
-  go: (r: Route) => void;
-  notify: (n: Notice) => void;
-  onRemoved: () => void;
-}) {
-  const scan = workspace.latest_scan;
-  const status = scanStateDisplay(scan?.state);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-
-  async function remove() {
-    setDeleting(true);
-    try {
-      await api.deleteWorkspace(workspace.id);
-      setDeleteOpen(false);
-      notify({ kind: 'info', text: 'Workspace removed from Blunt Code.' });
-      onRemoved();
-    } catch (e) {
-      notify({ kind: 'error', text: message(e) });
-      setDeleting(false);
-    }
-  }
-
-  return (
-    <Card className="workspace-grid-card flex flex-col justify-between">
-      <CardHeader className="pb-2">
-        <div className="flex items-start justify-between gap-2">
-          <button
-            type="button"
-            className="workspace-project-link text-base font-bold text-left"
-            onClick={() => go({ page: 'workspace', id: workspace.id })}
-          >
-            {workspace.name}
-          </button>
-          <Badge variant={status.variant} className="shrink-0 text-[0.68rem]">
-            {status.label}
-          </Badge>
-        </div>
-        <div className="mt-1">
-          <PathCopy path={workspace.root_path} />
-        </div>
-      </CardHeader>
-
-      <CardContent className="flex flex-1 flex-col justify-between gap-3 pt-0">
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-xs text-[var(--color-ink-soft)]">
-            <span>Languages</span>
-            <span className="font-mono text-[var(--color-ink-faint)]">
-              {workspace.languages?.length ? `${workspace.languages.length} detected` : 'none'}
-            </span>
-          </div>
-          <LanguageBadges languages={workspace.languages} />
-        </div>
-
-        <div className="rounded-[var(--radius-sm)] border border-[var(--color-rule-faint)] bg-[var(--color-surface-muted)] p-2.5">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-[var(--color-ink-soft)] font-medium">Last scan</span>
-            <span className="tabular-nums text-[var(--color-ink)] font-semibold">
-              {scan?.finished_at ? relativeTime(scan.finished_at) : scan ? 'In progress' : 'Never'}
-            </span>
-          </div>
-          {scan && (
-            <div className="mt-1.5 flex items-center justify-between text-xs">
-              <span className="text-[var(--color-ink-faint)] tabular-nums">
-                {scan.total_findings ?? 0} {(scan.total_findings ?? 0) === 1 ? 'finding' : 'findings'}
-              </span>
-              <MiniSparkline
-                values={sparkValues(scan.total_findings ?? workspace.name.length)}
-                ariaLabel={`Trend for ${workspace.name}`}
-              />
-            </div>
-          )}
-        </div>
-
-        <div className="workspace-card-actions flex items-center justify-between pt-2 border-t border-[var(--color-rule-faint)]">
-          <ScanActionDropdown workspaceId={workspace.id} defaultProfile={workspace.default_profile} go={go} notify={notify} onScanStarted={onRemoved} className="w-full" />
-          <Button
-            variant="ghost"
-            size="sm"
-            className="row-remove ml-2 shrink-0"
-            onClick={() => setDeleteOpen(true)}
-            aria-label={`Remove ${workspace.name}`}
-          >
-            Remove
-          </Button>
-        </div>
-      </CardContent>
+      <div className="ledger-actions">
+        <ScanActionDropdown
+          workspaceId={workspace.id}
+          defaultProfile={workspace.default_profile}
+          go={go}
+          notify={notify}
+          onScanStarted={onRemoved}
+        />
+        <Button
+          variant="ghost"
+          size="sm"
+          className="row-remove"
+          onClick={() => setDeleteOpen(true)}
+          aria-label={`Remove ${workspace.name}`}
+        >
+          Remove
+        </Button>
+      </div>
 
       {deleteOpen && (
-        <div className="p-4 border-t border-[var(--color-rule)] bg-[var(--color-surface-muted)]">
+        <div className="ledger-confirm">
           <ConfirmationDialog
             title="Remove this workspace?"
-            description="This removes the saved workspace, file rules, and local scan history from Blunt Code."
+            description="This removes the saved workspace, file rules, and local scan history from Blunt Code. Your project files will not be changed."
             confirmLabel="Remove workspace"
             busy={deleting}
             onCancel={() => setDeleteOpen(false)}
@@ -1006,6 +690,57 @@ function WorkspaceGridCard({
           />
         </div>
       )}
-    </Card>
+    </li>
+  );
+}
+
+function EnginesFoot({
+  tools,
+  ready,
+  total,
+  loading,
+  error,
+  retry,
+  go
+}: {
+  tools: Tool[];
+  ready: number;
+  total: number;
+  loading: boolean;
+  error?: string;
+  retry: () => void;
+  go: (r: Route) => void;
+}) {
+  return (
+    <footer className="board-foot" aria-label="Analyzer engines">
+      {loading ? (
+        <div className="board-skeleton"><SkeletonLines lines={1} /></div>
+      ) : error ? (
+        <p className="board-foot-note">
+          Engine status is unavailable right now.{' '}
+          <button type="button" className="text-button" onClick={retry}>Try again</button>
+        </p>
+      ) : (
+        <>
+          <i className="board-foot-dot" data-state={total > 0 && ready === total ? 'ready' : 'partial'} aria-hidden="true" />
+          <p className="board-foot-note">
+            <strong>{ready} of {total}</strong> engines ready · managed locally, nothing leaves this computer
+          </p>
+          {tools.length > 0 && (
+            <div className="board-foot-chips">
+              {tools.slice(0, 6).map((tool) => (
+                <span key={tool.id} className={`board-foot-chip ${tool.ready ? 'ready' : 'pending'}`} title={`${tool.id}: ${tool.ready ? 'Ready' : 'Not installed'}`}>
+                  {tool.id}
+                </span>
+              ))}
+              {tools.length > 6 && <span className="board-foot-more">+{tools.length - 6}</span>}
+            </div>
+          )}
+          <Button variant="ghost" size="sm" onClick={() => go({ page: 'tools' })}>
+            Manage tools
+          </Button>
+        </>
+      )}
+    </footer>
   );
 }

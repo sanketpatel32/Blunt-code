@@ -6,7 +6,7 @@ import './css/animations.css';
 // Clarity pass — consolidated navigation, dashboard and workspace layouts.
 // Imported after styles.css so the simplified layouts win over the legacy rules.
 import './css/nav-clarity.css';
-import './css/dashboard-clarity.css';
+import './css/board.css';
 import './css/workspace-clarity.css';
 
 const rootElement = document.getElementById('root');
