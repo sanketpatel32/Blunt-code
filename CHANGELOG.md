@@ -7,8 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.19] - 2026-09-02
+
+### Added
+- **Complete Dashboard Redesign**: Modernized the home dashboard into a developer security & code quality command center.
+  - **Live Command & Telemetry Bar**: Real-time status indicator showing active scan jobs and local engine readiness, plus quick 1-click workspace scanning.
+  - **Executive Posture & KPI Summary Grid**: Elevated metric cards tracking active scans, critical/high exposure, total findings, scan velocity, and scanned repository coverage, with dynamic security posture rating.
+  - **Global Severity Breakdown**: High-definition proportional severity stack with direct 1-click finding exploration routing into cross-workspace search.
+  - **Two-Column Workstation Layout**: Real-time scan pipeline stream with status filter tabs (`All`, `Running`, `Completed`, `Warnings`) alongside an interactive Project Hub.
+  - **Project Hub Search & Dual View Modes**: Real-time search filter and instant toggle between dense Table view and interactive Card Grid view with sparklines, language badges, and quick actions.
+  - **Analyzer Readiness Hub**: Visual analyzer status indicators with 1-click tool management.
+- **Native Folder Selector Integration**: One-click folder browser dialog in onboarding and dashboard views via `api.selectFolder()`.
+
 ### Fixed
-- **The Start-menu and taskbar shortcuts show the Blunt Code logo instead of the generic app tile.** The Windows executable never carried an icon resource: the installer points every shortcut at `bluntcode.exe,0`, and with nothing embedded Windows fell back to its default app thumbnail. The logo is now rendered from `web/public/bluntcode-mark.svg` into a 10-size `.ico` (16–256 px) and embedded with a VERSIONINFO resource (`cmd/bluntcode/rsrc_windows_amd64.syso`), so the Start menu, taskbar, Explorer, and the exe's Properties sheet ("Blunt Code 0.16.18") all brand correctly. Regenerate with `scripts/embed-windows-resources.ps1`.
+- **The Start-menu and taskbar shortcuts show the Blunt Code logo instead of the generic app tile.** The Windows executable never carried an icon resource: the installer points every shortcut at `bluntcode.exe,0`, and with nothing embedded Windows fell back to its default app thumbnail. The logo is now rendered from `web/public/bluntcode-mark.svg` into a 10-size `.ico` (16–256 px) and embedded with a VERSIONINFO resource (`cmd/bluntcode/rsrc_windows_amd64.syso`), so the Start menu, taskbar, Explorer, and the exe's Properties sheet ("Blunt Code 0.16.19") all brand correctly. Regenerate with `scripts/embed-windows-resources.ps1`.
 
 ## [0.16.18] - 2026-09-01
 
