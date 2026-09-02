@@ -419,12 +419,16 @@
   }
   .link::before {
     content: ""; position: absolute; top: 50%; left: 0;
+    /* explicit border-box: `* { box-sizing }` never matches pseudo-elements, so
+       the chip rendered 14px outer (10px + 2px borders), rode 2px below the
+       line, and its dock keyframe parked it on the arrowhead */
+    box-sizing: border-box;
     width: 10px; height: 10px; margin-top: -5px;
     background: var(--tape); border: 2px solid var(--ink);
     animation: pulse 2.6s linear infinite;
   }
-  /* chip docks just before the 9px arrowhead — calc(100% - 10px) parked it on the head */
-  @keyframes pulse { to { left: calc(100% - 19px); } }
+  /* chip docks flush against the 9px arrowhead: 10px chip + 9px head */
+  @keyframes pulse { to { left: calc(100% - 20px); } }
   .an-stack {
     flex: 1.25; display: grid; gap: 0.4rem;
     border-inline: var(--bw) solid var(--ink);
@@ -469,7 +473,7 @@
     /* margin: 0 0 0 -5px — the base margin-top:-5px must be reset or the chip
        rides 5px above its track and floats off the line */
     .link::before { animation: pulseV 2.6s linear infinite; left: 50%; margin: 0 0 0 -5px; top: 0; }
-    @keyframes pulseV { to { top: calc(100% - 19px); } }
+    @keyframes pulseV { to { top: calc(100% - 20px); } }
     .an-stack { border-inline: 0; border-block: var(--bw) solid var(--ink); padding-block: 0.6rem; }
     .profiles { grid-template-columns: 1fr; }
   }
