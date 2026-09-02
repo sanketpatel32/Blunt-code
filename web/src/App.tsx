@@ -161,7 +161,7 @@ function Page({ route, go, notify, onAdd }: { route: Route; go: (r: Route) => vo
     case 'scan': return id ? <ScanPage id={id} notify={notify} /> : <NotFoundPage go={go} />;
     case 'search': return <SearchPage go={go} />;
     case 'tools': return <ToolsPage notify={notify} go={go} />;
-    case 'pentest': return <Suspense fallback={<SkeletonCards count={3} variant="chart" />}><PentestPage go={go} /></Suspense>;
+    case 'pentest': return <Suspense fallback={<SkeletonCards count={3} variant="chart" />}><PentestPage workspaceId={id} go={go} notify={notify} /></Suspense>;
     case 'rules': return <Suspense fallback={<SkeletonCards count={2} />}><RuleStudioPage /></Suspense>;
     case 'settings': return <SettingsPage notify={notify} />;
     case 'about': return <AboutPage />;

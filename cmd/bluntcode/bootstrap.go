@@ -25,6 +25,7 @@ import (
 	"bluntcode/internal/analyzers/semgrep"
 	"bluntcode/internal/analyzers/sonarqube"
 	"bluntcode/internal/analyzers/license"
+	"bluntcode/internal/analyzers/pentest"
 	"bluntcode/internal/analyzers/todo"
 	"bluntcode/internal/config"
 	"bluntcode/internal/core"
@@ -135,6 +136,7 @@ func openCore() (core *appCore, release func(), err error) {
 	// in offline mode on purpose: an offline scan with no available analyzers
 	// must keep failing honestly instead of being rescued by the built-ins.
 	if !appSettings.Offline {
+		_ = registry.Register(pentest.New())
 		_ = registry.Register(secrets.New())
 		_ = registry.Register(todo.New())
 		_ = registry.Register(license.New())

@@ -7,7 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.16.19] - 2026-09-02
+## [0.16.20] - 2026-09-02
+
+### Added
+- **Workspace-Integrated Pentest & Security Engine**:
+  - **In-Process Pentest Analyzer**: Built-in AST and pattern scanner detecting OWASP Top 10 vulnerabilities (SQLi, DOM XSS, RCE, SSRF, JWT weak secrets, hardcoded secrets, weak cryptographic hashes, path traversal, unsafe deserialization, disabled TLS verification, CORS wildcard reflection, and debug exposure).
+  - **Live DAST Target Prober**: Integrated endpoint security auditor probing target URLs for missing security headers (`CSP`, `HSTS`, `X-Frame-Options`, `X-Content-Type-Options`), server banner disclosures, CORS reflection with credentials, and sensitive path exposures (`.env`, `.git/HEAD`, `/actuator/health`, `/swagger.json`).
+  - **Workspace Pentest Route & Navigation**: Added `/workspaces/:id/pentest` route and sidebar entry under "In this workspace", keeping pentesting focused on specific repositories.
+  - **Scan Action Dropdown**: Added versatile scan launcher menu (`Quick Scan`, `Standard Scan`, `Deep Scan`, `Run Pentest Scan`, `Open Pentest Suite`) to Workspace Cards, Workspace Tables, and the Workspace Detail action rail.
+  - **Workspace Detail Pentest Insights**: Added dedicated "Pentest & OWASP" insights tab and security posture breakdown for individual workspaces.
+  - **Interactive Hacking Suite**: 22 interactive exploit checks with live workspace finding matching, pass/fail evaluation, and remediation guidance.
 
 ### Added
 - **Complete Dashboard Redesign**: Modernized the home dashboard into a developer security & code quality command center.

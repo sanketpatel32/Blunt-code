@@ -77,7 +77,7 @@ func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.
 	// failed analyzer run for this scan (state "failed", error text, and an
 	// analyzer.failed event) unless the file-language gate above already
 	// skipped the adapter outright.
-	if req.Profile != analyzers.ProfileDeep {
+	if req.Profile != analyzers.ProfileDeep && req.Profile != analyzers.ProfilePentest {
 		return analyzers.AnalyzerPlan{}, fmt.Errorf("trivy does not apply")
 	}
 	// The orchestrator already narrows req.Files by SupportedLanguages, but

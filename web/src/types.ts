@@ -245,3 +245,30 @@ export interface Report {
   warnings?: string[];
   comparison?: { new_count?: number; fixed_count?: number; persistent_count?: number };
 }
+
+export interface PentestFindingItem {
+  id: string;
+  title: string;
+  severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
+  category: string;
+  owasp?: string;
+  cwe?: string;
+  message: string;
+  remediation: string;
+  evidence?: string;
+}
+
+export interface PentestProbeResult {
+  target_url: string;
+  status_code: number;
+  response_time_ms: number;
+  server?: string;
+  powered_by?: string;
+  grade: string;
+  risk_score: number;
+  headers_found: string[];
+  headers_missing: string[];
+  findings: PentestFindingItem[];
+  probed_at: string;
+}
+

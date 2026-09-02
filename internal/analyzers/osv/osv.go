@@ -82,7 +82,7 @@ func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.
 	// command-less plan is returned instead of an error so the executor
 	// records a clean no-op run (succeeded, zero findings) rather than a
 	// failure on every standard scan. Run treats it the same way.
-	if req.Profile != analyzers.ProfileDeep {
+	if req.Profile != analyzers.ProfileDeep && req.Profile != analyzers.ProfilePentest {
 		return analyzers.AnalyzerPlan{AnalyzerID: ID, Version: a.Version, Metadata: map[string]any{"reason": "deep_only"}}, nil
 	}
 	if req.WorkspaceRoot == "" {

@@ -112,8 +112,8 @@ func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.
 	// Checkov's full-framework policy sweep is the deep tier: every other
 	// profile (including the empty default) skips it. The error text is what
 	// internal/scans/exec.go records verbatim when it saves the failed run.
-	if req.Profile != analyzers.ProfileDeep {
-		return analyzers.AnalyzerPlan{}, fmt.Errorf("checkov requires the deep profile")
+	if req.Profile != analyzers.ProfileDeep && req.Profile != analyzers.ProfilePentest {
+		return analyzers.AnalyzerPlan{}, fmt.Errorf("checkov requires the deep or pentest profile")
 	}
 	// The orchestrator already routes by language, but the adapter filters
 	// again (the convention ruff and semgrep set) so no caller can start a

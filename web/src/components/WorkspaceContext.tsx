@@ -1,12 +1,13 @@
 import type { ReactNode } from 'react';
 import type { Route } from '../lib/router';
-import { LayoutDashboard, FolderCog, Clock } from 'lucide-react';
+import { LayoutDashboard, FolderCog, Clock, ShieldAlert } from 'lucide-react';
 
 export type WorkspaceSection = { key: string; label: string; route: Route; icon?: ReactNode; count?: number };
 
 export function workspaceSections(id: string): WorkspaceSection[] {
   return [
     { key: 'overview', label: 'Overview', route: { page: 'workspace', id }, icon: <LayoutDashboard className="h-4 w-4" /> },
+    { key: 'pentest', label: 'Pentest & Security', route: { page: 'pentest', id }, icon: <ShieldAlert className="h-4 w-4" /> },
     { key: 'files', label: 'Files & rules', route: { page: 'files', id }, icon: <FolderCog className="h-4 w-4" /> },
     { key: 'history', label: 'Scan history', route: { page: 'history', id }, icon: <Clock className="h-4 w-4" /> },
   ];
@@ -26,5 +27,5 @@ export function WorkspaceContextSidebar({ id, current, onNavigate }: { id: strin
 }
 
 function isSameSection(a: Route, b: Route): boolean {
-  return a.page === b.page && a.id === b.id && ['workspace', 'files', 'history'].includes(a.page);
+  return a.page === b.page && a.id === b.id && ['workspace', 'files', 'history', 'pentest'].includes(a.page);
 }

@@ -19,7 +19,8 @@ import { HistoryTable } from './HistoryPage';
 import { analyzerMeta, categoryColor, CATEGORY_LABELS } from '../lib/analyzerCatalog';
 import { languageCoverageFromLanguages, severityCountsFromSummary, trendPointsFromScans } from '../lib/chartData';
 import { useReducedMotion } from '../hooks/useReducedMotion';
-import { Sparkles, Copy, Check, ShieldAlert, BarChart3, AlertTriangle, Layers, FileSearch, ShieldCheck } from 'lucide-react';
+import { Sparkles, Copy, Check, ShieldAlert, BarChart3, AlertTriangle, Layers, FileSearch, ShieldCheck, Bug } from 'lucide-react';
+import { ScanActionDropdown } from '../components/ScanActionDropdown';
 
 /**
  * Loop 142 · this used to inline `oklch(62% 0.18 285)` as the fourth entry, which
@@ -95,10 +96,11 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
     {/* 2 · Act — one primary action, everything else quietly grouped beside it. */}
     <div className="workspace-toolbar workspace-action-rail">
       <div className="action-rail-primary">
-        <fieldset className="profile-picker segmented" aria-label="Scan profile"><span className="profile-picker-label">Profile</span>{['quick', 'standard', 'deep'].map((value) => <button key={value} type="button" aria-pressed={profile === value} onClick={() => setProfile(value)}>{value}</button>)}</fieldset>
-        <button type="button" className="button primary workspace-run" onClick={start}><Sparkles className="h-4 w-4" />Run scan</button>
+        <fieldset className="profile-picker segmented" aria-label="Scan profile"><span className="profile-picker-label">Profile</span>{['quick', 'standard', 'deep', 'pentest'].map((value) => <button key={value} type="button" aria-pressed={profile === value} onClick={() => setProfile(value)}>{value}</button>)}</fieldset>
+        <ScanActionDropdown workspaceId={id} defaultProfile={profile} size="default" variant="primary" go={go} notify={notify} />
       </div>
       <div className="action-rail-secondary">
+        <button type="button" className="button ghost" onClick={() => go({ page: 'pentest', id })}>Pentest suite</button>
         <button type="button" className="button ghost" onClick={() => go({ page: 'files', id })}>Configure files</button>
         <button type="button" className="button ghost" disabled={!latest} onClick={() => latest && go({ page: 'scan', id: latest.id })}>View last report</button>
         {latest && <a className="button ghost" href={api.markdownUrl(latest.id)}>Export Markdown</a>}
@@ -108,7 +110,7 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
       </div>
     </div>
     {pruneOpen && <form className="settings-editor" onSubmit={(event) => { event.preventDefault(); void prune(); }} aria-label="Prune scan history"><label>Keep newest<input type="number" min={1} max={100} value={pruneKeep} onChange={(event) => setPruneKeep(Number(event.target.value))} /></label><div className="editor-actions"><button type="submit" className="button primary" disabled={pruning}>Delete older scans</button><button type="button" className="button secondary" onClick={() => setPruneOpen(false)}>Cancel</button></div></form>}
-    {editing && <form className="settings-editor" onSubmit={(event) => { event.preventDefault(); saveSettings(); }} aria-label="Workspace settings"><label>Name<input value={nameDraft} onChange={(event) => setNameDraft(event.target.value)} maxLength={80} /></label><div className="settings-editor-profile"><span>Default profile</span><fieldset className="segmented" aria-label="Default profile">{['quick', 'standard', 'deep'].map((value) => <button key={value} type="button" aria-pressed={profileDraft === value} onClick={() => setProfileDraft(value)}>{value}</button>)}</fieldset></div><div className="editor-actions"><button type="submit" className="button primary" disabled={savingSettings}>Save</button><button type="button" className="button secondary" onClick={() => setEditing(false)}>Cancel</button></div></form>}
+    {editing && <form className="settings-editor" onSubmit={(event) => { event.preventDefault(); saveSettings(); }} aria-label="Workspace settings"><label>Name<input value={nameDraft} onChange={(event) => setNameDraft(event.target.value)} maxLength={80} /></label><div className="settings-editor-profile"><span>Default profile</span><fieldset className="segmented" aria-label="Default profile">{['quick', 'standard', 'deep', 'pentest'].map((value) => <button key={value} type="button" aria-pressed={profileDraft === value} onClick={() => setProfileDraft(value)}>{value}</button>)}</fieldset></div><div className="editor-actions"><button type="submit" className="button primary" disabled={savingSettings}>Save</button><button type="button" className="button secondary" onClick={() => setEditing(false)}>Cancel</button></div></form>}
 
     {/* 3 · Verdict — three headline numbers; the rest are one click away. */}
     {!latest && scans.loading ? <SkeletonCards count={6} /> : <section className={`workspace-verdict ${reduced ? '' : 'is-animated'}`} aria-label="Latest scan summary">
@@ -135,6 +137,7 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
         <h2>Insights</h2>
         <TabsList>
           <TabsTrigger value="trends">Trends</TabsTrigger>
+          <TabsTrigger value="pentest">Pentest &amp; OWASP</TabsTrigger>
           <TabsTrigger value="severity">Severity</TabsTrigger>
           <TabsTrigger value="languages">Languages</TabsTrigger>
           <TabsTrigger value="dependencies">Dependencies</TabsTrigger>
@@ -150,6 +153,7 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
           />
         </Suspense>
       </TabsContent>
+      <TabsContent value="pentest"><WorkspacePentestInsight workspaceId={id} scanId={latest?.id} go={go} /></TabsContent>
       <TabsContent value="severity"><SeverityTrendSection workspaceId={id} /></TabsContent>
       <TabsContent value="languages">
         {item.languages?.length
@@ -301,4 +305,91 @@ export function RiskCard({ risk }: { risk?: RiskProfile | null }) {
     <strong className="risk-score">{Math.round(risk.score)}</strong>
     <span>Risk {risk.grade}{delta}</span>
   </div>;
+}
+
+function WorkspacePentestInsight({ workspaceId, scanId, go }: { workspaceId: string; scanId?: string; go: (r: Route) => void }) {
+  const report = useLoad(() => (scanId ? api.report(scanId) : Promise.resolve(null)), [scanId]);
+  const findings = report.data?.findings ?? [];
+  const secFindings = findings.filter((f) => {
+    const cat = (f.category || '').toLowerCase();
+    const a = (f.analyzer_id || '').toLowerCase();
+    const r = (f.rule_id || '').toLowerCase();
+    return (
+      cat === 'pentest' ||
+      cat === 'security' ||
+      cat === 'vulnerability' ||
+      a === 'pentest' ||
+      a === 'secrets' ||
+      a === 'gitleaks-secrets' ||
+      a === 'semgrep' ||
+      r.includes('sqli') ||
+      r.includes('xss') ||
+      r.includes('ssrf') ||
+      r.includes('jwt') ||
+      r.includes('rce') ||
+      r.includes('secret')
+    );
+  });
+
+  const critical = secFindings.filter((f) => f.severity === 'critical').length;
+  const high = secFindings.filter((f) => f.severity === 'high').length;
+  const medium = secFindings.filter((f) => f.severity === 'medium').length;
+
+  return (
+    <div className="workspace-section-card space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-base font-semibold text-[var(--color-ink)] flex items-center gap-2">
+            <ShieldAlert className="h-4 w-4 text-[var(--color-danger)]" />OWASP Top 10 &amp; Pentest Posture
+          </h3>
+          <p className="text-xs text-[var(--color-ink-soft)]">
+            Active security vulnerabilities, injection flaws, broken authentication, and exposed secrets in this workspace.
+          </p>
+        </div>
+        <button type="button" className="button ghost" onClick={() => go({ page: 'pentest', id: workspaceId })}>
+          Open full Pentest Suite →
+        </button>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="p-3 rounded-[var(--radius-md)] border border-[var(--color-rule-faint)] bg-[var(--color-surface)]">
+          <span className="text-xs font-semibold text-[var(--color-danger)]">Critical Flaws</span>
+          <p className="font-display text-2xl font-bold mt-1 text-[var(--color-danger)]">{critical}</p>
+          <span className="text-[11px] text-[var(--color-ink-faint)]">RCE, SQLi, Hardcoded JWT, XXE</span>
+        </div>
+        <div className="p-3 rounded-[var(--radius-md)] border border-[var(--color-rule-faint)] bg-[var(--color-surface)]">
+          <span className="text-xs font-semibold text-[var(--color-warning)]">High Severity</span>
+          <p className="font-display text-2xl font-bold mt-1 text-[var(--color-warning)]">{high}</p>
+          <span className="text-[11px] text-[var(--color-ink-faint)]">SSRF, XSS, Path Traversal, CORS</span>
+        </div>
+        <div className="p-3 rounded-[var(--radius-md)] border border-[var(--color-rule-faint)] bg-[var(--color-surface)]">
+          <span className="text-xs font-semibold text-[var(--color-ink-soft)]">Medium / Warnings</span>
+          <p className="font-display text-2xl font-bold mt-1 text-[var(--color-ink)]">{medium}</p>
+          <span className="text-[11px] text-[var(--color-ink-faint)]">Weak Hashes, Missing Headers, Debug</span>
+        </div>
+      </div>
+
+      {secFindings.length > 0 ? (
+        <div className="space-y-2">
+          <h4 className="text-xs font-semibold text-[var(--color-ink)] uppercase tracking-wide">Top Identified Security Issues</h4>
+          <div className="space-y-1.5">
+            {secFindings.slice(0, 5).map((f) => (
+              <div key={f.id || f.fingerprint} className="flex items-center justify-between gap-2 p-2.5 rounded-[var(--radius-sm)] border border-[var(--color-rule-faint)] bg-[var(--color-surface)] text-xs">
+                <div className="min-w-0 flex-1">
+                  <span className="font-semibold text-[var(--color-ink)]">{f.relative_path}:{f.start_line}</span>
+                  <span className="text-[var(--color-ink-soft)] ml-2">{f.message}</span>
+                </div>
+                <span className={`state ${f.severity} text-[10px] uppercase font-mono px-2 py-0.5 rounded`}>{f.severity}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="p-4 rounded-[var(--radius-md)] border border-[var(--color-success)]/30 bg-[var(--color-success-soft)] text-xs text-[var(--color-ink-soft)] flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4 text-[var(--color-success)] shrink-0" />
+          <span>No critical OWASP vulnerabilities detected in the latest scan. Run a Pentest Scan to verify against all 22+ checks.</span>
+        </div>
+      )}
+    </div>
+  );
 }

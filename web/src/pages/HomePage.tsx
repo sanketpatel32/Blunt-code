@@ -18,6 +18,7 @@ import { WorkspaceTemplates } from '../components/WorkspaceTemplates';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { MiniSparkline } from '../components/MiniSparkline';
 import { PathCopy } from '../components/PathCopy';
+import { ScanActionDropdown } from '../components/ScanActionDropdown';
 import {
   Shield,
   ShieldAlert,
@@ -806,9 +807,7 @@ function WorkspaceTableRow({
         </TableCell>
         <TableCell>
           <div className="workspace-actions row-actions">
-            <Button size="sm" onClick={() => void analyze()} disabled={scanning}>
-              {scanning ? 'Starting…' : 'Run scan'}
-            </Button>
+            <ScanActionDropdown workspaceId={workspace.id} defaultProfile={workspace.default_profile} go={go} notify={notify} onScanStarted={onRemoved} />
             <Button
               variant="ghost"
               size="sm"
@@ -934,9 +933,7 @@ function WorkspaceGridCard({
         </div>
 
         <div className="workspace-card-actions flex items-center justify-between pt-2 border-t border-[var(--color-rule-faint)]">
-          <Button size="sm" onClick={() => void analyze()} disabled={scanning} className="w-full">
-            {scanning ? 'Starting…' : 'Run scan'}
-          </Button>
+          <ScanActionDropdown workspaceId={workspace.id} defaultProfile={workspace.default_profile} go={go} notify={notify} onScanStarted={onRemoved} className="w-full" />
           <Button
             variant="ghost"
             size="sm"

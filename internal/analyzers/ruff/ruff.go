@@ -69,7 +69,7 @@ func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.
 		return analyzers.AnalyzerPlan{}, fmt.Errorf("ruff does not apply")
 	}
 	args := []string{"check", "--output-format", "json", "--no-fix"}
-	if req.Profile == analyzers.ProfileDeep {
+	if req.Profile == analyzers.ProfileDeep || req.Profile == analyzers.ProfilePentest {
 		args = append(args, "--select="+deepSelect)
 	}
 	// Windows caps a process command line at 32,767 characters, so large

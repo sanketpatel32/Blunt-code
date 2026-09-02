@@ -151,6 +151,7 @@ const (
 	ProfileQuick    = "quick"
 	ProfileStandard = "standard"
 	ProfileDeep     = "deep"
+	ProfilePentest  = "pentest"
 )
 
 type ScanRequest struct {

@@ -3,6 +3,7 @@ export type Route = { page: 'home' | 'workspaces' | 'workspace' | 'files' | 'his
 export function parseRoute(pathname = window.location.pathname): Route {
   const segments = pathname.split('/').filter(Boolean);
   if (!segments.length) return { page: 'home' };
+  if (segments[0] === 'workspaces' && segments[2] === 'pentest') return { page: 'pentest', id: segments[1] };
   if (segments[0] === 'workspaces' && segments[2] === 'files') return { page: 'files', id: segments[1] };
   if (segments[0] === 'workspaces' && segments[2] === 'scans') return { page: 'history', id: segments[1] };
   if (segments[0] === 'workspaces' && segments[1]) return { page: 'workspace', id: segments[1] };
@@ -19,6 +20,7 @@ export function href(route: Route) {
   if (route.page === 'workspace') return `/workspaces/${route.id}`;
   if (route.page === 'files') return `/workspaces/${route.id}/files`;
   if (route.page === 'history') return `/workspaces/${route.id}/scans`;
+  if (route.page === 'pentest' && route.id) return `/workspaces/${route.id}/pentest`;
   if (route.page === 'scan') return `/scans/${route.id}`;
   return `/${route.page}`;
 }

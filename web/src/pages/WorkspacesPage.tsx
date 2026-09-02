@@ -19,6 +19,7 @@ import { SkeletonCards } from '../components/skeletons';
 import { ConfirmationDialog } from '../components/dialogs';
 import { WorkspaceTemplates } from '../components/WorkspaceTemplates';
 import { PathCopy } from '../components/PathCopy';
+import { ScanActionDropdown } from '../components/ScanActionDropdown';
 
 export function WorkspacesPage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd: () => void; notify: (n: Notice) => void }) {
   const state = useLoad(api.workspaces, []);
@@ -107,11 +108,9 @@ function WorkspaceCard({ workspace, go, notify, onRemoved }: { workspace: Worksp
         </div>
       </div>
     </div>
-    {/* Actions live flat on the card — a dropdown hid the three things this
-        card can do behind a click and made them look rarer than they are. */}
     <div className="workspace-card-actions">
       <button type="button" className="button ghost" onClick={() => go({ page: 'workspace', id: workspace.id })}>Open details</button>
-      <button type="button" className="button primary" onClick={(event) => void analyze(event)}>Run scan</button>
+      <ScanActionDropdown workspaceId={workspace.id} defaultProfile={workspace.default_profile} go={go} notify={notify} />
       <button type="button" className="button ghost workspace-card-remove" onClick={(event) => { event.stopPropagation(); setDeleteOpen(true); }}>Remove</button>
     </div>
     {tags.length > 0 && <ul className="badges workspace-tags flex flex-wrap" aria-label={`${workspace.name} tags`}>{tags.slice(0, MAX_CARD_TAGS).map((tag) => <Badge key={tag} variant="secondary" className="badge rounded-full border-[var(--color-rule-faint)] bg-[var(--color-surface-muted)] text-[var(--color-ink-soft)]">{tag}</Badge>)}{extraTags > 0 && <Badge variant="secondary" className="badge rounded-full border-[var(--color-rule-faint)] bg-[var(--color-surface-muted)] text-[var(--color-ink-soft)]" title={tags.slice(MAX_CARD_TAGS).join(', ')}>+{extraTags}</Badge>}</ul>}
@@ -153,7 +152,7 @@ function WorkspaceCard({ workspace, go, notify, onRemoved }: { workspace: Worksp
     </section>
     <footer>
       <Button variant="ghost" size="sm" className="rounded-[var(--radius-button)]" onClick={() => go({ page: 'workspace', id: workspace.id })}>Open details</Button>
-      <Button size="sm" className="ml-auto rounded-[var(--radius-button)] bg-[var(--color-accent)] text-[var(--color-accent-ink)] hover:bg-[var(--color-accent-strong)] shadow-[var(--shadow-accent)]" onClick={() => void analyze()}>Run scan</Button>
+      <ScanActionDropdown workspaceId={workspace.id} defaultProfile={workspace.default_profile} go={go} notify={notify} className="ml-auto" />
       <span className="sr-only">Remove</span>
     </footer>
   </div></Card>{deleteOpen && <ConfirmationDialog title="Remove this workspace?" description="This removes the saved workspace, file rules, and local scan history from Blunt Code. Your project files will not be changed." confirmLabel="Remove workspace" busy={deleting} onCancel={() => setDeleteOpen(false)} onConfirm={remove} />}</>;

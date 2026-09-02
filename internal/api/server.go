@@ -108,6 +108,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/workspaces/{id}/scans", s.listScans)
 	s.mux.HandleFunc("DELETE /api/v1/workspaces/{id}/scans", s.pruneWorkspaceScans)
 	s.mux.HandleFunc("POST /api/v1/workspaces/{id}/scans", s.startScan)
+	s.mux.HandleFunc("POST /api/v1/workspaces/{id}/pentest/probe", s.pentestProbe)
+	s.mux.HandleFunc("POST /api/v1/pentest/probe", s.pentestProbe)
 	s.mux.HandleFunc("GET /api/v1/scans", s.recentScans)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}", s.getScan)
 	s.mux.HandleFunc("DELETE /api/v1/scans/{id}", s.deleteScan)
@@ -1124,8 +1126,8 @@ func (s *Server) startScan(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "INVALID_JSON", "Invalid scan request.")
 		return
 	}
-	if input.Profile != "" && input.Profile != "quick" && input.Profile != "standard" && input.Profile != "deep" {
-		fail(w, 400, "INVALID_PROFILE", "profile must be quick, standard, or deep.")
+	if input.Profile != "" && input.Profile != "quick" && input.Profile != "standard" && input.Profile != "deep" && input.Profile != "pentest" {
+		fail(w, 400, "INVALID_PROFILE", "profile must be quick, standard, deep, or pentest.")
 		return
 	}
 	scans, err := s.db.Scans(r.Context(), work.ID)
