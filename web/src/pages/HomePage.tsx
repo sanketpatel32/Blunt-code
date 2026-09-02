@@ -40,7 +40,12 @@ import {
   LayoutGrid,
   List as ListIcon,
   RefreshCw,
-  FolderOpen
+  FolderOpen,
+  Lock,
+  Flame,
+  ArrowUpRight,
+  Terminal,
+  Sparkles
 } from 'lucide-react';
 
 import { SEVERITY_ORDER, languageCoverageFromLanguages, severityCountsFromSummary, trendPointsFromScans, type SeverityCounts } from '../lib/chartData';
@@ -125,22 +130,40 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
     );
   }, [workspaces.data, projectFilter]);
 
-  // Security Posture Rating
-  const postureGrade = useMemo(() => {
-    if (!summary || summary.total_findings === 0) return { grade: 'A+', label: 'Pristine', tone: 'text-[var(--color-success)]' };
-    const critAndHigh = (summary.critical_count ?? 0) + (summary.high_count ?? 0);
-    if (critAndHigh === 0 && summary.total_findings < 15) return { grade: 'A', label: 'Strong', tone: 'text-[var(--color-success)]' };
-    if (critAndHigh === 0) return { grade: 'B+', label: 'Good', tone: 'text-[var(--color-accent)]' };
-    if (critAndHigh <= 5) return { grade: 'B', label: 'Moderate', tone: 'text-[var(--color-warning)]' };
-    if (critAndHigh <= 15) return { grade: 'C', label: 'Elevated Risk', tone: 'text-[var(--color-warning)]' };
-    return { grade: 'D', label: 'Critical Attention', tone: 'text-[var(--color-danger)]' };
+  // Security Posture Score & Rating (0-100)
+  const posture = useMemo(() => {
+    if (!summary || summary.total_findings === 0) {
+      return { score: 100, grade: 'A+', label: 'Fortified & Clean', color: 'var(--color-success)', tone: 'positive' };
+    }
+    const critical = summary.critical_count ?? 0;
+    const high = summary.high_count ?? 0;
+    const medium = summary.medium_count ?? 0;
+    const total = summary.total_findings ?? 0;
+    
+    // Deduct points based on severity weights
+    let penalty = critical * 25 + high * 12 + medium * 3;
+    let computedScore = Math.max(12, Math.round(100 - penalty));
+
+    if (critical === 0 && high === 0 && total <= 10) {
+      return { score: Math.max(90, computedScore), grade: 'A', label: 'Strong Security Posture', color: 'var(--color-success)', tone: 'positive' };
+    }
+    if (critical === 0 && high <= 2) {
+      return { score: Math.max(78, computedScore), grade: 'B+', label: 'Good · Minor Vulnerabilities', color: 'var(--color-accent)', tone: 'neutral' };
+    }
+    if (critical <= 2 && high <= 6) {
+      return { score: Math.max(60, computedScore), grade: 'B', label: 'Moderate Risk Detected', color: 'var(--color-warning)', tone: 'warning' };
+    }
+    if (critical <= 5) {
+      return { score: Math.max(40, computedScore), grade: 'C', label: 'Elevated Vulnerability Risk', color: 'var(--color-warning)', tone: 'warning' };
+    }
+    return { score: Math.max(15, computedScore), grade: 'D', label: 'Critical Attention Required', color: 'var(--color-danger)', tone: 'danger' };
   }, [summary]);
 
   if (firstRun) {
     return (
       <div className="page dashboard-page">
         <header className="dashboard-heading">
-          <div>
+          <div className="dashboard-heading-main">
             <p className="eyebrow">Dashboard</p>
             <h1>Workspaces</h1>
             <p>Run a local scan, then follow every result in one place.</p>
@@ -178,41 +201,92 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
 
   return (
     <div className="page dashboard-page">
-      {/* ── Dashboard Hero & Command Bar ── */}
-      <header className="dashboard-heading">
-        <div className="dashboard-heading-main">
-          <div className="flex items-center gap-2.5">
-            <p className="eyebrow">Dashboard</p>
-            <span className="dashboard-live-indicator">
-              <i className="dashboard-live-dot" />
-              {(summary?.active_scans ?? 0) > 0
-                ? `${summary?.active_scans} active scan${(summary?.active_scans ?? 0) === 1 ? '' : 's'} running`
-                : 'Local engine ready'}
-            </span>
+      {/* ── Top Cyber Command Hero Deck ── */}
+      <section className="dashboard-hero-deck" aria-label="Security & Posture Overview">
+        <div className="dashboard-hero-content">
+          <div className="dashboard-heading-main">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <p className="eyebrow">Dashboard</p>
+              <span className="dashboard-live-indicator">
+                <i className="dashboard-live-dot" />
+                {(summary?.active_scans ?? 0) > 0
+                  ? `${summary?.active_scans} active scan${(summary?.active_scans ?? 0) === 1 ? '' : 's'} running`
+                  : 'Local engine ready'}
+              </span>
+              <span className="telemetry-pill hidden sm:inline-flex">
+                <Lock className="h-3 w-3 text-[var(--color-accent-strong)]" />
+                <span>100% Offline &amp; Private</span>
+              </span>
+            </div>
+            <h1>Workspaces</h1>
+            <p>Run a local scan, then follow every result in one place.</p>
           </div>
-          <h1>Workspaces</h1>
-          <p>Run a local scan, then follow every result in one place.</p>
+
+          <div className="dashboard-actions">
+            <Button
+              variant="outline"
+              onClick={() => void quickScan()}
+              disabled={!latestWorkspaceId || quickScanning}
+              title={latestWorkspaceId ? 'Run a scan on the most recently scanned workspace' : undefined}
+              className="quick-scan-btn"
+            >
+              <Play className={`mr-1.5 h-3.5 w-3.5 ${quickScanning ? 'animate-spin' : ''}`} />
+              {quickScanning ? 'Starting scan…' : 'Scan latest workspace'}
+            </Button>
+            <Button onClick={onAdd} className="add-workspace-btn">
+              <FolderPlus className="mr-1.5 h-4 w-4" />
+              + Add workspace
+            </Button>
+          </div>
         </div>
 
-        <div className="dashboard-actions">
-          <Button
-            variant="outline"
-            onClick={() => void quickScan()}
-            disabled={!latestWorkspaceId || quickScanning}
-            title={latestWorkspaceId ? 'Run a scan on the most recently scanned workspace' : undefined}
-            className="quick-scan-btn"
-          >
-            <Play className={`mr-1.5 h-3.5 w-3.5 ${quickScanning ? 'animate-spin' : ''}`} />
-            {quickScanning ? 'Starting scan…' : 'Scan latest workspace'}
-          </Button>
-          <Button onClick={onAdd} className="add-workspace-btn">
-            <FolderPlus className="mr-1.5 h-4 w-4" />
-            + Add workspace
-          </Button>
+        {/* Posture Meter Dial */}
+        <div className="dashboard-posture-banner">
+          <div className="posture-dial-wrap">
+            <svg viewBox="0 0 80 80" className="posture-svg-ring" aria-hidden="true">
+              <circle cx="40" cy="40" r="34" className="posture-ring-bg" />
+              <circle
+                cx="40"
+                cy="40"
+                r="34"
+                className="posture-ring-fill"
+                stroke={posture.color}
+                strokeDasharray={213.6}
+                strokeDashoffset={213.6 - (213.6 * posture.score) / 100}
+              />
+            </svg>
+            <div className="posture-grade-label">
+              <span className="posture-grade" style={{ color: posture.color }}>{posture.grade}</span>
+              <span className="posture-score-num">{posture.score}/100</span>
+            </div>
+          </div>
+          <div className="posture-meta">
+            <div className="flex items-center gap-2">
+              <span className="posture-title">Security Health Index</span>
+              <span className="posture-badge" data-tone={posture.tone}>{posture.label}</span>
+            </div>
+            <p className="posture-desc">
+              Continuous weighted risk assessment calculated across all scanned repositories.
+            </p>
+          </div>
+          <div className="posture-quick-stats">
+            <div className="posture-stat-item">
+              <span className="posture-stat-val text-[var(--color-danger)]">{summary?.critical_count ?? 0}</span>
+              <span className="posture-stat-lbl">Critical</span>
+            </div>
+            <div className="posture-stat-item">
+              <span className="posture-stat-val text-[var(--color-warning)]">{summary?.high_count ?? 0}</span>
+              <span className="posture-stat-lbl">High</span>
+            </div>
+            <div className="posture-stat-item">
+              <span className="posture-stat-val text-[var(--color-accent)]">{readyTools}</span>
+              <span className="posture-stat-lbl">Engines</span>
+            </div>
+          </div>
         </div>
-      </header>
+      </section>
 
-      {/* ── Primary Zone: KPI Metric Cards & Posture Banner ── */}
+      {/* ── Primary Zone: KPI Metric Cards Grid ── */}
       <div className={`dashboard-primary ${reduced ? '' : 'is-animated'}`}>
         {recent.loading ? (
           <div className="dashboard-summary-loading">
@@ -263,7 +337,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
           </section>
         )}
 
-        {/* Global Severity Breakdown Bar */}
+        {/* Global Severity Spectrum & Breakdown Bar */}
         {summary && (
           <SeverityBreakdown
             counts={severityCountsFromSummary(summary)}
@@ -345,8 +419,8 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
-              {workspaces.data && workspaces.data.length > 3 && (
+            <div className="flex items-center gap-2 flex-wrap">
+              {workspaces.data && workspaces.data.length > 2 && (
                 <div className="project-search-wrap">
                   <Search className="project-search-icon h-3.5 w-3.5" />
                   <input
@@ -448,7 +522,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
             <div>
               <h2 className="dashboard-section-title">
                 <BarChart3 className="h-4 w-4 text-[var(--color-accent)]" />
-                Security & Quality Analytics
+                Security &amp; Quality Analytics
               </h2>
               <p className="dashboard-section-sub">Continuous findings trend, distribution, and code coverage.</p>
             </div>
@@ -736,19 +810,6 @@ function WorkspaceTableRow({
   const status = scanStateDisplay(scan?.state);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [scanning, setScanning] = useState(false);
-
-  async function analyze() {
-    if (scanning) return;
-    setScanning(true);
-    try {
-      const active = await api.startScan(workspace.id);
-      go({ page: 'scan', id: active.id });
-    } catch (e) {
-      notify({ kind: 'error', text: message(e) });
-      setScanning(false);
-    }
-  }
 
   async function remove() {
     setDeleting(true);
@@ -854,19 +915,6 @@ function WorkspaceGridCard({
   const status = scanStateDisplay(scan?.state);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [scanning, setScanning] = useState(false);
-
-  async function analyze() {
-    if (scanning) return;
-    setScanning(true);
-    try {
-      const active = await api.startScan(workspace.id);
-      go({ page: 'scan', id: active.id });
-    } catch (e) {
-      notify({ kind: 'error', text: message(e) });
-      setScanning(false);
-    }
-  }
 
   async function remove() {
     setDeleting(true);

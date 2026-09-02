@@ -36,6 +36,7 @@ export function ScanActionDropdown({
   className = '',
 }: ScanActionDropdownProps) {
   const [running, setRunning] = useState(false);
+  const isFullWidth = className.includes('w-full');
 
   async function triggerScan(profile: string) {
     if (running) return;
@@ -53,13 +54,19 @@ export function ScanActionDropdown({
   }
 
   return (
-    <div className={`inline-flex items-center rounded-[var(--radius-button)] shadow-sm ${className}`} role="group" aria-label="Scan actions">
+    <div
+      className={`inline-flex items-stretch rounded-[var(--radius-button)] ${className}`}
+      role="group"
+      aria-label="Scan actions"
+    >
       <Button
         size={size}
         variant={variant as never}
         disabled={running}
         onClick={() => void triggerScan(defaultProfile)}
-        className="rounded-r-none border-r border-white/20 gap-1.5 focus-visible:z-10"
+        className={`rounded-r-none border-r border-black/15 dark:border-white/20 gap-1.5 focus-visible:z-10 focus-visible:ring-1 focus-visible:ring-offset-0 active:scale-100 ${
+          isFullWidth ? 'flex-1 justify-center' : ''
+        }`}
         title={`Run ${defaultProfile} scan`}
       >
         {running ? (
@@ -75,7 +82,7 @@ export function ScanActionDropdown({
             size={size}
             variant={variant as never}
             disabled={running}
-            className="rounded-l-none px-1.5 focus-visible:z-10"
+            className="rounded-l-none px-2 focus-visible:z-10 focus-visible:ring-1 focus-visible:ring-offset-0 active:scale-100 shrink-0"
             aria-label="Scan options"
             title="Choose scan profile or open pentest"
           >

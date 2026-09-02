@@ -108,11 +108,6 @@ function WorkspaceCard({ workspace, go, notify, onRemoved }: { workspace: Worksp
         </div>
       </div>
     </div>
-    <div className="workspace-card-actions">
-      <button type="button" className="button ghost" onClick={() => go({ page: 'workspace', id: workspace.id })}>Open details</button>
-      <ScanActionDropdown workspaceId={workspace.id} defaultProfile={workspace.default_profile} go={go} notify={notify} />
-      <button type="button" className="button ghost workspace-card-remove" onClick={(event) => { event.stopPropagation(); setDeleteOpen(true); }}>Remove</button>
-    </div>
     {tags.length > 0 && <ul className="badges workspace-tags flex flex-wrap" aria-label={`${workspace.name} tags`}>{tags.slice(0, MAX_CARD_TAGS).map((tag) => <Badge key={tag} variant="secondary" className="badge rounded-full border-[var(--color-rule-faint)] bg-[var(--color-surface-muted)] text-[var(--color-ink-soft)]">{tag}</Badge>)}{extraTags > 0 && <Badge variant="secondary" className="badge rounded-full border-[var(--color-rule-faint)] bg-[var(--color-surface-muted)] text-[var(--color-ink-soft)]" title={tags.slice(MAX_CARD_TAGS).join(', ')}>+{extraTags}</Badge>}</ul>}
     <section className="workspace-languages">
       <span className="text-[0.68rem] font-mono font-bold tracking-widest uppercase text-[var(--color-ink-faint)]">Languages</span>
@@ -152,8 +147,8 @@ function WorkspaceCard({ workspace, go, notify, onRemoved }: { workspace: Worksp
     </section>
     <footer>
       <Button variant="ghost" size="sm" className="rounded-[var(--radius-button)]" onClick={() => go({ page: 'workspace', id: workspace.id })}>Open details</Button>
+      <Button variant="ghost" size="sm" className="rounded-[var(--radius-button)] text-[var(--color-ink-faint)] hover:text-[var(--color-danger)] hover:bg-[var(--color-danger-soft)]" onClick={(event) => { event.stopPropagation(); setDeleteOpen(true); }}>Remove</Button>
       <ScanActionDropdown workspaceId={workspace.id} defaultProfile={workspace.default_profile} go={go} notify={notify} className="ml-auto" />
-      <span className="sr-only">Remove</span>
     </footer>
   </div></Card>{deleteOpen && <ConfirmationDialog title="Remove this workspace?" description="This removes the saved workspace, file rules, and local scan history from Blunt Code. Your project files will not be changed." confirmLabel="Remove workspace" busy={deleting} onCancel={() => setDeleteOpen(false)} onConfirm={remove} />}</>;
 }
