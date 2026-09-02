@@ -21,6 +21,7 @@ const en: Dict = {
   'nav.tools': 'Tools',
   'nav.pentest': 'Pentest',
   'nav.settings': 'Settings',
+  'nav.cli': 'CLI Docs',
   'nav.about': 'About',
   'nav.more': 'More',
   'category.lint': 'Lint',

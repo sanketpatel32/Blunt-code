@@ -144,23 +144,70 @@ Keyboard: `g h/w/t/s/a` navigate · `n` add workspace · `/` search · `?` help 
 
 ## 💻 CLI
 
+Blunt Code includes full headless CLI support for every core capability. Every operation in the web UI can be run from your terminal or CI/CD pipeline, with shared SQLite concurrency so CLI queries never conflict with a running GUI instance.
+
+For exhaustive documentation, see the [CLI Reference Manual](docs/CLI.md) or visit `/cli` in the web application.
+
 ```powershell
-bluntcode "C:\Projects\my-app" --no-browser --port 52160
-bluntcode doctor              # diagnostics
-bluntcode doctor --json --fix # self-heal stale rules / interrupted installs
-bluntcode scan "C:\my-app" --profile quick --json --quiet --timeout 10m
-bluntcode scan "C:\my-app" --fail-on high+ --max-findings 50 --baseline .\baseline.sarif
-bluntcode scan "C:\my-app" --format github   # PR annotations (error/warning/notice)
-bluntcode scan "C:\my-app" --format csv --output findings.csv --save-baseline baseline.sarif
-bluntcode scan "C:\my-app" --gate-analyzer semgrep,secrets --gate-category security
-bluntcode prune "C:\my-app" --keep 20
-bluntcode scan "C:\my-app" --jobs 2 --incremental --watch
-bluntcode config              # resolved paths, overrides, tool versions
+# Scans & CI Gates
+bluntcode scan "C:\my-app" --profile standard --fail-on high+ --format sarif --output audit.sarif
+bluntcode scan "C:\my-app" --format github --fail-on high+ # GitHub Actions annotations
+bluntcode scan "C:\my-app" --incremental --watch          # Continuous local scanning
+bluntcode prune "C:\my-app" --keep 20                     # Prune historical scans
+
+# Workspace Management
+bluntcode workspace list [--json]
+bluntcode workspace add . --name my-service
+bluntcode workspace show my-service
+bluntcode workspace tags my-service --set "backend,security"
+bluntcode workspace tree my-service --path src
+
+# Findings Search & Inspection
+bluntcode findings search "AWS" --severity critical
+bluntcode findings list . --format csv --output findings.csv
+bluntcode findings preview <scan-id> <finding-id> --lines 5
+
+# Comprehensive Reports
+bluntcode report . --format md                          # SonarQube-style Markdown
+bluntcode report . --format html --output report.html   # Self-contained HTML report
+bluntcode report . --format sarif --output audit.sarif  # OASIS SARIF log
+
+# History & Scans Compare
+bluntcode history . --limit 10
+bluntcode history compare <baseline-scan-id> <current-scan-id>
+
+# Suppressions (False Positives)
+bluntcode suppress list .
+bluntcode suppress add . --fingerprint <hash> --reason "Mock secret in tests"
+bluntcode suppress remove . --fingerprint <hash>
+
+# Rules & Path Overrides
+bluntcode rules list .
+bluntcode rules overrides . --set "dist/**,build/**,vendor/**"
+bluntcode rules disable . "tests/**"
+
+# Managed Analyzers Toolchain
+bluntcode tools list [--json]
+bluntcode tools install semgrep
+bluntcode tools repair gitleaks
+
+# Dynamic Pentest & DAST Probing
+bluntcode pentest probe http://localhost:3000
+bluntcode pentest probe https://api.staging.internal --scope full --json
+
+# Statistics, Trends & Risk Scores
+bluntcode stats                      # Global statistics
+bluntcode stats .                    # Workspace summary
+bluntcode trends . --limit 15        # Historical severity trendline
+bluntcode risk .                     # Risk score (0-100) and grade (A-D)
+
+# Diagnostics, Updates & Built-in Manual
+bluntcode doctor [--fix]             # Environment diagnostics & auto-repair
+bluntcode update check [--json]      # Check for newer releases
+bluntcode cli [command]              # Interactive built-in command documentation
 ```
 
-`--fail-on` gates **new** findings only when `--baseline` is set. Full flags: `bluntcode help` · CI recipe: [docs/ci.md](docs/ci.md).
-
-**Exit codes** · `0` scan completed · `1` failed, cancelled, timed out, or a `--fail-on`/`--max-findings` gate tripped · `2` usage error (bad flags, invalid values) · `130` stopped with Ctrl+C
+**Exit codes** · `0` clean / success · `1` failed or `--fail-on`/`--max-findings` gate tripped · `2` usage error · `130` stopped with Ctrl+C
 
 ### In CI — GitHub Actions
 
@@ -169,19 +216,19 @@ quality:
   runs-on: windows-latest
   steps:
     - uses: actions/checkout@v4
-    - name: Blunt Code gate
-      shell: pwsh
+    - name: Run Blunt Code Security Gate
       run: |
-        curl.exe -fsSL -o blunt.zip https://github.com/sanketpatel32/Blunt-code/releases/latest/download/BluntCode-0.16.7-windows-amd64.zip
-        Expand-Archive blunt.zip -DestinationPath .\blunt
-        .\blunt\BluntCode*\bluntcode.exe scan . --format github --fail-on high+
+        bluntcode scan . --profile standard --fail-on high+ --format sarif --output audit.sarif
+    - name: Upload SARIF to GitHub Security Tab
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: audit.sarif
 ```
-
-`--format github` emits workflow commands, so findings appear as inline PR annotations; a tripped gate exits `1` and fails the build. Windows-only runner required. Full workflow (incl. `LOCALAPPDATA` isolation): [docs/ci.md](docs/ci.md).
 
 ### For AI agents
 
-Blunt Code ships `llm.txt` / `llms.txt` ([llmstxt.org](https://llmstxt.org)) and `bluntcode agent` helpers — machine-readable, no browser needed.
+Blunt Code ships `llm.txt` / `llms.txt` ([llmstxt.org](https://llmstxt.org)), `bluntcode agent docs`, and `bluntcode agent scan` for zero-overhead, machine-readable JSON integration without opening a browser.
 
 ```powershell
 bluntcode llm                  # cat llm.txt (same as llms.txt)

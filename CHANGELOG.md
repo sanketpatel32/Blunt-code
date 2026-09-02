@@ -5,6 +5,33 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.0] - 2026-09-03
+
+### Added
+- **Full Headless CLI Support for Every Feature**:
+  - Implemented complete CLI subcommand suite in `cmd/bluntcode/`:
+    - `bluntcode workspace <list|add|show|tree|tags|delete>`: Full project registration, metadata inspection, directory trees, and tag management.
+    - `bluntcode findings <search|list|preview>`: Cross-workspace query search, findings listing in text/json/jsonl/csv formats, and source code snippet preview with context lines.
+    - `bluntcode report <scan|path>`: Full audit report exports in Markdown, SARIF 2.1.0, HTML, JSON, CSV, and JSONL formats.
+    - `bluntcode history [path]`, `history compare <id1> <id2>`, `history delete <id>`: Scan history inspection and comparative diffing showing new, fixed, and persistent findings.
+    - `bluntcode suppress <list|add|remove|import>`: Permanent false positive suppression by fingerprint hash and CSV batch import.
+    - `bluntcode rules <list|disable|enable|overrides>`: Workspace path exclusion globs and rule toggling.
+    - `bluntcode tools <list|install|repair|update>`: Hermetic analyzer binary management.
+    - `bluntcode pentest probe <url>`: Dynamic DAST endpoint probing for security headers, CORS, TLS, and vulnerabilities.
+    - `bluntcode stats [path]`, `trends <path>`, `risk <path>`: Global/workspace summaries, severity trendlines, weighted risk scores (0–100), and risk grades (A–D).
+    - `bluntcode update check`: In-terminal update checking against GitHub releases.
+    - `bluntcode cli [command]`: Comprehensive in-terminal reference manuals and recipes.
+  - CLI database queries run with shared SQLite concurrency (`busy_timeout(5000)`), executing without single-instance mutex contention so commands can run while the GUI is open.
+  - Interspersed flag parsing across all commands (`parseFlagsInterspersed`), allowing positional arguments and flags in any order.
+- **Dedicated Interactive CLI Documentation Page in Web App (`/cli`)**:
+  - `web/src/pages/CLIPage.tsx`: Rich interactive documentation page with Reference Manual, category filters, click-to-copy synopsis buttons, option tables, and examples.
+  - CI/CD & Automation recipes for GitHub Actions (with SARIF code scanning tab upload), Git Pre-commit hook, and GitLab CI.
+  - Visual Command Builder generating tailored `bluntcode scan` commands with live copy.
+  - Routed at `/cli` and `/docs`, with header navigation link, `g c` keyboard shortcut sequence, and Command Palette entry.
+- **Comprehensive Documentation**:
+  - Added `docs/CLI.md` containing full CLI reference manual, exit codes, and pipeline integrations.
+  - Updated `README.md` and `llm.txt` for AI assistant integration.
+
 ## [0.18.0] - 2026-09-02
 
 ### Added

@@ -53,6 +53,48 @@ func main() {
 		case "llm", "llms":
 			os.Exit(runLLM(os.Args[2:], os.Stdout, os.Stderr))
 			return
+		case "workspace", "workspaces":
+			os.Exit(runWorkspace(os.Args[2:], os.Stdout, os.Stderr))
+			return
+		case "findings", "finding":
+			os.Exit(runFindings(os.Args[2:], os.Stdout, os.Stderr))
+			return
+		case "history", "scans":
+			os.Exit(runHistory(os.Args[2:], os.Stdout, os.Stderr))
+			return
+		case "report", "reports":
+			os.Exit(runReport(os.Args[2:], os.Stdout, os.Stderr))
+			return
+		case "suppress", "suppressions":
+			os.Exit(runSuppress(os.Args[2:], os.Stdout, os.Stderr))
+			return
+		case "rules", "rule":
+			os.Exit(runRules(os.Args[2:], os.Stdout, os.Stderr))
+			return
+		case "tools", "tool":
+			os.Exit(runTools(os.Args[2:], os.Stdout, os.Stderr))
+			return
+		case "pentest":
+			os.Exit(runPentest(os.Args[2:], os.Stdout, os.Stderr))
+			return
+		case "stats":
+			os.Exit(runStats(os.Args[2:], os.Stdout, os.Stderr))
+			return
+		case "trends":
+			os.Exit(runTrends(os.Args[2:], os.Stdout, os.Stderr))
+			return
+		case "risk":
+			os.Exit(runRisk(os.Args[2:], os.Stdout, os.Stderr))
+			return
+		case "update":
+			os.Exit(runUpdate(os.Args[2:], os.Stdout, os.Stderr))
+			return
+		case "version", "--version", "-v":
+			fmt.Println(version)
+			return
+		case "cli", "docs":
+			os.Exit(runCLIDocs(os.Args[2:], os.Stdout, os.Stderr))
+			return
 		case "help", "--help", "-h":
 			printHelp(os.Stdout)
 			return
@@ -239,9 +281,20 @@ func printHelp(w io.Writer) {
 	fmt.Fprintln(w, "  "+pruneUsage)
 	fmt.Fprintln(w, "  "+doctorUsage)
 	fmt.Fprintln(w, "  "+configUsage)
+	fmt.Fprintln(w, "  "+workspaceUsage)
+	fmt.Fprintln(w, "  bluntcode findings <search|list|preview> [args]")
+	fmt.Fprintln(w, "  bluntcode history [path] | bluntcode history compare <id1> <id2>")
+	fmt.Fprintln(w, "  "+reportUsage)
+	fmt.Fprintln(w, "  bluntcode suppress <list|add|remove|import> <workspace> [args]")
+	fmt.Fprintln(w, "  bluntcode rules <list|disable|enable|overrides> <workspace> [args]")
+	fmt.Fprintln(w, "  bluntcode tools <list|install|repair|update> [tool-id]")
+	fmt.Fprintln(w, "  bluntcode pentest probe <url> [--auth-mode ...] [--scope ...]")
+	fmt.Fprintln(w, "  bluntcode stats [path] | bluntcode trends <path> | bluntcode risk <path>")
+	fmt.Fprintln(w, "  bluntcode update check [--json]")
+	fmt.Fprintln(w, "  bluntcode cli [command]   built-in reference manual and guides")
 	fmt.Fprintln(w, "  "+agentUsage+"   agent helper (docs + scan with --json --quiet)")
 	fmt.Fprintln(w, "  "+llmUsage)
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Run `bluntcode <command> --help` for the full flags of one subcommand.")
-	fmt.Fprintln(w, "Agents: see llm.txt / llms.txt or run `bluntcode agent docs` (also `bluntcode llm`).")
+	fmt.Fprintln(w, "Run `bluntcode <command> --help` or `bluntcode cli <command>` for command details.")
+	fmt.Fprintln(w, "Web UI documentation is available at /cli when the server is running.")
 }

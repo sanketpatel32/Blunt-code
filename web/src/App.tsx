@@ -32,10 +32,11 @@ void import('./pages/PentestPage');
 void import('./pages/RuleStudioPage');
 void import('./components/DependencyGraph');
 import { AboutPage } from './pages/AboutPage';
+import { CLIPage } from './pages/CLIPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 
-/** Keys that complete a "g" navigation sequence: g h/w/t/s -> the matching page. */
-const SEQUENCE_TARGETS: Partial<Record<string, Route['page']>> = { h: 'home', w: 'workspaces', t: 'tools', s: 'settings', a: 'about' };
+/** Keys that complete a "g" navigation sequence: g h/w/t/s/c/a -> the matching page. */
+const SEQUENCE_TARGETS: Partial<Record<string, Route['page']>> = { h: 'home', w: 'workspaces', t: 'tools', s: 'settings', c: 'cli', a: 'about' };
 /** How long "g" stays armed waiting for its second key. */
 const SEQUENCE_ARM_MS = 800;
 
@@ -154,6 +155,7 @@ export function App() {
     { id: 'nav-home', label: 'Go to Home', keywords: 'dashboard start', hint: 'g h', group: 'Navigation', run: () => go({ page: 'home' }) },
     { id: 'nav-workspaces', label: 'Go to Workspaces', keywords: 'projects', hint: 'g w', group: 'Navigation', run: () => go({ page: 'workspaces' }) },
     { id: 'nav-tools', label: 'Go to Tools', keywords: 'analyzers ruff biome semgrep sonar', hint: 'g t', group: 'Navigation', run: () => go({ page: 'tools' }) },
+    { id: 'nav-cli', label: 'Go to CLI Docs', keywords: 'cli terminal commands headless manual reference automation ci cd', hint: 'g c', group: 'Navigation', run: () => go({ page: 'cli' }) },
     { id: 'nav-settings', label: 'Go to Settings', keywords: 'preferences', hint: 'g s', group: 'Navigation', run: () => go({ page: 'settings' }) },
     { id: 'nav-about', label: 'Go to About', keywords: 'version info', hint: 'g a', group: 'Navigation', run: () => go({ page: 'about' }) },
     { id: 'nav-search', label: 'Go to findings', keywords: 'search findings', group: 'Navigation', run: () => go({ page: 'search' }) },
@@ -216,6 +218,7 @@ function Page({ route, go, notify, onAdd, onUpdateHandoff }: { route: Route; go:
     case 'scan': return id ? <ScanPage id={id} notify={notify} /> : <NotFoundPage go={go} />;
     case 'search': return <SearchPage go={go} />;
     case 'tools': return <ToolsPage notify={notify} go={go} />;
+    case 'cli': return <CLIPage />;
     case 'pentest': return <Suspense fallback={<SkeletonCards count={3} variant="chart" />}><PentestPage workspaceId={id} go={go} notify={notify} /></Suspense>;
     case 'rules': return <Suspense fallback={<SkeletonCards count={2} />}><RuleStudioPage /></Suspense>;
     case 'settings': return <SettingsPage notify={notify} />;

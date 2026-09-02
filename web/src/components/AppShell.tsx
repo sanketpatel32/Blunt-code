@@ -32,6 +32,7 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
     [{ page: 'search' }, t('nav.search')],
     [{ page: 'tools' }, t('nav.tools')],
     [{ page: 'rules' }, 'Rules'],
+    [{ page: 'cli' }, 'CLI'],
     [{ page: 'settings' }, t('nav.settings')],
     [{ page: 'about' }, t('nav.about')],
   ];

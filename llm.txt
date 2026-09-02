@@ -53,15 +53,26 @@
 ```
 bluntcode [path] [--no-browser] [--port N] [--version]   # launch web UI (loopback)
 bluntcode help | --help | -h
+bluntcode cli [command]                                     # reference manual and syntax
 bluntcode doctor [--json] [--fix]                         # diagnostics + optional self-heal
 bluntcode config [--json]                                 # effective config (paths, env, tool versions)
 bluntcode scan <path> [--profile quick|standard|deep] [--format text|json|github|sarif|csv|jsonl|markdown]
                     [--json] [--quiet] [--timeout 30m] [--output FILE] [--save-baseline FILE]
                     [--fail-on critical,high,...|high+] [--max-findings N]
                     [--baseline <scan-id|./file.sarif>] [--gate-analyzer a,b] [--gate-category c,d]
-                    [--github-cap 1..50] [--jobs N] [--incremental] [--watch] [--watch-poll dur] [--watch-quiet dur]
+                    [--github-cap 1..50] [--jobs N] [--incremental] [--watch]
 bluntcode prune <path> [--keep N]                         # retention: keep newest N scans
-bluntcode agent [--help] | agent docs | agent scan <path> [scan flags]  # agent helper, docs dump
+bluntcode workspace <list|add|show|tree|tags|delete>      # workspace management
+bluntcode findings <search|list|preview>                  # findings search, list, source preview
+bluntcode report <scan|path> [--format md|sarif|html|json|csv|jsonl] [--output FILE] # export audit reports
+bluntcode history [path] | compare <id1> <id2> | delete <id> # trace past scans and compare diffs
+bluntcode suppress <list|add|remove|import> <workspace>   # manage suppressed false positives
+bluntcode rules <list|disable|enable|overrides>           # workspace exclusions & rule toggles
+bluntcode tools <list|install|repair|update>              # manage analyzer toolchain
+bluntcode pentest probe <url> [--scope standard|full] [--json] # dynamic DAST probe
+bluntcode stats [path] | trends <path> | risk <path>      # risk scores (0-100), grades, trends
+bluntcode update check [--json]                           # check for newer releases
+bluntcode agent docs | agent scan <path> [scan flags]     # agent helper, docs dump
 bluntcode llm | llms                                      # cat this file to stdout
 ```
 

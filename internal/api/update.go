@@ -89,6 +89,39 @@ func (s *Server) offlineEnabled(r *http.Request) bool {
 	return settings.Offline
 }
 
+// UpdateCheckResult holds version comparison and release info.
+type UpdateCheckResult struct {
+	Current      string `json:"current"`
+	Latest       string `json:"latest"`
+	Available    bool   `json:"available"`
+	ReleaseURL   string `json:"release_url"`
+	ReleaseNotes string `json:"release_notes"`
+}
+
+// CheckUpdateDirect checks GitHub releases for a newer version than currentVersion.
+func CheckUpdateDirect(currentVersion string) (UpdateCheckResult, error) {
+	body, err := fetchURLBytes("https://api.github.com/repos/" + updateRepository + "/releases/latest")
+	if err != nil {
+		return UpdateCheckResult{}, fmt.Errorf("could not reach GitHub releases: %w", err)
+	}
+	var release releaseInfo
+	if err := json.Unmarshal(body, &release); err != nil || release.TagName == "" {
+		return UpdateCheckResult{}, fmt.Errorf("github returned an unexpected response")
+	}
+	latest := strings.TrimPrefix(release.TagName, "v")
+	notes := release.Body
+	if len(notes) > 600 {
+		notes = notes[:600] + "…"
+	}
+	return UpdateCheckResult{
+		Current:      currentVersion,
+		Latest:       latest,
+		Available:    compareSemver(latest, currentVersion) > 0,
+		ReleaseURL:   release.HTMLURL,
+		ReleaseNotes: strings.TrimSpace(notes),
+	}, nil
+}
+
 // updateCheck tells the UI whether a newer release exists. Respects offline
 // mode: the promise is local-first, so no network traffic happens when the
 // user turned it off.
@@ -97,28 +130,12 @@ func (s *Server) updateCheck(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusConflict, "UPDATE_OFFLINE", "Offline mode is enabled; turn it off in Settings to check for updates.")
 		return
 	}
-	body, err := fetchURLBytes("https://api.github.com/repos/" + updateRepository + "/releases/latest")
+	res, err := CheckUpdateDirect(s.version)
 	if err != nil {
-		fail(w, http.StatusBadGateway, "UPDATE_CHECK_FAILED", "Could not reach GitHub releases: "+err.Error())
+		fail(w, http.StatusBadGateway, "UPDATE_CHECK_FAILED", err.Error())
 		return
 	}
-	var release releaseInfo
-	if err := json.Unmarshal(body, &release); err != nil || release.TagName == "" {
-		fail(w, http.StatusBadGateway, "UPDATE_CHECK_FAILED", "GitHub returned an unexpected response.")
-		return
-	}
-	latest := strings.TrimPrefix(release.TagName, "v")
-	notes := release.Body
-	if len(notes) > 600 {
-		notes = notes[:600] + "…"
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"current":       s.version,
-		"latest":        latest,
-		"available":     compareSemver(latest, s.version) > 0,
-		"release_url":   release.HTMLURL,
-		"release_notes": strings.TrimSpace(notes),
-	})
+	writeJSON(w, http.StatusOK, res)
 }
 
 // fetchInstallerScript downloads install-latest.ps1 pinned to the newest
