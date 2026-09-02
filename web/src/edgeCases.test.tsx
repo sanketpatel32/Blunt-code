@@ -248,12 +248,15 @@ describe('hostile API fixtures', () => {
     expect(host.textContent).toContain('Ready');
   });
 
-  it('unknown routes render the 404 page without API calls', async () => {
+  it('unknown routes render the 404 page without page-level API calls', async () => {
     const fetchMock = routeMock([]);
     const host = await renderAt('/definitely/not/here', fetchMock);
     expectClean(host);
     expect(host.textContent).toContain('Page not found');
-    expect(fetchMock).not.toHaveBeenCalled();
+    // The once-per-session update check is app chrome and still fires; no
+    // page-level data was requested for an unknown route.
+    const requested = fetchMock.mock.calls.map(([input]) => String(input));
+    expect(requested.filter((url) => !url.endsWith('/update/check'))).toEqual([]);
   });
 });
 

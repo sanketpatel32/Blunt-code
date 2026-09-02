@@ -894,6 +894,26 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 @keyframes icon-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
 .empty .empty-icon svg { will-change: transform; animation: icon-float 3.2s var(--ease-in-out) infinite; }
 
+/* ── Farewell screen (app stopped / updating) ─────────────────── */
+/* Replaces the whole frame once the backend is gone, so the tab never shows a
+   dead, clickable app. Rides the .about-card chrome for surface and shadow. */
+.farewell { min-height: 100dvh; display: grid; place-items: center; padding: var(--space-xl) var(--page-gutter); animation: page-enter var(--dur-slow) var(--ease-out-quart); }
+.farewell-card { max-width: 30rem; display: grid; justify-items: center; gap: var(--space-md); text-align: center; }
+.farewell-mark { width: 3.5rem; height: 3.5rem; border-radius: var(--radius-lg); }
+.farewell-card h1 { margin: 0; font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; letter-spacing: -.025em; color: var(--color-ink); }
+.farewell-card p { margin: 0; }
+.farewell-steps { width: 100%; display: grid; gap: var(--space-xs); margin: var(--space-xs) 0 0; padding: var(--space-md); list-style: none; text-align: left; background: var(--color-surface-muted); border-radius: var(--radius-md); }
+.farewell-step { display: flex; align-items: center; gap: var(--space-sm); color: var(--color-ink-soft); font-size: var(--text-sm); }
+.farewell-step-dot { flex: none; width: 0.6rem; height: 0.6rem; border-radius: 50%; background: var(--color-rule); }
+.farewell-step.is-done { color: var(--color-ink); }
+.farewell-step.is-done .farewell-step-dot { background: var(--color-accent-strong); }
+.farewell-step.is-active { color: var(--color-ink); font-weight: 600; }
+.farewell-step.is-active .farewell-step-dot { background: var(--color-accent); animation: farewell-pulse 1.6s var(--ease-in-out) infinite; }
+@keyframes farewell-pulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-accent) 45%, transparent); } 50% { box-shadow: 0 0 0 5px transparent; } }
+.farewell-actions { margin-top: var(--space-xs); }
+.farewell-hint { font-size: var(--text-sm); min-height: 1.4em; }
+@media (prefers-reduced-motion: reduce) { .farewell { animation: none; } .farewell-step.is-active .farewell-step-dot { animation: none; } }
+
 /* ── Responsive ────────────────────────────────────────────────── */
 /* Loop 110 · one gutter token for every breakpoint. */
 @media (max-width: 68rem) { :root { --page-gutter: var(--space-xl); } }

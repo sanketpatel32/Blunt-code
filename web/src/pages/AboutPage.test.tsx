@@ -23,12 +23,12 @@ function aboutMock() {
   });
 }
 
-async function renderPage(fetchMock: ReturnType<typeof vi.fn>) {
+async function renderPage(fetchMock: ReturnType<typeof vi.fn>, onUpdateHandoff?: (version: string) => void) {
   vi.stubGlobal('fetch', fetchMock);
   const host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);
-  await act(async () => { root.render(<AboutPage />); });
+  await act(async () => { root.render(<AboutPage onUpdateHandoff={onUpdateHandoff} />); });
   await act(async () => { await Promise.resolve(); await Promise.resolve(); });
   return host;
 }
@@ -123,9 +123,22 @@ describe('AboutPage updates card', () => {
     await clickButton(host, 'Update now');
     const calls = fetchMock.mock.calls.map(([input, init]) => ({ url: String(input), method: (init as RequestInit | undefined)?.method }));
     expect(calls.filter((call) => call.url.endsWith('/update/apply')).length).toBe(1);
-    // The stop call is part of the handoff: the installer waits for our exit.
+    // Without a handoff (standalone render), the card still stops the server:
+    // the installer waits for our exit.
     expect(calls.some((call) => call.url.endsWith('/system/stop') && call.method === 'POST')).toBe(true);
     expect(host.textContent).toContain('Installer launched');
+  });
+
+  it('delegates the shutdown to the app shell when the handoff is provided', async () => {
+    const fetchMock = updateFetch({ available: true });
+    const handoff = vi.fn();
+    const host = await renderPage(fetchMock, handoff);
+    await clickButton(host, 'Check for updates');
+    await clickButton(host, 'Update now');
+    // The shell owns the stop + the update screen from here; the card must not
+    // race it with a second stop call.
+    expect(handoff).toHaveBeenCalledWith('2.0.0');
+    expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith('/system/stop'))).toBe(false);
   });
 
   it('surfaces offline and network failures with a retry', async () => {

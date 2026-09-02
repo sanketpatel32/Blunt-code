@@ -121,11 +121,29 @@ func (s *Server) updateCheck(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// fetchInstallerScript downloads install-latest.ps1 pinned to the newest
+// release tag, so the updater that runs always matches the release it is
+// installing. main is the fallback for the short window before a tag exists
+// or when the GitHub API call fails (rate limits and the like).
+func fetchInstallerScript() ([]byte, error) {
+	var release releaseInfo
+	if body, err := fetchURLBytes("https://api.github.com/repos/" + updateRepository + "/releases/latest"); err == nil {
+		_ = json.Unmarshal(body, &release)
+	}
+	if release.TagName != "" {
+		if body, err := fetchURLBytes("https://raw.githubusercontent.com/" + updateRepository + "/" + release.TagName + "/scripts/install-latest.ps1"); err == nil {
+			return body, nil
+		}
+	}
+	return fetchURLBytes("https://raw.githubusercontent.com/" + updateRepository + "/main/scripts/install-latest.ps1")
+}
+
 // updateApply stages the official PowerShell installer plus a tiny launcher
 // into a temp folder and starts it detached. The installer waits (see
 // -WaitForCloseSeconds) for Blunt Code to exit; the UI triggers /system/stop
-// right after this call returns, so the handoff reads: click Update → app
-// closes → installer swaps the binary → user relaunches.
+// right after this call returns, and once the installer finishes the launcher
+// starts the freshly installed exe, so the handoff reads: click Update → app
+// closes → installer swaps the binary → the new version opens on its own.
 func (s *Server) updateApply(w http.ResponseWriter, r *http.Request) {
 	if runtime.GOOS != "windows" {
 		fail(w, http.StatusNotImplemented, "UNSUPPORTED_PLATFORM", "In-app updates are Windows-only.")
@@ -135,7 +153,7 @@ func (s *Server) updateApply(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusConflict, "UPDATE_OFFLINE", "Offline mode is enabled; turn it off in Settings to update.")
 		return
 	}
-	raw, err := fetchURLBytes("https://raw.githubusercontent.com/"+updateRepository+"/main/scripts/install-latest.ps1")
+	raw, err := fetchInstallerScript()
 	if err != nil {
 		fail(w, http.StatusBadGateway, "UPDATE_APPLY_FAILED", "Could not download the installer: "+err.Error())
 		return
@@ -151,19 +169,32 @@ func (s *Server) updateApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	launcherPath := filepath.Join(dir, "run-update.cmd")
+	// The relaunch must target the installer's default location (not our own
+	// os.Executable()): a portable run from Downloads reinstalls into the
+	// default dir, and relaunching the old portable exe would undo the update.
+	// The if-exist guard keeps the chain silent when the install failed or
+	// landed somewhere custom.
 	launcher := "@echo off\r\n" +
 		"timeout /t 2 /nobreak >nul\r\n" +
-		"powershell -NoProfile -ExecutionPolicy Bypass -File \"" + scriptPath + "\" -Silent -WaitForCloseSeconds 60\r\n"
+		"powershell -NoProfile -ExecutionPolicy Bypass -File \"" + scriptPath + "\" -Silent -WaitForCloseSeconds 60\r\n" +
+		"if errorlevel 1 (\r\n" +
+		"  echo Update failed - the error above says why. Your current Blunt Code was kept;\r\n" +
+		"  echo start it again from the Start menu.\r\n" +
+		"  pause\r\n" +
+		"  exit /b 1\r\n" +
+		")\r\n" +
+		"if exist \"%LOCALAPPDATA%\\Programs\\BluntCode\\bluntcode.exe\" start \"\" \"%LOCALAPPDATA%\\Programs\\BluntCode\\bluntcode.exe\"\r\n"
 	if err := os.WriteFile(launcherPath, []byte(launcher), 0o600); err != nil {
 		fail(w, 500, "UPDATE_APPLY_FAILED", "Could not stage the updater.")
 		return
 	}
-	command := exec.Command("cmd", "/C", "start", "", launcherPath)
+	command := exec.Command("cmd", "/C", "start", "/min", "", launcherPath)
 	command.Dir = dir
 	if err := launchUpdateProcess(command); err != nil {
 		fail(w, 500, "UPDATE_APPLY_FAILED", "Could not launch the installer.")
 		return
 	}
+	s.log.Info("update staged", "dir", dir)
 	writeJSON(w, http.StatusOK, map[string]any{"started": true, "staged_at": dir})
 }
 

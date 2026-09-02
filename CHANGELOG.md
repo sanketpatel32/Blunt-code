@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Updates reopen Blunt Code automatically**: the staged updater now chains a relaunch of the freshly installed exe after the installer finishes, so "Update now" ends with the new version running in a new tab instead of a silently closed app. If the install fails, the updater console stays open with the error and the relaunch is skipped. The installer script is pinned to the release tag being installed (`main` stays the fallback), and the updater console starts minimized instead of flashing a window over the dying app.
+- **Update-available toast on launch**: each app session runs one silent update check; a newer release surfaces as a toast with a "Review update" action that jumps straight to the About page updater. Offline mode keeps full control — the check never runs while it is enabled.
+- **Close-app farewell screen**: after the app stops itself, the tab shows a "Blunt Code has stopped" card instead of the dead, still-clickable UI, with a best-effort "Close this tab" button (plus guidance when the browser refuses) and a reminder that data stays local and how to relaunch. The update handoff gets its own variant with an install-progress stepper.
+
+### Changed
+- **Close confirmation names live scans**: the "Close Blunt Code?" dialog now calls out which workspace still has a running scan before you cancel it.
+- Close is resilient to shutdown races: a failed stop request is told apart from the server dying mid-response (one health probe), so closing never gets stuck reporting an error for an app that already exited.
+
 ## [0.16.23] - 2026-09-02
 
 ### Added

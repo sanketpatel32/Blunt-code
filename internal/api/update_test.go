@@ -139,9 +139,24 @@ func TestUpdateApplyStagesInstallerAndLaunchesDetached(t *testing.T) {
 	if err != nil || !strings.Contains(string(launcher), "-Silent -WaitForCloseSeconds 60") {
 		t.Fatalf("staged launcher missing or wrong: %v", err)
 	}
+	// The launcher owns the relaunch: silent installs never start the app, so
+	// without this chain an in-app update strands the user without a window.
+	if !strings.Contains(string(launcher), `if exist "%LOCALAPPDATA%\Programs\BluntCode\bluntcode.exe" start "" "%LOCALAPPDATA%\Programs\BluntCode\bluntcode.exe"`) {
+		t.Fatalf("staged launcher does not relaunch the installed app:\n%s", string(launcher))
+	}
+	if !strings.Contains(string(launcher), "if errorlevel 1") {
+		t.Fatalf("staged launcher does not guard against failed installs:\n%s", string(launcher))
+	}
 	if len(*urlsSeen) == 0 || !strings.Contains(string(*urlsSeen), "raw.githubusercontent.com") {
 		t.Fatalf("installer script was not fetched from the repo: %s", string(*urlsSeen))
 	}
+	// A window flashing over the dying app reads like a crash; it starts minimized.
+	for _, arg := range launched.Args {
+		if arg == "/min" {
+			return
+		}
+	}
+	t.Fatalf("updater console was not started minimized: %v", launched.Args)
 }
 
 func TestUpdateApplyBlockedWhenOffline(t *testing.T) {

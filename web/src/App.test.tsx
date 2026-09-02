@@ -260,3 +260,89 @@ describe('Blunt Code home', () => {
     expect(host.querySelector('.empty.positive .empty-icon svg')).not.toBeNull();
   });
 });
+
+describe('closing the app', () => {
+  beforeEach(() => { window.history.replaceState({}, '', '/'); });
+  afterEach(async () => { await act(async () => { root?.unmount(); }); document.body.replaceChildren(); vi.unstubAllGlobals(); });
+
+  async function openCloseDialog(host: HTMLElement) {
+    const closeApp = [...host.querySelectorAll('button')].find((button) => button.textContent === 'Close app');
+    expect(closeApp).toBeDefined();
+    await act(async () => { closeApp!.click(); await Promise.resolve(); await Promise.resolve(); });
+    return host.querySelector('.confirmation-dialog')!;
+  }
+
+  it('replaces the app with the stopped screen once the server confirms shutdown', async () => {
+    const fetchMock = vi.fn((input: string, _init?: RequestInit) => {
+      if (input.endsWith('/system/stop')) return Promise.resolve(json({ state: 'stopping' }));
+      return Promise.resolve(json({ items: [] }));
+    });
+    const host = await render(fetchMock);
+    const dialog = await openCloseDialog(host);
+    const confirm = [...dialog.querySelectorAll('button')].find((button) => button.textContent === 'Close app')!;
+    await act(async () => { confirm.click(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
+    expect(fetchMock.mock.calls.some(([input, init]) => String(input).endsWith('/system/stop') && (init as RequestInit | undefined)?.method === 'POST')).toBe(true);
+    expect(host.textContent).toContain('Blunt Code has stopped');
+    expect(host.textContent).toContain('stay saved on this computer');
+    // The dead app is gone: no nav, no clickable remnants, just the farewell card.
+    expect(host.querySelector('.app-nav')).toBeNull();
+    expect(host.textContent).toContain('Close this tab');
+  });
+
+  it('still stops when shutdown severs the connection mid-response', async () => {
+    const fetchMock = vi.fn((input: string) => {
+      if (input.endsWith('/system/stop')) return Promise.reject(new TypeError('connection closed'));
+      if (input.endsWith('/health')) return Promise.reject(new TypeError('connection closed'));
+      return Promise.resolve(json({ items: [] }));
+    });
+    const host = await render(fetchMock);
+    const dialog = await openCloseDialog(host);
+    const confirm = [...dialog.querySelectorAll('button')].find((button) => button.textContent === 'Close app')!;
+    await act(async () => { confirm.click(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
+    expect(host.textContent).toContain('Blunt Code has stopped');
+  });
+
+  it('names the workspace with a running scan in the confirmation', async () => {
+    const fetchMock = vi.fn((input: string) => {
+      if (input.endsWith('/scans')) return Promise.resolve(json({ scans: [
+        { id: 'scan-live', workspace_id: 'ws-1', workspace_name: 'Example API', state: 'running' },
+        { id: 'scan-old', workspace_id: 'ws-2', workspace_name: 'Other', state: 'completed' },
+      ], total: 2 }));
+      return Promise.resolve(json({ items: [] }));
+    });
+    const host = await render(fetchMock);
+    await openCloseDialog(host);
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(host.textContent).toContain('A scan is still running on Example API');
+  });
+});
+
+describe('update awareness', () => {
+  beforeEach(() => { window.history.replaceState({}, '', '/'); });
+  afterEach(async () => { await act(async () => { root?.unmount(); }); document.body.replaceChildren(); vi.unstubAllGlobals(); });
+
+  it('toasts once about a newer release with a link to the updater', async () => {
+    const fetchMock = vi.fn((input: string) => {
+      if (input.endsWith('/update/check')) return Promise.resolve(json({ current: '0.16.23', latest: '0.17.0', available: true, release_url: 'https://example.com/r', release_notes: 'Notes' }));
+      return Promise.resolve(json({ items: [] }));
+    });
+    const host = await render(fetchMock);
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(host.textContent).toContain('Blunt Code 0.17.0 is available.');
+    const review = [...host.querySelectorAll('button')].find((button) => button.textContent === 'Review update');
+    expect(review).toBeDefined();
+    await act(async () => { review!.click(); await Promise.resolve(); await Promise.resolve(); });
+    expect(window.location.pathname).toBe('/about');
+  });
+
+  it('stays silent when the release matches', async () => {
+    const fetchMock = vi.fn((input: string) => {
+      if (input.endsWith('/update/check')) return Promise.resolve(json({ current: '0.16.23', latest: '0.16.23', available: false, release_url: '', release_notes: '' }));
+      return Promise.resolve(json({ items: [] }));
+    });
+    const host = await render(fetchMock);
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith('/update/check'))).toHaveLength(1);
+    expect(host.textContent).not.toContain('is available.');
+  });
+});

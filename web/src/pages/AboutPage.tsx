@@ -30,7 +30,7 @@ function EyeOffIcon(props: SVGProps<SVGSVGElement>) {
 }
 
 // Hallmark polished
- export function AboutPage() {
+ export function AboutPage({ onUpdateHandoff }: { onUpdateHandoff?: (version: string) => void }) {
   const meta = useLoad(api.meta, []); const health = useLoad(api.health, []);
   const [copied, setCopied] = useState(false);
   const revert = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -72,7 +72,7 @@ function EyeOffIcon(props: SVGProps<SVGSVGElement>) {
           </button>
         </p>
       </section>
-      <UpdateCard version={meta.data?.version ?? ''} />
+      <UpdateCard version={meta.data?.version ?? ''} onUpdateHandoff={onUpdateHandoff} />
       <section className="about-card" style={{ marginTop: 'var(--space-lg)' }}>
         <LanguageCoverage />
       </section>
@@ -90,12 +90,14 @@ type UpdateState =
 
 /**
  * In-app updater. The check respects offline mode server-side; applying stages
- * the official installer detached, then stops this app so the installer can
- * swap the binary (it waits for our exit via -WaitForCloseSeconds).
+ * the official installer detached, then hands off to the app shell, which
+ * stops this app (the installer waits for our exit via -WaitForCloseSeconds)
+ * and shows the update screen. The staged launcher relaunches the new version
+ * when the install finishes.
  */
 const NEWLINE = '\n';
 
-function UpdateCard({ version }: { version: string }) {
+function UpdateCard({ version, onUpdateHandoff }: { version: string; onUpdateHandoff?: (version: string) => void }) {
   const [state, setState] = useState<UpdateState>({ phase: 'idle' });
   async function check() {
     setState({ phase: 'checking' });
@@ -113,16 +115,18 @@ function UpdateCard({ version }: { version: string }) {
     setState({ phase: 'applying', latest: state.latest, notes: state.notes });
     try {
       await api.applyUpdate();
-      // The installer waits up to 60s for this app to exit before touching
-      // anything, so stopping here is part of the handoff, not an accident.
-      await api.stopServer().catch(() => undefined);
+      // The shell swaps the whole UI to the update screen and stops the
+      // server; the installer waits up to 60s for that exit before swapping
+      // the binary, then the staged launcher reopens the new version.
+      if (onUpdateHandoff) onUpdateHandoff(state.latest);
+      else await api.stopServer().catch(() => undefined);
     } catch (error) {
       setState({ phase: 'error', message: error instanceof Error ? error.message : 'Could not start the updater.' });
     }
   }
   return <section className="about-card" aria-label="Updates" style={{ marginTop: 'var(--space-lg)' }}>
     <h2>Updates {version ? <span className="badge">v{version} installed</span> : null}</h2>
-    <p>Checks GitHub releases for a newer Blunt Code. Updating downloads the official installer and restarts the app; your data stays local.</p>
+    <p>Checks GitHub releases for a newer Blunt Code. Updating closes the app, installs the official package, and reopens the new version automatically; your data stays local.</p>
     <div aria-live="polite">
       {state.phase === 'idle' && <p style={{ margin: 'var(--space-md) 0 0' }}><button type="button" className="button" onClick={() => void check()} disabled={!version}>Check for updates</button></p>}
       {state.phase === 'checking' && <p className="muted" style={{ margin: 'var(--space-md) 0 0' }}>Checking GitHub releases...</p>}
@@ -134,7 +138,7 @@ function UpdateCard({ version }: { version: string }) {
             <button type="button" className="button" onClick={() => void apply()}>Update now</button>
             <a className="button secondary" href={state.releaseUrl} target="_blank" rel="noreferrer">Release notes</a>
           </p>
-          : <p className="muted">Installer launched. Blunt Code will close; installation finishes on its own.</p>}
+          : <p className="muted">Installer launched. Blunt Code closes, installs the update, and reopens on its own.</p>}
       </div>}
       {state.phase === 'error' && <p style={{ margin: 'var(--space-md) 0 0' }} role="alert">{state.message} <button type="button" className="button secondary" onClick={() => void check()}>Try again</button></p>}
     </div>
