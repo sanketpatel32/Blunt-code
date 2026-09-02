@@ -5,7 +5,7 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.18.0] - 2026-09-02
 
 ### Added
 - **Docked source viewer on the analysis page**: clicking a finding now opens its code in a pane beside the list instead of a blocking centered modal — the highlight covers the finding's start–end lines, prev/next buttons (and ↑/↓ or j/k) walk rows with live preview, Esc closes, and copy-location plus the comments sheet live in the pane. Below 72rem the pane falls back to the modal layout.
