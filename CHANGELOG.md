@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.23] - 2026-09-02
+
+### Added
+- **Ultra-Compact Single-Row Page Headers Across All Views**:
+  - Completely redesigned `PageHeader` into a tight single-row layout (~36px–40px total height) with uppercase monospace eyebrow tags, crisp typography, responsive live count badges, inline concise descriptions, and right-aligned actions.
+  - Eliminated the massive top margins and giant descriptive banners across `Findings Search`, `Workspaces`, `Analysis Tools`, `Scan History`, `Rule Studio`, `Workspace Files`, `Settings`, `About`, and `Pentest`.
+  - Reduced `--page-gutter` and `.page` top padding so search inputs, facets, tool tables, and workspace cards are immediately visible without vertical scrolling.
+
+### Changed
+- **Workspace-Only Pentest Navigation**:
+  - Removed `Pentest` from the global top navigation bar in `AppShell` and from top-level standalone tools.
+  - Pentest is now exclusively scoped inside individual workspaces (`/workspaces/:id/pentest`, workspace context sidebar, detail tabs, and scan action dropdowns).
+- **Search Page UI Optimization**:
+  - Tightened omnisearch bar height and filter presets for immediate above-the-fold result inspection.
+
 ## [0.16.22] - 2026-09-02
 
 ### Added
