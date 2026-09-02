@@ -1,5 +1,8 @@
 # Release checklist
 
+- If `internal/build/version.go` or the logo (`web/public/bluntcode-mark.svg`) changed, refresh the
+  embedded Windows resources with `scripts\embed-windows-resources.ps1` and rebuild, so the exe's
+  icon and its Properties-sheet version stamp stay current.
 - Verify each Windows artifact URL, SHA-256, version, license, and notice.
 - Re-test Ruff, Biome, Semgrep local rules, SonarQube bootstrap/scanner/API, and managed Java together.
 - For Semgrep, verify the official uv 0.11.16 archive SHA-256, the exact
