@@ -31,7 +31,6 @@ const RuleStudioPage = lazy(() => import('./pages/RuleStudioPage').then((m) => (
 void import('./pages/PentestPage');
 void import('./pages/RuleStudioPage');
 void import('./components/DependencyGraph');
-void import('./components/AutoFixPanel');
 import { AboutPage } from './pages/AboutPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 

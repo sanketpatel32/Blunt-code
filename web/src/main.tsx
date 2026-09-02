@@ -8,6 +8,8 @@ import './css/animations.css';
 import './css/nav-clarity.css';
 import './css/board.css';
 import './css/workspace-clarity.css';
+// Analysis story — verdict header, filter toolbar, split list/source layout.
+import './css/analysis.css';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

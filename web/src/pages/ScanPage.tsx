@@ -6,6 +6,7 @@ import type { Notice } from '../lib/notice';
 import { message } from '../lib/notice';
 import { analyzerName, date, elapsed, findingLocation, scanStateDisplay } from '../lib/format';
 import { eventCopy, isTerminalScanState, liveHeadline, stageLabels, type ScanEvent } from '../lib/scanEvents';
+import { bandFor, riskGrade, riskScore, severityCountsOf } from '../lib/risk';
 import { useLoad } from '../hooks/useLoad';
 import { useTicker } from '../hooks/useTicker';
 import { ErrorPanel, Loading, SeverityCounts } from '../components/ui';
@@ -66,37 +67,85 @@ export function ScanPage({ id, notify }: { id: string; go?: (r: Route) => void; 
   if (scan.loading) return <div className="page"><Loading /></div>;
   if (scan.error) return <div className="page"><ErrorPanel error={scan.error} retry={scan.reload} /></div>;
   if (!current) return <div className="page"><Loading /></div>;
-  const headline = terminal ? scanStateDisplay(current.state).label : liveHeadline(events, current.state);
-  const reportedFindings = events.reduce((total, event) => total + (event.type === 'analyzer.completed' ? event.findings ?? 0 : 0), 0);
-  const findingsSoFar = Math.max(current.total_findings ?? 0, reportedFindings);
+  const state = scanStateDisplay(current.state);
+  const live = !terminal;
+  const counts = severityCountsOf(current);
+  const total = current.total_findings ?? 0;
+  const critical = counts.critical ?? 0;
+  const score = riskScore(counts);
+  const graded = current.state === 'completed' || current.state === 'completed_with_warnings';
+  const grade = graded && total > 0 ? riskGrade(score) : null;
+  /** One sentence the whole page hangs on: the verdict, in the same grade language as the dashboard. */
+  const headline = live
+    ? liveHeadline(events, current.state)
+    : current.state === 'failed' ? 'Analysis failed'
+      : current.state === 'cancelled' ? 'Analysis cancelled'
+        : current.state === 'interrupted' ? 'Scan interrupted — partial results below'
+          : total === 0 ? 'All clear — no findings'
+            : `${bandFor(riskGrade(score)).label} — ${total} ${total === 1 ? 'finding' : 'findings'}${critical > 0 ? `, ${critical} critical` : ''}`;
+  const reportedFindings = events.reduce((acc, event) => acc + (event.type === 'analyzer.completed' ? event.findings ?? 0 : 0), 0);
+  const findingsSoFar = Math.max(total, reportedFindings);
+  const runs = current.analyzer_runs ?? [];
+  const succeeded = runs.filter((run) => run.status === 'succeeded').length;
+  const metaBits = [
+    current.profile,
+    `Started ${date(current.started_at)}`,
+    current.duration_ms !== undefined && current.duration_ms !== null ? elapsed(current.started_at, current.finished_at) : `elapsed ${elapsed(current.started_at, current.finished_at)}`,
+  ].filter(Boolean);
   return <div className="page scan-page">
-    <header className="scan-header">
-      <div className="scan-header-copy">
-        <p className="eyebrow">Analysis story</p>
-        <h1>{headline}</h1>
-        <p className="scan-subtitle">Started {date(current.started_at)} · <span className="scan-elapsed" style={{ fontVariantNumeric: 'tabular-nums' } as never}>elapsed {elapsed(current.started_at, current.finished_at)}</span></p>
-        <ScanProgressBar scan={current} events={events} />
+    <header className="analysis-header" data-tone={live ? 'accent' : state.variant}>
+      <div className="analysis-headline">
+        {grade && <span className="analysis-grade" data-grade={grade} aria-hidden="true">{grade}</span>}
+        <div className="analysis-headline-copy">
+          <p className="eyebrow">Analysis</p>
+          <h1>{headline}</h1>
+          <p className="analysis-meta">{metaBits.join(' · ')}{runs.length ? ` · ${succeeded} of ${runs.length} engines succeeded` : ''}</p>
+          {live && <ScanProgressBar scan={current} events={events} />}
+        </div>
       </div>
-      <div className="scan-header-actions">
+      <div className="analysis-header-actions">
         <span className={`stream-state ${streamState}`} aria-live="polite"><i aria-hidden="true" />{terminal ? 'Saved report' : streamState === 'live' ? 'Live updates' : streamState === 'reconnecting' ? `Reconnecting${streamAttempts > 1 ? ` (try ${streamAttempts})` : ''}` : 'Connecting'}</span>
-        {!terminal && <button type="button" className="button danger" onClick={cancel}>Cancel scan</button>}
+        {live && <button type="button" className="button danger" onClick={cancel}>Cancel scan</button>}
       </div>
     </header>
-    <section className="progress-layout">
+    {live && <section className="progress-layout">
       <ScanStageList scan={current} events={events} />
       <aside className="scan-side" aria-busy={!terminal ? 'true' : 'false'}>
         <div className="scan-side-head">
           <p className="eyebrow">Results so far</p>
-          <h2 className="scan-metric"><span className="scan-metric-value">{findingsSoFar}</span> <span className="scan-metric-label">{terminal ? 'findings collected' : 'reported so far'}</span></h2>
+          <h2 className="scan-metric"><span className="scan-metric-value">{findingsSoFar}</span> <span className="scan-metric-label">reported so far</span></h2>
         </div>
         <SeverityCounts scan={current} />
         <LiveAnalyzerStrip runs={current.analyzer_runs} events={events} />
         {current.error_summary && <div className="inline-warning">{current.error_summary}</div>}
       </aside>
-    </section>
+    </section>}
+    {terminal && total > 0 && <section className="analysis-verdict" aria-label="Verdict">
+      <div className="analysis-grade-block">
+        <span className="analysis-grade" data-grade={riskGrade(score)} aria-hidden="true">{riskGrade(score)}</span>
+        <p className="analysis-grade-label"><span className="eyebrow">Risk grade</span><strong>{bandFor(riskGrade(score)).label}</strong><span className="grade-score">score {score}</span></p>
+      </div>
+      <div className="analysis-tally">
+        <span className="severity-stack" role="img" aria-label={`Findings by severity: ${severityBreakdown(counts)}`}>
+          {(['critical', 'high', 'medium', 'low', 'info'] as const).filter((sev) => (counts[sev] ?? 0) > 0).map((sev) => <i key={sev} className={`seg-${sev}`} style={{ width: `${Math.round(((counts[sev] ?? 0) * 1000) / Math.max(total, 1)) / 10}%` }} />)}
+        </span>
+        <ul className="analysis-tally-legend">
+          {(['critical', 'high', 'medium', 'low', 'info'] as const).map((sev) => <li key={sev} className={counts[sev] ? sev : 'zero'}><i className={`seg-${sev}`} aria-hidden="true" />{sev}<span className="legend-count">{counts[sev] ?? 0}</span></li>)}
+        </ul>
+      </div>
+      <dl className="analysis-stats">
+        <div><dt>New</dt><dd>{current.new_count ?? 0}</dd></div>
+        <div><dt>Fixed</dt><dd>{current.fixed_count ?? 0}</dd></div>
+      </dl>
+    </section>}
     {terminal && (current.fixed_count ?? 0) > 0 && <WhatChanged scanId={id} fixedCount={current.fixed_count ?? 0} />}
-    {terminal && <ReportView scanId={id} notify={notify} />}
+    {terminal && <ReportView scanId={id} notify={notify} runs={current.analyzer_runs ?? []} />}
   </div>;
+}
+
+/** Human breakdown of non-zero severity counts, e.g. "2 high, 1 medium". */
+function severityBreakdown(counts: Partial<Record<string, number | null | undefined>>) {
+  return Object.entries(counts).filter(([, count]) => (count ?? 0) > 0).map(([sev, count]) => `${count} ${sev}`).join(', ') || 'none';
 }
 
 /** Stripe/Linear bento progress: 4px height card, shimmer indeterminate 1.6s, spring determinate width, success/danger terminal. */

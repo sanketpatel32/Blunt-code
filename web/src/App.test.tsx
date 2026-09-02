@@ -195,31 +195,24 @@ describe('Blunt Code home', () => {
     const host = await render(fetchMock);
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     await act(async () => { FakeEventSource.instances[0].emit('analyzer.started', { type: 'analyzer.started', data: { analyzer_id: 'ruff', name: 'Ruff' } }); });
-    expect(host.textContent).toContain('Analysis overview');
+    expect(host.textContent).toContain('Low risk — 1 finding'); // the verdict headline leads the page
     expect(host.textContent).toContain('Example finding');
-    expect(host.textContent).toContain('Analyzer results');
-    expect(host.textContent).toContain('Semgrep');
-    expect(host.textContent).toContain('0 findings');
     expect(host.querySelector('.findings-table table')).not.toBeNull();
-    expect(host.querySelector<HTMLInputElement>('[placeholder="All categories"]')).toBeNull();
-    const filters = [...host.querySelectorAll('button')].find((button) => button.textContent === 'Filters');
-    expect(filters).toBeDefined();
-    await act(async () => { filters!.click(); });
-    expect(host.querySelector<HTMLInputElement>('[placeholder="All categories"]')).not.toBeNull();
-    const toolChips = [...host.querySelectorAll<HTMLButtonElement>('#finding-filters fieldset[aria-label="Tool"] .chip')];
-    expect(toolChips.map((chip) => chip.textContent)).toEqual(['All tools', 'Biome', 'Semgrep', 'SonarQube']);
-    expect(host.textContent).toContain('Showing 1–1 of 1');
-    expect(host.textContent).toContain('completed');
-    expect(host.textContent).toContain('Ruff started');
-    await act(async () => { toolChips.find((chip) => chip.textContent === 'Semgrep')!.click(); await Promise.resolve(); await Promise.resolve(); });
+    // Tool chips sit in the always-visible toolbar with per-tool counts; no Filters toggle exists.
+    const toolChips = [...host.querySelectorAll<HTMLButtonElement>('.analysis-toolbar fieldset[aria-label="Tool"] .chip')];
+    expect(toolChips.map((chip) => chip.textContent)).toEqual(['Biome1', 'Semgrep0', 'SonarQube0']);
+    expect([...host.querySelectorAll('button')].find((button) => button.textContent === 'Filters')).toBeUndefined();
+    expect(host.textContent).toContain('Showing 1 of 1');
+    expect(host.textContent).toContain('3 of 3 engines succeeded'); // the meta line carries the outcome
+    await act(async () => { toolChips.find((chip) => chip.textContent === 'Semgrep0')!.click(); await Promise.resolve(); await Promise.resolve(); });
     expect(host.textContent).toContain('Semgrep reported no findings');
-    await act(async () => { toolChips.find((chip) => chip.textContent === 'All tools')!.click(); await Promise.resolve(); await Promise.resolve(); });
-    const preview = host.querySelector<HTMLButtonElement>('[aria-label="Preview src/main.py:4"]');
-    expect(preview).not.toBeNull();
-    await act(async () => { preview!.click(); await Promise.resolve(); await Promise.resolve(); });
-    expect(host.textContent).toContain('Source preview');
+    await act(async () => { toolChips.find((chip) => chip.textContent === 'Semgrep0')!.click(); await Promise.resolve(); await Promise.resolve(); }); // clicking the active chip clears it
+    // Clicking the row docks the source pane beside the list instead of opening a modal.
+    const row = host.querySelector<HTMLTableRowElement>('.findings-table tbody tr');
+    await act(async () => { row!.click(); await Promise.resolve(); await Promise.resolve(); });
+    expect(host.querySelector('.analysis-split')!.getAttribute('data-pane')).toBe('open');
     expect(host.textContent).toContain('undefinedName()');
-    expect(host.querySelector('.code-preview code.highlight')?.textContent).toContain('undefinedName()');
+    expect(host.querySelector('.source-pane .code-preview code.highlight')?.textContent).toContain('undefinedName()');
   });
 
   it('shows an interrupted scan as a saved partial report, not a live scan', async () => {
@@ -236,8 +229,7 @@ describe('Blunt Code home', () => {
     const host = await render(fetchMock);
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     expect(host.textContent).toContain('Saved report');
-    expect(host.textContent).toContain('Analysis overview');
-    expect(host.textContent).toContain('Scan interrupted — completed checks are still available.');
+    expect(host.textContent).toContain('Scan interrupted — partial results below'); // the verdict headline names the outcome
     expect(host.textContent).not.toContain('Cancel scan');
   });
 

@@ -1,0 +1,467 @@
+/* Hallmark · macrostructure: Split Ledger (master-detail) · genre: modern-minimal
+ * theme: product tokens (system-managed — tokens.css) · enrichment: none (real data only)
+ * motion: row-tint · pane-fade · instant-focus (3 primitives, transform/opacity only)
+ * diversification: first master-detail split in this system (log had Marquee Hero, Workbench ×2, Component-scope, Index-First)
+ */
+
+/* ── Verdict header (terminal scans) ─────────────────────────────── */
+.analysis-header {
+  --analysis-edge: var(--color-rule-strong);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-md);
+  align-items: start;
+  padding: var(--space-md) var(--space-lg);
+  border: var(--rule) solid var(--color-rule);
+  border-top: 3px solid var(--analysis-edge);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-xs);
+}
+
+.analysis-header[data-tone='success'] { --analysis-edge: var(--color-success); }
+.analysis-header[data-tone='warning'] { --analysis-edge: var(--color-warning); }
+.analysis-header[data-tone='danger'] { --analysis-edge: var(--color-danger); }
+.analysis-header[data-tone='accent'] { --analysis-edge: var(--color-accent-strong); }
+
+.analysis-headline {
+  display: flex;
+  gap: var(--space-md);
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.analysis-grade {
+  --grade-bg: var(--color-surface-muted);
+  --grade-ink: var(--color-ink-faint);
+  --grade-edge: var(--color-rule-strong);
+  display: grid;
+  place-items: center;
+  width: 3.25rem;
+  height: 3.25rem;
+  flex: none;
+  border-radius: var(--radius-xs);
+  border: var(--rule) solid var(--grade-edge);
+  background: var(--grade-bg);
+  color: var(--grade-ink);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-xl);
+}
+
+.analysis-grade[data-grade='A'] { --grade-bg: var(--color-success-soft); --grade-ink: var(--color-success); --grade-edge: color-mix(in oklch, var(--color-success) 35%, var(--color-rule)); }
+.analysis-grade[data-grade='B'] { --grade-bg: var(--color-warning-soft); --grade-ink: var(--color-warning-ink, var(--color-warning)); --grade-edge: color-mix(in oklch, var(--color-warning) 35%, var(--color-rule)); }
+.analysis-grade[data-grade='C'] { --grade-bg: var(--color-danger-soft); --grade-ink: var(--color-danger); --grade-edge: color-mix(in oklch, var(--color-danger) 35%, var(--color-rule)); }
+.analysis-grade[data-grade='D'] { --grade-bg: var(--color-danger-strong, var(--color-danger)); --grade-ink: var(--color-danger-ink, var(--color-surface)); --grade-edge: var(--color-danger-strong, var(--color-danger)); }
+
+.analysis-headline-copy { min-width: 0; }
+
+.analysis-headline-copy h1 {
+  margin: 2px 0 0;
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 700;
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+}
+
+.analysis-meta {
+  margin: var(--space-3xs) 0 0;
+  font-size: var(--text-xs);
+  color: var(--color-ink-soft);
+}
+
+.analysis-meta code { font-family: var(--font-mono); color: var(--color-ink-faint); }
+
+.analysis-header-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-2xs);
+  flex: none;
+}
+
+/* ── Verdict strip: tally + delta stats under the header ─────────── */
+.analysis-verdict {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-lg);
+  align-items: center;
+  margin-top: var(--space-md);
+  padding: var(--space-sm) var(--space-lg);
+  border: var(--rule) solid var(--color-rule-faint);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.analysis-grade-block { display: flex; align-items: center; gap: var(--space-sm); }
+
+.analysis-grade-label { display: grid; gap: var(--space-3xs); margin: 0; font-size: var(--text-sm); }
+.analysis-grade-label .eyebrow { margin: 0; }
+.analysis-grade-label strong { font-size: var(--text-md); }
+.analysis-grade-label .grade-score { color: var(--color-ink-faint); font-variant-numeric: tabular-nums; }
+
+/* Segments are inline <i> widths; without flex they stack one per row instead of forming one bar. */
+.analysis-verdict .severity-stack { display: flex; height: .65rem; background: var(--color-surface-muted); border-radius: var(--radius-button); overflow: hidden; }
+
+.analysis-verdict .severity-stack i { display: block; height: 100%; flex: none; }
+
+.analysis-tally { display: flex; flex-direction: column; gap: var(--space-3xs); min-width: 0; }
+
+.analysis-tally-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs) var(--space-md);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-xs);
+  color: var(--color-ink-soft);
+}
+
+.analysis-tally-legend li { display: inline-flex; align-items: center; gap: var(--space-3xs); }
+
+.analysis-tally-legend li.zero { color: var(--color-ink-faint); }
+
+.analysis-tally-legend .legend-count { font-family: var(--font-mono); font-weight: 600; color: var(--color-ink); }
+
+.analysis-stats {
+  display: flex;
+  gap: var(--space-lg);
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-ink-soft);
+}
+
+.analysis-stats div { display: flex; flex-direction: column; gap: var(--space-3xs); }
+
+.analysis-stats dt { color: var(--color-ink-faint); text-transform: none; letter-spacing: .01em; }
+
+.analysis-stats dd { margin: 0; font-family: var(--font-display); font-size: var(--text-md); font-weight: 700; color: var(--color-ink); }
+
+/* ── Findings toolbar: one visible row, no hidden panels ─────────── */
+.analysis-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2xs) var(--space-sm);
+  position: sticky;
+  top: calc(var(--nav-h) + var(--space-2xs));
+  z-index: 30;
+  margin-top: var(--space-lg);
+  padding: var(--space-2xs) var(--space-sm);
+  border: var(--rule) solid var(--color-rule);
+  border-radius: var(--radius-lg);
+  background: color-mix(in oklch, var(--color-surface) 92%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+.analysis-search {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.analysis-search svg { flex: none; color: var(--color-ink-faint); }
+
+.analysis-search input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  border: var(--rule) solid var(--color-rule);
+  border-radius: var(--radius-xs);
+  background: var(--color-surface);
+  font-size: var(--text-xs);
+  color: var(--color-ink);
+}
+
+.analysis-search input:focus-visible { outline: var(--rule-focus) solid var(--color-focus); }
+
+.analysis-toolbar .chip-group { flex-wrap: nowrap; }
+
+/* Severity chips double as legend: count on the chip, pressed = filtered. */
+.sev-chip { display: inline-flex; align-items: center; gap: 5px; }
+
+.sev-chip .count { font-family: var(--font-mono); font-size: 10px; font-weight: 600; color: var(--color-ink-soft); }
+
+.sev-chip[aria-pressed='true'] .count { color: inherit; }
+
+/* Counts on status/tool/type chips share the severity chips' look. */
+.analysis-toolbar .chip .count { font-family: var(--font-mono); font-size: 10px; font-weight: 600; color: var(--color-ink-soft); }
+
+.analysis-toolbar .chip[aria-pressed='true'] .count { color: inherit; }
+
+/* The Type rail takes its own line and scrolls horizontally when long. */
+.analysis-toolbar .chip-rail { flex: 1 1 100%; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: thin; padding-bottom: 2px; }
+
+.toolbar-clear { margin-left: auto; }
+
+/* Status cell text; suppressed rows read as struck-through archive entries. */
+.status-text { font-size: var(--text-xs); color: var(--color-ink-soft); text-transform: capitalize; }
+
+.status-text.suppressed { color: var(--color-ink-faint); text-decoration: line-through; }
+
+/* ── Split layout: list left, source pane right ──────────────────── */
+.analysis-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-md);
+  margin-top: var(--space-sm);
+  align-items: start;
+}
+
+.findings-col { min-width: 0; }
+
+/* Wide layout: the list scrolls inside its own viewport so the header row
+   stays put and the docked pane holds its position while rows scroll. */
+@media (min-width: 72rem) {
+  .analysis-split[data-pane='open'] { grid-template-columns: minmax(0, 1fr) minmax(21rem, 30rem); }
+
+  .findings-col[data-scoped='true'] .table-wrap { max-height: calc(100dvh - var(--nav-h) - 11rem); overflow-y: auto; overscroll-behavior: contain; }
+
+  .findings-col[data-scoped='true'] .findings-table thead th { position: sticky; top: 0; z-index: 2; background: var(--color-surface-muted); box-shadow: 0 1px 0 var(--color-rule-faint); }
+}
+
+/* ── Findings table ──────────────────────────────────────────────── */
+.analysis-list .findings-table { min-width: 46rem; }
+
+/* Auto layout sized columns by content, letting the summary column swallow
+   the width and push Tool/Status off-viewport. Fixed layout + explicit th
+   widths keeps every column on screen; the summary column takes the rest. */
+.analysis-list table { table-layout: fixed; }
+
+.analysis-list thead th:nth-child(1) { width: 8rem; }
+
+.analysis-list thead th:nth-child(3) { width: 14rem; }
+
+.analysis-list thead th:nth-child(4) { width: 8rem; }
+
+.analysis-list thead th:nth-child(5) { width: 11.5rem; }
+
+.finding-summary { display: grid; gap: var(--space-3xs); min-width: 0; }
+
+.finding-summary strong,
+.finding-summary .finding-message,
+.finding-summary .finding-remediation { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.finding-summary .finding-message,
+.finding-summary .finding-remediation { font-size: var(--text-xs); color: var(--color-ink-soft); }
+
+.finding-summary .finding-remediation { color: var(--color-ink-faint); }
+
+.analysis-list td:nth-child(3) code { display: block; overflow: hidden; text-overflow: ellipsis; }
+
+.analysis-list td:nth-child(4) { overflow: hidden; }
+
+.analysis-list td:nth-child(4) .badge,
+.analysis-list td:nth-child(4) code { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The old standalone-report framing reads as a dead band under the verdict strip. */
+.scan-page .report { margin-top: var(--space-md); padding-top: 0; border-top: 0; }
+
+/* Severity edge tints: the three severities worth scanning for at a glance.
+   The active row's accent edge wins (defined after, same specificity). */
+.findings-table tbody tr.row-critical { box-shadow: inset 2px 0 0 var(--color-danger); }
+
+.findings-table tbody tr.row-high { box-shadow: inset 2px 0 0 color-mix(in oklch, var(--color-danger) 45%, var(--color-rule)); }
+
+.findings-table tbody tr.row-medium { box-shadow: inset 2px 0 0 var(--color-warning); }
+
+.findings-table tbody tr {
+  content-visibility: auto;
+  /* Two-line summaries measure ~90px; the estimate only needs to be close so the scrollbar doesn't jump. */
+  contain-intrinsic-size: auto 84px;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.findings-table tbody tr:hover,
+.findings-table tbody tr:focus-visible { background: var(--color-surface-muted); }
+
+.findings-table tbody tr.active { background: var(--color-accent-soft); box-shadow: inset 2px 0 0 var(--color-accent-strong); }
+
+/* The sticky severity cell paints an opaque background OVER the row's inset edge,
+   so the tint must live on that cell; --shadow-card keeps its sticky separation. */
+.findings-table tbody tr.row-critical td:first-child { box-shadow: inset 2px 0 0 var(--color-danger), var(--shadow-card); }
+
+.findings-table tbody tr.row-high td:first-child { box-shadow: inset 2px 0 0 color-mix(in oklch, var(--color-danger) 45%, var(--color-rule)), var(--shadow-card); }
+
+.findings-table tbody tr.row-medium td:first-child { box-shadow: inset 2px 0 0 var(--color-warning), var(--shadow-card); }
+
+.findings-table tbody tr.active td:first-child { box-shadow: inset 2px 0 0 var(--color-accent-strong), var(--shadow-card); }
+
+.findings-table tbody tr:focus-visible { outline: none; }
+
+.findings-table tbody tr:focus-visible .finding-summary strong { text-decoration: underline; }
+
+/* ── Load-more foot ──────────────────────────────────────────────── */
+.load-more {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  padding: var(--space-2xs) var(--space-sm);
+  margin-top: var(--space-2xs);
+}
+
+.load-more-status { font-size: var(--text-xs); color: var(--color-ink-soft); }
+
+.load-more .loading-more { display: inline-flex; align-items: center; gap: var(--space-2xs); font-size: var(--text-xs); color: var(--color-ink-faint); }
+
+/* ── Source pane ─────────────────────────────────────────────────── */
+.source-pane {
+  position: sticky;
+  top: calc(var(--nav-h) + var(--space-lg));
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - var(--nav-h) - var(--space-xl));
+  min-height: 18rem;
+  border: var(--rule) solid var(--color-rule);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+}
+
+.source-pane-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  padding: var(--space-2xs) var(--space-sm);
+  border-bottom: var(--rule) solid var(--color-rule-faint);
+  background: var(--color-surface-muted);
+}
+
+.source-pane-head code {
+  flex: 1;
+  min-width: 0;
+  font-size: 10px;
+  color: var(--color-ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+
+.source-pane-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.source-pane-body pre.code-preview { margin: 0; max-height: none; border-radius: 0; }
+
+.source-pane-context {
+  padding: var(--space-2xs) var(--space-sm);
+  border-top: var(--rule) solid var(--color-rule-faint);
+  font-size: var(--text-xs);
+  color: var(--color-ink-soft);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3xs);
+}
+
+.source-pane-context .context-row { display: flex; align-items: center; gap: var(--space-2xs); flex-wrap: wrap; }
+
+.source-pane-context .pane-message { color: var(--color-ink-soft); }
+
+.source-pane-context .remediation { color: var(--color-ink); }
+
+.source-pane-context a { color: var(--color-accent-strong); }
+
+.source-pane-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  flex-wrap: wrap;
+  padding: var(--space-2xs) var(--space-sm);
+  border-top: var(--rule) solid var(--color-rule-faint);
+}
+
+.source-pane-comments {
+  border-top: var(--rule) solid var(--color-rule-faint);
+  max-height: 16rem;
+  overflow-y: auto;
+}
+
+.source-pane-error {
+  padding: var(--space-md);
+  font-size: var(--text-xs);
+  color: var(--color-ink-soft);
+}
+
+.source-pane-error strong { display: block; margin-bottom: var(--space-3xs); color: var(--color-ink); }
+
+.pane-fade { animation: pane-fade var(--dur-medium, 180ms) var(--ease-out); }
+
+@keyframes pane-fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* Narrow widths: the pane docks to the bottom as a sheet over the list. */
+@media (max-width: 71.99rem) {
+  .analysis-split[data-pane='open'] .source-pane {
+    position: fixed;
+    left: var(--space-sm);
+    right: var(--space-sm);
+    bottom: var(--space-sm);
+    top: auto;
+    z-index: 60;
+    max-height: min(58dvh, 30rem);
+    min-height: 12rem;
+    box-shadow: var(--shadow-lg, var(--shadow-card));
+  }
+}
+
+/* ── Report foot: exports after triage ───────────────────────────── */
+.report-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+  margin-top: var(--space-lg);
+  padding: var(--space-sm) var(--space-lg);
+  border: var(--rule) solid var(--color-rule);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.report-foot-count { font-size: var(--text-xs); color: var(--color-ink-soft); }
+
+/* Export row: the popover-sized .export-item resets to compact inline chips. */
+.export-inline { display: flex; align-items: center; gap: var(--space-2xs); flex-wrap: wrap; }
+
+.export-inline .export-item {
+  padding: 2px var(--space-sm);
+  border: var(--rule) solid var(--color-rule);
+  border-radius: var(--radius-button);
+  background: var(--color-surface);
+  font-size: var(--text-xs);
+  gap: var(--space-2xs);
+}
+
+.export-inline .export-item:hover { border-color: var(--color-rule-strong); background: var(--color-surface-muted); }
+
+/* ── Reduced motion + print ──────────────────────────────────────── */
+@media (max-width: 60rem) {
+  .analysis-header { grid-template-columns: minmax(0, 1fr); }
+
+  .analysis-header-actions { flex-direction: row; align-items: center; justify-content: space-between; width: 100%; }
+
+  .analysis-verdict { grid-template-columns: minmax(0, 1fr); }
+
+  .analysis-stats { flex-wrap: wrap; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pane-fade { animation: none; }
+  .findings-table tbody tr { transition: none; }
+}
+
+@media print {
+  .analysis-toolbar, .source-pane, .load-more, .report-foot, .analysis-header-actions { display: none; }
+}

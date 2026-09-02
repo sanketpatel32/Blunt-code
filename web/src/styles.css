@@ -391,7 +391,6 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 /* history-pagination bento — see css/history.css */
 
 /* ── Analyzer results tiles ────────────────────────────────────── */
-.analyzer-results { margin-top: var(--space-2xl); }
 .analyzer-result-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: var(--space-sm); }
 .analyzer-result { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; min-width: 0; min-height: 4.5rem; padding: var(--space-md); border: var(--rule) solid var(--color-rule); border-radius: var(--radius-md); background: var(--color-surface); color: var(--color-ink); text-align: left; transition: all var(--dur-fast) var(--ease-out); box-shadow: var(--shadow-xs); }
 .analyzer-result:hover { border-color: var(--color-rule); box-shadow: var(--shadow-card-hover); }
@@ -534,12 +533,8 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 
 /* ── L8 · Report ───────────────────────────────────────────────── */
 .report { margin-top: var(--space-3xl); padding-top: var(--space-xl); border-top: var(--rule) solid var(--color-rule-faint); }
-.report-header { display: flex; align-items: start; justify-content: space-between; gap: var(--space-lg); }
-.report-header h2 { margin: 0; font-family: var(--font-display); font-size: var(--text-2xl); font-weight: 700; letter-spacing: -.03em; }
-.report-header p:not(.eyebrow) { margin: var(--space-xs) 0; color: var(--color-ink-soft); }
 .findings-section { margin-top: var(--space-2xl); }
 .findings-section .section-head { position: sticky; z-index: 5; top: calc(var(--nav-h) + var(--space-sm)); padding: var(--space-sm) var(--space-md); margin-left: calc(-1 * var(--space-md)); margin-right: calc(-1 * var(--space-md)); background: color-mix(in oklch, var(--color-paper) 88%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: var(--rule) solid var(--color-rule-faint); border-radius: var(--radius-md); }
-.findings-toolbar { display: flex; align-items: center; gap: var(--space-sm); }
 .filter-chips { display: flex; flex-wrap: wrap; gap: var(--space-xs); margin: var(--space-md) 0 0; padding: 0; list-style: none; }
 .filter-chip { display: inline-flex; align-items: center; gap: var(--space-2xs); padding: var(--space-2xs) var(--space-2xs) var(--space-2xs) var(--space-sm); border: var(--rule) solid var(--color-rule); border-radius: var(--radius-button); background: var(--color-surface); color: var(--color-ink-soft); font: 600 var(--text-xs) var(--font-mono); box-shadow: var(--shadow-xs); }
 .filter-chip-remove { display: inline-grid; width: 1.2rem; height: 1.2rem; padding: 0; border: 0; border-radius: 50%; background: var(--color-surface-muted); color: var(--color-ink-faint); font: 700 var(--text-sm)/1 var(--font-body); place-items: center; transition: all var(--dur-fast) var(--ease-out); }
@@ -954,7 +949,7 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 @media (max-width: 38rem) {
   .app-nav { min-height: 3.5rem; border-radius: 0; }
   .brand b { display: none; }
-  .page-heading, .scan-header, .report-header, .dashboard-heading { display: grid; }
+  .page-heading, .scan-header, .dashboard-heading { display: grid; }
   .dashboard-tools { display: grid; }
   .summary-grid { grid-template-columns: repeat(2, 1fr); }
   .filters { grid-template-columns: 1fr; }
@@ -1144,10 +1139,10 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
   }
   .export-menu, .export-popover, .command-palette, .skip-link, .toast-dismiss,
   .filter-chip-remove, .saved-filters-menu { display: none !important; }
-  .app-nav, .app-footer, .toast-stack, .filters, .filter-chips, .severity-pills, .findings-toolbar, .findings-pagination { display: none; }
+  .app-nav, .app-footer, .toast-stack, .filters, .filter-chips, .severity-pills, .findings-pagination { display: none; }
   .table-wrap tr, .workspace-card, .summary-card, .analyzer-result, .activity-row { break-inside: avoid; }
   .table-wrap thead { display: table-header-group; }
-  .page-heading, .section-head, .report-header { break-after: avoid; }
+  .page-heading, .section-head { break-after: avoid; }
   .severity-bar, .severity-stack { outline: var(--rule) solid var(--color-ink-ghost); }
   .page { width: 100%; padding: 0; }
   .table-wrap { overflow: visible; box-shadow: none; }

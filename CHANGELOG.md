@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Docked source viewer on the analysis page**: clicking a finding now opens its code in a pane beside the list instead of a blocking centered modal — the highlight covers the finding's start–end lines, prev/next buttons (and ↑/↓ or j/k) walk rows with live preview, Esc closes, and copy-location plus the comments sheet live in the pane. Below 72rem the pane falls back to the modal layout.
+
+### Changed
+- **Analysis page rebuilt as a verdict-led workbench**: the header now leads with the risk grade tile and a canonical verdict sentence ("Critical risk — 474 findings"), with a severity tally strip (New/Fixed stats included) replacing four summary cards and the duplicate distribution chart. Filters collapsed from a hidden panel with three overlapping text inputs and analyzers listed three ways into one always-visible toolbar: search (matches message/rule/path), multi-select severity chips with live counts, status chips, tool chips merged from the scan's own analyzer runs, and a Type rail. The findings table got a sticky header, load-more pagination that appends rows without a skeleton flash, a fixed column layout that keeps Tool and Status on-screen at 1440px, and severity edge tints per row. Severity sort now defaults to descending — critical findings previously loaded at the bottom, contradicting the app's own sort-direction constant. Naming collapsed from "Analysis story / Report" to "Analysis", and exports moved to header actions.
+- **Search page sends the params the server actually reads**: the workspace filter now sends `workspace_id` (the old `workspace` name was silently ignored), and the dead status/path facet inputs were dropped.
+
+### Removed
+- **The fabricated "AI Fix" feature is gone**: it picked from nine hardcoded templates by finding hash and presented the mock output as analysis — no backend endpoint ever existed. Real remediation text from the actual analyzers stays on each row. Dead components deleted with it: `AutoFixPanel`, `QuickFilters`, `FilterDrawer`, `SavedViews`, `VirtualizedList`.
+
 ### Fixed
 - **Managed SonarQube can no longer leak JVMs that break every later scan**: if Blunt Code ever exited without reaping the managed SonarQube tree (crash, force kill), its Java children survived as orphans, kept Windows file locks over the shared runtime's deployed plugin jars and embedded database, and made every subsequent scan fail with "managed SonarQube stopped during startup" — exactly what happened after the 2026-08-31 session. Three guarantees now close every leak path: the server process joins a Windows kill-on-close job object, so the operating system itself ends the whole Java tree the moment Blunt Code dies, however abruptly; every server startup first sweeps stray JVMs from previous sessions (matched by the pinned managed `java.exe` image path and spared when they belong to the app's own live tree, so an in-flight scanner is never touched); and `Shutdown` runs the same sweep as a backstop instead of silently returning when the server process had already died on its own.
 

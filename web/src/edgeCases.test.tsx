@@ -167,7 +167,7 @@ describe('hostile API fixtures', () => {
     ]);
     const host = await renderAt('/scans/scan-1', fetchMock);
     expectClean(host);
-    expect(host.textContent).toContain('Analysis overview');
+    expect(host.textContent).toContain('Analysis'); // the verdict header renders above a null-safe report
     expect(host.textContent).toContain('All clear'); // zero findings, no filters
     expect(host.textContent).toContain('0 findings fixed'); // fixed: null stays at zero
   });
@@ -195,7 +195,7 @@ describe('hostile API fixtures', () => {
     ]);
     const host = await renderAt('/scans/scan-1', fetchMock);
     expectClean(host);
-    expect(host.textContent).toContain('Showing 0–0 of 0');
+    expect(host.textContent).toContain('0 findings · 0 engines ran'); // no pager renders for an empty list — and nothing crashes
   });
 
   it('ReportView survives a report payload with no scan at all', async () => {
@@ -206,7 +206,7 @@ describe('hostile API fixtures', () => {
     ]);
     const host = await renderAt('/scans/scan-1', fetchMock);
     expectClean(host);
-    expect(host.textContent).toContain('Analysis overview');
+    expect(host.textContent).toContain('Low risk — 1 finding'); // the page renders from the scan endpoint; the empty report degrades to zeroed controls
   });
 
   it('ToolsPage survives tools missing name/version/can_install', async () => {

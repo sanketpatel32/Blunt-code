@@ -29,7 +29,6 @@ import {
   KeyRound,
   LayoutList,
   LayoutGrid,
-  Sparkles,
   X,
   ExternalLink,
   RotateCcw,
@@ -55,8 +54,6 @@ const ANALYZERS = [
   'license-scan',
   'todo',
 ] as const;
-
-const STATUSES = ['new', 'persistent'] as const;
 
 const SEARCH_COLUMNS = [
   ['severity', 'Severity'],
@@ -102,9 +99,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
     return new Set(v ? v.split(',').filter(Boolean) : []);
   });
   const [analyzer, setAnalyzer] = useState(() => new URLSearchParams(window.location.search).get('analyzer') ?? '');
-  const [status, setStatus] = useState(() => new URLSearchParams(window.location.search).get('status') ?? '');
   const [workspace, setWorkspace] = useState(() => new URLSearchParams(window.location.search).get('workspace') ?? '');
-  const [pathPrefix, setPathPrefix] = useState(() => new URLSearchParams(window.location.search).get('path') ?? '');
   const [visibleCols, setVisibleCols] = useState({ severity: true, finding: true, location: true, actions: true });
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('table');
   const [selectedFinding, setSelectedFinding] = useState<SearchedFinding | null>(null);
@@ -123,7 +118,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
       analyzer: new URLSearchParams(window.location.search).get('analyzer') ?? '',
       rule: '',
       path: new URLSearchParams(window.location.search).get('workspace') ?? '',
-      status: new URLSearchParams(window.location.search).get('status') ?? '',
+      status: '',
       q: new URLSearchParams(window.location.search).get('q') ?? '',
     } as FindingFilter)
   );
@@ -136,15 +131,14 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
     if (debouncedQuery) value.q = debouncedQuery;
     if (analyzer) value.analyzer = analyzer;
     if (severities.size) value.severity = [...severities].join(',');
-    if (status) value.status = status;
-    if (workspace) value.workspace = workspace;
-    if (pathPrefix) value.path = pathPrefix;
+    // The server scopes by workspace_id; the address bar keeps the shorter `workspace` key.
+    if (workspace) value.workspace_id = workspace;
     return value;
-  }, [debouncedQuery, severities, analyzer, status, workspace, pathPrefix, page, pageSize]);
+  }, [debouncedQuery, severities, analyzer, workspace, page, pageSize]);
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedQuery, severities, analyzer, status, workspace, pathPrefix]);
+  }, [debouncedQuery, severities, analyzer, workspace]);
 
   // URL sync
   useEffect(() => {
@@ -152,25 +146,21 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
     if (debouncedQuery) sp.set('q', debouncedQuery);
     if (analyzer) sp.set('analyzer', analyzer);
     if (severities.size) sp.set('severity', [...severities].join(','));
-    if (status) sp.set('status', status);
     if (workspace) sp.set('workspace', workspace);
-    if (pathPrefix) sp.set('path', pathPrefix);
     if (page !== 1) sp.set('page', String(page));
     const qs = sp.toString();
     const cur = window.location.search.replace(/^\?/, '');
     if (qs === cur) return;
     const next = qs ? `${window.location.pathname}?${qs}${window.location.hash}` : `${window.location.pathname}${window.location.hash}`;
     window.history.replaceState(null, '', next);
-  }, [debouncedQuery, analyzer, severities, status, workspace, pathPrefix, page]);
+  }, [debouncedQuery, analyzer, severities, workspace, page]);
 
   useEffect(() => {
     const onPop = () => {
       const sp = new URLSearchParams(window.location.search);
       setQuery(sp.get('q') ?? '');
       setAnalyzer(sp.get('analyzer') ?? '');
-      setStatus(sp.get('status') ?? '');
       setWorkspace(sp.get('workspace') ?? '');
-      setPathPrefix(sp.get('path') ?? '');
       const v = sp.get('severity');
       setSeverities(new Set(v ? v.split(',').filter(Boolean) : []));
       const p = Number(sp.get('page'));
@@ -182,7 +172,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
           analyzer: sp.get('analyzer') ?? '',
           rule: '',
           path: sp.get('workspace') ?? '',
-          status: sp.get('status') ?? '',
+          status: '',
           q: sp.get('q') ?? '',
         } as FindingFilter)
       );
@@ -199,13 +189,13 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
         analyzer,
         rule: '',
         path: workspace,
-        status,
+        status: '',
         q: query,
       } as FindingFilter)
     );
-  }, [severities, analyzer, status, workspace, query]);
+  }, [severities, analyzer, workspace, query]);
 
-  const state = useLoad(() => api.searchFindings(params), [params.q, params.severity, params.analyzer, params.page, params.page_size, params.status, params.workspace, params.path]);
+  const state = useLoad(() => api.searchFindings(params), [params.q, params.severity, params.analyzer, params.page, params.page_size, params.workspace_id]);
   const hiddenColumnCount = SEARCH_COLUMNS.filter(([key]) => !visibleCols[key as keyof typeof visibleCols]).length;
   const items = state.data?.items ?? [];
   const total = state.data?.total ?? 0;
@@ -233,23 +223,19 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
     if (query.trim()) count++;
     if (severities.size > 0) count += severities.size;
     if (analyzer) count++;
-    if (status) count++;
     if (workspace) count++;
-    if (pathPrefix) count++;
     return count;
-  }, [query, severities, analyzer, status, workspace, pathPrefix]);
+  }, [query, severities, analyzer, workspace]);
 
   const clearAll = () => {
     setQuery('');
     setSeverities(new Set());
     setAnalyzer('');
-    setStatus('');
     setWorkspace('');
-    setPathPrefix('');
     setPage(1);
   };
 
-  const applyPreset = (preset: 'critical_high' | 'security' | 'secrets' | 'new_only') => {
+  const applyPreset = (preset: 'critical_high' | 'security' | 'secrets') => {
     clearAll();
     switch (preset) {
       case 'critical_high':
@@ -262,9 +248,6 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
       case 'secrets':
         setAnalyzer('secrets');
         setSeverities(new Set(['critical', 'high']));
-        break;
-      case 'new_only':
-        setStatus('new');
         break;
     }
   };
@@ -396,52 +379,6 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
         </fieldset>
       </div>
 
-      {/* Finding Status */}
-      <div className="facet-section">
-        <p className="facet-title text-xs font-semibold uppercase tracking-wider text-[var(--color-ink-faint)]">Finding Status</p>
-        <fieldset className="chip-group mt-2 flex flex-wrap gap-1.5" aria-label="Filter by status">
-          <button
-            type="button"
-            className={`chip text-[11px] px-2.5 py-1 rounded-full border transition-all ${
-              status === ''
-                ? 'bg-[var(--color-surface-subtle)] border-[var(--color-rule-strong)] text-[var(--color-ink)] font-semibold'
-                : 'border-[var(--color-rule-faint)] bg-[var(--color-surface-muted)] text-[var(--color-ink-soft)]'
-            }`}
-            aria-pressed={status === ''}
-            onClick={() => setStatus('')}
-          >
-            All
-          </button>
-          {STATUSES.map((s) => (
-            <button
-              key={s}
-              type="button"
-              className={`chip text-[11px] px-2.5 py-1 rounded-full border capitalize transition-all ${
-                status === s
-                  ? 'bg-[var(--color-surface-subtle)] border-[var(--color-rule-strong)] text-[var(--color-ink)] font-semibold'
-                  : 'border-[var(--color-rule-faint)] bg-[var(--color-surface-muted)] text-[var(--color-ink-soft)]'
-              }`}
-              aria-pressed={status === s}
-              onClick={() => setStatus(s)}
-            >
-              {s}
-            </button>
-          ))}
-        </fieldset>
-      </div>
-
-      {/* Path Prefix Filter */}
-      <div className="facet-section">
-        <p className="facet-title text-xs font-semibold uppercase tracking-wider text-[var(--color-ink-faint)]">File Path Prefix</p>
-        <input
-          value={pathPrefix}
-          onChange={(e) => setPathPrefix(e.target.value)}
-          placeholder="e.g. src/auth or internal/api"
-          aria-label="Filter by file path"
-          className="mt-2 w-full rounded-[var(--radius-button)] border border-[var(--color-rule-faint)] bg-[var(--color-surface)] px-2.5 py-1.5 text-xs text-[var(--color-ink)] placeholder:text-[var(--color-ink-faint)] focus:border-[var(--color-accent)] focus:outline-none"
-        />
-      </div>
-
       {/* Saved Searches */}
       <div className="facet-saved pt-3 border-t border-[var(--color-rule-faint)]">
         <div className="flex items-center justify-between">
@@ -482,7 +419,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
             severity: [...severities].join(','),
             analyzer,
             q: query,
-            status,
+            status: '',
             category: '',
             rule: '',
             path: workspace,
@@ -492,7 +429,6 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
           setSeverities(new Set(f.severity ? f.severity.split(',') : []));
           setAnalyzer(f.analyzer);
           setQuery(f.q);
-          setStatus(f.status);
           setWorkspace(f.path);
         }}
       />
@@ -572,13 +508,6 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
           >
             <KeyRound className="h-3 w-3" /> Secrets &amp; Keys
           </button>
-          <button
-            type="button"
-            onClick={() => applyPreset('new_only')}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-[var(--color-rule-faint)] bg-[var(--color-surface-muted)] text-[var(--color-ink-soft)] hover:bg-[var(--color-surface-subtle)] transition-colors font-medium"
-          >
-            <Sparkles className="h-3 w-3" /> New in Last Scan
-          </button>
         </div>
       </div>
 
@@ -597,7 +526,6 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                 setSeverities(new Set(f.severity ? f.severity.split(',') : []));
                 setAnalyzer(f.analyzer);
                 setQuery(f.q);
-                setStatus(f.status);
                 setWorkspace(f.path);
                 setAdvancedOpen(false);
               }}

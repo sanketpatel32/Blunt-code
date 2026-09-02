@@ -31,18 +31,31 @@ const scan = {
 };
 const finding = { id: 'finding-1', analyzer_id: 'ruff', severity: 'high', category: 'correctness', title: 'Example finding', message: 'Undefined name', relative_path: 'src/main.py', start_line: 4 };
 
+const previewBody = {
+  path: 'src/main.py',
+  lines: [
+    { number: 3, text: 'import os' },
+    { number: 4, text: 'x = undefined_name' },
+    { number: 5, text: 'print(x)' },
+  ],
+  highlight_start_line: 4,
+  highlight_end_line: 4,
+};
+
 function findingsPage() {
-  return { items: [finding], total: 1, limit: 25, offset: 0, has_more: false };
+  return { items: [finding], total: 1, limit: 100, offset: 0, has_more: false, page: 1, page_size: 100, has_next: false };
 }
 
 const fetchMock = vi.fn((input: string, _init?: RequestInit) => {
   if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, comparison: { new_count: 1, fixed_count: 0, persistent_count: 0 }, warnings: [], findings: [finding] }));
+  if (input.includes('/preview')) return Promise.resolve(json(previewBody));
   if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json(findingsPage()));
   return Promise.resolve(json({ items: [] }));
 });
 
+/** Only list requests — the preview endpoint also matches a loose /findings substring. */
 function findingUrls() {
-  return fetchMock.mock.calls.map(([input]) => String(input)).filter((url) => url.includes('/findings'));
+  return fetchMock.mock.calls.map(([input]) => String(input)).filter((url) => url.includes('/findings?'));
 }
 
 async function render() {
@@ -51,7 +64,7 @@ async function render() {
   document.body.append(host);
   root = createRoot(host);
   await act(async () => { root.render(<ReportView scanId="scan-1" />); });
-  await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+  await settle();
   return host;
 }
 
@@ -68,31 +81,40 @@ async function click(element: Element) {
   await act(async () => { (element as HTMLButtonElement).click(); });
 }
 
+async function press(target: Element, key: string) {
+  await act(async () => { target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })); });
+}
+
 async function advance(ms: number) {
-  await act(async () => { vi.advanceTimersByTime(ms); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(ms); });
 }
 
-function buttonByText(host: HTMLElement, text: string) {
-  return [...host.querySelectorAll('button')].find((button) => button.textContent === text)!;
+/** Drains enough microtask turns for a fetch -> json -> setState chain under fake timers; two turns can be one short. */
+async function settle() {
+  for (let i = 0; i < 8; i += 1) await act(async () => { await Promise.resolve(); });
 }
 
-/** The select inside a labelled filter row, e.g. filterSelect(host, 'Rule'). */
-function filterSelect(host: HTMLElement, labelText: string) {
-  const label = [...host.querySelectorAll('#finding-filters label')].find((element) => element.textContent!.startsWith(labelText))!;
-  return label.querySelector('select')!;
+/** One chip button inside a labelled toolbar group, matched by its own text. */
+function chipIn(host: HTMLElement, groupLabel: string, text: string) {
+  const group = host.querySelector(`fieldset[aria-label="${groupLabel}"]`)!;
+  return [...group.querySelectorAll<HTMLButtonElement>('.chip')].find((button) => button.textContent!.startsWith(text))!;
 }
 
-/** The Tool filter is a chip group (all options visible); pick a chip the way a user does. */
-function toolChip(host: HTMLElement, label: string) {
-  return [...host.querySelectorAll<HTMLButtonElement>('#finding-filters fieldset[aria-label="Tool"] .chip')].find((button) => button.textContent === label)!;
+function rows(host: HTMLElement) {
+  return [...host.querySelectorAll<HTMLTableRowElement>('tbody tr[data-index]')];
 }
 
-/** Picks a select option the way a real user does (value + change event). */
-async function choose(select: HTMLSelectElement, value: string) {
-  await act(async () => { select.value = value; select.dispatchEvent(new Event('change', { bubbles: true })); });
+/** The foot carries two status spans ("Showing N of M" plus "End of list" when done) — the last one is the terminal state. */
+function footStatus(host: HTMLElement) {
+  return [...host.querySelectorAll('.load-more-status')].at(-1)!.textContent;
 }
 
-beforeEach(() => { vi.useFakeTimers(); fetchMock.mockClear(); });
+beforeEach(() => {
+  vi.useFakeTimers();
+  fetchMock.mockClear();
+  window.history.replaceState(null, '', window.location.pathname);
+  window.localStorage.clear();
+});
 
 afterEach(async () => {
   await act(async () => { root?.unmount(); });
@@ -101,11 +123,10 @@ afterEach(async () => {
   vi.useRealTimers();
 });
 
-describe('ReportView finding filters', () => {
-  it('debounces text filters so typing does not refetch on every keystroke', async () => {
+describe('ReportView toolbar filters', () => {
+  it('debounces the search box so typing does not refetch on every keystroke', async () => {
     const host = await render();
-    await click(buttonByText(host, 'Filters'));
-    const search = host.querySelector<HTMLInputElement>('[placeholder="Message or rule"]')!;
+    const search = host.querySelector<HTMLInputElement>('[placeholder="Search message, rule, or file"]')!;
     expect(findingUrls()).toHaveLength(1);
 
     await type(search, 'ev');
@@ -113,41 +134,111 @@ describe('ReportView finding filters', () => {
     await type(search, 'eval');
     expect(findingUrls()).toHaveLength(1); // typing never triggers an extra request
     expect(host.textContent).toContain('search: "eval"'); // the chip echoes instantly
-    expect(host.querySelector('[aria-label="Remove search filter"]')).not.toBeNull();
 
     await advance(300);
     expect(findingUrls()).toHaveLength(2);
     expect(findingUrls()[1]).toContain('q=eval');
+    expect(window.location.search).toContain('q=eval'); // shareable links carry the search
   });
 
-  it('applies pill filters immediately without waiting for the debounce', async () => {
+  it('severity chips are multi-select and send the comma list the server accepts', async () => {
     const host = await render();
-    await click(buttonByText(host, 'Filters'));
-    await click(host.querySelector<HTMLButtonElement>('.severity-pill.high')!);
-    expect(findingUrls()).toHaveLength(2);
-    expect(findingUrls()[1]).toContain('severity=high');
+    const high = chipIn(host, 'Severity', 'high');
+    const medium = chipIn(host, 'Severity', 'medium');
+    expect(high.querySelector('.count')!.textContent).toBe('2'); // chips double as the legend
+    expect(high.getAttribute('aria-pressed')).toBe('false');
+
+    await click(high);
+    expect(findingUrls().at(-1)).toContain('severity=high');
+    expect(high.getAttribute('aria-pressed')).toBe('true');
     expect(host.textContent).toContain('severity: high');
+
+    await click(medium);
+    expect(findingUrls().at(-1)).toContain('severity=high%2Cmedium'); // comma list, one request
+    expect(host.textContent).toContain('severity: high, medium');
+
+    await click(high);
+    expect(findingUrls().at(-1)).toContain('severity=medium');
+    expect(findingUrls().at(-1)).not.toContain('medium,'); // unselecting keeps the rest
   });
 
-  it('clears all filters immediately instead of waiting out the debounce', async () => {
+  it('disables zero-count severities and keeps an active chip selectable', async () => {
     const host = await render();
-    await click(buttonByText(host, 'Filters'));
-    await type(host.querySelector<HTMLInputElement>('[placeholder="Message or rule"]')!, 'eval');
-    await advance(300);
-    expect(findingUrls().at(-1)).toContain('q=eval');
+    expect(chipIn(host, 'Severity', 'critical').disabled).toBe(true);
+    expect(chipIn(host, 'Severity', 'high').disabled).toBe(false);
+  });
 
-    await click(buttonByText(host, 'Clear'));
-    expect(findingUrls()).toHaveLength(3);
-    expect(findingUrls()[2]).not.toContain('q=');
+  it('status chips replace Any status with one status at a time', async () => {
+    const host = await render();
+    await click(chipIn(host, 'Status', 'new'));
+    expect(findingUrls().at(-1)).toContain('status=new');
+    expect(host.textContent).toContain('status: new');
+
+    await click(chipIn(host, 'Status', 'persistent'));
+    expect(findingUrls().at(-1)).toContain('status=persistent');
+    expect(findingUrls().at(-1)).not.toContain('persistent,'); // single-select, not a list
+
+    await click(chipIn(host, 'Status', 'persistent'));
+    expect(findingUrls().at(-1)).not.toContain('status='); // clicking the active chip clears it
+  });
+
+  it('tool chips carry per-tool finding counts and toggle the analyzer filter', async () => {
+    await fetchMock.withImplementation((input: string) => {
+      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan: { ...scan, analyzer_runs: [{ analyzer_id: 'ruff', status: 'succeeded', duration_ms: 1500 }, { analyzer_id: 'biome', status: 'succeeded', duration_ms: 40 }] }, warnings: [], findings: [finding, { ...finding, id: 'finding-2', analyzer_id: 'biome' }, { ...finding, id: 'finding-3', analyzer_id: 'biome' }] }));
+      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: [finding, { ...finding, id: 'finding-2', analyzer_id: 'biome' }, { ...finding, id: 'finding-3', analyzer_id: 'biome' }], total: 3, limit: 100, offset: 0, has_more: false, has_next: false }));
+      return Promise.resolve(json({ items: [] }));
+    }, async () => {
+      const host = await render();
+      const ruff = chipIn(host, 'Tool', 'Ruff');
+      expect(ruff.querySelector('.count')!.textContent).toBe('1'); // count from the report payload
+      expect(ruff.getAttribute('title')).toContain('1.5s'); // run duration rides along as hover context
+      expect(chipIn(host, 'Tool', 'Biome').querySelector('.count')!.textContent).toBe('2');
+
+      await click(ruff);
+      expect(findingUrls().at(-1)).toContain('analyzer=ruff');
+      expect(host.textContent).toContain('tool: Ruff');
+
+      await click(ruff);
+      expect(findingUrls().at(-1)).not.toContain('analyzer='); // clicking the active chip clears it
+    });
+  });
+
+  it('the Type rail lists only categories present, busiest first, and filters by category', async () => {
+    await fetchMock.withImplementation((input: string) => {
+      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, warnings: [], findings: [finding, { ...finding, id: 'f2', category: 'security' }, { ...finding, id: 'f3' }] }));
+      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: [finding], total: 1, limit: 100, offset: 0, has_more: false, has_next: false }));
+      return Promise.resolve(json({ items: [] }));
+    }, async () => {
+      const host = await render();
+      const rail = host.querySelector('fieldset[aria-label="Type"]')!;
+      const chips = [...rail.querySelectorAll<HTMLButtonElement>('.chip')];
+      expect(chips.map((chip) => chip.querySelector('.count')!.textContent)).toEqual(['2', '1']); // correctness first
+      expect(chips[0].textContent).toContain('correctness'); // unknown labels fall back to the raw category id
+
+      await click(chips[0]);
+      expect(findingUrls().at(-1)).toContain('category=correctness');
+      expect(host.textContent).toContain('type: correctness');
+    });
+  });
+
+  it('Clear resets every filter at once instead of waiting out the debounce', async () => {
+    const host = await render();
+    await type(host.querySelector<HTMLInputElement>('[placeholder="Search message, rule, or file"]')!, 'eval');
+    await advance(300);
+    await click(chipIn(host, 'Severity', 'high'));
+    expect(host.querySelector('.filter-chips')!.children).toHaveLength(2);
+
+    await click([...host.querySelectorAll('button')].find((button) => button.textContent === 'Clear')!);
+    expect(findingUrls().at(-1)).not.toContain('q=');
+    expect(findingUrls().at(-1)).not.toContain('severity=');
     expect(host.querySelector('.filter-chips')).toBeNull();
   });
 
   it('renders one removable chip per active filter and removes only that filter', async () => {
     const host = await render();
-    await click(buttonByText(host, 'Filters'));
-    await type(host.querySelector<HTMLInputElement>('[placeholder="Message or rule"]')!, 'eval');
-    await click(host.querySelector<HTMLButtonElement>('.severity-pill.high')!);
-    await click(host.querySelector<HTMLButtonElement>('.analyzer-result')!);
+    await type(host.querySelector<HTMLInputElement>('[placeholder="Search message, rule, or file"]')!, 'eval');
+    await click(chipIn(host, 'Severity', 'high'));
+    await click(chipIn(host, 'Tool', 'Ruff'));
     expect([...host.querySelectorAll('.filter-chip')].map((chip) => chip.textContent)).toEqual(['severity: high×', 'tool: Ruff×', 'search: "eval"×']);
 
     await click(host.querySelector<HTMLButtonElement>('[aria-label="Remove severity filter"]')!);
@@ -156,92 +247,32 @@ describe('ReportView finding filters', () => {
     expect(findingUrls().at(-1)).toContain('analyzer=ruff');
 
     await click(host.querySelector<HTMLButtonElement>('[aria-label="Remove tool filter"]')!);
-    expect([...host.querySelectorAll('.filter-chip')].map((chip) => chip.textContent)).toEqual(['search: "eval"×']);
     expect(findingUrls().at(-1)).not.toContain('analyzer=');
   });
 
-  it('shows scan severity counts as toggleable pills and toggles the severity filter', async () => {
+  it('keeps rendering chips for path/rule params from old shared URLs even though no inputs exist for them', async () => {
+    window.history.replaceState(null, '', `${window.location.pathname}?path=src%2Fmain.py&rule=F821`);
     const host = await render();
-    const pills = [...host.querySelectorAll<HTMLButtonElement>('.severity-pill')];
-    expect(pills.map((pill) => pill.className.replace('severity-pill ', '').replace(' selected', ''))).toEqual(['critical', 'high', 'medium', 'low', 'info']);
-    expect(pills.map((pill) => pill.textContent)).toEqual(['critical0', 'high2', 'medium1', 'low0', 'info0']);
-    expect(pills[0].disabled).toBe(true); // zero-count severities are muted and disabled
-    expect(pills[1].disabled).toBe(false);
+    expect(host.textContent).toContain('file: src/main.py');
+    expect(host.textContent).toContain('rule: F821');
 
-    await click(pills[1]);
-    expect(pills[1].getAttribute('aria-pressed')).toBe('true');
-    expect(pills[1].className).toContain('selected');
-    expect(findingUrls().at(-1)).toContain('severity=high');
+    await click(host.querySelector<HTMLButtonElement>('[aria-label="Remove file filter"]')!);
+    expect(findingUrls().at(-1)).not.toContain('path=');
+    expect(host.textContent).toContain('rule: F821'); // the untouched filter survives
+  });
 
-    await click(pills[1]);
-    expect(host.querySelector('.severity-pill.high')!.getAttribute('aria-pressed')).toBe('false');
-    expect(findingUrls().at(-1)).not.toContain('severity=');
+  it('toggles row density and remembers the choice', async () => {
+    const host = await render();
+    expect(host.querySelector('.finding-list')!.className).not.toContain('finding-dense');
+
+    await click([...host.querySelectorAll('button')].find((button) => button.textContent === 'Compact')!);
+    expect(host.querySelector('.finding-list')!.className).toContain('finding-dense');
+    expect(window.localStorage.getItem('bluntcode.findingsDensity')).toBe('compact');
+    expect([...host.querySelectorAll('button')].some((button) => button.textContent === 'Comfortable')).toBe(true);
   });
 });
 
-describe('ReportView analyzer and rule filters', () => {
-  const ruleFindings = [
-    { ...finding, id: 'f1', analyzer_id: 'ruff', rule_id: 'F821' },
-    { ...finding, id: 'f2', analyzer_id: 'ruff', rule_id: 'E501' },
-    { ...finding, id: 'f3', analyzer_id: 'biome', rule_id: 'COM841' },
-  ];
-  const ruleRuns = [{ analyzer_id: 'ruff', status: 'succeeded' }, { analyzer_id: 'biome', status: 'succeeded' }];
-
-  /** Runs the body against a scan whose report carries two tools and three distinct rules. */
-  async function withRuleScan(body: (host: HTMLElement) => Promise<void>) {
-    await fetchMock.withImplementation((input: string) => {
-      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan: { ...scan, analyzer_runs: ruleRuns }, warnings: [], findings: ruleFindings }));
-      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: ruleFindings, total: 3, limit: 50, offset: 0, has_more: false }));
-      return Promise.resolve(json({ items: [] }));
-    }, async () => { await body(await render()); });
-  }
-
-  it('selecting a tool from the scan runs sends analyzer= and refetches immediately', async () => {
-    await withRuleScan(async (host) => {
-      await click(buttonByText(host, 'Filters'));
-      expect(findingUrls()).toHaveLength(1);
-
-      await click(toolChip(host, 'Biome'));
-      expect(findingUrls()).toHaveLength(2);
-      expect(findingUrls()[1]).toContain('analyzer=biome');
-      expect(host.textContent).toContain('tool: Biome'); // chip echoes the choice
-    });
-  });
-
-  it('offers rules scoped to the selected tool and sends rule= exactly', async () => {
-    await withRuleScan(async (host) => {
-      await click(buttonByText(host, 'Filters'));
-      expect([...filterSelect(host, 'Rule').options].map((option) => option.value)).toEqual(['', 'COM841', 'E501', 'F821']); // distinct rules across every run, sorted
-
-      await click(toolChip(host, 'Ruff'));
-      expect([...filterSelect(host, 'Rule').options].map((option) => option.value)).toEqual(['', 'E501', 'F821']); // scoped to the active tool
-
-      await choose(filterSelect(host, 'Rule'), 'E501');
-      expect(findingUrls().at(-1)).toContain('analyzer=ruff');
-      expect(findingUrls().at(-1)).toContain('rule=E501');
-      expect(host.textContent).toContain('rule: E501');
-
-      await click(host.querySelector<HTMLButtonElement>('[aria-label="Remove rule filter"]')!);
-      expect(findingUrls().at(-1)).not.toContain('rule=');
-    });
-  });
-
-  it('switching tools resets a rule the new tool never reports', async () => {
-    await withRuleScan(async (host) => {
-      await click(buttonByText(host, 'Filters'));
-      await click(toolChip(host, 'Ruff'));
-      await choose(filterSelect(host, 'Rule'), 'F821');
-      expect(findingUrls().at(-1)).toContain('rule=F821');
-
-      await click(toolChip(host, 'Biome'));
-      const last = findingUrls().at(-1)!;
-      expect(last).toContain('analyzer=biome');
-      expect(last).not.toContain('rule='); // F821 belongs to ruff, so the rule filter resets with the tool
-    });
-  });
-});
-
-describe('ReportView findings sorting', () => {
+describe('ReportView sorting', () => {
   function sortButton(host: HTMLElement, label: string) {
     return [...host.querySelectorAll<HTMLButtonElement>('.findings-table thead .th-sort')].find((button) => button.textContent!.startsWith(label))!;
   }
@@ -250,35 +281,33 @@ describe('ReportView findings sorting', () => {
     return [...host.querySelectorAll('.findings-table thead th')].find((th) => th.textContent!.startsWith(label))!;
   }
 
+  it('defaults to severity descending so critical findings load on top', async () => {
+    const host = await render();
+    expect(findingUrls()[0]).toContain('sort=severity');
+    expect(findingUrls()[0]).toContain('order=desc'); // the old build shipped asc — critical landed last
+    expect(headerCell(host, 'Severity').getAttribute('aria-sort')).toBe('descending');
+  });
+
   it('keeps the Finding column non-sortable while the others expose sort buttons', async () => {
     const host = await render();
     const headers = [...host.querySelectorAll('.findings-table thead th')];
-    // Fix column is also non-sortable (last col)
-    expect(headers.map((th) => th.querySelector('button.th-sort') !== null)).toEqual([true, false, true, true, true, false]);
-    expect(headers.slice(0,5).map((th) => th.textContent!.replace(/[^A-Za-z]/g, ''))).toEqual(['Severitysortedascending', 'Finding', 'File', 'Tool', 'Status']);
-    expect(headers[1].getAttribute('aria-sort')).toBeNull();
-    expect(headers.slice(2,5).map((th) => th.getAttribute('aria-sort'))).toEqual(['none', 'none', 'none']);
+    expect(headers.map((th) => th.querySelector('button.th-sort') !== null)).toEqual([true, false, true, true, true]);
+    expect(headers.slice(0, 5).map((th) => th.textContent!.replace(/[^A-Za-z]/g, ''))).toEqual(['Severitysorteddescending', 'Finding', 'File', 'Tool', 'Status']);
   });
 
-  it('toggles severity between ascending and descending, updating aria-sort and the request', async () => {
+  it('toggles severity between descending and ascending, updating aria-sort and the request', async () => {
     const host = await render();
-    expect(findingUrls()[0]).toContain('sort=severity');
-    expect(findingUrls()[0]).toContain('order=asc');
-    expect(headerCell(host, 'Severity').getAttribute('aria-sort')).toBe('ascending');
-
-    await click(sortButton(host, 'Severity'));
-    expect(findingUrls().at(-1)).toContain('sort=severity');
-    expect(findingUrls().at(-1)).toContain('order=desc'); // desc rank puts critical findings on top
-    expect(headerCell(host, 'Severity').getAttribute('aria-sort')).toBe('descending');
-    expect(sortButton(host, 'Severity').textContent).toContain('sorted descending'); // direction is part of the accessible name
-    expect(sortButton(host, 'Severity').textContent).toContain('▼');
-
     await click(sortButton(host, 'Severity'));
     expect(findingUrls().at(-1)).toContain('order=asc');
     expect(headerCell(host, 'Severity').getAttribute('aria-sort')).toBe('ascending');
+    expect(sortButton(host, 'Severity').textContent).toContain('▲');
+
+    await click(sortButton(host, 'Severity'));
+    expect(findingUrls().at(-1)).toContain('order=desc');
+    expect(headerCell(host, 'Severity').getAttribute('aria-sort')).toBe('descending');
   });
 
-  it('switches to another column with an ascending default and clears the previous sort', async () => {
+  it('switching columns applies that column default and clears the previous sort', async () => {
     const host = await render();
     await click(sortButton(host, 'File'));
     expect(findingUrls().at(-1)).toContain('sort=path');
@@ -286,54 +315,23 @@ describe('ReportView findings sorting', () => {
     expect(headerCell(host, 'File').getAttribute('aria-sort')).toBe('ascending');
     expect(headerCell(host, 'Severity').getAttribute('aria-sort')).toBe('none');
 
-    await click(sortButton(host, 'Tool'));
-    expect(findingUrls().at(-1)).toContain('sort=analyzer');
-    expect(findingUrls().at(-1)).toContain('order=asc');
-    expect(headerCell(host, 'Tool').getAttribute('aria-sort')).toBe('ascending');
-    expect(headerCell(host, 'File').getAttribute('aria-sort')).toBe('none');
-  });
-
-  it('re-selecting severity from another column applies the descending default so critical comes first', async () => {
-    const host = await render();
-    await click(sortButton(host, 'Status'));
-    expect(findingUrls().at(-1)).toContain('sort=status');
-    expect(findingUrls().at(-1)).toContain('order=asc');
-
-    await click(sortButton(host, 'Severity'));
-    expect(findingUrls().at(-1)).toContain('sort=severity');
+    await click(sortButton(host, 'Severity')); // back from another column: descending default again
     expect(findingUrls().at(-1)).toContain('order=desc');
-    expect(headerCell(host, 'Severity').getAttribute('aria-sort')).toBe('descending');
-  });
-
-  it('restarts on the first page when the sort changes', async () => {
-    await fetchMock.withImplementation((input: string) => {
-      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, comparison: { new_count: 1, fixed_count: 0, persistent_count: 0 }, warnings: [], findings: [finding] }));
-      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: Array.from({ length: 50 }, (_, index) => ({ ...finding, id: `finding-${index}` })), total: 120, limit: 50, offset: 0, has_more: true }));
-      return Promise.resolve(json({ items: [] }));
-    }, async () => {
-      const host = await render();
-      const next = [...host.querySelectorAll('button')].find((button) => button.textContent === 'Next')!;
-      await click(next);
-      expect(findingUrls().at(-1)).toContain('page=2');
-
-      await click(sortButton(host, 'Tool'));
-      expect(findingUrls().at(-1)).toContain('sort=analyzer');
-      expect(findingUrls().at(-1)).toContain('page=1');
-    });
   });
 });
 
-describe('ReportView findings pagination', () => {
-  const TOTAL = 120;
+describe('ReportView load-more pagination', () => {
+  const TOTAL = 250;
 
   /** Page-mode mock: answers whichever page/page_size the URL asks for, mirroring the server envelope. */
   function pageMock(body: (host: HTMLElement) => Promise<void>, overrides?: { has_next?: boolean; has_more?: boolean }) {
     return fetchMock.withImplementation((input: string) => {
       if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, warnings: [], findings: [finding] }));
+      if (input.includes('/preview')) return Promise.resolve(json(previewBody));
       if (input.includes('/scans/scan-1/findings')) {
         const url = new URL(input, 'http://localhost');
         const page = Number(url.searchParams.get('page') ?? '1');
-        const pageSize = Number(url.searchParams.get('page_size') ?? '50');
+        const pageSize = Number(url.searchParams.get('page_size') ?? '100');
         const start = (page - 1) * pageSize;
         const items = Array.from({ length: Math.min(pageSize, Math.max(0, TOTAL - start)) }, (_, index) => ({ ...finding, id: `finding-${start + index}` }));
         const hasNext = overrides?.has_next ?? start + pageSize < TOTAL;
@@ -343,250 +341,152 @@ describe('ReportView findings pagination', () => {
     }, async () => { await body(await render()); });
   }
 
-  function pager(host: HTMLElement) {
-    const nav = host.querySelector('nav[aria-label="Findings pagination"]')!;
-    return {
-      previous: [...nav.querySelectorAll('button')].find((button) => button.textContent === 'Previous')! as HTMLButtonElement,
-      next: [...nav.querySelectorAll('button')].find((button) => button.textContent === 'Next')! as HTMLButtonElement,
-      output: nav.querySelector('output')!,
-      status: nav.querySelector('span')!,
-    };
-  }
-
-  it('loads page 1 at a 50-row window and walks Next/Next/Prev with boundary disables', async () => {
+  it('fetches a 100-row window, then Show more appends the next window without duplicates', async () => {
     await pageMock(async (host) => {
       expect(findingUrls()[0]).toContain('page=1');
-      expect(findingUrls()[0]).toContain('page_size=50');
-      const p = pager(host);
-      expect(p.status.textContent).toBe('Showing 1–50 of 120');
-      expect(p.output.textContent).toBe('Page 1 of 3');
-      expect(p.output.getAttribute('aria-live')).toBe('polite'); // page turns are announced politely
-      expect(p.previous.disabled).toBe(true); // already on the first page
-      expect(p.next.disabled).toBe(false);
+      expect(findingUrls()[0]).toContain('page_size=100');
+      expect(footStatus(host)).toBe('Showing 100 of 250');
 
-      await click(p.next);
+      await click([...host.querySelectorAll('button')].find((button) => button.textContent === 'Show more')!);
+      await settle();
       expect(findingUrls().at(-1)).toContain('page=2');
-      expect(p.status.textContent).toBe('Showing 51–100 of 120');
-      expect(p.output.textContent).toBe('Page 2 of 3');
-      expect(p.previous.disabled).toBe(false);
+      expect(rows(host)).toHaveLength(200);
+      expect(new Set(rows(host).map((row) => row.getAttribute('data-index'))).size).toBe(200); // no duplicate rows
+      expect(footStatus(host)).toBe('Showing 200 of 250');
 
-      await click(p.next);
-      expect(findingUrls().at(-1)).toContain('page=3');
-      expect(p.status.textContent).toBe('Showing 101–120 of 120'); // the final page holds the remainder
-      expect(p.output.textContent).toBe('Page 3 of 3');
-      expect(p.next.disabled).toBe(true); // has_next is false on the last page
-      expect(p.previous.disabled).toBe(false);
-
-      await click(p.previous);
-      expect(findingUrls().at(-1)).toContain('page=2');
+      await click([...host.querySelectorAll('button')].find((button) => button.textContent === 'Show more')!);
+      await settle();
+      expect(rows(host)).toHaveLength(250);
+      expect(footStatus(host)).toBe('End of list');
+      expect([...host.querySelectorAll('button')].some((button) => button.textContent === 'Show more')).toBe(false);
     });
   });
 
   it('treats the envelope has_next as authoritative over the legacy has_more flag', async () => {
     await pageMock(async (host) => {
-      expect(pager(host).next.disabled).toBe(true); // page mode says no next page even though has_more lingers
+      expect(footStatus(host)).toBe('End of list'); // page mode wins over the lingering has_more flag
+      expect([...host.querySelectorAll('button')].some((button) => button.textContent === 'Show more')).toBe(false);
     }, { has_next: false, has_more: true });
   });
 
-  it('resets to page 1 when a filter changes', async () => {
+  it('a filter change restarts the accumulated list on window one', async () => {
     await pageMock(async (host) => {
-      await click(pager(host).next);
-      expect(findingUrls().at(-1)).toContain('page=2');
+      await click([...host.querySelectorAll('button')].find((button) => button.textContent === 'Show more')!);
+      await settle();
+      expect(rows(host)).toHaveLength(200);
 
-      await click(host.querySelector<HTMLButtonElement>('.severity-pill.high')!);
-      const last = findingUrls().at(-1)!;
-      expect(last).toContain('severity=high');
-      expect(last).toContain('page=1');
+      await click(chipIn(host, 'Severity', 'high'));
+      expect(findingUrls().at(-1)).toContain('severity=high');
+      expect(findingUrls().at(-1)).toContain('page=1');
+      await settle();
+      expect(rows(host)).toHaveLength(100); // replaced, not merged on top of the old windows
     });
   });
 
-  it('lets the user pick the rows-per-page window; the choice refetches, restarts on page 1, and reaches the URL', async () => {
-    window.history.replaceState(null, '', window.location.pathname); // start from a clean URL so earlier describes cannot leak state
+  it('the rows-per-fetch selector offers API-legal windows and restarts on window one', async () => {
     await pageMock(async (host) => {
-      const sizeButtons = [...host.querySelectorAll<HTMLButtonElement>('nav[aria-label="Findings pagination"] .page-size button')];
-      expect(sizeButtons.map((button) => button.textContent)).toEqual(['25', '50', '100', '200']); // API-legal windows, 200 being MaxFindingsPageSize
-      expect(sizeButtons.find((button) => button.getAttribute('aria-pressed') === 'true')!.textContent).toBe('50');
+      const sizeButtons = [...host.querySelectorAll<HTMLButtonElement>('.load-more .page-size button')];
+      expect(sizeButtons.map((button) => button.textContent)).toEqual(['25', '50', '100', '200']);
+      expect(sizeButtons.find((button) => button.getAttribute('aria-pressed') === 'true')!.textContent).toBe('100');
       expect(window.location.search).not.toContain('page_size='); // the default stays out of shareable URLs
 
-      await click(pager(host).next);
-      expect(findingUrls().at(-1)).toContain('page=2');
+      await click([...host.querySelectorAll('button')].find((button) => button.textContent === 'Show more')!);
+      await settle();
 
-      await click(sizeButtons.find((button) => button.textContent === '100')!);
+      await click(sizeButtons.find((button) => button.textContent === '50')!);
       const last = findingUrls().at(-1)!;
-      expect(last).toContain('page_size=100');
-      expect(last).toContain('page=1'); // a new window restarts on the first page
-      expect(pager(host).status.textContent).toBe('Showing 1–100 of 120');
-      expect(pager(host).output.textContent).toBe('Page 1 of 2');
-      expect(window.location.search).toContain('page_size=100'); // shareable links reproduce the chosen window
-
-      window.history.replaceState(null, '', window.location.pathname); // leave the URL clean for later describes
+      expect(last).toContain('page_size=50');
+      expect(last).toContain('page=1');
+      expect(window.location.search).toContain('page_size=50'); // shareable links reproduce the window
     });
   });
 });
 
-describe('ReportView severity distribution', () => {
-  it('renders the stacked severity bar with proportional segment widths and an accessible summary', async () => {
-    const host = await render();
-    const bar = host.querySelector<HTMLElement>('.severity-stack')!;
-    expect(bar.getAttribute('role')).toBe('img');
-    expect(bar.getAttribute('aria-label')).toBe('Findings by severity: 2 high, 1 medium'); // zero counts are left out of the label
-    const segments = [...bar.children] as HTMLElement[];
-    expect(segments.map((segment) => segment.className)).toEqual(['seg-high', 'seg-medium']); // 0-count severities get no segment
-    expect(segments.map((segment) => segment.style.width)).toEqual(['66.7%', '33.3%']); // 2/3 and 1/3 of the 3 findings
-  });
-
-  it('pairs the bar with a legend carrying every severity count', async () => {
-    const host = await render();
-    const legend = [...host.querySelectorAll('.severity-legend li')];
-    expect(legend.map((item) => item.textContent)).toEqual(['critical0', 'high2', 'medium1', 'low0', 'info0']);
-    expect(legend[0].className).toBe('zero'); // zero-count entries are muted, not hidden
-    expect(legend[1].className).toBe('high');
-  });
-
-  it('hides the distribution for zero-finding scans where the all-clear panel speaks instead', async () => {
-    await fetchMock.withImplementation((input: string) => {
-      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan: { ...scan, total_findings: 0, high_count: 0, medium_count: 0 }, warnings: [], findings: [] }));
-      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: [], total: 0, limit: 25, offset: 0, has_more: false }));
+describe('ReportView split pane', () => {
+  function twoFindings(body: (host: HTMLElement) => Promise<void>) {
+    return fetchMock.withImplementation((input: string) => {
+      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, warnings: [], findings: [finding, { ...finding, id: 'finding-2', title: 'Second finding', start_line: 9 }] }));
+      if (input.includes('/preview')) return Promise.resolve(json(previewBody));
+      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: [finding, { ...finding, id: 'finding-2', title: 'Second finding', start_line: 9 }], total: 2, limit: 100, offset: 0, has_more: false, has_next: false }));
       return Promise.resolve(json({ items: [] }));
-    }, async () => {
-      const host = await render();
-      expect(host.querySelector('.severity-distribution')).toBeNull();
-      expect(host.querySelector('.severity-stack')).toBeNull();
-    });
-  });
-});
+    }, async () => { await body(await render()); });
+  }
 
-describe('ReportView analyzer mini-bars', () => {
-  const multiAnalyzerFindings = [
-    { ...finding, id: 'f1', analyzer_id: 'ruff', severity: 'high' },
-    { ...finding, id: 'f2', analyzer_id: 'ruff', severity: 'high' },
-    { ...finding, id: 'f3', analyzer_id: 'ruff', severity: 'medium' },
-    { ...finding, id: 'f4', analyzer_id: 'biome', severity: 'critical' },
-  ];
-  const multiAnalyzerRuns = [{ analyzer_id: 'semgrep', status: 'succeeded' }, { analyzer_id: 'biome', status: 'succeeded' }, { analyzer_id: 'ruff', status: 'succeeded' }];
-
-  it('sorts analyzer rows by finding count and splits each mini-bar by severity', async () => {
-    await fetchMock.withImplementation((input: string) => {
-      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan: { ...scan, analyzer_runs: multiAnalyzerRuns }, warnings: [], findings: multiAnalyzerFindings }));
-      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: multiAnalyzerFindings, total: 4, limit: 25, offset: 0, has_more: false }));
-      return Promise.resolve(json({ items: [] }));
-    }, async () => {
-      const host = await render();
-      const rows = [...host.querySelectorAll('.analyzer-result')];
-      expect(rows.map((row) => row.querySelector('strong')!.textContent)).toEqual(['Ruff', 'Biome', 'Semgrep']); // busiest first
-      expect(rows.map((row) => row.querySelector('.state')!.textContent)).toEqual(['3 findings', '1 finding', '0 findings']);
-
-      const ruffBar = rows[0].querySelector<HTMLElement>('.analyzer-bar')!;
-      expect(ruffBar.getAttribute('role')).toBe('img');
-      expect(ruffBar.getAttribute('aria-label')).toBe('Ruff findings by severity: 2 high, 1 medium');
-      expect([...ruffBar.children].map((segment) => segment.className)).toEqual(['seg-high', 'seg-medium']);
-      expect([...ruffBar.children].map((segment) => (segment as HTMLElement).style.width)).toEqual(['66.7%', '33.3%']);
-
-      const biomeBar = rows[1].querySelector<HTMLElement>('.analyzer-bar')!;
-      expect([...biomeBar.children].map((segment) => segment.className)).toEqual(['seg-critical']);
-      expect(rows[2].querySelector('.analyzer-bar')).toBeNull(); // zero-finding analyzers get no bar
-    });
-  });
-});
-
-describe('ReportView export row', () => {
-  it('lists the five export targets as always-visible download links and carries the active filter in the CSV href', async () => {
-    const host = await render();
-    expect(host.querySelector('.export-toggle')).toBeNull(); // the popover trigger is gone — exports sit flat on the page
-    await click(host.querySelector<HTMLButtonElement>('.severity-pill.high')!); // filter first so the CSV link carries it
-    const items = [...host.querySelectorAll('.export-menu.export-inline .export-item')] as HTMLElement[];
-    expect(items.map((item) => item.textContent)).toEqual(['Markdown.md', 'HTML.html', 'SARIF.sarif', 'CSV (current filters).csv', 'Jira CSV.csv']);
-    expect(items[0].getAttribute('href')).toBe('/api/v1/scans/scan-1/report.md');
-    expect(items[1].getAttribute('href')).toBe('/api/v1/scans/scan-1/report.html');
-    expect(items[2].getAttribute('href')).toBe('/api/v1/scans/scan-1/report.sarif');
-    const csvHref = (items[3] as HTMLAnchorElement).getAttribute('href')!;
-    expect(csvHref).toContain('/api/v1/scans/scan-1/findings.csv?');
-    expect(csvHref).toContain('severity=high'); // the active filter rides along
-    expect(csvHref).toContain('sort=severity');
-    expect(csvHref).toContain('order=asc');
-    expect(csvHref).not.toContain('page='); // paging params stay off the export
-    expect(csvHref).not.toContain('page_size=');
-    expect(items.slice(0,4).every((item) => (item as HTMLAnchorElement).hasAttribute('download'))).toBe(true); // plain GET navigation, no fetch
-  });
-});
-
-describe('ReportView finding row copy', () => {
-  it('copies a readable multi-line summary to the clipboard and confirms inline', async () => {
-    const rich = { ...finding, id: 'finding-rich', rule_id: 'F821', start_column: 7, remediation: 'Define the name before use.', status: 'new' };
-    await fetchMock.withImplementation((input: string) => {
-      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, comparison: { new_count: 1, fixed_count: 0, persistent_count: 0 }, warnings: [], findings: [rich] }));
-      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: [rich], total: 1, limit: 25, offset: 0, has_more: false }));
-      return Promise.resolve(json({ items: [] }));
-    }, async () => {
-      const host = await render();
-      const writeText = vi.fn(() => Promise.resolve());
-      Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true }); // jsdom ships no clipboard API
-      try {
-        const copyButton = host.querySelector<HTMLButtonElement>('[aria-label="Copy finding details"]')!;
-        expect(copyButton).not.toBeNull();
-        await click(copyButton);
-        await act(async () => { await Promise.resolve(); await Promise.resolve(); });
-        expect(writeText).toHaveBeenCalledTimes(1);
-        expect(writeText).toHaveBeenCalledWith('[high] F821 — Undefined name\nsrc/main.py:4:7\nanalyzer: ruff\nremediation: Define the name before use.');
-        expect(copyButton.className).toContain('copied'); // brief check-mark swap instead of a toast
-
-        await advance(800);
-        expect(copyButton.className).not.toContain('copied');
-      } finally {
-        delete (navigator as { clipboard?: unknown }).clipboard;
-      }
+  it('clicking a row docks the source pane with the finding code beside the list', async () => {
+    await twoFindings(async (host) => {
+      expect(host.querySelector('.analysis-split')!.getAttribute('data-pane')).toBe('closed');
+      await click(rows(host)[0]);
+      expect(host.querySelector('.analysis-split')!.getAttribute('data-pane')).toBe('open');
+      const previewCalls = fetchMock.mock.calls.map(([input]) => String(input)).filter((url) => url.includes('/preview'));
+      expect(previewCalls.at(-1)).toContain('/scans/scan-1/findings/finding-1/preview');
+      await settle();
+      const pane = host.querySelector('.source-pane')!;
+      expect(pane.textContent).toContain('src/main.py:4');
+      expect(pane.querySelectorAll('pre.code-preview code').length).toBe(3);
+      expect(pane.querySelectorAll('pre.code-preview code.highlight').length).toBe(1); // only the flagged line
+      expect(pane.textContent).toContain('Undefined name');
+      expect(rows(host)[0].className).toContain('active'); // the list marks the row the pane shows
     });
   });
 
-  it('moves focus between row copy buttons with ArrowUp/ArrowDown/Home/End (roving tabindex)', async () => {
-    await fetchMock.withImplementation((input: string) => {
-      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, comparison: { new_count: 1, fixed_count: 0, persistent_count: 0 }, warnings: [], findings: [finding] }));
-      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: [{ ...finding, id: 'finding-1' }, { ...finding, id: 'finding-2' }], total: 2, limit: 25, offset: 0, has_more: false }));
-      return Promise.resolve(json({ items: [] }));
-    }, async () => {
-      const host = await render();
-      const buttons = [...host.querySelectorAll<HTMLButtonElement>('[aria-label="Copy finding details"]')];
-      expect(buttons).toHaveLength(2);
-      expect(buttons.map((button) => button.tabIndex)).toEqual([0, -1]); // exactly one tab stop in the table
-      buttons[0].focus();
-      expect(document.activeElement).toBe(buttons[0]);
+  it('prev/next walk the selection along the list and disable at the ends', async () => {
+    await twoFindings(async (host) => {
+      await click(rows(host)[0]);
+      await settle();
+      const pane = host.querySelector('.source-pane')!;
+      const prev = pane.querySelector<HTMLButtonElement>('[aria-label="Previous finding"]')!;
+      const next = pane.querySelector<HTMLButtonElement>('[aria-label="Next finding"]')!;
+      expect(prev.disabled).toBe(true);
+      expect(next.disabled).toBe(false);
 
-      const press = (target: Element, key: string) => act(async () => { target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })); });
-      await press(buttons[0], 'ArrowDown');
-      expect(document.activeElement).toBe(buttons[1]);
-      expect(buttons.map((button) => button.tabIndex)).toEqual([-1, 0]); // the tab stop follows the focus
-      await press(buttons[1], 'ArrowUp');
-      expect(document.activeElement).toBe(buttons[0]);
-      await press(buttons[0], 'End');
-      expect(document.activeElement).toBe(buttons[1]);
-      await press(buttons[1], 'Home');
-      expect(document.activeElement).toBe(buttons[0]);
+      await click(next);
+      await settle();
+      expect(rows(host)[1].className).toContain('active');
+      expect(host.querySelector('.source-pane')!.textContent).toContain('src/main.py:9');
+      expect(host.querySelector('.source-pane')!.querySelector<HTMLButtonElement>('[aria-label="Next finding"]')!.disabled).toBe(true);
+
+      await click(host.querySelector('.source-pane')!.querySelector<HTMLButtonElement>('[aria-label="Previous finding"]')!);
+      await settle();
+      expect(rows(host)[0].className).toContain('active');
     });
   });
-});
 
-describe('ReportView render guards', () => {
-  it('renders a full page of hostile rows (10k-char messages, huge paths) without blowing up', async () => {
-    // Render guard: analyzers can emit enormous messages and paths. The table
-    // must render every row to completion (CSS clamps the visual height); this
-    // catches per-row O(n^2) string building regressions as exceptions/timeouts.
-    const hostile = Array.from({ length: 100 }, (_, index) => ({
-      ...finding,
-      id: `hostile-${index}`,
-      message: 'x'.repeat(10_000) + ` tail ${index}`,
-      relative_path: `src/${'deep/'.repeat(200)}file${index}.py`,
-      remediation: 'y'.repeat(5_000),
-    }));
+  it('Escape closes the pane and the list returns to full width', async () => {
+    await twoFindings(async (host) => {
+      await click(rows(host)[0]);
+      expect(host.querySelector('.analysis-split')!.getAttribute('data-pane')).toBe('open');
+      await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
+      expect(host.querySelector('.analysis-split')!.getAttribute('data-pane')).toBe('closed');
+      expect(host.querySelector('.source-pane')).toBeNull();
+    });
+  });
+
+  it('rows are keyboard-walkable: ArrowDown moves focus, Enter opens the pane', async () => {
+    await twoFindings(async (host) => {
+      const first = rows(host)[0];
+      first.focus();
+      await press(first, 'ArrowDown');
+      expect(document.activeElement).toBe(rows(host)[1]);
+
+      await press(rows(host)[1], 'Enter');
+      expect(host.querySelector('.analysis-split')!.getAttribute('data-pane')).toBe('open');
+      expect(rows(host)[1].className).toContain('active');
+    });
+  });
+
+  it('preview errors map to friendly copy instead of a raw error panel', async () => {
     await fetchMock.withImplementation((input: string) => {
-      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, comparison: { new_count: 1, fixed_count: 0, persistent_count: 0 }, warnings: [], findings: hostile }));
-      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: hostile, total: 100, limit: 100, offset: 0, has_more: false }));
+      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, warnings: [], findings: [finding] }));
+      if (input.includes('/preview')) return Promise.resolve(json({ error: { code: 'SOURCE_FILE_NOT_FOUND', message: 'gone' } }, 404));
+      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json(findingsPage()));
       return Promise.resolve(json({ items: [] }));
     }, async () => {
       const host = await render();
-      const rows = host.querySelectorAll('.findings-table tbody tr');
-      expect(rows).toHaveLength(100);
-      const message = host.querySelector('.finding-message');
-      expect(message?.textContent).toContain(`tail 0`);
+      await click(rows(host)[0]);
+      await settle();
+      const note = host.querySelector('.source-pane-error')!;
+      expect(note.textContent).toContain('Preview unavailable');
+      expect(note.textContent).toContain('The file moved or was deleted after this scan ran');
     });
   });
 });
@@ -606,8 +506,9 @@ describe('ReportView suppression actions', () => {
 
   it('suppresses from a row: opens the dialog, posts the fingerprint, and refreshes the findings', async () => {
     await fetchMock.withImplementation((input: string) => {
-      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, comparison: { new_count: 1, fixed_count: 0, persistent_count: 0 }, warnings: [], findings: [fingerprinted] }));
-      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: [fingerprinted], total: 1, limit: 25, offset: 0, has_more: false }));
+      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, warnings: [], findings: [fingerprinted] }));
+      if (input.includes('/preview')) return Promise.resolve(json(previewBody));
+      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: [fingerprinted], total: 1, limit: 100, offset: 0, has_more: false, has_next: false }));
       return Promise.resolve(json({ fingerprint: FINGERPRINT, created_at: '2026-08-24T00:00:00Z' }, 201));
     }, async () => {
       const host = await render();
@@ -616,29 +517,27 @@ describe('ReportView suppression actions', () => {
       await click(rowButton);
       expect(host.querySelector('dialog')!.textContent).toContain('Suppressing hides this finding from future scans, reports, and the CI gate.');
 
-      await click(buttonByText(host, 'Suppress finding'));
+      await click([...host.querySelectorAll('button')].find((button) => button.textContent === 'Suppress finding')!);
       await flush();
       const posts = callsFor('POST');
       expect(posts).toHaveLength(1);
       expect(posts[0][0]).toBe('/api/v1/workspaces/ws-1/suppressions');
       expect(JSON.parse(String(posts[0][1]!.body))).toEqual({ fingerprint: FINGERPRINT, reason: '' });
       expect(host.querySelector('dialog')).toBeNull(); // closes on success
-      expect(findingUrls()).toHaveLength(2); // the list refetches so the row drops out
+      expect(findingUrls()).toHaveLength(2); // the list refetches so the row status flips
     });
   });
 
   it('restores a suppressed finding via DELETE and refreshes the findings', async () => {
     await fetchMock.withImplementation((input: string) => {
-      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, comparison: { new_count: 0, fixed_count: 0, persistent_count: 0 }, warnings: [], findings: [suppressedItem] }));
-      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: [suppressedItem], total: 1, limit: 25, offset: 0, has_more: false }));
+      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, warnings: [], findings: [suppressedItem] }));
+      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: [suppressedItem], total: 1, limit: 100, offset: 0, has_more: false, has_next: false }));
       return Promise.resolve(new Response(null, { status: 204 }));
     }, async () => {
       const host = await render();
       expect(host.querySelector('.status-text.suppressed')!.textContent).toBe('suppressed');
       expect(host.querySelector('[aria-label="Suppress Example finding"]')).toBeNull(); // suppressed rows restore instead
-      const restore = host.querySelector<HTMLButtonElement>('[aria-label="Restore Example finding"]')!;
-      expect(restore.textContent).toBe('Restore');
-      await click(restore);
+      await click(host.querySelector<HTMLButtonElement>('[aria-label="Restore Example finding"]')!);
       await flush();
       const deletes = callsFor('DELETE');
       expect(deletes).toHaveLength(1);
@@ -654,45 +553,162 @@ describe('ReportView suppression actions', () => {
   });
 });
 
-describe('ReportView severity row edges', () => {
+describe('ReportView bulk actions', () => {
+  it('select-all and per-row checkboxes drive a bulk toolbar with a live count', async () => {
+    await fetchMock.withImplementation((input: string) => {
+      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, warnings: [], findings: [finding, { ...finding, id: 'finding-2' }] }));
+      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: [finding, { ...finding, id: 'finding-2' }], total: 2, limit: 100, offset: 0, has_more: false, has_next: false }));
+      return Promise.resolve(json({ items: [] }));
+    }, async () => {
+      const host = await render();
+      expect(host.querySelector('[role="toolbar"][aria-label="Bulk actions"]')).toBeNull();
+
+      await click(rows(host)[0].querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+      const toolbar = host.querySelector('[role="toolbar"][aria-label="Bulk actions"]')!;
+      expect(toolbar.textContent).toContain('1 selected');
+      expect(toolbar.textContent).toContain('Copy');
+
+      await click(host.querySelector<HTMLInputElement>('[aria-label="Select all"]')!);
+      expect(toolbar.querySelector('[aria-live="polite"]')!.textContent).toBe('2 selected');
+    });
+  });
+});
+
+describe('ReportView export foot', () => {
+  it('lists the five export targets as always-visible links and carries the active filter in the CSV href', async () => {
+    const host = await render();
+    await click(chipIn(host, 'Severity', 'high')); // filter first so the CSV link carries it
+    const items = [...host.querySelectorAll('.export-menu.export-inline .export-item')] as HTMLElement[];
+    expect(items.map((item) => item.textContent)).toEqual(['Markdown.md', 'HTML.html', 'SARIF.sarif', 'CSV (current filters).csv', 'Jira CSV.csv']);
+    expect(items[0].getAttribute('href')).toBe('/api/v1/scans/scan-1/report.md');
+    const csvHref = (items[3] as HTMLAnchorElement).getAttribute('href')!;
+    expect(csvHref).toContain('/api/v1/scans/scan-1/findings.csv?');
+    expect(csvHref).toContain('severity=high'); // the active filter rides along
+    expect(csvHref).toContain('sort=severity');
+    expect(csvHref).toContain('order=desc'); // the export mirrors the fixed default sort
+    expect(csvHref).not.toContain('page='); // paging params stay off the export
+    expect(items.slice(0, 4).every((item) => (item as HTMLAnchorElement).hasAttribute('download'))).toBe(true); // plain GET navigation, no fetch
+  });
+
+  it('the foot counts findings and engines from the report payload', async () => {
+    const host = await render();
+    expect(host.querySelector('.report-foot-count')!.textContent).toContain('1 finding');
+    expect(host.querySelector('.report-foot-count')!.textContent).toContain('1 engine');
+  });
+});
+
+describe('ReportView finding row copy', () => {
+  it('copies a readable multi-line summary to the clipboard and confirms inline', async () => {
+    const rich = { ...finding, rule_id: 'F821', start_column: 7, remediation: 'Define the name before use.', status: 'new' };
+    await fetchMock.withImplementation((input: string) => {
+      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, warnings: [], findings: [rich] }));
+      if (input.includes('/preview')) return Promise.resolve(json(previewBody));
+      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: [rich], total: 1, limit: 100, offset: 0, has_more: false, has_next: false }));
+      return Promise.resolve(json({ items: [] }));
+    }, async () => {
+      const host = await render();
+      const writeText = vi.fn(() => Promise.resolve());
+      Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true }); // jsdom ships no clipboard API
+      try {
+        const copyButton = host.querySelector<HTMLButtonElement>('[aria-label="Copy finding details"]')!;
+        await click(copyButton);
+        await settle();
+        expect(writeText).toHaveBeenCalledTimes(1);
+        expect(writeText).toHaveBeenCalledWith('[high] F821 — Undefined name\nsrc/main.py:4:7\nanalyzer: ruff\nremediation: Define the name before use.');
+        expect(copyButton.className).toContain('copied'); // brief check-mark swap instead of a toast
+
+        await advance(800);
+        expect(copyButton.className).not.toContain('copied');
+      } finally {
+        delete (navigator as { clipboard?: unknown }).clipboard;
+      }
+    });
+  });
+});
+
+describe('ReportView states and guards', () => {
+  it('renders the all-clear panel for a completed zero-finding scan', async () => {
+    await fetchMock.withImplementation((input: string) => {
+      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan: { ...scan, total_findings: 0, high_count: 0, medium_count: 0 }, warnings: [], findings: [] }));
+      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: [], total: 0, limit: 100, offset: 0, has_more: false, has_next: false }));
+      return Promise.resolve(json({ items: [] }));
+    }, async () => {
+      const host = await render();
+      expect(host.textContent).toContain('All clear — no findings');
+      expect(host.querySelector('.findings-table tbody tr')).toBeNull();
+    });
+  });
+
+  it('keeps filter-empty messaging when filters exclude everything', async () => {
+    await fetchMock.withImplementation((input: string) => {
+      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, warnings: [], findings: [finding] }));
+      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: [], total: 0, limit: 100, offset: 0, has_more: false, has_next: false }));
+      return Promise.resolve(json({ items: [] }));
+    }, async () => {
+      const host = await render();
+      expect(host.textContent).toContain('No findings match these filters');
+      expect(host.textContent).toContain('Try clearing one or more filters.');
+    });
+  });
+
+  it('names the tool when one engine reported nothing', async () => {
+    await fetchMock.withImplementation((input: string) => {
+      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan: { ...scan, analyzer_runs: [{ analyzer_id: 'biome', status: 'succeeded' }] }, warnings: [], findings: [] }));
+      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: [], total: 0, limit: 100, offset: 0, has_more: false, has_next: false }));
+      return Promise.resolve(json({ items: [] }));
+    }, async () => {
+      const host = await render();
+      await click(chipIn(host, 'Tool', 'Biome'));
+      await settle();
+      expect(host.textContent).toContain('Biome reported no findings');
+    });
+  });
+
+  it('renders report warnings inline above the toolbar', async () => {
+    await fetchMock.withImplementation((input: string) => {
+      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, warnings: ['semgrep exited 1'], findings: [finding] }));
+      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json(findingsPage()));
+      return Promise.resolve(json({ items: [] }));
+    }, async () => {
+      const host = await render();
+      expect(host.querySelector('.inline-warning')!.textContent).toContain('Incomplete analysis');
+      expect(host.querySelector('.inline-warning')!.textContent).toContain('semgrep exited 1');
+    });
+  });
+
+  it('surfaces a failed report load as an error panel with retry', async () => {
+    await fetchMock.withImplementation(() => Promise.resolve(json({ error: { code: 'BOOM', message: 'report exploded' } }, 500)), async () => {
+      const host = await render();
+      expect(host.textContent).toContain('report exploded');
+    });
+  });
+
+  it('renders a full page of hostile rows (10k-char messages, huge paths) without blowing up', async () => {
+    const hostile = Array.from({ length: 100 }, (_, index) => ({
+      ...finding,
+      id: `hostile-${index}`,
+      message: 'x'.repeat(10_000) + ` tail ${index}`,
+      relative_path: `src/${'deep/'.repeat(200)}file${index}.py`,
+      remediation: 'y'.repeat(5_000),
+    }));
+    await fetchMock.withImplementation((input: string) => {
+      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, warnings: [], findings: hostile }));
+      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: hostile, total: 100, limit: 100, offset: 0, has_more: false, has_next: false }));
+      return Promise.resolve(json({ items: [] }));
+    }, async () => {
+      const host = await render();
+      expect(host.querySelectorAll('.findings-table tbody tr')).toHaveLength(100);
+      expect(host.querySelector('.finding-message')?.textContent).toContain('tail 0');
+    });
+  });
+
   it('tints critical/high/medium rows and leaves low/info rows clean', async () => {
     const host = await render();
     expect(host.querySelector('.findings-table tbody tr.row-high')).not.toBeNull();
-    // The fixture finding is high-severity; no other edge class may leak onto it.
     expect(host.querySelector('.findings-table tbody tr.row-critical')).toBeNull();
     expect(host.querySelector('.findings-table tbody tr.row-medium')).toBeNull();
   });
-});
 
-describe('ReportView analyzer duration chips (Loop W1)', () => {
-  it('renders one chip per analyzer run with compact durations and outcome classes', async () => {
-    await fetchMock.withImplementation((input: string) => {
-      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan: { ...scan, analyzer_runs: [{ analyzer_id: 'ruff', status: 'succeeded', version: '0.6.9', duration_ms: 1500 }, { analyzer_id: 'biome', status: 'failed', message: 'binary not found', duration_ms: 40 }] }, warnings: [], findings: [finding] }));
-      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json(findingsPage()));
-      return Promise.resolve(json({ items: [] }));
-    }, async () => {
-      const host = await render();
-      const chips = [...host.querySelectorAll('.analyzer-run-chip')];
-      expect(chips.map((chip) => chip.textContent)).toEqual(['Ruff1.5s', 'Biome40ms']);
-      expect(chips[0]!.className).toContain('state success');
-      expect(chips[1]!.className).toContain('failed');
-      expect(chips[0]!.getAttribute('title')).toContain('0.6.9'); // version rides along as hover context
-    });
-  });
-
-  it('omits the chip row entirely when the scan carried no analyzer runs', async () => {
-    await fetchMock.withImplementation((input: string) => {
-      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan: { ...scan, analyzer_runs: [] }, warnings: [], findings: [finding] }));
-      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json(findingsPage()));
-      return Promise.resolve(json({ items: [] }));
-    }, async () => {
-      const host = await render();
-      expect(host.querySelector('.analyzer-run-chips')).toBeNull();
-    });
-  });
-});
-
-describe('ReportView table accessibility (Loop W6)', () => {
   it('names the findings table for screen readers', async () => {
     const host = await render();
     expect(host.querySelector('.findings-table caption')?.textContent).toBe('Findings matching the current filters');
