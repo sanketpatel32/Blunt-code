@@ -1,0 +1,20 @@
+/*
+  Vary: Accept, Accept-Encoding
+  X-Robots-Tag: all
+
+/
+  Link: <https://sanketpatel32.github.io/Blunt-code/index.md>; rel="alternate"; type="text/markdown", <https://sanketpatel32.github.io/Blunt-code/llms.txt>; rel="alternate"; type="text/plain"
+
+/index.md
+  Content-Type: text/markdown; charset=utf-8
+  Vary: Accept, Accept-Encoding
+
+/llms.txt
+  Content-Type: text/plain; charset=utf-8
+  Vary: Accept, Accept-Encoding
+
+/sitemap.xml
+  Content-Type: application/xml; charset=utf-8
+
+/robots.txt
+  Content-Type: text/plain; charset=utf-8
