@@ -20,6 +20,7 @@ import { ConfirmationDialog } from '../components/dialogs';
 import { WorkspaceTemplates } from '../components/WorkspaceTemplates';
 import { PathCopy } from '../components/PathCopy';
 import { ScanActionDropdown } from '../components/ScanActionDropdown';
+import { PageHeader } from '../components/PageHeader';
 
 export function WorkspacesPage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd: () => void; notify: (n: Notice) => void }) {
   const state = useLoad(api.workspaces, []);
@@ -35,12 +36,24 @@ export function WorkspacesPage({ go, onAdd, notify }: { go: (r: Route) => void; 
   const byTag = filterWorkspacesByTag(sortWorkspaces(workspaces, sort.key, sort.dir), debouncedTagQuery);
   const visibleWorkspaces = debouncedSearch ? byTag.filter(w=> w.name.toLowerCase().includes(debouncedSearch.toLowerCase()) || w.root_path.toLowerCase().includes(debouncedSearch.toLowerCase())) : byTag;
   const tagNeedle = debouncedTagQuery.trim().toLowerCase();
-  // No page heading: the page title repeated the nav item, and adding lives in
-  // the nav's + button — the sort bar is the honest start of this page. The
-  // sr-only h1 keeps the accessible heading order intact.
-  return <div className="page"><h1 className="sr-only">Workspaces</h1>{state.loading ? <SkeletonCards count={6} variant="workspace" /> : state.error ? <ErrorPanel error={state.error} retry={state.reload} /> : workspaces.length ? <><div className="workspace-controls-row"><div className="workspace-filterbar"><Input type="search" aria-label="Search workspaces" placeholder="Search workspaces…" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setSearch(''); }} className="workspace-filter-search" /><Input type="search" aria-label="Filter by tag" placeholder="Filter by tag…" value={tagQuery} onChange={(event) => setTagQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setTagQuery(''); }} className="workspace-filter-tag" />{(debouncedTagQuery||debouncedSearch) ? <button type="button" className="text-button workspace-filter-clear" onClick={()=>{ setTagQuery(''); setSearch(''); }}>Clear</button> : null}{/* Only a filtered list needs a result count: with nothing typed it just
-          restates the number of cards below it, which is noise. */}
-          {(debouncedTagQuery || debouncedSearch) ? <p className="workspace-filter-count" role="status">{visibleWorkspaces.length === workspaces.length ? `${workspaces.length} ${workspaces.length === 1 ? 'workspace' : 'workspaces'}` : `${visibleWorkspaces.length} of ${workspaces.length} ${workspaces.length === 1 ? 'workspace' : 'workspaces'} shown`}</p> : null}</div><WorkspaceSortBar sort={sort} onSort={(key) => setSort((current) => current.key === key ? { key, dir: current.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: firstClickDir[key] })} /></div>{visibleWorkspaces.length ? <div className="workspace-grid">{visibleWorkspaces.map((workspace) => <WorkspaceCard key={workspace.id} workspace={workspace} go={go} notify={notify} onRemoved={state.reload} />)}</div> : <Empty title="No workspaces match this tag" icon={<FolderIcon />}>No workspace tags contain “{tagNeedle}”. Clear the filter to see every project.</Empty>}</> : <><Empty title="No workspaces yet" icon={<FolderIcon />}>Use the folder picker to add a project.</Empty><WorkspaceTemplates onUseTemplate={onAdd} /></>}</div>;
+
+  return (
+    <div className="page">
+      <PageHeader
+        eyebrow="Repositories & Projects"
+        title="Workspaces"
+        description="Inspect and run security scans across your local development workspaces."
+        badge={<Badge variant="secondary" className="text-xs tabular-nums">{workspaces.length} registered</Badge>}
+        actions={
+          <Button size="sm" onClick={onAdd} className="gap-1.5 bg-[var(--color-accent)] text-[var(--color-accent-ink)]">
+            + Add workspace
+          </Button>
+        }
+      />
+      {state.loading ? <SkeletonCards count={6} variant="workspace" /> : state.error ? <ErrorPanel error={state.error} retry={state.reload} /> : workspaces.length ? <><div className="workspace-controls-row"><div className="workspace-filterbar"><Input type="search" aria-label="Search workspaces" placeholder="Search workspaces…" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setSearch(''); }} className="workspace-filter-search" /><Input type="search" aria-label="Filter by tag" placeholder="Filter by tag…" value={tagQuery} onChange={(event) => setTagQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setTagQuery(''); }} className="workspace-filter-tag" />{(debouncedTagQuery||debouncedSearch) ? <button type="button" className="text-button workspace-filter-clear" onClick={()=>{ setTagQuery(''); setSearch(''); }}>Clear</button> : null}
+          {(debouncedTagQuery || debouncedSearch) ? <p className="workspace-filter-count" role="status">{visibleWorkspaces.length === workspaces.length ? `${workspaces.length} ${workspaces.length === 1 ? 'workspace' : 'workspaces'}` : `${visibleWorkspaces.length} of ${workspaces.length} ${workspaces.length === 1 ? 'workspace' : 'workspaces'} shown`}</p> : null}</div><WorkspaceSortBar sort={sort} onSort={(key) => setSort((current) => current.key === key ? { key, dir: current.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: firstClickDir[key] })} /></div>{visibleWorkspaces.length ? <div className="workspace-grid">{visibleWorkspaces.map((workspace) => <WorkspaceCard key={workspace.id} workspace={workspace} go={go} notify={notify} onRemoved={state.reload} />)}</div> : <Empty title="No workspaces match this tag" icon={<FolderIcon />}>No workspace tags contain “{tagNeedle}”. Clear the filter to see every project.</Empty>}</> : <><Empty title="No workspaces yet" icon={<FolderIcon />}>Use the folder picker to add a project.</Empty><WorkspaceTemplates onUseTemplate={onAdd} /></>}
+    </div>
+  );
 }
 
 /** Typing waits for a pause before re-filtering so long tags never flicker per keystroke; short enough to feel instant. */

@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-  [string]$Version = '0.16.21',
+  [string]$Version = '0.16.22',
   # No $PSScriptRoot here: Windows PowerShell 5.1 leaves it empty inside
   # param() default expressions, so resolve after the body starts.
   [string]$OutputDir = '',

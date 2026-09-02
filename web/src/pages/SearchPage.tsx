@@ -13,6 +13,7 @@ import type { FindingFilter } from './report/ReportView';
 import { QueryBuilder } from '../components/QueryBuilder';
 import { filterToQueryGroup, type QueryGroup } from '../lib/queryBuilder';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '../components/ui/sheet';
+import { PageHeader } from '../components/PageHeader';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
@@ -501,30 +502,26 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
   return (
     <div className="page search-page space-y-5">
       {/* Header & Hero */}
-      <header className="page-heading flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="eyebrow flex items-center gap-1.5">
-            <MagnifierIcon /> Cross-Workspace Intelligence
-          </p>
-          <h1 className="text-2xl font-bold tracking-tight text-[var(--color-ink)]">Global Findings Search</h1>
-          <p className="text-sm text-[var(--color-ink-soft)]">
-            Instant full-text query and vulnerability inspection across all scanned workspaces and security reports.
-          </p>
-        </div>
-        <div className="search-page-actions flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setAdvancedOpen(true)} aria-expanded={advancedOpen} aria-controls="search-advanced" className="gap-1.5 text-xs">
-            <SlidersHorizontal className="h-3.5 w-3.5" /> Advanced Query
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setFacetsOpen((v) => !v)} className="md:hidden gap-1.5 text-xs">
-            <Filter className="h-3.5 w-3.5" /> Filters {activeFiltersCount > 0 && `(${activeFiltersCount})`}
-          </Button>
-          {activeFiltersCount > 0 && (
-            <Button variant="ghost" size="sm" onClick={clearAll} className="gap-1.5 text-xs text-[var(--color-ink-soft)] hover:text-[var(--color-danger)]">
-              <RotateCcw className="h-3.5 w-3.5" /> Clear filters
+      <PageHeader
+        eyebrow={<><MagnifierIcon /> Cross-Workspace Intelligence</>}
+        title="Find findings everywhere"
+        description="Searches every stored scan on this computer. Suppressed findings stay hidden."
+        actions={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setAdvancedOpen(true)} aria-expanded={advancedOpen} aria-controls="search-advanced" className="gap-1.5 text-xs">
+              <SlidersHorizontal className="h-3.5 w-3.5" /> Advanced
             </Button>
-          )}
-        </div>
-      </header>
+            <Button variant="outline" size="sm" onClick={() => setFacetsOpen((v) => !v)} className="md:hidden gap-1.5 text-xs">
+              <Filter className="h-3.5 w-3.5" /> Filters {activeFiltersCount > 0 && `(${activeFiltersCount})`}
+            </Button>
+            {activeFiltersCount > 0 && (
+              <Button variant="ghost" size="sm" onClick={clearAll} className="gap-1.5 text-xs text-[var(--color-ink-soft)] hover:text-[var(--color-danger)]">
+                <RotateCcw className="h-3.5 w-3.5" /> Clear
+              </Button>
+            )}
+          </>
+        }
+      />
 
       {/* Omnisearch Bar & Quick Presets */}
       <div className="space-y-3">

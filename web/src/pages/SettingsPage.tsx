@@ -6,6 +6,7 @@ import { useLoad } from '../hooks/useLoad';
 import { ConfirmationDialog } from '../components/dialogs';
 import { FolderIcon } from '../components/icons';
 import { LOCALES, useT } from '../lib/i18n';
+import { PageHeader } from '../components/PageHeader';
 
 /** Local folders the backend can reveal in the OS file browser, each with the notice for "not created yet". */
 const DATA_FOLDERS = [
@@ -19,23 +20,218 @@ type DataFolder = (typeof DATA_FOLDERS)[number];
 
 export function SettingsPage({ notify }: { notify: (n: Notice) => void }) {
   const { t, locale, setLocale } = useT();
-  const meta = useLoad(api.meta, []); const settings = useLoad(api.settings, []); const [saving, setSaving] = useState(false); const [stopOpen, setStopOpen] = useState(false); const [stopping, setStopping] = useState(false); const [opening, setOpening] = useState<DataFolder['kind'] | null>(null);
-  async function save(input: { offline?: boolean; open_browser?: boolean }) { setSaving(true); try { await api.saveSettings(input); await settings.reload(); } catch (e) { notify({ kind: 'error', text: message(e) }); } finally { setSaving(false); } }
-  async function stop() { setStopping(true); try { await api.stopServer(); setStopOpen(false); notify({ kind: 'info', text: 'Blunt Code is stopping. You can close this tab.' }); } catch (e) { notify({ kind: 'error', text: message(e) }); setStopping(false); } }
-  async function openFolder(folder: DataFolder) { setOpening(folder.kind); try { await api.openFolder(folder.kind); notify({ kind: 'success', text: `Opened the ${folder.label.toLowerCase()} folder.` }); } catch (e) { if (e instanceof ApiError && e.code === 'FOLDER_NOT_FOUND') notify({ kind: 'info', text: folder.missing }); else notify({ kind: 'error', text: message(e) }); } finally { setOpening(null); } }
-  return <div className="page"><header className="page-heading"><div><p className="eyebrow">Settings</p><h1>Application settings</h1><p>Blunt Code keeps configuration small and local.</p></div></header><div className="settings-list"><section><h2>General</h2><div className="setting"><div><h3>Open browser automatically</h3><p>Open the local interface when Blunt Code starts.</p></div><Toggle on={settings.data?.open_browser ?? true} disabled={settings.loading || saving} label="Open browser automatically" onToggle={() => void save({ open_browser: !(settings.data?.open_browser ?? true) })} /></div><div className="setting"><div><h3>Offline mode</h3><p>Do not download tools or check for updates. Installed tools can still scan local workspaces.</p></div><Toggle on={settings.data?.offline ?? false} disabled={settings.loading || saving} label="Offline mode" onToggle={() => void save({ offline: !(settings.data?.offline ?? false) })} /></div>{/* Loops 121–122 · phone widths collapse the nav controls, so language gets a
-    full-width row here rather than being unreachable under 768px. */}
-<div className="setting"><div><h3>{t('common.language')}</h3><p>Interface language. Analyzer output stays in the language the tool reports.</p></div><fieldset className="setting-control segmented" aria-label={t('common.language')}>{LOCALES.map((option) => <button key={option.value} type="button" aria-pressed={locale === option.value} onClick={() => setLocale(option.value as never)}>{option.label}</button>)}</fieldset></div></section><section><h2>Analysis</h2><Setting label="Default scan profile" description="Workspace scans use the saved profile unless you choose another profile." value="Workspace managed" /><Setting label="Include style findings" description="Style and formatting findings can be configured with workspace rules." value="Workspace managed" /></section><section><h2>Privacy</h2><Setting label="Telemetry" description="Blunt Code does not send usage analytics or repository data to a cloud service." value="Disabled" /><Setting label="Data directory" description="Application state, tool installs, and scan history are kept on this computer." value={meta.data?.data_directory ?? (meta.loading ? 'Loading…' : 'Available from local metadata')} /></section><section><h2>Data folders</h2><div className="data-folders"><div><h3>Open local folders</h3><p>Open the folders where Blunt Code keeps local data.</p><code>Stored in: {meta.data?.data_directory ?? (meta.loading ? 'Loading…' : 'Available from local metadata')}</code></div><div className="folder-buttons">{DATA_FOLDERS.map((folder) => <button type="button" key={folder.kind} className="button secondary folder-button" disabled={opening === folder.kind} onClick={() => void openFolder(folder)}><FolderIcon />{opening === folder.kind ? 'Opening…' : folder.label}</button>)}</div></div></section><section><h2>Server</h2><div className="setting danger-setting"><div><h3>Stop local server</h3><p>End this Blunt Code session. Any active scan will be cancelled; your saved workspaces and reports stay on this computer.</p></div><button type="button" className="button danger" onClick={() => setStopOpen(true)}>Stop server</button></div></section></div>{stopOpen && <ConfirmationDialog title="Stop Blunt Code?" description="The local server will stop and this page will disconnect. You can start Blunt Code again whenever you need it." confirmLabel="Stop server" busy={stopping} onCancel={() => setStopOpen(false)} onConfirm={stop} />}</div>;
+  const meta = useLoad(api.meta, []);
+  const settings = useLoad(api.settings, []);
+  const [saving, setSaving] = useState(false);
+  const [stopOpen, setStopOpen] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const [opening, setOpening] = useState<DataFolder['kind'] | null>(null);
+
+  async function save(input: { offline?: boolean; open_browser?: boolean }) {
+    setSaving(true);
+    try {
+      await api.saveSettings(input);
+      await settings.reload();
+    } catch (e) {
+      notify({ kind: 'error', text: message(e) });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function stop() {
+    setStopping(true);
+    try {
+      await api.stopServer();
+      setStopOpen(false);
+      notify({ kind: 'info', text: 'Blunt Code is stopping. You can close this tab.' });
+    } catch (e) {
+      notify({ kind: 'error', text: message(e) });
+      setStopping(false);
+    }
+  }
+
+  async function openFolder(folder: DataFolder) {
+    setOpening(folder.kind);
+    try {
+      await api.openFolder(folder.kind);
+      notify({ kind: 'success', text: `Opened the ${folder.label.toLowerCase()} folder.` });
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'FOLDER_NOT_FOUND') {
+        notify({ kind: 'info', text: folder.missing });
+      } else {
+        notify({ kind: 'error', text: message(e) });
+      }
+    } finally {
+      setOpening(null);
+    }
+  }
+
+  return (
+    <div className="page">
+      <PageHeader
+        eyebrow="Settings"
+        title="Application settings"
+        description="Blunt Code keeps configuration small and local."
+      />
+      <div className="settings-list">
+        <section>
+          <h2>General</h2>
+          <div className="setting">
+            <div>
+              <h3>Open browser automatically</h3>
+              <p>Open the local interface when Blunt Code starts.</p>
+            </div>
+            <Toggle
+              on={settings.data?.open_browser ?? true}
+              disabled={settings.loading || saving}
+              label="Open browser automatically"
+              onToggle={() => void save({ open_browser: !(settings.data?.open_browser ?? true) })}
+            />
+          </div>
+          <div className="setting">
+            <div>
+              <h3>Offline mode</h3>
+              <p>Do not download tools or check for updates. Installed tools can still scan local workspaces.</p>
+            </div>
+            <Toggle
+              on={settings.data?.offline ?? false}
+              disabled={settings.loading || saving}
+              label="Offline mode"
+              onToggle={() => void save({ offline: !(settings.data?.offline ?? false) })}
+            />
+          </div>
+          <div className="setting">
+            <div>
+              <h3>{t('common.language')}</h3>
+              <p>Interface language. Analyzer output stays in the language the tool reports.</p>
+            </div>
+            <fieldset className="setting-control segmented" aria-label={t('common.language')}>
+              {LOCALES.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  aria-pressed={locale === option.value}
+                  onClick={() => setLocale(option.value as never)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </fieldset>
+          </div>
+        </section>
+
+        <section>
+          <h2>Analysis</h2>
+          <Setting
+            label="Default scan profile"
+            description="Workspace scans use the saved profile unless you choose another profile."
+            value="Workspace managed"
+          />
+          <Setting
+            label="Include style findings"
+            description="Style and formatting findings can be configured with workspace rules."
+            value="Workspace managed"
+          />
+        </section>
+
+        <section>
+          <h2>Privacy</h2>
+          <Setting
+            label="Telemetry"
+            description="Blunt Code does not send usage analytics or repository data to a cloud service."
+            value="Disabled"
+          />
+          <Setting
+            label="Data directory"
+            description="Application state, tool installs, and scan history are kept on this computer."
+            value={meta.data?.data_directory ?? (meta.loading ? 'Loading…' : 'Available from local metadata')}
+          />
+        </section>
+
+        <section>
+          <h2>Data folders</h2>
+          <div className="data-folders">
+            <div>
+              <h3>Open local folders</h3>
+              <p>Open the folders where Blunt Code keeps local data.</p>
+              <code>Stored in: {meta.data?.data_directory ?? (meta.loading ? 'Loading…' : 'Available from local metadata')}</code>
+            </div>
+            <div className="folder-buttons">
+              {DATA_FOLDERS.map((folder) => (
+                <button
+                  type="button"
+                  key={folder.kind}
+                  className="button secondary folder-button"
+                  disabled={opening === folder.kind}
+                  onClick={() => void openFolder(folder)}
+                >
+                  <FolderIcon />
+                  {opening === folder.kind ? 'Opening…' : folder.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <h2>Server</h2>
+          <div className="setting danger-setting">
+            <div>
+              <h3>Stop local server</h3>
+              <p>End this Blunt Code session. Any active scan will be cancelled; your saved workspaces and reports stay on this computer.</p>
+            </div>
+            <button type="button" className="button danger" onClick={() => setStopOpen(true)}>
+              Stop server
+            </button>
+          </div>
+        </section>
+      </div>
+
+      {stopOpen && (
+        <ConfirmationDialog
+          title="Stop Blunt Code?"
+          description="The local server will stop and this page will disconnect. You can start Blunt Code again whenever you need it."
+          confirmLabel="Stop server"
+          busy={stopping}
+          onCancel={() => setStopOpen(false)}
+          onConfirm={stop}
+        />
+      )}
+    </div>
+  );
 }
 
-function Setting({ label, description, value }: { label: string; description: string; value: string }) { return <div className="setting"><div><h3>{label}</h3><p>{description}</p></div><span>{value}</span></div>; }
+function Setting({ label, description, value }: { label: string; description: string; value: string }) {
+  return (
+    <div className="setting">
+      <div>
+        <h3>{label}</h3>
+        <p>{description}</p>
+      </div>
+      <span>{value}</span>
+    </div>
+  );
+}
 
-/** Accessible switch control for boolean settings. The track/knob are
- *  decorative; the state is announced through role=switch + aria-checked and a
- *  visible On/Off word so the screenshot stays legible too. */
+/** Accessible switch control for boolean settings. */
 function Toggle({ on, onToggle, label, disabled }: { on: boolean; onToggle: () => void; label: string; disabled?: boolean }) {
-  return <span className="toggle-cell">
-    <button type="button" role="switch" aria-checked={on} aria-label={label} className={`switch${on ? ' on' : ''}`} disabled={disabled} onClick={onToggle}><span className="knob" aria-hidden="true" /></button>
-    <span className="switch-state" aria-hidden="true">{on ? 'On' : 'Off'}</span>
-  </span>;
+  return (
+    <span className="toggle-cell">
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        aria-label={label}
+        className={`switch${on ? ' on' : ''}`}
+        disabled={disabled}
+        onClick={onToggle}
+      >
+        <span className="knob" aria-hidden="true" />
+      </button>
+      <span className="switch-state" aria-hidden="true">
+        {on ? 'On' : 'Off'}
+      </span>
+    </span>
+  );
 }

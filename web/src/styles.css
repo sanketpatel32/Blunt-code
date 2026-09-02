@@ -82,15 +82,16 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .app-footer span:first-child { font-weight: 600; color: var(--color-ink-faint); }
 
 /* ── L1 · Page & Typography ────────────────────────────────────── */
- .page { view-transition-name: page; width: 100%; max-width: none; padding: var(--space-3xl) var(--page-gutter) var(--space-4xl); animation: page-enter var(--dur-slow) var(--ease-out-quart); }
+.page { view-transition-name: page; width: 100%; max-width: none; padding: var(--space-lg) var(--page-gutter) var(--space-2xl); animation: page-enter var(--dur-slow) var(--ease-out-quart); }
 .workspace-page-body { min-width: 0; }
-@keyframes page-enter { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
-.eyebrow { display: inline-flex; align-items: center; gap: var(--space-xs); margin: 0 0 var(--space-sm); color: var(--color-accent-strong); font: 600 var(--text-xs) var(--font-mono); letter-spacing: .08em; text-transform: uppercase; }
-.eyebrow::before { content: ''; width: 1.1rem; height: 2px; border-radius: var(--radius-button); background: var(--color-accent); opacity: .5; }
-.hero h1, .page-heading h1, .scan-header h1 { text-wrap: balance; max-width: 14ch; min-width: 0; margin: 0; overflow-wrap: anywhere; color: var(--color-ink); font-family: var(--font-display); font-size: var(--text-display); font-weight: 700; letter-spacing: -.05em; line-height: 0.95; }
-.page-heading h1, .scan-header h1 { max-width: 20ch; font-size: var(--text-3xl); letter-spacing: -.04em; line-height: 0.96; }
-.hero p:not(.eyebrow), .page-heading p:not(.eyebrow), .scan-header p:not(.eyebrow) { max-width: var(--measure); margin-top: var(--space-sm); color: var(--color-ink-soft); font-size: var(--text-md); line-height: var(--leading-relaxed); }
-.page-heading, .scan-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-xl); margin-bottom: var(--space-2xl); }
+@keyframes page-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.eyebrow { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 3px; color: var(--color-accent-strong); font: 600 11px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; }
+.eyebrow::before { content: ''; width: 0.75rem; height: 2px; border-radius: var(--radius-button); background: var(--color-accent); opacity: .6; }
+.hero h1 { text-wrap: balance; max-width: 14ch; min-width: 0; margin: 0; overflow-wrap: anywhere; color: var(--color-ink); font-family: var(--font-display); font-size: var(--text-display); font-weight: 700; letter-spacing: -.05em; line-height: 0.95; }
+.page-heading h1, .scan-header h1 { max-width: none; font-size: 1.45rem; font-weight: 700; letter-spacing: -.03em; line-height: 1.15; color: var(--color-ink); margin: 0; font-family: var(--font-display); }
+.hero p:not(.eyebrow) { max-width: var(--measure); margin-top: var(--space-sm); color: var(--color-ink-soft); font-size: var(--text-md); line-height: var(--leading-relaxed); }
+.page-heading p:not(.eyebrow), .scan-header p:not(.eyebrow) { max-width: none; margin-top: 3px; color: var(--color-ink-soft); font-size: var(--text-xs); line-height: 1.4; }
+.page-heading, .scan-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); margin-bottom: var(--space-md); padding-bottom: var(--space-sm); border-bottom: var(--rule) solid var(--color-rule-faint); }
 .narrow { max-width: none; width: 100%; }
 .hero { margin-bottom: var(--space-2xl); }
 .story-hero { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(17rem, .85fr); gap: var(--space-3xl); align-items: end; padding: var(--space-xl) 0 var(--space-2xl); border-bottom: var(--rule) solid var(--color-rule-faint); transition: background var(--dur-fast) var(--ease-out); }

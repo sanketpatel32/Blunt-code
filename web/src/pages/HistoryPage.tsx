@@ -10,6 +10,7 @@ import { Empty, ErrorPanel } from '../components/ui';
 import { ScanIcon } from '../components/icons';
 import { SkeletonTable } from '../components/skeletons';
 import { WorkspaceContextSidebar } from '../components/WorkspaceContext';
+import { PageHeader } from '../components/PageHeader';
 
 function useDateFilter() {
   const [from, setFrom] = useState('');
@@ -24,7 +25,19 @@ export function HistoryPage({ workspaceId, go }: { workspaceId: string; go: (r: 
   useEffect(() => {
     if (state.data && state.data.items.length === 0 && state.data.total > 0 && page > 1) setPage(1);
   }, [state.data, page]);
-  return <div className="page workspace-page"><WorkspaceContextSidebar id={workspaceId} current={{ page: 'history', id: workspaceId }} onNavigate={go} /><div className="workspace-page-body"><header className="page-heading"><div><p className="eyebrow">Scan history</p><h1>Previous analyses</h1><p className="muted">Reports and findings are stored only on this computer.</p></div></header><div className="history-filter-bar"><label className="history-filter-field"><span className="history-filter-label">From</span><span className="history-filter-input-wrap"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 9h18"/></svg><input type="date" value={dateFilter.from} onChange={(e)=>{dateFilter.setFrom(e.target.value); setPage(1);}} className="history-filter-input" aria-label="Filter from date" /></span></label><label className="history-filter-field"><span className="history-filter-label">To</span><span className="history-filter-input-wrap"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 9h18"/></svg><input type="date" value={dateFilter.to} onChange={(e)=>{dateFilter.setTo(e.target.value); setPage(1);}} className="history-filter-input" aria-label="Filter to date" /></span></label>{dateFilter.hasFilter && <button type="button" className="history-filter-clear" onClick={()=>{dateFilter.setFrom(''); dateFilter.setTo(''); setPage(1);}} aria-label="Clear date filters">✕ Clear</button>}<span className="history-filter-count tabular-nums" aria-live="polite">{state.data ? `${state.data.total} scan${state.data.total === 1 ? '' : 's'}` : ''}</span></div>{state.loading ? <SkeletonTable rows={6} cols={7} /> : state.error ? <ErrorPanel error={state.error} retry={state.reload} /> : <HistoryTable scans={state.data?.items ?? []} go={go} paging={{ page, pageSize: historyPageSize, total: state.data?.total ?? 0, hasNext: state.data?.has_next ?? false, onPage: setPage }} dateFrom={dateFilter.from} dateTo={dateFilter.to} />}</div></div>;
+  return (
+    <div className="page workspace-page">
+      <WorkspaceContextSidebar id={workspaceId} current={{ page: 'history', id: workspaceId }} onNavigate={go} />
+      <div className="workspace-page-body">
+        <PageHeader
+          eyebrow="Scan history"
+          title="Previous analyses"
+          description="Reports and findings are stored only on this computer."
+        />
+        <div className="history-filter-bar"><label className="history-filter-field"><span className="history-filter-label">From</span><span className="history-filter-input-wrap"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 9h18"/></svg><input type="date" value={dateFilter.from} onChange={(e)=>{dateFilter.setFrom(e.target.value); setPage(1);}} className="history-filter-input" aria-label="Filter from date" /></span></label><label className="history-filter-field"><span className="history-filter-label">To</span><span className="history-filter-input-wrap"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 9h18"/></svg><input type="date" value={dateFilter.to} onChange={(e)=>{dateFilter.setTo(e.target.value); setPage(1);}} className="history-filter-input" aria-label="Filter to date" /></span></label>{dateFilter.hasFilter && <button type="button" className="history-filter-clear" onClick={()=>{dateFilter.setFrom(''); dateFilter.setTo(''); setPage(1);}} aria-label="Clear date filters">✕ Clear</button>}<span className="history-filter-count tabular-nums" aria-live="polite">{state.data ? `${state.data.total} scan${state.data.total === 1 ? '' : 's'}` : ''}</span></div>{state.loading ? <SkeletonTable rows={6} cols={7} /> : state.error ? <ErrorPanel error={state.error} retry={state.reload} /> : <HistoryTable scans={state.data?.items ?? []} go={go} paging={{ page, pageSize: historyPageSize, total: state.data?.total ?? 0, hasNext: state.data?.has_next ?? false, onPage: setPage }} dateFrom={dateFilter.from} dateTo={dateFilter.to} />}
+      </div>
+    </div>
+  );
 }
 
 /** Server-side paging contract handed to HistoryTable by HistoryPage. When absent the table falls back to slicing the given array client-side. */

@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.22] - 2026-09-02
+
+### Added
+- **Complete Application-Wide Page Header Redesign**:
+  - Replaced high-profile vertical page headers with a compact, modern, and unified `PageHeader` component across every view (`Workspaces`, `Findings Search`, `Pentest Suite`, `Tools`, `Scan History`, `Rule Studio`, `Workspace Files`, `Settings`, `About`, and `404`).
+  - Streamlined vertical spacing and margins by ~65%, ensuring key data, controls, and tables sit comfortably above the fold.
+  - Standardized visual layout with monospace eyebrow tags, crisp typography, responsive badges, and aligned action bars.
+- **Global Findings Search Redesign**:
+  - Full Omnisearch bar with instant debounced filtering, keyboard shortcut hints, and quick-filter presets (`Critical & High`, `Pentest & OWASP`, `Secrets & Keys`, `New in Last Scan`).
+  - Multi-facet search sidebar with severity, workspace, tool engine, finding status, and path filters.
+  - Dual view toggle (Dense Table view with column customization vs Rich Card List view).
+  - Slide-over finding detail inspection sheet for instant drilldown into diagnostics and code snippets without leaving search.
+
+### Fixed
+- **Cleaned up redundant action buttons on workspace cards** and polished focus outlines on split scan dropdown triggers.
+
 ## [0.16.21] - 2026-09-02
 
 ### Added

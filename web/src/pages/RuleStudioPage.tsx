@@ -5,6 +5,7 @@ import { Badge } from '../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { CodeEditor, type CodeEditorLanguage } from '../components/CodeEditor';
 import { useReducedMotion } from '../hooks/useReducedMotion';
+import { PageHeader } from '../components/PageHeader';
 
 type CustomRule = {
   id: string;
@@ -183,13 +184,11 @@ export function RuleStudioPage() {
 
   return (
     <div className="page">
-      <header className="page-heading">
-        <div>
-          <p className="eyebrow">Rule Studio</p>
-          <h1>Custom rules</h1>
-          <p>Create YAML rules, preview matched findings, and save locally. Tab indents 2 spaces · Ctrl+S saves.</p>
-        </div>
-      </header>
+      <PageHeader
+        eyebrow="Rule Studio"
+        title="Custom rules"
+        description="Create YAML rules, preview matched findings, and save locally. Tab indents 2 spaces · Ctrl+S saves."
+      />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card className={reduced ? '' : 'anim-fadeInUp'}>

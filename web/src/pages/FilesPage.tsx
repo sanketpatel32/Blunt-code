@@ -11,6 +11,8 @@ import { Empty, ErrorPanel } from '../components/ui';
 import { MagnifierIcon } from '../components/icons';
 import { SkeletonLines } from '../components/skeletons';
 import { WorkspaceContextSidebar } from '../components/WorkspaceContext';
+import { PageHeader } from '../components/PageHeader';
+import { Button } from '../components/ui/button';
 import { ALL_LANGUAGES } from '../lib/analyzerCatalog';
 
 interface RuleDraft { uid: number; rule_type: 'include' | 'exclude'; pattern: string; enabled?: boolean }
@@ -87,7 +89,25 @@ export function FilesPage({ id, go, notify }: { id: string; go?: (r: Route) => v
   const selectedCount = overrides.filter((o) => o.mode === 'include').length;
   const langDistinct = Object.keys(langCounts).length;
 
-  return <div className="page workspace-page">{go && <WorkspaceContextSidebar id={id} current={{ page: 'files', id }} onNavigate={go} />}<div className="workspace-page-body"><header className="page-heading workspace-heading"><div className="workspace-hero-copy"><p className="eyebrow">File selection</p><h1>{workspace.data?.name ?? 'Workspace files'}</h1><code className="workspace-root" title={workspace.data?.root_path}>{workspace.data?.root_path}</code></div><div className="files-toolbar"><button type="button" className="button ghost files-reset" onClick={() => { setRules({ rules: [] }); setOverrides([]); }}><RotateCcw size={14} aria-hidden />Reset</button><button type="button" className="button primary files-save" onClick={save}><Save size={14} aria-hidden />Save selection</button></div></header>
+  return (
+    <div className="page workspace-page">
+      {go && <WorkspaceContextSidebar id={id} current={{ page: 'files', id }} onNavigate={go} />}
+      <div className="workspace-page-body">
+        <PageHeader
+          eyebrow="File selection"
+          title={workspace.data?.name ?? 'Workspace files'}
+          description={<code className="workspace-root text-xs text-[var(--color-ink-faint)] font-mono" title={workspace.data?.root_path}>{workspace.data?.root_path}</code>}
+          actions={
+            <div className="files-toolbar flex items-center gap-2">
+              <Button variant="ghost" size="sm" onClick={() => { setRules({ rules: [] }); setOverrides([]); }} className="gap-1.5 text-xs">
+                <RotateCcw size={14} aria-hidden />Reset
+              </Button>
+              <Button variant="default" size="sm" onClick={save} className="gap-1.5 text-xs">
+                <Save size={14} aria-hidden />Save selection
+              </Button>
+            </div>
+          }
+        />
     <section className="file-layout"><div className="tree-panel"><div className="tree-panel-head"><div><p className="eyebrow">Source tree</p><h2 className="tree-panel-title">Workspace files</h2></div><span className="tree-count-badge tabular-nums">{nodes.length ? `${nodes.length} top-level` : '—'}</span></div><div className="tree-panel-controls"><label className="search file-search"><span className="sr-only">Search paths</span><span className="file-search-wrap"><Search size={14} className="file-search-icon" aria-hidden /><input ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') { setQuery(''); event.currentTarget.blur(); } }} placeholder="src or package.json" className="file-search-input" /><kbd className="kbd-hint">/</kbd></span></label><fieldset className="tree-toolbar chip-group chip-rail" aria-label="Filter by language">
           <button type="button" className="chip" aria-pressed={lang === ''} onClick={() => setLang('')}>All languages</button>
           {(ALL_LANGUAGES as readonly string[]).map((l) => {
@@ -96,7 +116,9 @@ export function FilesPage({ id, go, notify }: { id: string; go?: (r: Route) => v
             return <button key={l} type="button" className="chip" aria-pressed={lang === l} onClick={() => setLang(l)}>{label}{count ? <small className="chip-count">{count}</small> : null}</button>;
           })}
         {lang && <button type="button" className="text-button" onClick={() => setLang('')}>Clear filter</button>}{!loadingTree && !treeError && <button type="button" className="button ghost tree-collapse-btn" onClick={() => setCollapseSignal((value) => value + 1)}>Collapse all</button>}</fieldset><div className="tree-scroll">{loadingTree ? <SkeletonLines lines={6} /> : treeError ? <ErrorPanel error={treeError} retry={loadTree} /> : <FileTree key={treeKey} nodes={nodes} query={debouncedQuery} lang={debouncedLang} workspaceId={id} overrides={overrides} onOverrides={setOverrides} collapseSignal={collapseSignal} />}</div><div className="tree-summary-bar"><span className="tabular-nums">{selectedCount ? `${selectedCount} paths selected` : `${nodes.length} paths`}</span><span aria-hidden>·</span><span className="tabular-nums">{langDistinct} languages</span></div></div></div><RuleEditor rules={rules.rules} setRules={(items) => setRules({ rules: items })} /></section>
-  </div></div>;
+      </div>
+    </div>
+  );
 }
 
 /** Per-row slice of tree state. The top-level FileTree owns all of it so search can walk every loaded level. */
