@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -19,7 +20,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -133,6 +133,13 @@ func (s *ManagedServer) Start(ctx context.Context, env map[string]string) error 
 	if s.Executable == "" {
 		return fmt.Errorf("managed SonarQube server executable is not configured")
 	}
+	// Leftover JVMs from a previous session still hold locks over the shared
+	// runtime directories (deployed plugin jars, the embedded database) and
+	// would fail this boot at the deploy cleanup, so they are ended first.
+	// Processes belonging to this process's own live tree are spared.
+	if err := sweepStrayServerProcesses(ctx, s.Executable, nil); err != nil {
+		slog.Default().Warn("managed SonarQube stray sweep failed; continuing startup", "error", err)
+	}
 	// The server is application-owned and shared by every scan, so it is
 	// deliberately NOT bound to the starting scan's context: cancelling that
 	// scan (or its timeout expiring) must not kill the server out from under
@@ -148,6 +155,13 @@ func (s *ManagedServer) Start(ctx context.Context, env map[string]string) error 
 	}
 	if err := cmd.Start(); err != nil {
 		return err
+	}
+	// The kill-on-close job makes the operating system end the whole Java
+	// tree when this process dies, even on a crash that never runs Shutdown.
+	// A failed assignment is logged rather than fatal: explicit Shutdown and
+	// the startup sweep still bound the damage.
+	if err := trackProcessInKillOnCloseJob(cmd.Process); err != nil {
+		slog.Default().Warn("managed SonarQube kill-on-close tracking failed", "error", err)
 	}
 	s.cmd = cmd
 	s.exited = false
@@ -209,14 +223,28 @@ func (s *ManagedServer) Shutdown(ctx context.Context) error {
 	cmd := s.cmd
 	done := s.done
 	s.mu.Unlock()
-	if cmd == nil || cmd.Process == nil {
-		return nil
+	var err error
+	if cmd != nil && cmd.Process != nil {
+		err = s.stopOwnedProcessTree(ctx, cmd, done)
 	}
-	// SonarQube 26 no longer exposes /api/system/shutdown. Give the owned Java
-	// parent a short chance to close cleanly, then explicitly terminate its
-	// process tree. Process.Kill alone leaves Elasticsearch, web, and compute
-	// engine JVM children running on Windows.
-	_ = cmd.Process.Signal(os.Interrupt)
+	// Backstop for the leak behind the 2026-09-02 startup failures: when the
+	// server process had already exited on its own, the previous early return
+	// left its orphaned JVM children alive, and their locks over the shared
+	// runtime broke every later boot. The sweep ends any managed JVM that is
+	// not part of this process's own live tree.
+	if sweepErr := sweepStrayServerProcesses(ctx, s.Executable, nil); sweepErr != nil {
+		slog.Default().Warn("managed SonarQube shutdown sweep failed", "error", sweepErr)
+	}
+	return err
+}
+
+// stopOwnedProcessTree ends the owned server process and its children.
+// SonarQube 26 exposes no local shutdown API, and os.Process.Signal with
+// os.Interrupt is a documented no-op on Windows (only Kill is implemented),
+// so after a short grace for a concurrently exiting process the tree is
+// force-ended explicitly: killing only the parent would leave the
+// Elasticsearch, web, and compute-engine JVMs running on Windows.
+func (s *ManagedServer) stopOwnedProcessTree(ctx context.Context, cmd *exec.Cmd, done <-chan error) error {
 	grace := s.ShutdownGracePeriod
 	if grace <= 0 {
 		grace = 5 * time.Second
@@ -253,15 +281,7 @@ func (s *ManagedServer) terminateProcessTree(ctx context.Context, pid int) error
 		}
 		return process.Kill()
 	}
-	output, err := exec.CommandContext(ctx, "taskkill", "/PID", strconv.Itoa(pid), "/T", "/F").CombinedOutput()
-	if err != nil {
-		text := strings.ToLower(string(output))
-		if strings.Contains(text, "not found") || strings.Contains(text, "no running instance") {
-			return nil
-		}
-		return fmt.Errorf("taskkill /T /F: %w: %s", err, strings.TrimSpace(string(output)))
-	}
-	return nil
+	return killWindowsProcessTree(ctx, pid)
 }
 
 type credentials struct {

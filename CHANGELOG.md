@@ -5,6 +5,11 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **Managed SonarQube can no longer leak JVMs that break every later scan**: if Blunt Code ever exited without reaping the managed SonarQube tree (crash, force kill), its Java children survived as orphans, kept Windows file locks over the shared runtime's deployed plugin jars and embedded database, and made every subsequent scan fail with "managed SonarQube stopped during startup" — exactly what happened after the 2026-08-31 session. Three guarantees now close every leak path: the server process joins a Windows kill-on-close job object, so the operating system itself ends the whole Java tree the moment Blunt Code dies, however abruptly; every server startup first sweeps stray JVMs from previous sessions (matched by the pinned managed `java.exe` image path and spared when they belong to the app's own live tree, so an in-flight scanner is never touched); and `Shutdown` runs the same sweep as a backstop instead of silently returning when the server process had already died on its own.
+
 ## [0.17.0] - 2026-09-02
 
 ### Added
