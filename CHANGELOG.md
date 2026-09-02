@@ -5,7 +5,7 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.17.0] - 2026-09-02
 
 ### Added
 - **Updates reopen Blunt Code automatically**: the staged updater now chains a relaunch of the freshly installed exe after the installer finishes, so "Update now" ends with the new version running in a new tab instead of a silently closed app. If the install fails, the updater console stays open with the error and the relaunch is skipped. The installer script is pinned to the release tag being installed (`main` stays the fallback), and the updater console starts minimized instead of flashing a window over the dying app.
