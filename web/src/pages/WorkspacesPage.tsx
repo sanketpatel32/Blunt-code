@@ -40,12 +40,11 @@ export function WorkspacesPage({ go, onAdd, notify }: { go: (r: Route) => void; 
   return (
     <div className="page">
       <PageHeader
-        eyebrow="Repositories & Projects"
-        title="Workspaces"
-        description="Inspect and run security scans across your local development workspaces."
-        badge={<Badge variant="secondary" className="text-xs tabular-nums">{workspaces.length} registered</Badge>}
+        eyebrow="Workspaces"
+        title="All Workspaces"
+        badge={<Badge variant="secondary" className="text-xs font-mono tabular-nums">{workspaces.length} registered</Badge>}
         actions={
-          <Button size="sm" onClick={onAdd} className="gap-1.5 bg-[var(--color-accent)] text-[var(--color-accent-ink)]">
+          <Button size="sm" onClick={onAdd} className="gap-1.5 h-7 text-xs bg-[var(--color-accent)] text-[var(--color-accent-ink)] font-medium">
             + Add workspace
           </Button>
         }

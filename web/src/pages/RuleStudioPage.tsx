@@ -185,12 +185,18 @@ export function RuleStudioPage() {
   return (
     <div className="page">
       <PageHeader
-        eyebrow="Rule Studio"
+        eyebrow="Rules"
         title="Custom rules"
-        description="Create YAML rules, preview matched findings, and save locally. Tab indents 2 spaces · Ctrl+S saves."
+        badge={<Badge variant="secondary" className="text-xs font-mono tabular-nums">{rules.length} active</Badge>}
+        description="Create YAML rules, preview matched findings, and save locally."
+        actions={
+          <span className="text-[11px] text-[var(--color-ink-soft)] font-mono hidden sm:inline-flex items-center gap-1">
+            <kbd className="px-1.5 py-0.5 bg-[var(--color-surface-muted)] border border-[var(--color-rule)] rounded-[var(--radius-xs)] text-[10px]">Ctrl+S</kbd> to save
+          </span>
+        }
       />
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-2">
         <Card className={reduced ? '' : 'anim-fadeInUp'}>
           <CardHeader>
             <div className="flex flex-wrap items-start justify-between gap-3">

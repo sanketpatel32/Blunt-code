@@ -46,7 +46,6 @@ describe('navigation resilience', () => {
     const host = await renderApp();
     const labels = [...host.querySelectorAll('.app-nav nav a')].map((link) => link.textContent);
     expect(labels).toEqual(expect.arrayContaining(['Home', 'Workspaces', 'Search', 'Tools', 'Settings', 'About']));
-    expect(labels).toContain('Pentest');
     expect(labels[labels.length - 1]).toBe('About');
     const about = host.querySelector<HTMLAnchorElement>('.app-nav nav a[href="/about"]');
     expect(about?.textContent).toBe('About');

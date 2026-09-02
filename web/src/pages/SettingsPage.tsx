@@ -70,9 +70,9 @@ export function SettingsPage({ notify }: { notify: (n: Notice) => void }) {
   return (
     <div className="page">
       <PageHeader
-        eyebrow="Settings"
-        title="Application settings"
-        description="Blunt Code keeps configuration small and local."
+        eyebrow="Preferences"
+        title="Settings"
+        description="Local runtime, offline mode, and privacy configuration."
       />
       <div className="settings-list">
         <section>

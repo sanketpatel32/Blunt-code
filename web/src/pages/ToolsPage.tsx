@@ -10,9 +10,9 @@ import { WrenchIcon } from '../components/icons';
 import { SkeletonTable } from '../components/skeletons';
 import { ANALYZER_CATALOG, analyzerMeta, categoryColor, CATEGORY_LABELS, type AnalyzerCategory } from '../lib/analyzerCatalog';
 import { LanguageCoverage } from '../components/LanguageCoverage';
-import { PentestSection } from './PentestPage';
 import type { Route } from '../lib/router';
 import { PageHeader } from '../components/PageHeader';
+import { Badge } from '../components/ui/badge';
 import { Wrench, Shield, Bug, KeyRound, Boxes, Container, FileCog, Scale, Palette, Zap, Crosshair, Radar, Package, ListTodo, Gauge, Download, WrenchIcon as RepairIcon, RefreshCw, MoreHorizontal } from 'lucide-react';
 
 type ToolOperation = 'install' | 'repair' | 'update';
@@ -118,9 +118,10 @@ export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r
   return (
     <div className="page">
       <PageHeader
-        eyebrow="Managed tools"
+        eyebrow="Analyzers"
         title="Analysis tools"
-        description="Blunt Code keeps tool setup private and local. Install or repair only when needed."
+        badge={<Badge variant="secondary" className="text-xs font-mono tabular-nums">{backend.length + builtIns.length} engines</Badge>}
+        description="Local tool setup is private and run on-device."
       />
       {tools.loading ? <SkeletonTable rows={4} cols={5} className="tool-table" /> : tools.error ? <ErrorPanel error={tools.error} retry={tools.reload} /> : !backend.length ? <Empty title="No managed tools" icon={<WrenchIcon />}>Tool status appears here after the backend registers analyzers.</Empty> : <><ReadinessStrip tools={backend} busy={busy} />
     {[...grouped.entries()].map(([cat, list]) => <CategoryAccordion key={cat} category={cat} tools={list} busy={busy} onAction={action} />)}
@@ -128,7 +129,6 @@ export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r
       <div className="builtin-table table-wrap"><table><thead><tr><th scope="col">Tool</th><th scope="col">Status</th><th scope="col">Languages</th><th scope="col">Details</th></tr></thead><tbody>{builtIns.map((a) => <tr key={a.id}><td><strong className="flex items-center gap-1.5">{a.displayName}<span className="badge text-[10px]" style={{ borderColor: categoryColor(a.category), color: categoryColor(a.category) }}>{a.category}</span></strong></td><td><span className="state ready">Built-in</span></td><td><span className="flex flex-wrap gap-1">{a.languages.slice(0, 3).map((l) => <span key={l} className="badge text-[10px]">{l}</span>)}<span className="badge text-[10px]">+{a.languages.length - 3} more</span></span></td><td className="text-xs max-w-[18rem] truncate" title={a.description}>{a.description}</td></tr>)}</tbody></table></div>
     </section>}
       <LanguageCoverage />
-      <PentestSection go={go} />
     </>}
   </div>
   );

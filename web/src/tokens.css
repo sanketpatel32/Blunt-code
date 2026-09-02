@@ -199,8 +199,8 @@
   --grid-gap: var(--space-md);
 
   /* — Layout constants — single source for chrome offsets (loop 102) */
-  --nav-h: 3.5rem;
-  --page-gutter: var(--space-2xl);
+  --nav-h: 3.25rem;
+  --page-gutter: var(--space-lg);
   --tap-min: 2.75rem;
 }
 

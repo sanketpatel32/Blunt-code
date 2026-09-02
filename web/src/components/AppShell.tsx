@@ -31,7 +31,6 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
     [{ page: 'workspaces' }, t('nav.workspaces')],
     [{ page: 'search' }, t('nav.search')],
     [{ page: 'tools' }, t('nav.tools')],
-    [{ page: 'pentest' }, t('nav.pentest')],
     [{ page: 'rules' }, 'Rules'],
     [{ page: 'settings' }, t('nav.settings')],
     [{ page: 'about' }, t('nav.about')],

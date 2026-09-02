@@ -500,23 +500,24 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
   );
 
   return (
-    <div className="page search-page space-y-5">
-      {/* Header & Hero */}
+    <div className="page search-page space-y-3">
+      {/* Compact Header */}
       <PageHeader
-        eyebrow={<><MagnifierIcon /> Cross-Workspace Intelligence</>}
+        eyebrow="Findings Search"
         title="Find findings everywhere"
+        badge={total > 0 ? <Badge variant="secondary" className="text-xs font-mono tabular-nums">{total.toLocaleString()} matches</Badge> : undefined}
         description="Searches every stored scan on this computer. Suppressed findings stay hidden."
         actions={
           <>
-            <Button variant="outline" size="sm" onClick={() => setAdvancedOpen(true)} aria-expanded={advancedOpen} aria-controls="search-advanced" className="gap-1.5 text-xs">
-              <SlidersHorizontal className="h-3.5 w-3.5" /> Advanced
+            <Button variant="outline" size="sm" onClick={() => setAdvancedOpen(true)} aria-expanded={advancedOpen} aria-controls="search-advanced" className="gap-1.5 text-xs h-7 px-2.5">
+              <SlidersHorizontal className="h-3 w-3" /> Advanced
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setFacetsOpen((v) => !v)} className="md:hidden gap-1.5 text-xs">
-              <Filter className="h-3.5 w-3.5" /> Filters {activeFiltersCount > 0 && `(${activeFiltersCount})`}
+            <Button variant="outline" size="sm" onClick={() => setFacetsOpen((v) => !v)} className="md:hidden gap-1.5 text-xs h-7 px-2.5">
+              <Filter className="h-3 w-3" /> Filters {activeFiltersCount > 0 && `(${activeFiltersCount})`}
             </Button>
             {activeFiltersCount > 0 && (
-              <Button variant="ghost" size="sm" onClick={clearAll} className="gap-1.5 text-xs text-[var(--color-ink-soft)] hover:text-[var(--color-danger)]">
-                <RotateCcw className="h-3.5 w-3.5" /> Clear
+              <Button variant="ghost" size="sm" onClick={clearAll} className="gap-1.5 text-xs h-7 px-2 text-[var(--color-ink-soft)] hover:text-[var(--color-danger)]">
+                <RotateCcw className="h-3 w-3" /> Clear
               </Button>
             )}
           </>
@@ -524,12 +525,12 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
       />
 
       {/* Omnisearch Bar & Quick Presets */}
-      <div className="space-y-3">
+      <div className="space-y-2">
         <div className="search-toolbar relative flex items-center shadow-xs" role="search">
-          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-ink-faint)]" aria-hidden="true" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--color-ink-faint)]" aria-hidden="true" />
           <input
             type="search"
-            className="search-input w-full rounded-[var(--radius-card)] border border-[var(--color-rule)] bg-[var(--color-surface)] py-3 pl-10 pr-12 text-sm text-[var(--color-ink)] shadow-inner transition-all placeholder:text-[var(--color-ink-faint)] focus:border-[var(--color-accent)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)]"
+            className="search-input w-full rounded-[var(--radius-md)] border border-[var(--color-rule)] bg-[var(--color-surface)] py-2 pl-9 pr-10 text-xs sm:text-sm text-[var(--color-ink)] shadow-xs transition-all placeholder:text-[var(--color-ink-faint)] focus:border-[var(--color-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--color-focus)]"
             placeholder="Search message text, vulnerability rules (e.g. sqli, xss, cwe), file paths, or CWE IDs…"
             aria-label="Search findings"
             value={query}

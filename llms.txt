@@ -1,16 +1,16 @@
-# Blunt Code — llm.txt for AI agents
+# Blunt Code — llms.txt for AI agents
 
-> Blunt Code is a local-first code quality & security analyzer for Windows. One `bluntcode.exe` runs Ruff, Biome, Gitleaks, Semgrep, SonarQube, and OSV Scanner, Trivy, and Checkov on deep scans, plus built-in secrets/TODO/license detectors on loopback 127.0.0.1 (no cloud, no telemetry). Use headless `bluntcode scan` for automation/CI.
+> Blunt Code is a local-first code quality & security analyzer for Windows. One `bluntcode.exe` runs Ruff, Biome, Gitleaks, Semgrep, SonarQube, OSV Scanner, Trivy, Checkov, License Scanner, Pentest Suite, plus built-in secrets/TODO detectors on loopback 127.0.0.1 (no cloud, no telemetry). Use headless `bluntcode scan` for automation/CI.
 
-- **Version:** 0.7.0 (2026-08-26) — shadcn UI (Tailwind+Radix+CVA+lucide)
+- **Version:** 0.16.21 (2026-09-02)
 - **Repo:** https://github.com/sanketpatel32/Blunt-code
 - **Platform:** Windows 10/11 amd64, standard user, no admin, no global Python/Java/Node
 - **License:** MIT (`LICENSE`), third-party notices (`THIRD_PARTY_NOTICES.md`)
-- **Latest release ZIP:** `BluntCode-0.7.0-windows-amd64.zip` + `.sha256`
+- **Latest release ZIP:** `BluntCode-0.16.21-windows-amd64.zip` + `.sha256`
 
 ## When to use Blunt Code (agent decision tree)
 
-- User asks to lint/scan/audit local code → `bluntcode scan <path> --json` or `--format sarif|jsonl|csv`
+- User asks to lint/scan/audit local code → `bluntcode scan <path> --json` or `--format sarif|jsonl|csv|markdown`
 - User wants CI gate (fail on severity) → `bluntcode scan --fail-on high+ --max-findings 50`
 - User wants baseline (ignore known debt) → `bluntcode scan --baseline <scan-id-or-sarif>`
 - User wants docs without launching UI → `bluntcode agent docs` (this file) or `bluntcode llm`
@@ -20,7 +20,7 @@
 ## Quick start for agents (non-interactive)
 
 ```powershell
-# 1) Health + paths (no lock contention if app is running? doctor --json is lock-free for read, --fix needs lock)
+# 1) Health + paths (doctor --json is lock-free for read, --fix needs lock)
 .\bluntcode.exe doctor --json
 .\bluntcode.exe config --json
 
@@ -55,7 +55,7 @@ bluntcode [path] [--no-browser] [--port N] [--version]   # launch web UI (loopba
 bluntcode help | --help | -h
 bluntcode doctor [--json] [--fix]                         # diagnostics + optional self-heal
 bluntcode config [--json]                                 # effective config (paths, env, tool versions)
-bluntcode scan <path> [--profile quick|standard|deep] [--format text|json|github|sarif|csv|jsonl|markdown]
+bluntcode scan <path> [--profile quick|standard|deep|pentest] [--format text|json|github|sarif|csv|jsonl|markdown]
                     [--json] [--quiet] [--timeout 30m] [--output FILE] [--save-baseline FILE]
                     [--fail-on critical,high,...|high+] [--max-findings N]
                     [--baseline <scan-id|./file.sarif>] [--gate-analyzer a,b] [--gate-category c,d]
@@ -77,22 +77,13 @@ bluntcode llm | llms                                      # cat this file to std
 {
   "scan_id": "uuid", "workspace": "name", "workspace_path": "C:\\...", "profile": "standard",
   "state": "completed|completed_with_warnings|failed|cancelled|interrupted",
-  "timed_out": false, "started_at": "2026-08-26T00:00:00Z", "finished_at": "...", "duration_ms": 1234,
+  "timed_out": false, "started_at": "2026-09-02T00:00:00Z", "finished_at": "...", "duration_ms": 1234,
   "total_findings": 8, "severity": {"critical":0,"high":1,"medium":2,"low":3,"info":2,"total":8},
   "comparison": {"available": true, "new": 3, "fixed": 1, "persistent": 5},
   "analyzers": [{"id":"ruff","version":"0.9...","state":"succeeded","findings":2,"duration_ms": 400,"error":""}],
   "report_markdown_path": "C:\\...\\reports\\...", "error": ""
 }
 ```
-
-### Other machine-readable outputs
-- `--format json` -> `reports.Model` (`schema: "bluntcode/scan-report"`, versioned, findings sorted path/line/rule, BOM-free, sorted severity)
-- `--format sarif` -> SARIF 2.1.0 (`partialFingerprints: bluntcode/v1` = sha256 fingerprint, round-trips via `--baseline`)
-- `--format csv` -> RFC4180 + UTF-8 BOM, Excel-safe (formula cells prefixed `'`)
-- `--format jsonl` -> NDJSON findings, export ordering, `derivedStatus`
-- `--format github` -> `::error|warning|notice file=...,line=...,col=...::msg` (percent-encoded `,`,`:`,`%`,`\n`, capped `github-cap` per severity)
-- `doctor --json` -> `doctor.Result` with checks `[{id,status,detail}]`, `ExitCode()` 0/1
-- `config --json` -> fixed-key map: version, paths `{dataDir exists,db,tools,reports,logs,temp}`, `BLUNTCODE_SONAR_STARTUP_TIMEOUT`, settings, tools versions
 
 ## HTTP API (when web UI is running on 127.0.0.1)
 
@@ -111,62 +102,16 @@ Base: `http://127.0.0.1:<port>/api/v1` (port printed on stdout, or `--port 0` pi
 
 Auth: none (loopback). Rate limit: token bucket 30/30m on mutations -> `429 RATE_LIMITED` + `Retry-After`.
 
-## File layout & ignores
-
-```
-%LOCALAPPDATA%\BluntCode
-├── bluntcode.db
-├── reports\  logs\  tools\  temp\
-```
-
-- `.bluntcodeignore` at workspace root: `pattern` per line, `#` comment, LF/CRLF, `\`→`/`, cap 1000/64KiB, `!` negation skipped, merged additively with `GET /workspaces/{id}/rules` (`exclude`, case-insensitive, `dir/**`, `**/name`, basename)
-- Inline ignore: `bluntcode:ignore` (or `bluntcode:ignore secrets.aws-access-key-id reason: ...`) suppresses same/next line for built-ins (`secrets`, `todo`)
-- Suppression: `POST /workspaces/{id}/suppressions {"fingerprint":"64hex","reason":"..."}` (500 chars), hides from next scan, reports, gate
-
 ## Scan profiles & analyzers
 
 - **quick:** ruff+biome
 - **standard:** +gitleaks +semgrep (25-rule local pack) +sonarqube +license-scan (built-in copyleft/conflict/undeclared detection) (polyglot, 10m startup, env `BLUNTCODE_SONAR_STARTUP_TIMEOUT`)
 - **deep:** standard + ruff extended `E,W,F,B,SIM,C4,RET,ARG,PLR` + osv-dependencies (OSV Scanner lockfile CVE scan) + container-trivy (Trivy CVE/secrets/misconfig filesystem scan) + iac-checkov (Checkov Terraform/Dockerfile/K8s/CloudFormation policy scan)
+- **pentest:** OWASP Top 10 SAST audit + live DAST target prober
 - **secrets:** AWS/GH/Slack/Google/JWT/Stripe/OpenAI/Anthropic/Azure, entropy + placeholder filtering, msg = `prefix + length` never secret
 - **todo:** `TODO|FIXME|HACK|XXX|BUG` whole-word, case-sensitive, 200 chars, follower heuristics
 
 Languages: 40+ via `internal/discovery` — Py, JS/TS, Go, Java, Kotlin, C#, C/C++, Ruby, PHP, Rust, Swift, Scala, ObjC, Vue, Svelte, CSS/SCSS/HTML/JSON/YAML/TOML/XML/SQL/GraphQL, sh/ps1/bat, MD/INI/properties/.env/Dockerfile/PEM
-
-## Agent best practices
-
-1. Prefer `bluntcode scan --json --quiet` for structured parsing. Write JSON to temp file if large (`--output` for doc formats).
-2. For CI, combine `--fail-on`/`--max-findings` with `--baseline` to avoid debt explosion. Capture SARIF once: `--save-baseline baseline.sarif`.
-3. Use `--incremental` for speed on unchanged workspaces (SHA-256 per file, invalidated on analyzer/profile/version change). Watch already incremental from 2nd scan.
-4. Handle `instance.ErrAlreadyRunning` (“Only one Blunt Code process can use the data directory”) → ask user to close UI tray, or `taskkill /IM bluntcode.exe /F`, or retry `doctor`.
-5. Always scrub/log `fingerprints` (64hex sha256 of rule+path+lines) for suppression/baseline, not `id`.
-6. Respect `prefers-reduced-motion`, `hostileCorpus` escaping — all strings HTML/control-scrubbed.
-7. Docs: `docs/ci.md` (CI), `docs/ignoring-findings.md`, `docs/configuration.md`, `docs/architecture.md`, `docs/analyzers.md` — or `bluntcode agent docs`.
-
-## Examples for agents
-
-```powershell
-# Agent: scan and summarize top findings
-.\bluntcode.exe scan "C:\repo" --json --quiet | ConvertFrom-Json | ForEach-Object { $_.severity; $_.analyzers }
-
-# Agent: baseline-gated CI step (PowerShell)
-.\bluntcode.exe scan "C:\repo" --fail-on high+ --baseline .\baseline.sarif --json --quiet; if($LASTEXITCODE -eq 1){ throw "gate failed" }
-
-# Agent: global search via API (when server is up)
-$port = (Get-Content "$env:LOCALAPPDATA\BluntCode\port.txt" -ErrorAction SilentlyContinue)
-Invoke-RestMethod "http://127.0.0.1:$port/api/v1/findings/search?q=TODO&severity=low&page_size=5"
-
-# Agent: start scan via API then poll
-$ws = (Invoke-RestMethod "http://127.0.0.1:$port/api/v1/workspaces").items[0]
-$scan = Invoke-RestMethod -Method Post "http://127.0.0.1:$port/api/v1/workspaces/$($ws.id)/scans" -Body '{"profile":"quick"}' -ContentType "application/json"
-```
-
-## Troubleshooting
-
-- `Close Blunt Code before installing an update.` → `Get-Process bluntcode | Stop-Process -Force`, or run installer with `-WaitForCloseSeconds 30` then close UI.
-- `timeout after 30m: cancelling scan` → increase `--timeout` or `--jobs`, or scope with `--gate-analyzer`.
-- `bluntcode scan: exactly one workspace path is required` → pass absolute path first positional.
-- `bluntcode scan: --json cannot be combined with --format json` → pick one: summary vs full report.
 
 ---
 *This file follows https://llmstxt.org/ — plain markdown, no HTML, designed for LLM ingestion. Also served as `llm.txt` alias and via `bluntcode llm` / `bluntcode agent docs`.*
