@@ -18,6 +18,21 @@ class FakeEventSource {
   close() {}
 }
 
+/** Records every listener so tests can push server events (history replays
+ *  and live updates) into the page exactly as the SSE endpoint would. */
+class DispatchingEventSource {
+  static instances: DispatchingEventSource[] = [];
+  private listeners = new Map<string, Array<(event: { data: string }) => void>>();
+  constructor(public url: string) { DispatchingEventSource.instances.push(this); }
+  addEventListener(type: string, handler: (event: { data: string }) => void) {
+    this.listeners.set(type, [...(this.listeners.get(type) ?? []), handler]);
+  }
+  close() {}
+  dispatch(type: string, data: unknown) {
+    for (const handler of this.listeners.get(type) ?? []) handler({ data: JSON.stringify(data) });
+  }
+}
+
 let root: Root;
 
 function json(body: unknown, status = 200) {
@@ -134,5 +149,84 @@ describe('ScanPage what-changed panel', () => {
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     expect(host.querySelector('.what-changed')).toBeNull();
     expect(host.querySelector('.report')).not.toBeNull();
+  });
+});
+
+/** The scan record arrives mid-scan, so the page connects once while it is
+ *  still loading and reconnects when the state resolves — both connections
+ *  are replayed the same history, which used to be appended twice. */
+async function renderLiveScanPage(scan: Scan) {
+  const fetchMock = vi.fn((input: string) => {
+    if (input.endsWith(`/scans/${scan.id}`)) return Promise.resolve(json(scan));
+    return Promise.resolve(json({}));
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  vi.stubGlobal('EventSource', DispatchingEventSource);
+  DispatchingEventSource.instances = [];
+  const host = document.createElement('div');
+  document.body.append(host);
+  root = createRoot(host);
+  await act(async () => { root.render(<ScanPage id={scan.id} go={vi.fn<(route: Route) => void>()} notify={vi.fn<(notice: Notice) => void>()} />); });
+  await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+  return { host, fetchMock };
+}
+
+function replayHistory(source: DispatchingEventSource) {
+  source.dispatch('connected', {});
+  source.dispatch('scan.stage', { type: 'scan.stage', data: { stage: 'Preparing workspace' } });
+  source.dispatch('analyzer.completed', { type: 'analyzer.completed', data: { analyzer_id: 'biome', findings: 3, severities: { low: 3 } } });
+  source.dispatch('analyzer.completed', { type: 'analyzer.completed', data: { analyzer_id: 'gitleaks-secrets', findings: 10768, severities: { critical: 9460, high: 1308 } } });
+}
+
+const liveFixture = (): Scan => ({
+  ...scanFixture({ state: 'running', total_findings: 0, started_at: '2026-09-03T00:00:00Z', finished_at: null }),
+  analyzer_runs: [
+    { analyzer_id: 'biome', status: 'succeeded' },
+    { analyzer_id: 'gitleaks-secrets', status: 'succeeded' },
+    { analyzer_id: 'semgrep', status: 'running' },
+  ],
+});
+
+/** Locale number grouping varies ("10,771" vs "10.771"), so tests compare digits only. */
+const digits = (text: string | null | undefined) => (text ?? '').replace(/[^\d]/g, '');
+
+describe('ScanPage live results panel', () => {
+  it('counts replayed history once even though both connections are replayed it', async () => {
+    const { host } = await renderLiveScanPage(liveFixture());
+    const [first, second] = DispatchingEventSource.instances;
+    expect(second).toBeDefined();
+    await act(async () => { replayHistory(first); });
+    await act(async () => { replayHistory(second); });
+    const metric = digits(host.querySelector('.scan-metric-value')?.textContent);
+    expect(metric).toBe('10771');
+    expect(metric).not.toBe('21542');
+    const flow = [...host.querySelectorAll('.scan-flow li strong')].map((node) => node.textContent);
+    expect(flow.filter((text) => text?.includes('biome finished'))).toHaveLength(1);
+    expect(flow.filter((text) => text?.includes('gitleaks-secrets finished'))).toHaveLength(1);
+  });
+
+  it('shows live severity totals and per-analyzer findings from completion events', async () => {
+    const { host } = await renderLiveScanPage(liveFixture());
+    expect(host.querySelector('.severity-counts')?.getAttribute('data-pending')).toBe('true');
+    const [first] = DispatchingEventSource.instances;
+    await act(async () => { replayHistory(first); });
+    expect(host.querySelector('.severity-counts')?.getAttribute('data-pending')).toBeNull();
+    expect(digits(host.querySelector('.severity-counts .critical')?.textContent)).toBe('9460');
+    expect(digits(host.querySelector('.severity-counts .high')?.textContent)).toBe('1308');
+    expect(digits(host.querySelector('.severity-counts .low')?.textContent)).toBe('3');
+    const pills = [...host.querySelectorAll('.live-analyzers li')];
+    expect(digits(pills.find((li) => li.textContent?.includes('biome'))?.querySelector('.pill-count')?.textContent)).toBe('3');
+    expect(digits(pills.find((li) => li.textContent?.includes('gitleaks-secrets'))?.querySelector('.pill-count')?.textContent)).toBe('10768');
+    expect(pills.find((li) => li.textContent?.includes('semgrep'))?.querySelector('.pill-count')).toBeNull();
+  });
+
+  it('recovers live totals after a reconnect re-replays history', async () => {
+    const { host } = await renderLiveScanPage(liveFixture());
+    const [first, second] = DispatchingEventSource.instances;
+    await act(async () => { replayHistory(first); });
+    await act(async () => { replayHistory(second); });
+    await act(async () => { second.dispatch('analyzer.completed', { type: 'analyzer.completed', data: { analyzer_id: 'semgrep', findings: 5, severities: { medium: 5 } } }); });
+    expect(digits(host.querySelector('.scan-metric-value')?.textContent)).toBe('10776');
+    expect(digits(host.querySelector('.severity-counts .medium')?.textContent)).toBe('5');
   });
 });

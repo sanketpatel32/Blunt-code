@@ -9,6 +9,14 @@ const JUST_NOW_WINDOW_MS = 45 * SECOND_MS;
 // per row), so both instances are hoisted to module level and reused for every call.
 const shortDate = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
 const dateTime = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+// Hoisted for the same reason as the date formatters: live scan panels format
+// one number per severity chip and per analyzer pill per update.
+const countFmt = new Intl.NumberFormat(undefined);
+
+/** Locale-formatted integer (21,542) for metrics that previously rendered raw. */
+export function count(value: number): string {
+  return countFmt.format(value);
+}
 
 export function date(value?: string | null) {
   if (!value) return 'Not analyzed yet';

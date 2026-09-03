@@ -251,6 +251,9 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
   color: var(--color-ink-soft); font: 600 var(--text-xs) var(--font-mono); letter-spacing: .02em; line-height: 1.4;
 }
 .severity-counts { display: flex; flex-wrap: wrap; gap: var(--space-lg); margin: var(--space-md) 0; }
+/* Live scans show the chips before any analyzer has reported; muted zeros
+   read as "not yet known" instead of "scan found nothing". */
+.severity-counts[data-pending='true'] { opacity: .5; }
 .severity-counts span { color: var(--color-ink); font-family: var(--font-display); font-variant-numeric: tabular-nums; font-size: var(--text-lg); font-weight: 700; }
 .severity-counts small { display: block; color: var(--color-ink-faint); font: 600 .62rem var(--font-mono); letter-spacing: .04em; text-transform: uppercase; }
 .severity-counts .critical, .severity-counts .high, .severity.critical, .severity.high { color: var(--color-danger); border-color: color-mix(in oklch, var(--color-danger) 30%, var(--color-rule)); background: var(--color-danger-soft); }
@@ -536,6 +539,7 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .live-category-label { display: inline-flex; align-items: center; padding-left: var(--space-sm); border-left: 3px solid var(--color-accent); margin-left: calc(-1 * var(--space-sm)); color: var(--color-ink-soft); font: 700 var(--text-xs) var(--font-mono); letter-spacing: .06em; text-transform: uppercase; }
 .live-analyzers { display: flex; flex-wrap: wrap; gap: var(--space-2xs); margin: 0; padding: 0; list-style: none; }
 .live-analyzers li { display: inline-flex; align-items: center; gap: var(--space-2xs); }
+.pill-count { color: var(--color-ink-soft); font: 600 .68rem var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: .02em; white-space: nowrap; }
 .live-pill-enter { animation: scan-fadeInUp 320ms var(--ease-out-quart) both; }
 .category-dots { display: flex; gap: var(--space-xs); margin-top: var(--space-xs); }
 .category-dot { width: .5rem; height: .5rem; border-radius: 50%; display: inline-block; }

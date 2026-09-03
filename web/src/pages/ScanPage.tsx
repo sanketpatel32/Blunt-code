@@ -4,8 +4,8 @@ import type { AnalyzerRun, Finding, Scan } from '../types';
 import type { Route } from '../lib/router';
 import type { Notice } from '../lib/notice';
 import { message } from '../lib/notice';
-import { analyzerName, date, elapsed, findingLocation, scanStateDisplay } from '../lib/format';
-import { eventCopy, isTerminalScanState, liveHeadline, stageLabels, type ScanEvent } from '../lib/scanEvents';
+import { analyzerName, count, date, elapsed, findingLocation, scanStateDisplay } from '../lib/format';
+import { eventCopy, isTerminalScanState, latestAnalyzerCompletions, liveHeadline, severityTotalsSoFar, stageLabels, type ScanEvent } from '../lib/scanEvents';
 import { bandFor, riskGrade, riskScore, severityCountsOf } from '../lib/risk';
 import { useLoad } from '../hooks/useLoad';
 import { useTicker } from '../hooks/useTicker';
@@ -33,12 +33,18 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
       return;
     }
     let source: EventSource | undefined; let retry: number | undefined;
+    // Set on `connected`: the very next event starts the server's history
+    // replay, so it replaces the list instead of appending to it. Without
+    // this, every reconnect (including the undefined -> actual scan state
+    // transition right after first load) appends a second copy of replayed
+    // history and double-counts every analyzer's findings.
+    let replaceNext = false;
     const receive = (event: MessageEvent) => {
       try {
         const envelope = JSON.parse(event.data) as { type?: string; data?: Record<string, unknown> };
         const data = (envelope.data ?? envelope) as Omit<ScanEvent, 'type' | 'at'>;
         const next: ScanEvent = { ...data, type: envelope.type ?? event.type, at: Date.now(), seq: eventSeq.current++ };
-        setEvents((old) => [...old.slice(-23), next]);
+        setEvents((old) => { if (replaceNext) { replaceNext = false; return [next]; } return [...old.slice(-31), next]; });
         setStreamState('live');
         if (next.type === 'scan.completed') { try { pushNotification({ title: 'Scan completed', message: `Scan ${id.slice(0,8)} finished`, kind: 'success' }); } catch {} void scanReload(); } else if (next.type === 'scan.cancelled') void scanReload();
       } catch { /* Invalid optional event payloads do not interrupt the scan. */ }
@@ -48,7 +54,12 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
       setStreamState((state) => state === 'live' ? 'reconnecting' : state);
       source = new EventSource(`/api/v1/scans/${encodeURIComponent(id)}/events`);
       ['scan.started', 'scan.stage', 'analyzer.started', 'analyzer.completed', 'analyzer.failed', 'analyzer.skipped', 'scan.warning', 'scan.completed', 'scan.cancelled'].forEach((type) => { source?.addEventListener(type, receive); });
-      source.addEventListener('connected', () => { attempt = 0; setStreamAttempts(0); setStreamState('live'); });
+      source.addEventListener('connected', () => {
+        attempt = 0;
+        setStreamAttempts(0);
+        setStreamState('live');
+        replaceNext = true;
+      });
       source.onerror = () => {
         source?.close();
         setStreamState('reconnecting');
@@ -64,6 +75,13 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
   const current = scan.data;
   const terminal = current && isTerminalScanState(current.state);
   useTicker(!terminal);
+  // Live totals come from analyzer completion events (deduped per analyzer)
+  // because the scan record's summary fields only land when the scan
+  // finalizes — until then they read as zeros.
+  const completions = latestAnalyzerCompletions(events);
+  const reportedFindings = [...completions.values()].reduce((acc, event) => acc + (event.findings ?? 0), 0);
+  const liveSeverity = severityTotalsSoFar(events);
+  const findingsSoFar = Math.max(current?.total_findings ?? 0, reportedFindings);
   async function cancel() { try { await api.cancelScan(id); await scan.reload(); } catch (e) { notify({ kind: 'error', text: message(e) }); } }
   if (scan.loading) return <div className="page"><Loading /></div>;
   if (scan.error) return <div className="page"><ErrorPanel error={scan.error} retry={scan.reload} /></div>;
@@ -83,9 +101,7 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
       : current.state === 'cancelled' ? 'Analysis cancelled'
         : current.state === 'interrupted' ? 'Scan interrupted — partial results below'
           : total === 0 ? 'All clear — no findings'
-            : `${bandFor(riskGrade(score)).label} — ${total} ${total === 1 ? 'finding' : 'findings'}${critical > 0 ? `, ${critical} critical` : ''}`;
-  const reportedFindings = events.reduce((acc, event) => acc + (event.type === 'analyzer.completed' ? event.findings ?? 0 : 0), 0);
-  const findingsSoFar = Math.max(total, reportedFindings);
+            : `${bandFor(riskGrade(score)).label} — ${count(total)} ${total === 1 ? 'finding' : 'findings'}${critical > 0 ? `, ${count(critical)} critical` : ''}`;
   const runs = current.analyzer_runs ?? [];
   const succeeded = runs.filter((run) => run.status === 'succeeded').length;
   /** Card accent follows the worst finding on the page: danger > warning > success > neutral. */
@@ -139,9 +155,9 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
       <aside className="scan-side" aria-busy={!terminal ? 'true' : 'false'}>
         <div className="scan-side-head">
           <p className="eyebrow">Results so far</p>
-          <h2 className="scan-metric"><span className="scan-metric-value">{findingsSoFar}</span> <span className="scan-metric-label">reported so far</span></h2>
+          <h2 className="scan-metric"><span className="scan-metric-value">{count(findingsSoFar)}</span> <span className="scan-metric-label">{findingsSoFar === 1 ? 'finding' : 'findings'}</span></h2>
         </div>
-        <SeverityCounts scan={current} />
+        <SeverityCounts counts={liveSeverity} pending={completions.size === 0} />
         <LiveAnalyzerStrip runs={current.analyzer_runs} events={events} />
         {current.error_summary && <div className="inline-warning">{current.error_summary}</div>}
       </aside>
@@ -151,14 +167,14 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
         <p className="eyebrow">Findings by severity</p>
         <ul className="verdict-bars">
           {(['critical', 'high', 'medium', 'low', 'info'] as const).map((sev) => {
-            const count = counts[sev] ?? 0;
-            const pct = total > 0 ? Math.max(count > 0 ? 2 : 0, Math.round((count / total) * 100)) : 0;
-            return <li key={sev} className={`verdict-bar-row ${count === 0 ? 'is-zero' : ''}`}>
+            const value = counts[sev] ?? 0;
+            const pct = total > 0 ? Math.max(value > 0 ? 2 : 0, Math.round((value / total) * 100)) : 0;
+            return <li key={sev} className={`verdict-bar-row ${value === 0 ? 'is-zero' : ''}`}>
               <span className="verdict-bar-label"><i className={`sev-dot sev-${sev}`} aria-hidden="true" />{sev}</span>
-              <span className="verdict-bar-track" role="img" aria-label={`${count} ${sev} findings`}>
+              <span className="verdict-bar-track" role="img" aria-label={`${value} ${sev} findings`}>
                 <i className={`verdict-bar-fill sev-${sev}`} style={{ width: `${pct}%` }} />
               </span>
-              <span className="verdict-bar-count">{count}</span>
+              <span className="verdict-bar-count">{count(value)}</span>
             </li>;
           })}
         </ul>
@@ -209,6 +225,7 @@ export function LiveAnalyzerStrip({ runs, events }: { runs?: AnalyzerRun[]; even
   for (const event of events) {
     if (event.type === 'analyzer.started') started.set(event.analyzer_id ?? event.name ?? '', true);
   }
+  const completions = latestAnalyzerCompletions(events);
   const pills = (runs?.length ? runs.map((run) => ({ id: run.analyzer_id, status: run.status, message: run.message })) : [...started.keys()].map((id) => ({ id, status: 'running', message: undefined as string | undefined })));
   if (!pills.length) return null;
   const grouped = new Map<string, typeof pills>();
@@ -227,9 +244,11 @@ export function LiveAnalyzerStrip({ runs, events }: { runs?: AnalyzerRun[]; even
           {items.map((pill, pIdx) => {
             const skipped = pill.status === 'skipped';
             const failed = pill.status === 'failed';
+            const found = pill.status === 'succeeded' ? completions.get(pill.id)?.findings : undefined;
             return <li key={pill.id} title={skipped || failed ? (pill.message || (skipped ? 'Skipped — no applicable files or not enabled for this profile' : 'Failed')) : undefined} className={reduced ? '' : 'live-pill-enter'} style={reduced ? undefined : { animationDelay: `${(gIdx * items.length + pIdx) * 40}ms`, willChange: 'transform, opacity' } as never}>
               <span className="badge"><i className="category-dot" style={{ background: categoryColor((analyzerMeta(pill.id)?.category ?? 'security') as never) } as never} aria-hidden="true" />{pill.id}</span>
               <span className={`state ${pill.status}`}>{pill.status}</span>
+              {found !== undefined && <span className="pill-count">{count(found)} {found === 1 ? 'finding' : 'findings'}</span>}
               {skipped && <span className="text-xs" style={{ color: 'var(--color-ink-faint)', marginLeft: '4px' }} role="note">skipped: {pill.message || 'no applicable files'}</span>}
               {failed && pill.message && <span className="text-xs" style={{ color: 'var(--color-danger)', marginLeft: '4px' }} role="note">{pill.message}</span>}
             </li>;

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { Scan, Severity, Tool } from '../types';
-import { languageNames, languageColor } from '../lib/format';
+import { count, languageNames, languageColor } from '../lib/format';
 import { useCountUp } from '../hooks/useCountUp';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
@@ -61,14 +61,19 @@ export function LanguageBadges({ languages }: { languages?: string[] }) {
     : <span className="muted">No supported source languages found</span>;
 }
 
-export function SeverityCounts({ scan }: { scan?: Scan }) {
+/** Severity chips for a scan. Reads the finalized summary fields from `scan`
+ *  (completed scans), or explicit `counts` (live scans, where the summary has
+ *  not landed yet and totals come from analyzer completion events). `pending`
+ *  mutes the row while no analyzer has reported anything. */
+export function SeverityCounts({ scan, counts, pending }: { scan?: Scan; counts?: Partial<Record<Severity, number>>; pending?: boolean }) {
+  const source = counts ?? { critical: scan?.critical_count, high: scan?.high_count, medium: scan?.medium_count, low: scan?.low_count };
   const values: Array<[Severity, number | undefined, string]> = [
-    ['critical', scan?.critical_count, 'critical'],
-    ['high', scan?.high_count, 'high'],
-    ['medium', scan?.medium_count, 'medium'],
-    ['low', scan?.low_count, 'low'],
+    ['critical', source.critical, 'critical'],
+    ['high', source.high, 'high'],
+    ['medium', source.medium, 'medium'],
+    ['low', source.low, 'low'],
   ];
-  return <div className="severity-counts flex gap-6">{values.map(([severity, count]) => <span key={severity} className={`${severity}${severity === 'critical' && (count ?? 0) > 0 ? ' critical-live' : ''}`}>{count ?? 0} <small>{severity}</small></span>)}</div>;
+  return <div className="severity-counts flex gap-6" data-pending={pending ? 'true' : undefined}>{values.map(([severity, value]) => <span key={severity} className={`${severity}${severity === 'critical' && (value ?? 0) > 0 ? ' critical-live' : ''}`}>{count(value ?? 0)} <small>{severity}</small></span>)}</div>;
 }
 
 export function ToolSummary({ tools }: { tools: Tool[] }) {

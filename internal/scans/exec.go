@@ -85,6 +85,19 @@ func (c *scanCounters) snapshot() (successful, failed int) {
 	return int(c.successful.Load()), int(c.failed.Load())
 }
 
+// severityCounts buckets a normalized findings slice by severity for the
+// analyzer.completed event, so live progress pages can show real per-severity
+// totals before the scan's final summary lands. Keys are the canonical
+// severity strings; an empty slice yields an empty map, not nil, so the JSON
+// payload always decodes as an object.
+func severityCounts(findings []analyzers.Finding) map[string]int {
+	counts := make(map[string]int, 5)
+	for i := range findings {
+		counts[string(findings[i].Severity)]++
+	}
+	return counts
+}
+
 // executeAnalyzer runs the full pipeline for one adapter: language gating,
 // profile filtering, tool readiness (with managed installation), planning,
 // execution, normalization, persistence, and events. It is the exact body the
@@ -170,7 +183,7 @@ func (s *Service) executeAnalyzer(ctx context.Context, scan core.Scan, work core
 			_, err = s.db.SaveAnalyzerResult(context.Background(), scan.ID, database.AnalyzerRunInput{AnalyzerID: adapter.ID(), Version: plan.Version, State: "succeeded", StartedAt: started, FinishedAt: finished, ExitCode: result.ExitCode}, findings, metrics)
 			if err == nil {
 				counters.markSucceeded(adapter.ID())
-				s.emit(scan.ID, "analyzer.completed", map[string]any{"analyzer_id": adapter.ID(), "findings": len(findings)})
+				s.emit(scan.ID, "analyzer.completed", map[string]any{"analyzer_id": adapter.ID(), "findings": len(findings), "severities": severityCounts(findings)})
 				return analyzerSucceeded
 			}
 		}

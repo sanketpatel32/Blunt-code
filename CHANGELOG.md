@@ -5,6 +5,14 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.3] - 2026-09-03
+
+### Fixed
+- **Live scan panel double-counted every finding**: the event stream replays the scan's full history to every new subscriber, and the scan page re-subscribed as soon as the scan record loaded — appending a second copy of the replay. "Results so far" showed exactly 2× the real total (a 10,771-finding scan read as 21,542) and every analysis-flow entry appeared twice. Each connection now replaces the list from the server's authoritative replay instead of appending to it, and results-so-far totals are summed per analyzer (last completion wins), so they cannot double-count across reconnects. Verified live mid-scan: the metric, flow list, and per-analyzer counts all matched the persisted findings exactly.
+
+### Changed
+- **Real severity totals while a scan is still running**: `analyzer.completed` events now carry per-severity counts, so the "Results so far" panel shows live critical/high/medium/low chips (previously all zeros until the scan finalized) and each succeeded analyzer pill shows its own findings count. Severity chips read as muted "pending" until the first analyzer reports. Large numbers are locale-grouped (10,771) on the live metric, flow entries, verdict bars, and headline.
+
 ## [0.20.2] - 2026-09-03
 
 ### Fixed
