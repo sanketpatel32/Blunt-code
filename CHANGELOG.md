@@ -5,6 +5,16 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.0] - 2026-09-03
+
+### Changed
+- **Scan result page redesign (`/scans/:id`)**:
+  - New `scan-hero` header card: grade tile, verdict headline, and a single meta line (profile · started · duration · engines) with the live/saved status and Cancel/Workspace actions — the duplicate grade badge is gone.
+  - Verdict strip rebuilt as a distribution card: per-severity bars with counts for all five severities (zero rows dimmed) plus Risk score with band range, New, Fixed, and Engines stats.
+  - Findings toolbar restructured into a two-row filter card: search with live result count, density toggle, and Clear on top; labelled Severity (with color dots and counts), Status, Tool, and Type groups below instead of one undifferentiated chip wall.
+  - Findings table rows breathe again: two-line message clamp, stronger titles, file paths in muted code chips, `→`-prefixed remediation lines, hover tooltips on truncated cells, severity pills with dots, and a card-style load-more footer.
+  - Source pane polish: remediation rendered as an accent callout, tighter header, plus restyled export chips in the report footer.
+
 ## [0.19.1] - 2026-09-03
 
 ### Fixed

@@ -15,7 +15,6 @@ import { ReportView } from './report/ReportView';
 import { pushNotification } from '../lib/notifications';
 import { analyzerMeta, categoryColor, CATEGORY_LABELS } from '../lib/analyzerCatalog';
 import { useReducedMotion } from '../hooks/useReducedMotion';
-import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 
 export type { ScanEvent } from '../lib/scanEvents';
@@ -89,36 +88,39 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
   const findingsSoFar = Math.max(total, reportedFindings);
   const runs = current.analyzer_runs ?? [];
   const succeeded = runs.filter((run) => run.status === 'succeeded').length;
-  const metaBits = [
-    current.profile,
-    `Started ${date(current.started_at)}`,
-    current.duration_ms !== undefined && current.duration_ms !== null ? elapsed(current.started_at, current.finished_at) : `elapsed ${elapsed(current.started_at, current.finished_at)}`,
-  ].filter(Boolean);
+  /** Card accent follows the worst finding on the page: danger > warning > success > neutral. */
+  const heroTone = live ? 'live' : total === 0 ? 'success' : critical > 0 || (counts.high ?? 0) > 0 ? 'danger' : (counts.medium ?? 0) > 0 ? 'warning' : 'neutral';
+  const startedText = date(current.started_at);
+  const durationText = elapsed(current.started_at, current.finished_at);
   return <div className="page scan-page">
-    <PageHeader
-      eyebrow="Analysis"
-      title={headline}
-      badge={
-        <div className="flex items-center gap-2 flex-wrap">
-          {grade && (
-            <span className="analysis-grade-badge font-mono font-bold text-xs px-2 py-0.5 rounded border border-[var(--color-rule)] bg-[var(--color-surface-muted)] text-[var(--color-ink)]" data-grade={grade}>
-              Grade {grade}
-            </span>
-          )}
-          <span className={`stream-state ${streamState} text-xs`} aria-live="polite">
-            <i aria-hidden="true" />
-            {terminal ? 'Saved report' : streamState === 'live' ? 'Live updates' : streamState === 'reconnecting' ? `Reconnecting${streamAttempts > 1 ? ` (try ${streamAttempts})` : ''}` : 'Connecting'}
-          </span>
+    <header className="scan-hero" data-tone={heroTone}>
+      <div className="scan-hero-main">
+        <p className="eyebrow">Analysis · {current.profile} profile</p>
+        <div className="scan-hero-title-row">
+          {graded && grade
+            ? <span className="scan-grade" data-grade={grade} aria-hidden="true">{grade}</span>
+            : <span className={`scan-grade scan-grade-clear`} aria-hidden="true">✓</span>}
+          <div className="scan-hero-copy">
+            <h1>{headline}</h1>
+            <p className="scan-hero-meta">
+              <span>Started {startedText}</span>
+              <span aria-hidden="true">·</span>
+              <span>{live ? `elapsed ${durationText}` : durationText}</span>
+              {runs.length > 0 && <>
+                <span aria-hidden="true">·</span>
+                <span>{succeeded} of {runs.length} {runs.length === 1 ? 'engine' : 'engines'} succeeded</span>
+              </>}
+            </p>
+          </div>
         </div>
-      }
-      description={
-        <span>
-          {metaBits.join(' · ')}
-          {runs.length ? ` · ${succeeded} of ${runs.length} engines succeeded` : ''}
+        {live && <div className="scan-hero-progress"><ScanProgressBar scan={current} events={events} /></div>}
+      </div>
+      <div className="scan-hero-side">
+        <span className={`stream-state ${streamState}`} aria-live="polite">
+          <i aria-hidden="true" />
+          {terminal ? 'Saved report' : streamState === 'live' ? 'Live updates' : streamState === 'reconnecting' ? `Reconnecting${streamAttempts > 1 ? ` (try ${streamAttempts})` : ''}` : 'Connecting'}
         </span>
-      }
-      actions={
-        <div className="flex items-center gap-2">
+        <div className="scan-hero-actions">
           {live && (
             <Button variant="destructive" size="sm" onClick={cancel}>
               Cancel scan
@@ -130,10 +132,8 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
             </Button>
           )}
         </div>
-      }
-    >
-      {live && <div className="mt-2 w-full"><ScanProgressBar scan={current} events={events} /></div>}
-    </PageHeader>
+      </div>
+    </header>
     {live && <section className="progress-layout">
       <ScanStageList scan={current} events={events} />
       <aside className="scan-side" aria-busy={!terminal ? 'true' : 'false'}>
@@ -146,32 +146,33 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
         {current.error_summary && <div className="inline-warning">{current.error_summary}</div>}
       </aside>
     </section>}
-    {terminal && total > 0 && <section className="analysis-verdict" aria-label="Verdict">
-      <div className="analysis-grade-block">
-        <span className="analysis-grade" data-grade={riskGrade(score)} aria-hidden="true">{riskGrade(score)}</span>
-        <p className="analysis-grade-label"><span className="eyebrow">Risk grade</span><strong>{bandFor(riskGrade(score)).label}</strong><span className="grade-score">score {score}</span></p>
-      </div>
-      <div className="analysis-tally">
-        <span className="severity-stack" role="img" aria-label={`Findings by severity: ${severityBreakdown(counts)}`}>
-          {(['critical', 'high', 'medium', 'low', 'info'] as const).filter((sev) => (counts[sev] ?? 0) > 0).map((sev) => <i key={sev} className={`seg-${sev}`} style={{ width: `${Math.round(((counts[sev] ?? 0) * 1000) / Math.max(total, 1)) / 10}%` }} />)}
-        </span>
-        <ul className="analysis-tally-legend">
-          {(['critical', 'high', 'medium', 'low', 'info'] as const).map((sev) => <li key={sev} className={counts[sev] ? sev : 'zero'}><i className={`seg-${sev}`} aria-hidden="true" />{sev}<span className="legend-count">{counts[sev] ?? 0}</span></li>)}
+    {terminal && total > 0 && <section className="analysis-verdict verdict-card" data-tone={heroTone} aria-label="Verdict">
+      <div className="verdict-distro">
+        <p className="eyebrow">Findings by severity</p>
+        <ul className="verdict-bars">
+          {(['critical', 'high', 'medium', 'low', 'info'] as const).map((sev) => {
+            const count = counts[sev] ?? 0;
+            const pct = total > 0 ? Math.max(count > 0 ? 2 : 0, Math.round((count / total) * 100)) : 0;
+            return <li key={sev} className={`verdict-bar-row ${count === 0 ? 'is-zero' : ''}`}>
+              <span className="verdict-bar-label"><i className={`sev-dot sev-${sev}`} aria-hidden="true" />{sev}</span>
+              <span className="verdict-bar-track" role="img" aria-label={`${count} ${sev} findings`}>
+                <i className={`verdict-bar-fill sev-${sev}`} style={{ width: `${pct}%` }} />
+              </span>
+              <span className="verdict-bar-count">{count}</span>
+            </li>;
+          })}
         </ul>
       </div>
-      <dl className="analysis-stats">
-        <div><dt>New</dt><dd>{current.new_count ?? 0}</dd></div>
-        <div><dt>Fixed</dt><dd>{current.fixed_count ?? 0}</dd></div>
+      <dl className="verdict-stats">
+        <div className="verdict-stat"><dt>Risk score</dt><dd>{score}<span className="verdict-stat-note">{bandFor(riskGrade(score)).range}</span></dd></div>
+        <div className="verdict-stat"><dt>New</dt><dd>{current.new_count ?? 0}</dd></div>
+        <div className="verdict-stat"><dt>Fixed</dt><dd>{current.fixed_count ?? 0}</dd></div>
+        <div className="verdict-stat"><dt>Engines</dt><dd>{runs.length ? `${succeeded}/${runs.length}` : '—'}</dd></div>
       </dl>
     </section>}
     {terminal && (current.fixed_count ?? 0) > 0 && <WhatChanged scanId={id} fixedCount={current.fixed_count ?? 0} />}
     {terminal && <ReportView scanId={id} notify={notify} runs={current.analyzer_runs ?? []} />}
   </div>;
-}
-
-/** Human breakdown of non-zero severity counts, e.g. "2 high, 1 medium". */
-function severityBreakdown(counts: Partial<Record<string, number | null | undefined>>) {
-  return Object.entries(counts).filter(([, count]) => (count ?? 0) > 0).map(([sev, count]) => `${count} ${sev}`).join(', ') || 'none';
 }
 
 /** Stripe/Linear bento progress: 4px height card, shimmer indeterminate 1.6s, spring determinate width, success/danger terminal. */
