@@ -571,3 +571,30 @@ func dropDeselectedFindings(findings []analyzers.Finding, deselect func(string) 
 	}
 	return kept
 }
+
+// keepsArtifactFindings reports whether an adapter's findings inside
+// generated artifacts stay visible. Only the secret detectors qualify: a
+// credential baked into a shipped bundle, a lockfile, or a vendored
+// dependency is a real leak, and hiding it would be the one way artifact
+// filtering could make a scan less honest. Every other analyzer's artifact
+// findings — code smells in dist output, style violations in vendored
+// packages — are noise about files nobody edits.
+func keepsArtifactFindings(analyzerID string) bool {
+	return analyzerID == "secrets" || analyzerID == "gitleaks-secrets"
+}
+
+// dropArtifactFindings removes findings whose path discovery classifies as
+// generated output (build directories, minified bundles, vendored deps; see
+// discovery.IsArtifactPath), keeping order. Lockfile paths are not artifacts
+// by that definition, so dependency analyzers (osv, trivy) keep reporting
+// vulnerabilities at package-lock.json and friends.
+func dropArtifactFindings(findings []analyzers.Finding) []analyzers.Finding {
+	kept := make([]analyzers.Finding, 0, len(findings))
+	for _, finding := range findings {
+		if discovery.IsArtifactPath(finding.RelativePath) {
+			continue
+		}
+		kept = append(kept, finding)
+	}
+	return kept
+}

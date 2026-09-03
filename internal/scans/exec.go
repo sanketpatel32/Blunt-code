@@ -179,6 +179,15 @@ func (s *Service) executeAnalyzer(ctx context.Context, scan core.Scan, work core
 		// workspace configuration excludes. Enforcement lands here, once for
 		// every adapter, instead of trusting each tool's scoping.
 		findings = dropDeselectedFindings(findings, deselect)
+		// The same walkers also report inside generated artifacts that
+		// discovery never selected (style findings on dist bundles, code
+		// smells in vendored packages). Those findings are noise about
+		// files nobody edits, so they go too — except from secret
+		// detectors, where a credential inside shipped output is exactly
+		// the leak a scan must surface (see keepsArtifactFindings).
+		if !keepsArtifactFindings(adapter.ID()) {
+			findings = dropArtifactFindings(findings)
+		}
 		if err == nil {
 			_, err = s.db.SaveAnalyzerResult(context.Background(), scan.ID, database.AnalyzerRunInput{AnalyzerID: adapter.ID(), Version: plan.Version, State: "succeeded", StartedAt: started, FinishedAt: finished, ExitCode: result.ExitCode}, findings, metrics)
 			if err == nil {

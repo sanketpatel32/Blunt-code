@@ -13,17 +13,17 @@ import (
 	"bluntcode/internal/workspace"
 )
 
-var defaultDirectories = map[string]struct{}{
-	".git": {}, ".hg": {}, ".svn": {}, "node_modules": {}, ".venv": {}, "venv": {}, "env": {}, "__pycache__": {}, ".pytest_cache": {}, ".mypy_cache": {}, ".ruff_cache": {}, ".next": {}, ".nuxt": {}, "dist": {}, "build": {}, "out": {}, "coverage": {}, ".cache": {}, ".idea": {}, ".vscode": {},
-}
-
+// DefaultExcluded reports whether a path is excluded from scanning without
+// any user configuration: artifact directories (node_modules, dist, target,
+// vendor, ...) for directories, and generated file names (minified bundles,
+// lockfiles, protobuf and generator output, hash-sufficed bundler chunks)
+// for files. The tables and their rationale live in artifacts.go.
 func DefaultExcluded(path string, directory bool) bool {
-	base := strings.ToLower(filepath.Base(path))
+	base := filepath.Base(path)
 	if directory {
-		_, ok := defaultDirectories[base]
-		return ok
+		return artifactDirectoryName(base)
 	}
-	return strings.HasSuffix(base, ".min.js") || strings.HasSuffix(base, ".map") || strings.HasSuffix(base, ".pyc") || strings.HasSuffix(base, ".pyo")
+	return artifactFileName(base)
 }
 
 // extensionLanguages maps every file extension discovery classifies to a
@@ -158,6 +158,13 @@ func Discover(ctx context.Context, root string, userExcludes []string) (Result, 
 		if err != nil {
 			return nil
 		}
+		// Content heuristics: oversized candidates and large files whose
+		// head is one enormous line (minified bundles under a source-looking
+		// name) are generated output too (see artifacts.go).
+		if skipGeneratedContent(path, info.Size()) {
+			result.Skipped++
+			return nil
+		}
 		result.Languages[lang]++
 		result.Files = append(result.Files, core.FileEntry{RelativePath: filepath.ToSlash(rel), Language: lang, SizeBytes: info.Size(), Selected: true})
 		return nil
@@ -213,10 +220,16 @@ func Tree(ctx context.Context, root, relative string, userExcludes []string) ([]
 		if err != nil {
 			continue
 		}
+		// Same content heuristics as Discover, so the Files page never
+		// offers a file a scan would refuse to read.
+		if skipGeneratedContent(path, info.Size()) {
+			continue
+		}
 		items = append(items, core.FileEntry{RelativePath: rel, Language: language, SizeBytes: info.Size(), Selected: true})
 	}
 	return items, nil
 }
+
 // ExcludedByUser reports whether a workspace-relative path matches any user
 // exclude pattern, with exactly the semantics Discover and Tree enforce.
 // Scans reuse it to drop findings that directory-walking analyzers

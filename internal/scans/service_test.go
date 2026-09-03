@@ -225,6 +225,112 @@ func TestScanDropsFindingsInExcludedPaths(t *testing.T) {
 	t.Fatal("scan did not finish")
 }
 
+// secretNoisyAnalyzer reports from inside an artifact path under the
+// gitleaks-secrets identity, so the secret-detector exemption from artifact
+// filtering is exercised end to end.
+type secretNoisyAnalyzer struct{ noisyAnalyzer }
+
+func (secretNoisyAnalyzer) ID() string { return "gitleaks-secrets" }
+
+func TestKeepsArtifactFindings(t *testing.T) {
+	for _, id := range []string{"secrets", "gitleaks-secrets"} {
+		if !keepsArtifactFindings(id) {
+			t.Errorf("secret detector %q must keep artifact findings", id)
+		}
+	}
+	for _, id := range []string{"sonarqube", "semgrep", "biome", "noisy", ""} {
+		if keepsArtifactFindings(id) {
+			t.Errorf("analyzer %q must not keep artifact findings", id)
+		}
+	}
+}
+
+// TestScanDropsFindingsInArtifactPaths pins the generated-artifact finding
+// filter: a directory-walking analyzer's findings inside build output and
+// vendored dependencies are dropped, lockfile findings survive for the
+// dependency analyzers, and secret detectors keep artifact findings because a
+// credential inside shipped output is exactly the leak a scan must surface.
+func TestScanDropsFindingsInArtifactPaths(t *testing.T) {
+	root := t.TempDir()
+	for _, path := range []string{
+		"keep/main.py",
+		"dist/app-CKc0XBc7.js",
+		"node_modules/dep/index.js",
+		"package-lock.json",
+	} {
+		full := filepath.Join(root, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(full), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("x=1"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	paths, err := config.NewPaths(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := database.Open(context.Background(), paths.DBPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	work, err := db.CreateWorkspace(context.Background(), core.Workspace{Name: "Fixture", RootPath: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := analyzers.NewRegistry()
+	if err := registry.Register(noisyAnalyzer{paths: []string{
+		"keep/main.py",
+		"dist/app-CKc0XBc7.js",
+		"node_modules/dep/index.js",
+		"target/x.rs",
+		"package-lock.json",
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.Register(secretNoisyAnalyzer{noisyAnalyzer{paths: []string{"dist/app-CKc0XBc7.js"}}}); err != nil {
+		t.Fatal(err)
+	}
+	service := New(db, registry, events.New(), filepath.Join(paths.DataDir, "reports"), paths.ToolsDir, nil)
+	scan, err := service.DiscoverAndStart(context.Background(), work, "standard", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		current, scanErr := db.Scan(context.Background(), scan.ID)
+		if scanErr != nil {
+			t.Fatal(scanErr)
+		}
+		if terminal(current.State) {
+			if current.State != "completed" && current.State != "completed_with_warnings" {
+				t.Fatalf("scan state %q", current.State)
+			}
+			findings, findErr := db.Findings(context.Background(), scan.ID)
+			if findErr != nil {
+				t.Fatal(findErr)
+			}
+			seen := map[string]int{}
+			for _, finding := range findings {
+				seen[finding.RelativePath]++
+			}
+			// noisy keeps the source file and the lockfile; the artifact
+			// paths (dist bundle, vendored dep, build dir) are dropped.
+			// gitleaks-secrets keeps its bundle finding.
+			if seen["keep/main.py"] != 1 || seen["package-lock.json"] != 1 || seen["dist/app-CKc0XBc7.js"] != 1 {
+				t.Fatalf("expected source, lockfile, and secret-detector bundle findings, got %#v", findings)
+			}
+			if seen["node_modules/dep/index.js"] != 0 || seen["target/x.rs"] != 0 {
+				t.Fatalf("artifact findings leaked into the scan: %#v", findings)
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("scan did not finish")
+}
+
 func TestAnalyzerTimeouts(t *testing.T) {
 	if analyzerTimeout("ruff") != 10*time.Minute || analyzerTimeout("sonarqube") != 30*time.Minute {
 		t.Fatalf("unexpected analyzer timeouts")
