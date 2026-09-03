@@ -129,7 +129,13 @@ export function scanStateDisplay(state?: string | null): { label: string; varian
   return { label, variant: 'outline' };
 }
 
-export const analyzerDisplayNames: Record<string, string> = { biome: 'Biome', ruff: 'Ruff', semgrep: 'Semgrep', sonarqube: 'SonarQube' };
+/** Compact display names for chips, badges, and table cells; surfaces that have
+ *  room for the full brand use analyzerCatalog's displayName instead. */
+export const analyzerDisplayNames: Record<string, string> = {
+  biome: 'Biome', ruff: 'Ruff', semgrep: 'Semgrep', sonarqube: 'SonarQube',
+  'gitleaks-secrets': 'Gitleaks', 'osv-dependencies': 'OSV', 'container-trivy': 'Trivy',
+  'iac-checkov': 'Checkov', 'license-scan': 'License', secrets: 'Secrets', pentest: 'Pentest', todo: 'Todo',
+};
 
 export function analyzerName(id: string) {
   return analyzerDisplayNames[id] ?? id;
@@ -137,6 +143,16 @@ export function analyzerName(id: string) {
 
 export function findingLocation(finding: Finding) {
   return `${finding.relative_path ?? 'Project-level finding'}${finding.start_line ? `:${finding.start_line}${finding.start_column ? `:${finding.start_column}` : ''}` : ''}`;
+}
+
+/** Table-friendly location: the same string as findingLocation, but deep paths
+ *  collapse to their last two segments so the FILE column stays one tidy line
+ *  and the filename — the useful end — stays visible. The full value belongs
+ *  in the cell's title attribute. */
+export function shortFindingLocation(finding: Finding): string {
+  const location = findingLocation(finding);
+  if (!finding.relative_path) return location;
+  return shortPath(finding.relative_path) + location.slice(finding.relative_path.length);
 }
 
 /**

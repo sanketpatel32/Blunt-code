@@ -34,6 +34,12 @@ func Open(ctx context.Context, path string) (*DB, error) {
 		db.Close()
 		return nil, err
 	}
+	// One-time data heal for findings stored by releases with the SonarQube
+	// project-key path bug; a no-op for healthy rows, so it rides on open.
+	if _, err = result.RepairSonarqubeFindingPaths(ctx); err != nil {
+		db.Close()
+		return nil, err
+	}
 	return result, nil
 }
 

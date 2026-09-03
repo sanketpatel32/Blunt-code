@@ -55,8 +55,28 @@ func TestIssueFixture(t *testing.T) {
 		t.Fatal("expected one issue")
 	}
 	f := response.Issues[0].Finding()
-	if f.Severity != analyzers.SeverityHigh || f.Category != analyzers.CategoryVulnerability || f.RelativePath != "test:src/main.ts" {
+	if f.Severity != analyzers.SeverityHigh || f.Category != analyzers.CategoryVulnerability || f.RelativePath != "bluntcode:test:src/main.ts" {
 		t.Fatalf("unexpected finding %#v", f)
+	}
+	if got := sonarProjectPath(f.RelativePath, "bluntcode:test"); got != "src/main.ts" {
+		t.Fatalf("sonarProjectPath = %q, want src/main.ts", got)
+	}
+}
+
+// Regression: Blunt Code project keys contain colons themselves
+// ("bluntcode:<workspace-id>"), so trimming the component at its first colon
+// left the workspace id glued to every stored path. Only the whole known key
+// may be trimmed.
+func TestSonarProjectPath(t *testing.T) {
+	cases := []struct{ name, component, key, want string }{
+		{"workspace-scoped key", "bluntcode:b01a778f-99c6-95c1-0006-f8d4a461e5e6:src/pages/Home.tsx", "bluntcode:b01a778f-99c6-95c1-0006-f8d4a461e5e6", "src/pages/Home.tsx"},
+		{"plain key", "test:src/main.ts", "test", "src/main.ts"},
+		{"key mismatch keeps component", "bluntcode:other:src/main.ts", "bluntcode:key", "bluntcode:other:src/main.ts"},
+	}
+	for _, tc := range cases {
+		if got := sonarProjectPath(tc.component, tc.key); got != tc.want {
+			t.Errorf("%s: sonarProjectPath(%q, %q) = %q, want %q", tc.name, tc.component, tc.key, got, tc.want)
+		}
 	}
 }
 

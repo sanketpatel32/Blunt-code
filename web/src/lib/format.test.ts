@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compactDuration, date, elapsed, relativeTime, scanStateDisplay, shortPath } from './format';
+import { analyzerName, compactDuration, date, elapsed, relativeTime, scanStateDisplay, shortFindingLocation, shortPath } from './format';
 
 const NOW = new Date('2026-08-22T12:00:00Z').getTime();
 
@@ -140,5 +140,35 @@ describe('scanStateDisplay', () => {
     expect(scanStateDisplay(null)).toEqual({ label: 'Ready', variant: 'outline' });
     expect(scanStateDisplay(undefined)).toEqual({ label: 'Ready', variant: 'outline' });
     expect(scanStateDisplay('some_new_state')).toEqual({ label: 'Some new state', variant: 'outline' });
+  });
+});
+
+describe('shortFindingLocation', () => {
+  const base = { id: 'f', analyzer_id: 'sonarqube', severity: 'high', message: 'm' };
+  it('collapses deep paths to the last two segments and keeps the line suffix', () => {
+    expect(shortFindingLocation({ ...base, relative_path: 'src/components/deep/nested/Widget.tsx', start_line: 12 } as never)).toBe('…/nested/Widget.tsx:12');
+  });
+  it('keeps shallow paths and column suffixes whole', () => {
+    expect(shortFindingLocation({ ...base, relative_path: 'src/main.py', start_line: 4, start_column: 7 } as never)).toBe('src/main.py:4:7');
+  });
+  it('passes project-level findings through untouched', () => {
+    expect(shortFindingLocation(base as never)).toBe('Project-level finding');
+  });
+});
+
+describe('analyzerName', () => {
+  it('maps every shipped analyzer id to a compact display name', () => {
+    expect(analyzerName('sonarqube')).toBe('SonarQube');
+    expect(analyzerName('gitleaks-secrets')).toBe('Gitleaks');
+    expect(analyzerName('osv-dependencies')).toBe('OSV');
+    expect(analyzerName('container-trivy')).toBe('Trivy');
+    expect(analyzerName('iac-checkov')).toBe('Checkov');
+    expect(analyzerName('license-scan')).toBe('License');
+    expect(analyzerName('secrets')).toBe('Secrets');
+    expect(analyzerName('pentest')).toBe('Pentest');
+    expect(analyzerName('todo')).toBe('Todo');
+  });
+  it('falls back to the raw id for unknown engines', () => {
+    expect(analyzerName('future-thing')).toBe('future-thing');
   });
 });

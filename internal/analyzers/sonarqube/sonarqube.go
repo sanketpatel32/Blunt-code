@@ -177,13 +177,20 @@ func (a *Adapter) Normalize(ctx context.Context, r analyzers.AnalyzerResult) ([]
 	out := make([]analyzers.Finding, 0, len(issues))
 	for _, x := range issues {
 		f := x.Finding()
-		// The issues API reports component paths as "<project-key>:<path>";
-		// strip the prefix so reports show workspace-relative paths.
-		f.RelativePath = strings.TrimPrefix(f.RelativePath, key+":")
+		f.RelativePath = sonarProjectPath(f.RelativePath, key)
 		f.SetFingerprint()
 		out = append(out, f)
 	}
 	return out, metrics, nil
+}
+
+// sonarProjectPath strips the "<project-key>:" prefix the issues API puts on
+// component keys so reports show workspace-relative paths. The key must be
+// trimmed as a whole: Blunt Code project keys contain colons themselves
+// ("bluntcode:<workspace-id>"), so splitting at the first colon would leave
+// the workspace id glued to every path.
+func sonarProjectPath(component, projectKey string) string {
+	return strings.TrimPrefix(component, projectKey+":")
 }
 
 func scannerFailureOutput(output string) string {
@@ -269,11 +276,7 @@ type TextRange struct {
 }
 
 func (x Issue) Finding() analyzers.Finding {
-	path := x.Component
-	if i := strings.Index(path, ":"); i >= 0 {
-		path = path[i+1:]
-	}
-	f := analyzers.Finding{AnalyzerID: ID, RuleID: x.Rule, Severity: sonarSeverity(x.Severity), Category: sonarCategory(x.Type), Title: x.Rule, Message: x.Message, RelativePath: path, RawSeverity: x.Severity, Metadata: map[string]any{"issue_key": x.Key, "type": x.Type}}
+	f := analyzers.Finding{AnalyzerID: ID, RuleID: x.Rule, Severity: sonarSeverity(x.Severity), Category: sonarCategory(x.Type), Title: x.Rule, Message: x.Message, RelativePath: x.Component, RawSeverity: x.Severity, Metadata: map[string]any{"issue_key": x.Key, "type": x.Type}}
 	if x.TextRange != nil {
 		f.StartLine = x.TextRange.StartLine
 		f.StartColumn = x.TextRange.StartOffset

@@ -83,3 +83,24 @@ export const CATEGORY_LABELS: Record<AnalyzerCategory, string> = {
   license: 'License',
   hacking: 'Hacking',
 };
+
+/** Labels for the finding categories stored on findings (analyzers.Finding.category) —
+ *  a different vocabulary from the analyzer categories above; the Type rail chips
+ *  show these so raw ids like "code_smell" never reach the screen. */
+export const FINDING_CATEGORY_LABELS: Record<string, string> = {
+  bug: 'Bug',
+  vulnerability: 'Vulnerability',
+  security: 'Security',
+  correctness: 'Correctness',
+  maintainability: 'Maintainability',
+  code_smell: 'Code smell',
+  performance: 'Performance',
+  complexity: 'Complexity',
+  duplication: 'Duplication',
+  style: 'Style',
+  other: 'Other',
+};
+
+export function findingCategoryLabel(category: string): string {
+  return FINDING_CATEGORY_LABELS[category] ?? category;
+}

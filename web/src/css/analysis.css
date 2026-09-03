@@ -436,7 +436,10 @@
 .analysis-list td:nth-child(4) .badge,
 .analysis-list td:nth-child(4) code { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.analysis-list td:nth-child(4) .badge { margin-bottom: 3px; }
+/* The whole row opens the source pane; the path cell is the affordance users
+   aim for, so its hover state echoes the row's. */
+.analysis-list td:nth-child(3) { cursor: inherit; }
+.analysis-list tbody tr:hover td:nth-child(3) code { color: var(--color-ink); }
 
 /* The old standalone-report framing reads as a dead band under the verdict strip. */
 .scan-page .report { margin-top: var(--space-md); padding-top: 0; border-top: 0; }

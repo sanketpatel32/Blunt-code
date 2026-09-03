@@ -133,7 +133,6 @@ describe('ReportView toolbar filters', () => {
     await advance(150);
     await type(search, 'eval');
     expect(findingUrls()).toHaveLength(1); // typing never triggers an extra request
-    expect(host.textContent).toContain('search: "eval"'); // the chip echoes instantly
 
     await advance(300);
     expect(findingUrls()).toHaveLength(2);
@@ -151,11 +150,9 @@ describe('ReportView toolbar filters', () => {
     await click(high);
     expect(findingUrls().at(-1)).toContain('severity=high');
     expect(high.getAttribute('aria-pressed')).toBe('true');
-    expect(host.textContent).toContain('severity: high');
 
     await click(medium);
     expect(findingUrls().at(-1)).toContain('severity=high%2Cmedium'); // comma list, one request
-    expect(host.textContent).toContain('severity: high, medium');
 
     await click(high);
     expect(findingUrls().at(-1)).toContain('severity=medium');
@@ -172,7 +169,6 @@ describe('ReportView toolbar filters', () => {
     const host = await render();
     await click(chipIn(host, 'Status', 'new'));
     expect(findingUrls().at(-1)).toContain('status=new');
-    expect(host.textContent).toContain('status: new');
 
     await click(chipIn(host, 'Status', 'persistent'));
     expect(findingUrls().at(-1)).toContain('status=persistent');
@@ -196,7 +192,6 @@ describe('ReportView toolbar filters', () => {
 
       await click(ruff);
       expect(findingUrls().at(-1)).toContain('analyzer=ruff');
-      expect(host.textContent).toContain('tool: Ruff');
 
       await click(ruff);
       expect(findingUrls().at(-1)).not.toContain('analyzer='); // clicking the active chip clears it
@@ -213,11 +208,12 @@ describe('ReportView toolbar filters', () => {
       const rail = host.querySelector('fieldset[aria-label="Type"]')!;
       const chips = [...rail.querySelectorAll<HTMLButtonElement>('.chip')];
       expect(chips.map((chip) => chip.querySelector('.count')!.textContent)).toEqual(['2', '1']); // correctness first
-      expect(chips[0].textContent).toContain('correctness'); // unknown labels fall back to the raw category id
+      expect(chips[0].textContent).toContain('Correctness'); // finding categories get human labels, not raw ids
+      expect(chips[1].textContent).toContain('Security');
 
       await click(chips[0]);
       expect(findingUrls().at(-1)).toContain('category=correctness');
-      expect(host.textContent).toContain('type: correctness');
+      expect(host.querySelector('.filter-chips')).toBeNull(); // the pressed rail chip is the indicator; no duplicate summary chip
     });
   });
 
@@ -226,7 +222,7 @@ describe('ReportView toolbar filters', () => {
     await type(host.querySelector<HTMLInputElement>('[placeholder="Search message, rule, or file"]')!, 'eval');
     await advance(300);
     await click(chipIn(host, 'Severity', 'high'));
-    expect(host.querySelector('.filter-chips')!.children).toHaveLength(2);
+    expect(findingUrls().at(-1)).toContain('severity=high');
 
     await click([...host.querySelectorAll('button')].find((button) => button.textContent === 'Clear')!);
     expect(findingUrls().at(-1)).not.toContain('q=');
@@ -234,20 +230,17 @@ describe('ReportView toolbar filters', () => {
     expect(host.querySelector('.filter-chips')).toBeNull();
   });
 
-  it('renders one removable chip per active filter and removes only that filter', async () => {
+  it('keeps toolbar-only filters out of the summary chip row', async () => {
     const host = await render();
     await type(host.querySelector<HTMLInputElement>('[placeholder="Search message, rule, or file"]')!, 'eval');
     await click(chipIn(host, 'Severity', 'high'));
     await click(chipIn(host, 'Tool', 'Ruff'));
-    expect([...host.querySelectorAll('.filter-chip')].map((chip) => chip.textContent)).toEqual(['severity: high×', 'tool: Ruff×', 'search: "eval"×']);
-
-    await click(host.querySelector<HTMLButtonElement>('[aria-label="Remove severity filter"]')!);
-    expect([...host.querySelectorAll('.filter-chip')].map((chip) => chip.textContent)).toEqual(['tool: Ruff×', 'search: "eval"×']);
-    expect(findingUrls().at(-1)).not.toContain('severity=');
+    await click(chipIn(host, 'Status', 'new'));
+    await settle();
+    expect(host.querySelector('.filter-chips')).toBeNull(); // pressed chips + the search box already show this state
+    expect(findingUrls().at(-1)).toContain('severity=high');
     expect(findingUrls().at(-1)).toContain('analyzer=ruff');
-
-    await click(host.querySelector<HTMLButtonElement>('[aria-label="Remove tool filter"]')!);
-    expect(findingUrls().at(-1)).not.toContain('analyzer=');
+    expect(findingUrls().at(-1)).toContain('status=new');
   });
 
   it('keeps rendering chips for path/rule params from old shared URLs even though no inputs exist for them', async () => {
@@ -622,6 +615,40 @@ describe('ReportView finding row copy', () => {
       } finally {
         delete (navigator as { clipboard?: unknown }).clipboard;
       }
+    });
+  });
+});
+
+describe('ReportView finding cells', () => {
+  function withFinding(row: typeof finding & { rule_id?: string }, body: (host: HTMLElement) => Promise<void>) {
+    return fetchMock.withImplementation((input: string) => {
+      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, warnings: [], findings: [row] }));
+      if (input.includes('/preview')) return Promise.resolve(json(previewBody));
+      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: [row], total: 1, limit: 100, offset: 0, has_more: false, has_next: false }));
+      return Promise.resolve(json({ items: [] }));
+    }, async () => { await body(await render()); });
+  }
+
+  it('the Tool cell shows a compact display name and never repeats the rule id', async () => {
+    await withFinding({ ...finding, analyzer_id: 'sonarqube', rule_id: 'typescript:S2699' }, async (host) => {
+      const toolCell = host.querySelector('.findings-table tbody tr td:nth-child(4)')!;
+      expect(toolCell.textContent).toBe('SonarQube');
+    });
+  });
+
+  it('the File cell shows the path tail with line number and keeps the full path in its title', async () => {
+    await withFinding({ ...finding, relative_path: 'src/components/deep/nested/Widget.tsx', start_line: 12 }, async (host) => {
+      const code = host.querySelector('.findings-table tbody tr td:nth-child(3) code')!;
+      expect(code.textContent).toBe('…/nested/Widget.tsx:12');
+      expect(code.getAttribute('title')).toBe('src/components/deep/nested/Widget.tsx:12');
+    });
+  });
+
+  it('clicking the File cell opens the source pane like the rest of the row', async () => {
+    await withFinding(finding, async (host) => {
+      expect(host.querySelector('.analysis-split')!.getAttribute('data-pane')).toBe('closed');
+      await click(host.querySelector('.findings-table tbody tr td:nth-child(3)')!);
+      expect(host.querySelector('.analysis-split')!.getAttribute('data-pane')).toBe('open');
     });
   });
 });
