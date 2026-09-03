@@ -437,10 +437,9 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
 
   return (
     <div className="page search-page space-y-3">
-      {/* Compact Header */}
       <PageHeader
         eyebrow="Findings Search"
-        title="Find findings everywhere"
+        title="Search findings"
         badge={total > 0 ? <Badge variant="secondary" className="text-xs font-mono tabular-nums">{total.toLocaleString()} matches</Badge> : undefined}
         description="Searches every stored scan on this computer. Suppressed findings stay hidden."
         actions={

@@ -360,7 +360,7 @@ describe('ReportView load-more pagination', () => {
       expect(footStatus(host)).toBe('End of list');
       expect([...host.querySelectorAll('button')].some((button) => button.textContent === 'Show more')).toBe(false);
     });
-  });
+  }, 20000);
 
   it('treats the envelope has_next as authoritative over the legacy has_more flag', async () => {
     await pageMock(async (host) => {

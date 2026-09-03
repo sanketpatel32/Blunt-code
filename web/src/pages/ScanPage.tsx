@@ -15,10 +15,12 @@ import { ReportView } from './report/ReportView';
 import { pushNotification } from '../lib/notifications';
 import { analyzerMeta, categoryColor, CATEGORY_LABELS } from '../lib/analyzerCatalog';
 import { useReducedMotion } from '../hooks/useReducedMotion';
+import { PageHeader } from '../components/PageHeader';
+import { Button } from '../components/ui/button';
 
 export type { ScanEvent } from '../lib/scanEvents';
 
-export function ScanPage({ id, notify }: { id: string; go?: (r: Route) => void; notify: (n: Notice) => void }) {
+export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => void; notify: (n: Notice) => void }) {
   const scan = useLoad(() => api.scan(id), [id]);
   const [events, setEvents] = useState<ScanEvent[]>([]);
   const eventSeq = useRef(0);
@@ -93,21 +95,45 @@ export function ScanPage({ id, notify }: { id: string; go?: (r: Route) => void; 
     current.duration_ms !== undefined && current.duration_ms !== null ? elapsed(current.started_at, current.finished_at) : `elapsed ${elapsed(current.started_at, current.finished_at)}`,
   ].filter(Boolean);
   return <div className="page scan-page">
-    <header className="analysis-header" data-tone={live ? 'accent' : state.variant}>
-      <div className="analysis-headline">
-        {grade && <span className="analysis-grade" data-grade={grade} aria-hidden="true">{grade}</span>}
-        <div className="analysis-headline-copy">
-          <p className="eyebrow">Analysis</p>
-          <h1>{headline}</h1>
-          <p className="analysis-meta">{metaBits.join(' · ')}{runs.length ? ` · ${succeeded} of ${runs.length} engines succeeded` : ''}</p>
-          {live && <ScanProgressBar scan={current} events={events} />}
+    <PageHeader
+      eyebrow="Analysis"
+      title={headline}
+      badge={
+        <div className="flex items-center gap-2 flex-wrap">
+          {grade && (
+            <span className="analysis-grade-badge font-mono font-bold text-xs px-2 py-0.5 rounded border border-[var(--color-rule)] bg-[var(--color-surface-muted)] text-[var(--color-ink)]" data-grade={grade}>
+              Grade {grade}
+            </span>
+          )}
+          <span className={`stream-state ${streamState} text-xs`} aria-live="polite">
+            <i aria-hidden="true" />
+            {terminal ? 'Saved report' : streamState === 'live' ? 'Live updates' : streamState === 'reconnecting' ? `Reconnecting${streamAttempts > 1 ? ` (try ${streamAttempts})` : ''}` : 'Connecting'}
+          </span>
         </div>
-      </div>
-      <div className="analysis-header-actions">
-        <span className={`stream-state ${streamState}`} aria-live="polite"><i aria-hidden="true" />{terminal ? 'Saved report' : streamState === 'live' ? 'Live updates' : streamState === 'reconnecting' ? `Reconnecting${streamAttempts > 1 ? ` (try ${streamAttempts})` : ''}` : 'Connecting'}</span>
-        {live && <button type="button" className="button danger" onClick={cancel}>Cancel scan</button>}
-      </div>
-    </header>
+      }
+      description={
+        <span>
+          {metaBits.join(' · ')}
+          {runs.length ? ` · ${succeeded} of ${runs.length} engines succeeded` : ''}
+        </span>
+      }
+      actions={
+        <div className="flex items-center gap-2">
+          {live && (
+            <Button variant="destructive" size="sm" onClick={cancel}>
+              Cancel scan
+            </Button>
+          )}
+          {go && current.workspace_id && (
+            <Button variant="outline" size="sm" onClick={() => go({ page: 'workspace', id: current.workspace_id })}>
+              Workspace
+            </Button>
+          )}
+        </div>
+      }
+    >
+      {live && <div className="mt-2 w-full"><ScanProgressBar scan={current} events={events} /></div>}
+    </PageHeader>
     {live && <section className="progress-layout">
       <ScanStageList scan={current} events={events} />
       <aside className="scan-side" aria-busy={!terminal ? 'true' : 'false'}>

@@ -121,7 +121,7 @@ export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r
         eyebrow="Analyzers"
         title="Analysis tools"
         badge={<Badge variant="secondary" className="text-xs font-mono tabular-nums">{backend.length + builtIns.length} engines</Badge>}
-        description="Local tool setup is private and run on-device."
+        description="Manage local analyzers, linters, and vulnerability engines configured on this machine."
       />
       {tools.loading ? <SkeletonTable rows={4} cols={5} className="tool-table" /> : tools.error ? <ErrorPanel error={tools.error} retry={tools.reload} /> : !backend.length ? <Empty title="No managed tools" icon={<WrenchIcon />}>Tool status appears here after the backend registers analyzers.</Empty> : <><ReadinessStrip tools={backend} busy={busy} />
     {[...grouped.entries()].map(([cat, list]) => <CategoryAccordion key={cat} category={cat} tools={list} busy={busy} onAction={action} />)}

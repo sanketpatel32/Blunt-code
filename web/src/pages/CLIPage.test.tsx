@@ -124,4 +124,23 @@ describe('CLIPage', () => {
 
     expect(writeText).toHaveBeenCalled();
   });
+
+  it('renders with theme-compliant classes in both dark and light modes without hardcoded colors', async () => {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    const darkHost = await renderPage();
+    expect(darkHost.querySelector('.cli-page')).not.toBeNull();
+    expect(darkHost.querySelector('.cli-hero')).not.toBeNull();
+    expect(darkHost.querySelector('.cli-command-card')).not.toBeNull();
+    expect(darkHost.querySelector('.cli-terminal-box')).not.toBeNull();
+
+    // Verify no elements carry hardcoded #fff, #1e1e1e, or rgba inline background colors
+    const elementsWithInlineBg = Array.from(darkHost.querySelectorAll('[style*="background"]'));
+    const hardcodedBgs = elementsWithInlineBg.filter((el) => {
+      const s = el.getAttribute('style') || '';
+      return s.includes('#fff') || s.includes('#1e1e1e') || s.includes('rgba(0,0,0');
+    });
+    expect(hardcodedBgs).toHaveLength(0);
+
+    document.documentElement.setAttribute('data-theme', 'light');
+  });
 });

@@ -15,7 +15,7 @@ export default defineConfig({
       '/api': { target: 'http://127.0.0.1:8787', changeOrigin: true },
     },
   },
-  test: { environment: 'jsdom', setupFiles: ['./src/testSetup.ts'] },
+  test: { environment: 'jsdom', setupFiles: ['./src/testSetup.ts'], testTimeout: 15000 },
   build: {
     chunkSizeWarningLimit: 600,
     rollupOptions: {

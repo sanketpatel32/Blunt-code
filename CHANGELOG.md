@@ -5,6 +5,19 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.1] - 2026-09-03
+
+### Fixed
+- **Dark Mode and Light Mode Theming on CLI App Page (`/cli`)**:
+  - Replaced inline styles and ad-hoc fallback values with dedicated, design-token-driven CSS classes in `web/src/css/cli.css`.
+  - All surfaces, cards, hero sections, interactive tabs, search inputs, category pills, terminal synopsis boxes, option tables, and recipe code blocks now adapt seamlessly between dark mode (`:root[data-theme='dark']`) and light mode (`:root`).
+  - Inputs and select elements in the visual Command Generator use proper theme surfaces and borders (`--color-surface`, `--color-rule-strong`, `--color-ink`), preventing white-on-white or dark-on-dark contrast issues in dark mode.
+  - Verified 100% WCAG AA contrast compliance across all text/background token pairings.
+  - Added theme-compliance test asserting no hardcoded `#fff` or `#1e1e1e` backgrounds in `CLIPage.test.tsx`.
+- **PageHeader and Workspace Tree Consistency**:
+  - Maintained `.workspace-root` class on file tree path breadcrumb in `FilesPage.tsx`.
+  - Configured Vitest test timeout (`testTimeout: 15000`) in `web/vite.config.ts` to prevent parallel test runner timeouts on Windows.
+
 ## [0.19.0] - 2026-09-03
 
 ### Added

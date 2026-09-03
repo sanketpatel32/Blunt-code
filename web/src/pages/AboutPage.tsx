@@ -4,6 +4,7 @@ import { copyToClipboard } from '../lib/clipboard';
 import { useLoad } from '../hooks/useLoad';
 import { LanguageCoverage } from '../components/LanguageCoverage';
 import { PageHeader } from '../components/PageHeader';
+import { Badge } from '../components/ui/badge';
 
 /**
  * Privacy point icons drawn inline (AboutPage gets no stylesheet of its own) so
@@ -51,7 +52,8 @@ function EyeOffIcon(props: SVGProps<SVGSVGElement>) {
       <PageHeader
         eyebrow="About"
         title="Blunt Code"
-        description="A local-first static analysis application for Windows."
+        badge={meta.data?.version ? <Badge variant="secondary" className="text-xs font-mono">v{meta.data.version}</Badge> : undefined}
+        description="A local-first static analysis and security auditing application for Windows."
       />
       <section className="about-card">
         <h2>Local by default <span className="badge">{meta.data?.version ? `v${meta.data.version}` : 'Version unknown'}</span></h2>

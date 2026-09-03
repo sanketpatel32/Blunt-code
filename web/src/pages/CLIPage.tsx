@@ -4,6 +4,7 @@ import { useLoad } from '../hooks/useLoad';
 import { copyToClipboard } from '../lib/clipboard';
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
+import { Badge } from '../components/ui/badge';
 import {
   Terminal,
   Copy,
@@ -14,6 +15,7 @@ import {
   Sliders,
   GitBranch,
 } from 'lucide-react';
+import '../css/cli.css';
 
 interface CLICommand {
   id: string;
@@ -22,8 +24,8 @@ interface CLICommand {
   synopsis: string;
   description: string;
   badge?: string;
-  flags: { flag: string; type: string; desc: string; def?: string }[];
-  examples: { title: string; cmd: string }[];
+  flags?: { flag: string; type: string; desc: string; def?: string }[];
+  examples?: { title: string; cmd: string }[];
   subcommands?: { name: string; desc: string; syntax: string }[];
 }
 
@@ -100,203 +102,208 @@ const COMMANDS: CLICommand[] = [
       { name: 'preview', desc: 'Show source code excerpt with line numbers and caret', syntax: 'bluntcode findings preview <scan-id> <finding-id> [--lines N] [--json]' },
     ],
     flags: [
-      { flag: '--severity', type: 'string', desc: 'Filter severities (e.g. critical, high+, medium)' },
+      { flag: '--workspace', type: 'string', desc: 'Scope search to specific workspace name or ID' },
+      { flag: '--severity', type: 'string', desc: 'Filter by comma-separated severities (critical, high, medium, low, info)' },
       { flag: '--analyzer', type: 'string', desc: 'Filter by analyzer ID (e.g. semgrep, ruff, secrets)' },
-      { flag: '--format', type: 'string', desc: 'Output format: text, json, jsonl, csv', def: 'text' },
-      { flag: '--output', type: 'file', desc: 'Write output to file path' },
-      { flag: '--lines', type: 'int', desc: 'Context lines around snippet for preview', def: '5' },
+      { flag: '--limit', type: 'int', desc: 'Maximum number of findings to output (default: 50)' },
+      { flag: '--format', type: 'string', desc: 'Output format: text, json, jsonl, or csv (default: text)' },
+      { flag: '--output', type: 'file', desc: 'Destination file path for export' },
+      { flag: '--lines', type: 'int', desc: 'Context lines around preview excerpt (default: 5)' },
     ],
     examples: [
-      { title: 'Search for secrets across all projects', cmd: 'bluntcode findings search "AWS" --severity critical' },
-      { title: 'Export findings as CSV spreadsheet', cmd: 'bluntcode findings list . --format csv --output issues.csv' },
-      { title: 'Output newline-delimited JSON for jq pipelines', cmd: 'bluntcode findings list . --format jsonl' },
-      { title: 'Inspect finding snippet with line numbers', cmd: 'bluntcode findings preview <scan-id> <finding-id> --lines 8' },
+      { title: 'Search for hardcoded credentials', cmd: 'bluntcode findings search "AWS" --severity critical' },
+      { title: 'List issues in current workspace as CSV', cmd: 'bluntcode findings list . --format csv --output issues.csv' },
+      { title: 'Inspect source snippet for finding', cmd: 'bluntcode findings preview 99479be6... df7e5ede... --lines 8' },
     ],
   },
   {
     id: 'report',
     name: 'bluntcode report',
     category: 'Reports & Exports',
-    synopsis: 'bluntcode report <scan-id|workspace-path> [--format md|sarif|html|json|csv|jsonl] [--output <file>]',
-    description:
-      'Exports a full audit report for any scan in standard formats, including SonarQube-style Markdown, self-contained HTML, and OASIS SARIF.',
+    synopsis: 'bluntcode report <scan-id|workspace-path> [options]',
+    description: 'Generates and exports complete multi-tool audit reports in standard document formats.',
     badge: 'Exporters',
     flags: [
-      { flag: '--format', type: 'string', desc: 'Format: md (markdown), sarif, html, json, csv, jsonl', def: 'md' },
-      { flag: '--output', type: 'file', desc: 'Write report to destination file instead of stdout' },
+      { flag: '--format', type: 'string', desc: 'Report format: md (Markdown), sarif, html, json, csv, jsonl', def: 'md' },
+      { flag: '--output', type: 'file', desc: 'Destination file path (default: stdout)' },
       { flag: '--json', type: 'bool', desc: 'Alias for --format json' },
     ],
     examples: [
-      { title: 'Generate Markdown audit report to stdout', cmd: 'bluntcode report .' },
-      { title: 'Export interactive HTML report', cmd: 'bluntcode report . --format html --output audit-report.html' },
-      { title: 'Generate SARIF log for CI artifact', cmd: 'bluntcode report . --format sarif --output results.sarif' },
-      { title: 'Export finding records as CSV', cmd: 'bluntcode report <scan-id> --format csv --output scan-findings.csv' },
+      { title: 'Generate SonarQube-style Markdown report', cmd: 'bluntcode report . --format md' },
+      { title: 'Generate standalone HTML audit report', cmd: 'bluntcode report . --format html --output audit.html' },
+      { title: 'Export OASIS SARIF log', cmd: 'bluntcode report . --format sarif --output audit.sarif' },
+      { title: 'Pipe JSON report into jq', cmd: 'bluntcode report . --format json | jq ".findings[] | select(.severity==\"critical\")"' },
     ],
   },
   {
     id: 'history',
     name: 'bluntcode history',
-    category: 'History & Compare',
-    synopsis: 'bluntcode history [path] | bluntcode history compare <id1> <id2> | bluntcode history delete <id>',
-    description: 'Trace historical scan runs, compare two scans for regressions, and clean up past records.',
+    category: 'Audit & History',
+    synopsis: 'bluntcode history [workspace-id|path] [options]',
+    description: 'Inspect scan history, track fix velocity, and compare two scans for regressions.',
     badge: 'Audit Trail',
     subcommands: [
-      { name: 'list', desc: 'List historical scans with durations and finding counts', syntax: 'bluntcode history [workspace-id|path] [--limit N] [--json]' },
-      { name: 'compare', desc: 'Diff two scans to show new, fixed, and persistent findings', syntax: 'bluntcode history compare <scan1> <scan2> [--json]' },
-      { name: 'delete', desc: 'Permanently remove a scan record', syntax: 'bluntcode history delete <scan-id> [--json]' },
+      { name: 'list', desc: 'List historical scans for workspace or globally', syntax: 'bluntcode history [workspace] [--limit N] [--json]' },
+      { name: 'compare', desc: 'Diff two scans to show new, fixed, and persistent findings', syntax: 'bluntcode history compare <scan-1-id> <scan-2-id> [--json]' },
+      { name: 'delete', desc: 'Delete a historical scan record', syntax: 'bluntcode history delete <scan-id> [--json]' },
     ],
     flags: [
-      { flag: '--limit', type: 'int', desc: 'Maximum number of scans to display (1-100)', def: '20' },
+      { flag: '--limit', type: 'int', desc: 'Maximum number of scans to display (default: 20)' },
       { flag: '--json', type: 'bool', desc: 'Output structured JSON payload' },
     ],
     examples: [
-      { title: 'View recent scans for current workspace', cmd: 'bluntcode history . --limit 10' },
-      { title: 'Compare baseline and PR scans', cmd: 'bluntcode history compare <scan-1-id> <scan-2-id>' },
-      { title: 'Prune historical scans older than retention', cmd: 'bluntcode prune . --keep 10' },
+      { title: 'List recent scans in workspace', cmd: 'bluntcode history . --limit 10' },
+      { title: 'Compare baseline and current scan', cmd: 'bluntcode history compare b71d4a... 99479b...' },
+      { title: 'Delete an obsolete scan', cmd: 'bluntcode history delete 0c5cc632...' },
     ],
   },
   {
     id: 'suppress',
     name: 'bluntcode suppress',
-    category: 'Rules & Suppressions',
-    synopsis: 'bluntcode suppress <list|add|remove|import> <workspace> [args]',
-    description:
-      'Manage dismissed findings and false positives. Suppressed findings are excluded from scan totals, reports, and CI gates.',
-    badge: 'Triaging',
+    category: 'Suppressions & Rules',
+    synopsis: 'bluntcode suppress <list|add|remove|import> <workspace> [options]',
+    description: 'Manage suppressed false positives permanently across scans by SHA-256 fingerprint hash.',
+    badge: 'Triage',
     subcommands: [
       { name: 'list', desc: 'List active suppressions for a workspace', syntax: 'bluntcode suppress list <workspace> [--json|--csv]' },
-      { name: 'add', desc: 'Dismiss a finding fingerprint forever', syntax: 'bluntcode suppress add <workspace> --fingerprint <hash> [--reason <text>]' },
-      { name: 'remove', desc: 'Unsuppress a previously dismissed fingerprint', syntax: 'bluntcode suppress remove <workspace> --fingerprint <hash>' },
+      { name: 'add', desc: 'Suppress a finding by fingerprint hash', syntax: 'bluntcode suppress add <workspace> --fingerprint <hash> [--reason <text>]' },
+      { name: 'remove', desc: 'Remove a suppression to re-enable finding', syntax: 'bluntcode suppress remove <workspace> --fingerprint <hash>' },
       { name: 'import', desc: 'Batch import suppressions from a CSV file', syntax: 'bluntcode suppress import <workspace> <csv-file>' },
     ],
     flags: [
-      { flag: '--fingerprint', type: 'string', desc: 'Unique SHA-256 finding fingerprint hash' },
-      { flag: '--reason', type: 'string', desc: 'Justification for suppression (e.g. "Dev-only fixture")' },
-      { flag: '--json', type: 'bool', desc: 'Output JSON payload' },
-      { flag: '--csv', type: 'bool', desc: 'Output CSV spreadsheet format' },
+      { flag: '--fingerprint', type: 'hash', desc: 'SHA-256 fingerprint hash of finding to suppress' },
+      { flag: '--reason', type: 'string', desc: 'Audit justification reason for suppression' },
+      { flag: '--json', type: 'bool', desc: 'Output structured JSON array' },
+      { flag: '--csv', type: 'bool', desc: 'Output suppressions as CSV' },
     ],
     examples: [
       { title: 'List suppressions for workspace', cmd: 'bluntcode suppress list .' },
-      { title: 'Suppress false positive', cmd: 'bluntcode suppress add . --fingerprint a7f3b89... --reason "Mock secret in tests"' },
-      { title: 'Re-enable finding', cmd: 'bluntcode suppress remove . --fingerprint a7f3b89...' },
-      { title: 'Import suppressions from CSV', cmd: 'bluntcode suppress import . team-suppressions.csv' },
+      { title: 'Suppress a false positive finding', cmd: 'bluntcode suppress add . --fingerprint b1242b... --reason "Mock secret in unit test"' },
+      { title: 'Batch import suppressions from audit CSV', cmd: 'bluntcode suppress import . suppressions.csv' },
     ],
   },
   {
     id: 'rules',
     name: 'bluntcode rules',
-    category: 'Rules & Suppressions',
-    synopsis: 'bluntcode rules <list|disable|enable|overrides> <workspace> [args]',
-    description: 'Configure workspace file exclude overrides and enable or disable specific analyzer rules.',
+    category: 'Suppressions & Rules',
+    synopsis: 'bluntcode rules <list|disable|enable|overrides> <workspace> [options]',
+    description: 'Configure workspace file exclusions, path overrides, and toggle individual rules.',
     badge: 'Configuration',
     subcommands: [
-      { name: 'list', desc: 'List configured rules and path exclusion overrides', syntax: 'bluntcode rules list <workspace> [--json]' },
-      { name: 'disable', desc: 'Disable a specific rule pattern', syntax: 'bluntcode rules disable <workspace> <pattern>' },
-      { name: 'enable', desc: 'Enable a specific rule pattern', syntax: 'bluntcode rules enable <workspace> <pattern>' },
-      { name: 'overrides', desc: 'View or set path exclusion overrides', syntax: 'bluntcode rules overrides <workspace> [--set "path1,path2"] [--json]' },
+      { name: 'list', desc: 'List all rule toggles and path exclusion overrides', syntax: 'bluntcode rules list <workspace> [--json]' },
+      { name: 'disable', desc: 'Disable a rule pattern from scanning', syntax: 'bluntcode rules disable <workspace> <rule-or-path>' },
+      { name: 'enable', desc: 'Re-enable a rule pattern', syntax: 'bluntcode rules enable <workspace> <rule-or-path>' },
+      { name: 'overrides', desc: 'View or set comma-separated path exclusions', syntax: 'bluntcode rules overrides <workspace> [--set "path1,path2"]' },
     ],
     flags: [
-      { flag: '--set', type: 'string', desc: 'Comma-separated glob paths to exclude from analysis' },
-      { flag: '--json', type: 'bool', desc: 'Output JSON payload' },
+      { flag: '--set', type: 'string', desc: 'Comma-separated list of path exclusion globs (e.g. "dist/**,vendor/**")' },
+      { flag: '--json', type: 'bool', desc: 'Output structured JSON payload' },
     ],
     examples: [
-      { title: 'View workspace rules and overrides', cmd: 'bluntcode rules list .' },
-      { title: 'Exclude build directories from scans', cmd: 'bluntcode rules overrides . --set "dist/**,build/**,vendor/**"' },
-      { title: 'Disable rule in test files', cmd: 'bluntcode rules disable . "tests/**"' },
+      { title: 'Inspect active workspace rules', cmd: 'bluntcode rules list .' },
+      { title: 'Exclude test fixtures directory', cmd: 'bluntcode rules overrides . --set "dist/**,build/**,tests/fixtures/**"' },
+      { title: 'Disable a specific analyzer rule', cmd: 'bluntcode rules disable . "todo.fixme"' },
     ],
   },
   {
     id: 'tools',
     name: 'bluntcode tools',
-    category: 'Managed Analyzers',
-    synopsis: 'bluntcode tools <list|install|repair|update> [tool-id]',
-    description:
-      'Inspect, verify, download, and repair local hermetic analyzer binaries (Ruff, Biome, Semgrep, Gitleaks, Checkov, Trivy, SonarQube).',
+    category: 'Analyzer Toolchain',
+    synopsis: 'bluntcode tools <list|install|repair|update> [args]',
+    description: 'Inspect status, install, repair, and update hermetic analyzer binaries (Ruff, Biome, Semgrep, SonarQube, etc.).',
     badge: 'Toolchain',
     subcommands: [
-      { name: 'list', desc: 'List all managed tools, versions, and readiness', syntax: 'bluntcode tools list [--json]' },
-      { name: 'install', desc: 'Download and verify a hermetic analyzer binary', syntax: 'bluntcode tools install <tool-id>' },
-      { name: 'repair', desc: 'Reinstall and verify analyzer binary', syntax: 'bluntcode tools repair <tool-id>' },
-      { name: 'update', desc: 'Update analyzer to latest manifest version', syntax: 'bluntcode tools update <tool-id>' },
+      { name: 'list', desc: 'List all managed tools, versions, and installation states', syntax: 'bluntcode tools list [--json]' },
+      { name: 'install', desc: 'Download and verify a pinned analyzer binary', syntax: 'bluntcode tools install <tool-id>' },
+      { name: 'repair', desc: 'Force re-download and repair of damaged tool', syntax: 'bluntcode tools repair <tool-id>' },
+      { name: 'update', desc: 'Refresh tool configuration to latest pinned version', syntax: 'bluntcode tools update <tool-id>' },
     ],
     flags: [
-      { flag: '--json', type: 'bool', desc: 'Output JSON status array' },
+      { flag: '--json', type: 'bool', desc: 'Output tool states as JSON array' },
     ],
     examples: [
-      { title: 'Inspect toolchain readiness', cmd: 'bluntcode tools list' },
-      { title: 'Download Semgrep analyzer', cmd: 'bluntcode tools install semgrep' },
-      { title: 'Repair Gitleaks binary', cmd: 'bluntcode tools repair gitleaks' },
-      { title: 'Output tools status as JSON for script', cmd: 'bluntcode tools list --json' },
+      { title: 'Inspect installed analyzers', cmd: 'bluntcode tools list' },
+      { title: 'Install Semgrep engine', cmd: 'bluntcode tools install semgrep' },
+      { title: 'Repair Gitleaks binary installation', cmd: 'bluntcode tools repair gitleaks-secrets' },
     ],
   },
   {
     id: 'pentest',
     name: 'bluntcode pentest',
-    category: 'Dynamic Pentest & DAST',
+    category: 'Dynamic Pentest',
     synopsis: 'bluntcode pentest probe <url> [options]',
-    description:
-      'Performs dynamic DAST probing against any HTTP endpoint. Audits security headers, CORS misconfigurations, TLS configuration, info disclosure, and security grade.',
-    badge: 'DAST Security',
+    description: 'Perform active DAST security header probing, TLS analysis, and dynamic vulnerability assessment against HTTP endpoints.',
+    badge: 'DAST Probing',
+    subcommands: [
+      { name: 'probe', desc: 'Probe URL endpoint for security misconfigurations', syntax: 'bluntcode pentest probe <url> [--scope standard|full|spider] [--auth-mode bearer|basic|cookie] [--auth-token <token>] [--json]' },
+    ],
     flags: [
-      { flag: '--scope', type: 'string', desc: 'Probe depth: standard, full, or spider', def: 'standard' },
-      { flag: '--auth-mode', type: 'string', desc: 'Auth mode: bearer, basic, or cookie' },
-      { flag: '--auth-token', type: 'string', desc: 'Auth token credentials or cookie string' },
-      { flag: '--json', type: 'bool', desc: 'Output complete structured JSON audit results' },
+      { flag: '--scope', type: 'string', desc: 'Probing scope: standard, full, or spider (default: standard)' },
+      { flag: '--auth-mode', type: 'string', desc: 'Authentication scheme: bearer, basic, or cookie' },
+      { flag: '--auth-token', type: 'string', desc: 'Credentials or token to authenticate probe requests' },
+      { flag: '--json', type: 'bool', desc: 'Output structured JSON audit results' },
     ],
     examples: [
       { title: 'Probe local development server', cmd: 'bluntcode pentest probe http://localhost:3000' },
-      { title: 'Full security probe on staging API', cmd: 'bluntcode pentest probe https://api.staging.internal --scope full' },
-      { title: 'Probe authenticated endpoint with Bearer token', cmd: 'bluntcode pentest probe http://localhost:8080 --auth-mode bearer --auth-token "eyJh..."' },
-      { title: 'Output JSON for automated security gating', cmd: 'bluntcode pentest probe http://localhost:3000 --json' },
+      { title: 'Deep authenticated API probe', cmd: 'bluntcode pentest probe https://api.staging.internal --scope full --auth-mode bearer --auth-token "eyJh..."' },
+      { title: 'Export probe results as JSON', cmd: 'bluntcode pentest probe https://myapp.local --json > pentest-audit.json' },
     ],
   },
   {
     id: 'stats',
-    name: 'bluntcode stats, trends, risk',
-    category: 'Stats & Risk Metrics',
-    synopsis: 'bluntcode stats [workspace] | bluntcode trends <workspace> | bluntcode risk <workspace>',
-    description: 'Calculates global and per-workspace risk scores (0-100), risk grades (A-D), and historical severity trends.',
-    badge: 'Metrics & Health',
+    name: 'bluntcode stats / trends / risk',
+    category: 'Metrics & Trends',
+    synopsis: 'bluntcode <stats|trends|risk> [workspace] [options]',
+    description: 'Calculate global or workspace metrics, historical severity trends, and weighted risk scores (0-100) with letter grades (A-D).',
+    badge: 'Analytics',
+    subcommands: [
+      { name: 'stats', desc: 'Print scan count and finding totals', syntax: 'bluntcode stats [workspace] [--json]' },
+      { name: 'trends', desc: 'Historical severity counts over time', syntax: 'bluntcode trends <workspace> [--limit N] [--json]' },
+      { name: 'risk', desc: 'Calculate weighted risk score (0-100) and grade (A-D)', syntax: 'bluntcode risk <workspace> [--json]' },
+    ],
     flags: [
-      { flag: '--limit', type: 'int', desc: 'Number of scans to trace for trends (1-100)', def: '10' },
-      { flag: '--json', type: 'bool', desc: 'Output machine-readable JSON metrics' },
+      { flag: '--limit', type: 'int', desc: 'Number of past scans to include in trendline (default: 10)' },
+      { flag: '--json', type: 'bool', desc: 'Output structured JSON payload' },
     ],
     examples: [
-      { title: 'Global workspace & scan statistics', cmd: 'bluntcode stats' },
-      { title: 'Workspace-specific scan summary', cmd: 'bluntcode stats .' },
-      { title: 'Risk score and grade assessment', cmd: 'bluntcode risk .' },
-      { title: 'Severity trendline across recent scans', cmd: 'bluntcode trends . --limit 15' },
+      { title: 'View global statistics', cmd: 'bluntcode stats' },
+      { title: 'View workspace risk score and grade', cmd: 'bluntcode risk .' },
+      { title: 'Inspect severity trendline table', cmd: 'bluntcode trends . --limit 15' },
     ],
   },
   {
-    id: 'doctor',
-    name: 'bluntcode doctor, config, update',
+    id: 'diagnostics',
+    name: 'bluntcode doctor / config / update',
     category: 'Diagnostics & System',
-    synopsis: 'bluntcode doctor [--fix] [--json] | bluntcode config | bluntcode update check',
-    description: 'Diagnoses system health, checks tools integrity, repairs missing folders, and checks for updates.',
-    badge: 'Diagnostics',
+    synopsis: 'bluntcode <doctor|config|update> [options]',
+    description: 'Run environment health checks, view effective directory configurations, and check for new releases.',
+    badge: 'System',
+    subcommands: [
+      { name: 'doctor', desc: 'Diagnose runtime environment, PATH, and tool installations', syntax: 'bluntcode doctor [--fix] [--json]' },
+      { name: 'config', desc: 'Print resolved directory paths and configurations', syntax: 'bluntcode config [--json]' },
+      { name: 'update', desc: 'Check for newer Blunt Code releases on GitHub', syntax: 'bluntcode update check [--json]' },
+    ],
     flags: [
-      { flag: '--fix', type: 'bool', desc: 'Automatically repair missing folders and recreate corrupted databases' },
-      { flag: '--json', type: 'bool', desc: 'Output structured diagnostic JSON' },
+      { flag: '--fix', type: 'bool', desc: 'Automatically repair detected issues' },
+      { flag: '--json', type: 'bool', desc: 'Output structured JSON diagnostic payload' },
     ],
     examples: [
-      { title: 'Run environment health check', cmd: 'bluntcode doctor' },
-      { title: 'Automatically fix configuration issues', cmd: 'bluntcode doctor --fix' },
-      { title: 'Print resolved data directories and ports', cmd: 'bluntcode config' },
-      { title: 'Check if a newer version of Blunt Code is available', cmd: 'bluntcode update check' },
+      { title: 'Check system health', cmd: 'bluntcode doctor' },
+      { title: 'Self-heal environment issues', cmd: 'bluntcode doctor --fix' },
+      { title: 'Check for software updates', cmd: 'bluntcode update check' },
     ],
   },
   {
     id: 'agent',
-    name: 'bluntcode agent, llm',
+    name: 'bluntcode agent / llm',
     category: 'AI Agents & Automation',
-    synopsis: 'bluntcode agent docs | bluntcode agent scan <path> | bluntcode llm',
-    description:
-      'Optimized entrypoints for AI coding agents (Claude, Gemini, Cursor, Antigravity). Delivers clean JSON outputs and developer documentation.',
-    badge: 'AI Agents',
-    flags: [
-      { flag: '--json', type: 'bool', desc: 'Machine-readable output (default for agent scan)' },
-      { flag: '--quiet', type: 'bool', desc: 'Suppress interactive output (default for agent scan)' },
+    synopsis: 'bluntcode <agent|llm> [options]',
+    description: 'Commands optimized for AI coding assistants (Claude, Gemini, Cursor, Antigravity) with zero-browser JSON outputs.',
+    badge: 'Agent Ready',
+    subcommands: [
+      { name: 'agent docs', desc: 'Print llm.txt developer guidance to stdout', syntax: 'bluntcode agent docs' },
+      { name: 'agent scan', desc: 'Run scan with automatic --json and --quiet defaults', syntax: 'bluntcode agent scan <path> [scan flags]' },
+      { name: 'llm', desc: 'Print llms.txt standard index', syntax: 'bluntcode llm' },
     ],
     examples: [
       { title: 'Print agent instructions (llm.txt)', cmd: 'bluntcode agent docs' },
@@ -411,8 +418,9 @@ export function CLIPage() {
         cmd.name.toLowerCase().includes(q) ||
         cmd.description.toLowerCase().includes(q) ||
         cmd.synopsis.toLowerCase().includes(q) ||
-        cmd.flags.some((f) => f.flag.toLowerCase().includes(q) || f.desc.toLowerCase().includes(q)) ||
-        cmd.examples.some((e) => e.cmd.toLowerCase().includes(q) || e.title.toLowerCase().includes(q))
+        cmd.flags?.some((f) => f.flag.toLowerCase().includes(q) || f.desc.toLowerCase().includes(q)) ||
+        cmd.examples?.some((e) => e.cmd.toLowerCase().includes(q) || e.title.toLowerCase().includes(q)) ||
+        cmd.subcommands?.some((s) => s.name.toLowerCase().includes(q) || s.desc.toLowerCase().includes(q))
       );
     });
   }, [selectedCategory, search]);
@@ -440,51 +448,52 @@ export function CLIPage() {
       <PageHeader
         eyebrow="Developer Reference"
         title="Command-Line Interface (CLI)"
+        badge={meta.data?.version ? <Badge variant="secondary" className="text-xs font-mono">v{meta.data.version}</Badge> : undefined}
         description="Every feature in Blunt Code is fully accessible from your terminal, CI/CD pipeline, pre-commit hook, or AI assistant."
       />
 
       {/* Hero Overview Card */}
-      <section className="about-card" style={{ marginBottom: 'var(--space-md)' }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-sm)' }}>
+      <section className="cli-hero">
+        <div className="cli-hero-top">
           <div>
-            <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <h2 className="cli-hero-title">
               <Terminal size={20} />
               <code>bluntcode</code> CLI {meta.data?.version && <span className="badge">v{meta.data.version}</span>}
             </h2>
-            <p style={{ margin: '6px 0 0', color: 'var(--text-secondary)' }}>
+            <p className="cli-hero-desc">
               Headless code security analysis, vulnerability probing, and project metrics for Windows.
             </p>
           </div>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <span className="badge" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+          <div className="cli-badges">
+            <span className="badge">
               <Shield size={13} /> 100% Local & Hermetic
             </span>
-            <span className="badge" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+            <span className="badge">
               <GitBranch size={13} /> CI Exit Codes
             </span>
-            <span className="badge" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+            <span className="badge">
               <Bot size={13} /> Agent Ready
             </span>
           </div>
         </div>
 
         {/* Global CLI quick facts */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginTop: '16px' }}>
-          <div style={{ padding: '12px', background: 'var(--bg-subtle, rgba(0,0,0,0.03))', borderRadius: '8px', border: '1px solid var(--border-subtle, rgba(0,0,0,0.08))' }}>
-            <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-primary)' }}>Concurrent CLI & GUI</div>
-            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+        <div className="cli-facts">
+          <div className="cli-fact-tile">
+            <div className="cli-fact-title">Concurrent CLI & GUI</div>
+            <div className="cli-fact-desc">
               Queries run safely without blocking or needing the single-instance mutex. Run CLI commands even while the GUI is open.
             </div>
           </div>
-          <div style={{ padding: '12px', background: 'var(--bg-subtle, rgba(0,0,0,0.03))', borderRadius: '8px', border: '1px solid var(--border-subtle, rgba(0,0,0,0.08))' }}>
-            <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-primary)' }}>Standard Exit Codes</div>
-            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+          <div className="cli-fact-tile">
+            <div className="cli-fact-title">Standard Exit Codes</div>
+            <div className="cli-fact-desc">
               <code>0</code> = Clean / success, <code>1</code> = Gate tripped or issues found, <code>2</code> = Flag syntax or usage error.
             </div>
           </div>
-          <div style={{ padding: '12px', background: 'var(--bg-subtle, rgba(0,0,0,0.03))', borderRadius: '8px', border: '1px solid var(--border-subtle, rgba(0,0,0,0.08))' }}>
-            <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-primary)' }}>Built-in Manual</div>
-            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+          <div className="cli-fact-tile">
+            <div className="cli-fact-title">Built-in Manual</div>
+            <div className="cli-fact-desc">
               Run <code>bluntcode cli &lt;command&gt;</code> in terminal for comprehensive in-terminal command documentation and examples.
             </div>
           </div>
@@ -492,60 +501,52 @@ export function CLIPage() {
       </section>
 
       {/* Navigation Tabs */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '1px solid var(--border-subtle, rgba(0,0,0,0.1))', paddingBottom: '8px' }}>
+      <nav className="cli-tabs" aria-label="CLI Documentation Tabs">
         <button
-          className={tab === 'reference' ? 'tab active' : 'tab'}
+          type="button"
+          className={`tab cli-tab${tab === 'reference' ? ' active' : ''}`}
           onClick={() => setTab('reference')}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 16px', borderRadius: '6px', border: 'none', background: tab === 'reference' ? 'var(--accent-primary, #0969da)' : 'transparent', color: tab === 'reference' ? '#fff' : 'inherit', cursor: 'pointer', fontWeight: 600 }}
         >
           <Terminal size={16} /> Reference Manual
         </button>
         <button
-          className={tab === 'ci' ? 'tab active' : 'tab'}
+          type="button"
+          className={`tab cli-tab${tab === 'ci' ? ' active' : ''}`}
           onClick={() => setTab('ci')}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 16px', borderRadius: '6px', border: 'none', background: tab === 'ci' ? 'var(--accent-primary, #0969da)' : 'transparent', color: tab === 'ci' ? '#fff' : 'inherit', cursor: 'pointer', fontWeight: 600 }}
         >
           <GitBranch size={16} /> CI/CD & Automation
         </button>
         <button
-          className={tab === 'builder' ? 'tab active' : 'tab'}
+          type="button"
+          className={`tab cli-tab${tab === 'builder' ? ' active' : ''}`}
           onClick={() => setTab('builder')}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 16px', borderRadius: '6px', border: 'none', background: tab === 'builder' ? 'var(--accent-primary, #0969da)' : 'transparent', color: tab === 'builder' ? '#fff' : 'inherit', cursor: 'pointer', fontWeight: 600 }}
         >
           <Sliders size={16} /> Command Builder
         </button>
-      </div>
+      </nav>
 
       {/* TAB 1: Reference Manual */}
       {tab === 'reference' && (
         <div>
           {/* Filter Bar */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center', marginBottom: '20px' }}>
-            <div style={{ position: 'relative', flex: '1 1 240px' }}>
-              <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} />
+          <div className="cli-filter-bar">
+            <div className="cli-search-wrap">
+              <Search size={16} className="cli-search-icon" aria-hidden="true" />
               <input
                 type="text"
                 placeholder="Search commands, flags, or recipes..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                style={{ width: '100%', padding: '8px 12px 8px 36px', borderRadius: '6px', border: '1px solid var(--border-subtle, #ccc)', background: 'var(--bg-input, #fff)', color: 'inherit' }}
+                className="cli-search-input"
               />
             </div>
-            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            <div className="cli-cat-pills">
               {categories.map((cat) => (
                 <button
                   key={cat}
+                  type="button"
                   onClick={() => setSelectedCategory(cat)}
-                  style={{
-                    padding: '6px 12px',
-                    borderRadius: '16px',
-                    fontSize: '12px',
-                    fontWeight: 500,
-                    border: '1px solid var(--border-subtle, rgba(0,0,0,0.15))',
-                    background: selectedCategory === cat ? 'var(--accent-primary, #0969da)' : 'var(--bg-surface, transparent)',
-                    color: selectedCategory === cat ? '#fff' : 'inherit',
-                    cursor: 'pointer',
-                  }}
+                  className={`cli-cat-pill${selectedCategory === cat ? ' active' : ''}`}
                 >
                   {cat}
                 </button>
@@ -554,85 +555,62 @@ export function CLIPage() {
           </div>
 
           {/* Commands List */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div className="cli-commands-list">
             {filteredCommands.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
+              <div className="cli-empty">
                 No commands match your query "{search}".
               </div>
             ) : (
               filteredCommands.map((cmd) => (
-                <div
-                  key={cmd.id}
-                  style={{
-                    padding: '20px',
-                    borderRadius: '8px',
-                    background: 'var(--bg-surface, #fff)',
-                    border: '1px solid var(--border-subtle, rgba(0,0,0,0.1))',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px' }}>
+                <article key={cmd.id} className="cli-command-card">
+                  <div className="cli-cmd-head">
                     <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                        <h3 style={{ margin: 0, fontFamily: 'var(--font-mono, monospace)', fontSize: '17px' }}>{cmd.name}</h3>
+                      <div className="cli-cmd-title-row">
+                        <h3 className="cli-cmd-title">{cmd.name}</h3>
                         {cmd.badge && <span className="badge">{cmd.badge}</span>}
-                        <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{cmd.category}</span>
+                        <span className="cli-cmd-category">{cmd.category}</span>
                       </div>
-                      <p style={{ margin: '8px 0 12px', color: 'var(--text-secondary)' }}>{cmd.description}</p>
+                      <p className="cli-cmd-desc">{cmd.description}</p>
                     </div>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => copy(cmd.synopsis)}
                       title="Copy synopsis"
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                     >
-                      {copiedText === cmd.synopsis ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
+                      {copiedText === cmd.synopsis ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
                       {copiedText === cmd.synopsis ? 'Copied' : 'Copy'}
                     </Button>
                   </div>
 
                   {/* Synopsis Box */}
-                  <div
-                    style={{
-                      background: 'var(--bg-code, #1e1e1e)',
-                      color: 'var(--text-code, #f3f4f6)',
-                      padding: '10px 14px',
-                      borderRadius: '6px',
-                      fontFamily: 'monospace',
-                      fontSize: '13px',
-                      overflowX: 'auto',
-                      marginBottom: '16px',
-                    }}
-                  >
-                    <code>{cmd.synopsis}</code>
+                  <div className="cli-terminal-box">
+                    <code className="cli-terminal-code">
+                      <span className="cli-prompt-symbol" aria-hidden="true">&gt;</span>
+                      {cmd.synopsis}
+                    </code>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => copy(cmd.synopsis)}
+                      title="Copy synopsis"
+                    >
+                      {copiedText === cmd.synopsis ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                    </Button>
                   </div>
 
                   {/* Subcommands if any */}
                   {cmd.subcommands && cmd.subcommands.length > 0 && (
-                    <div style={{ marginBottom: '16px' }}>
-                      <div style={{ fontWeight: 600, fontSize: '13px', marginBottom: '8px', color: 'var(--text-primary)' }}>Subcommands:</div>
-                      <div style={{ display: 'grid', gap: '6px' }}>
+                    <div className="cli-subcommands">
+                      <div className="cli-section-label">Subcommands</div>
+                      <div className="cli-subcmd-grid">
                         {cmd.subcommands.map((sub) => (
-                          <div
-                            key={sub.name}
-                            style={{
-                              padding: '8px 12px',
-                              borderRadius: '6px',
-                              background: 'var(--bg-subtle, rgba(0,0,0,0.02))',
-                              border: '1px solid var(--border-subtle, rgba(0,0,0,0.06))',
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
-                              flexWrap: 'wrap',
-                              gap: '8px',
-                            }}
-                          >
+                          <div key={sub.name} className="cli-subcmd-item">
                             <div>
-                              <strong style={{ fontFamily: 'monospace' }}>{sub.name}</strong> &mdash;{' '}
-                              <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{sub.desc}</span>
-                              <div style={{ fontSize: '12px', fontFamily: 'monospace', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                                {sub.syntax}
+                              <strong>{sub.name}</strong>
+                              <span className="cli-subcmd-desc">{sub.desc}</span>
+                              <div className="cli-subcmd-syntax">
+                                <code>{sub.syntax}</code>
                               </div>
                             </div>
                             <Button
@@ -641,7 +619,7 @@ export function CLIPage() {
                               onClick={() => copy(sub.syntax)}
                               title="Copy command"
                             >
-                              {copiedText === sub.syntax ? <Check size={12} color="#10b981" /> : <Copy size={12} />}
+                              {copiedText === sub.syntax ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
                             </Button>
                           </div>
                         ))}
@@ -651,25 +629,25 @@ export function CLIPage() {
 
                   {/* Flag Options Table */}
                   {cmd.flags && cmd.flags.length > 0 && (
-                    <div style={{ marginBottom: '16px' }}>
-                      <div style={{ fontWeight: 600, fontSize: '13px', marginBottom: '8px', color: 'var(--text-primary)' }}>Options & Flags:</div>
-                      <div style={{ overflowX: 'auto' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+                    <div className="cli-flags-wrap">
+                      <div className="cli-section-label">Options &amp; Flags</div>
+                      <div className="cli-table-container">
+                        <table className="cli-table">
                           <thead>
-                            <tr style={{ borderBottom: '1px solid var(--border-subtle, rgba(0,0,0,0.1))', color: 'var(--text-secondary)' }}>
-                              <th style={{ padding: '6px 8px' }}>Flag</th>
-                              <th style={{ padding: '6px 8px' }}>Type</th>
-                              <th style={{ padding: '6px 8px' }}>Description</th>
-                              <th style={{ padding: '6px 8px' }}>Default</th>
+                            <tr>
+                              <th>Flag</th>
+                              <th>Type</th>
+                              <th>Description</th>
+                              <th>Default</th>
                             </tr>
                           </thead>
                           <tbody>
                             {cmd.flags.map((f) => (
-                              <tr key={f.flag} style={{ borderBottom: '1px solid var(--border-subtle, rgba(0,0,0,0.05))' }}>
-                                <td style={{ padding: '6px 8px', fontFamily: 'monospace', fontWeight: 600 }}>{f.flag}</td>
-                                <td style={{ padding: '6px 8px', color: 'var(--text-secondary)' }}>{f.type}</td>
-                                <td style={{ padding: '6px 8px' }}>{f.desc}</td>
-                                <td style={{ padding: '6px 8px', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{f.def || '-'}</td>
+                              <tr key={f.flag}>
+                                <td className="cli-flag-name"><code>{f.flag}</code></td>
+                                <td className="cli-flag-type">{f.type}</td>
+                                <td className="cli-flag-desc">{f.desc}</td>
+                                <td className="cli-flag-def"><code>{f.def || '—'}</code></td>
                               </tr>
                             ))}
                           </tbody>
@@ -679,34 +657,25 @@ export function CLIPage() {
                   )}
 
                   {/* Examples */}
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: '13px', marginBottom: '8px', color: 'var(--text-primary)' }}>Practical Examples:</div>
-                    <div style={{ display: 'grid', gap: '6px' }}>
-                      {cmd.examples.map((ex, i) => (
-                        <div
-                          key={i}
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            background: 'var(--bg-subtle, rgba(0,0,0,0.03))',
-                            padding: '8px 12px',
-                            borderRadius: '6px',
-                            gap: '8px',
-                          }}
-                        >
-                          <div>
-                            <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>{ex.title}</div>
-                            <div style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--text-primary)' }}>{ex.cmd}</div>
+                  {cmd.examples && cmd.examples.length > 0 && (
+                    <div className="cli-examples-wrap">
+                      <div className="cli-section-label">Practical Examples</div>
+                      <div className="cli-examples-grid">
+                        {cmd.examples.map((ex, i) => (
+                          <div key={i} className="cli-example-item">
+                            <div>
+                              <div className="cli-example-title">{ex.title}</div>
+                              <code className="cli-example-cmd">{ex.cmd}</code>
+                            </div>
+                            <Button variant="ghost" size="sm" onClick={() => copy(ex.cmd)} title="Copy example">
+                              {copiedText === ex.cmd ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                            </Button>
                           </div>
-                          <Button variant="ghost" size="sm" onClick={() => copy(ex.cmd)} title="Copy example">
-                            {copiedText === ex.cmd ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
-                          </Button>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                </div>
+                  )}
+                </article>
               ))
             )}
           </div>
@@ -715,121 +684,93 @@ export function CLIPage() {
 
       {/* TAB 2: CI/CD & Automation Recipes */}
       {tab === 'ci' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        <div className="cli-ci-list">
           {/* GitHub Actions Card */}
-          <div style={{ padding: '20px', borderRadius: '8px', background: 'var(--bg-surface, #fff)', border: '1px solid var(--border-subtle, rgba(0,0,0,0.1))' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+          <section className="cli-ci-card">
+            <div className="cli-ci-head">
               <div>
-                <h3 style={{ margin: 0 }}>GitHub Actions with SARIF Code Scanning</h3>
-                <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: '13px' }}>
+                <h3 className="cli-ci-title">GitHub Actions with SARIF Code Scanning</h3>
+                <p className="cli-ci-desc">
                   Runs on pull requests and pushes, trips the build on high/critical findings, and uploads OASIS SARIF alerts to GitHub Security tab.
                 </p>
               </div>
               <Button variant="outline" size="sm" onClick={() => copy(CI_WORKFLOW_GITHUB)}>
-                {copiedText === CI_WORKFLOW_GITHUB ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
+                {copiedText === CI_WORKFLOW_GITHUB ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
                 {copiedText === CI_WORKFLOW_GITHUB ? 'Copied' : 'Copy YAML'}
               </Button>
             </div>
-            <pre
-              style={{
-                background: 'var(--bg-code, #1e1e1e)',
-                color: 'var(--text-code, #f3f4f6)',
-                padding: '14px',
-                borderRadius: '6px',
-                fontSize: '12px',
-                overflowX: 'auto',
-                lineHeight: 1.5,
-              }}
-            >
+            <pre className="cli-code-pre">
               <code>{CI_WORKFLOW_GITHUB}</code>
             </pre>
-          </div>
+          </section>
 
           {/* Pre-commit Hook Card */}
-          <div style={{ padding: '20px', borderRadius: '8px', background: 'var(--bg-surface, #fff)', border: '1px solid var(--border-subtle, rgba(0,0,0,0.1))' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+          <section className="cli-ci-card">
+            <div className="cli-ci-head">
               <div>
-                <h3 style={{ margin: 0 }}>Git Pre-Commit Hook</h3>
-                <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: '13px' }}>
+                <h3 className="cli-ci-title">Git Pre-Commit Hook</h3>
+                <p className="cli-ci-desc">
                   Save to <code>.git/hooks/pre-commit</code> to prevent committing vulnerable code or hardcoded secrets locally.
                 </p>
               </div>
               <Button variant="outline" size="sm" onClick={() => copy(PRE_COMMIT_HOOK)}>
-                {copiedText === PRE_COMMIT_HOOK ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
+                {copiedText === PRE_COMMIT_HOOK ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
                 {copiedText === PRE_COMMIT_HOOK ? 'Copied' : 'Copy Script'}
               </Button>
             </div>
-            <pre
-              style={{
-                background: 'var(--bg-code, #1e1e1e)',
-                color: 'var(--text-code, #f3f4f6)',
-                padding: '14px',
-                borderRadius: '6px',
-                fontSize: '12px',
-                overflowX: 'auto',
-                lineHeight: 1.5,
-              }}
-            >
+            <pre className="cli-code-pre">
               <code>{PRE_COMMIT_HOOK}</code>
             </pre>
-          </div>
+          </section>
 
           {/* GitLab CI Card */}
-          <div style={{ padding: '20px', borderRadius: '8px', background: 'var(--bg-surface, #fff)', border: '1px solid var(--border-subtle, rgba(0,0,0,0.1))' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+          <section className="cli-ci-card">
+            <div className="cli-ci-head">
               <div>
-                <h3 style={{ margin: 0 }}>GitLab CI Pipeline (.gitlab-ci.yml)</h3>
-                <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: '13px' }}>
+                <h3 className="cli-ci-title">GitLab CI Pipeline (.gitlab-ci.yml)</h3>
+                <p className="cli-ci-desc">
                   Executes automated analysis on Windows runners and saves reports as build artifacts.
                 </p>
               </div>
               <Button variant="outline" size="sm" onClick={() => copy(CI_WORKFLOW_GITLAB)}>
-                {copiedText === CI_WORKFLOW_GITLAB ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
+                {copiedText === CI_WORKFLOW_GITLAB ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
                 {copiedText === CI_WORKFLOW_GITLAB ? 'Copied' : 'Copy YAML'}
               </Button>
             </div>
-            <pre
-              style={{
-                background: 'var(--bg-code, #1e1e1e)',
-                color: 'var(--text-code, #f3f4f6)',
-                padding: '14px',
-                borderRadius: '6px',
-                fontSize: '12px',
-                overflowX: 'auto',
-                lineHeight: 1.5,
-              }}
-            >
+            <pre className="cli-code-pre">
               <code>{CI_WORKFLOW_GITLAB}</code>
             </pre>
-          </div>
+          </section>
         </div>
       )}
 
       {/* TAB 3: Interactive Command Builder */}
       {tab === 'builder' && (
-        <div style={{ padding: '24px', borderRadius: '8px', background: 'var(--bg-surface, #fff)', border: '1px solid var(--border-subtle, rgba(0,0,0,0.1))' }}>
-          <h3 style={{ margin: '0 0 8px' }}>Scan Command Generator</h3>
-          <p style={{ margin: '0 0 20px', color: 'var(--text-secondary)', fontSize: '13px' }}>
-            Customize your scan flags visually, preview the generated terminal command, and copy it straight into your terminal or pipeline.
-          </p>
+        <section className="cli-builder-card">
+          <div className="cli-builder-head">
+            <h3>Scan Command Generator</h3>
+            <p>
+              Customize your scan flags visually, preview the generated terminal command, and copy it straight into your terminal or pipeline.
+            </p>
+          </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', marginBottom: '24px' }}>
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px' }}>Target Path</label>
+          <div className="cli-builder-grid">
+            <div className="cli-builder-field">
+              <label className="cli-builder-label">Target Path</label>
               <input
                 type="text"
                 value={builderTarget}
                 onChange={(e) => setBuilderTarget(e.target.value)}
-                style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-subtle, #ccc)' }}
+                className="cli-builder-input"
               />
             </div>
 
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px' }}>Profile</label>
+            <div className="cli-builder-field">
+              <label className="cli-builder-label">Profile</label>
               <select
                 value={builderProfile}
                 onChange={(e) => setBuilderProfile(e.target.value)}
-                style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-subtle, #ccc)', background: 'var(--bg-surface, #fff)' }}
+                className="cli-builder-select"
               >
                 <option value="quick">Quick (fastest, lightweight lints)</option>
                 <option value="standard">Standard (recommended, full analyzers)</option>
@@ -837,12 +778,12 @@ export function CLIPage() {
               </select>
             </div>
 
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px' }}>CI Gate (--fail-on)</label>
+            <div className="cli-builder-field">
+              <label className="cli-builder-label">CI Gate (--fail-on)</label>
               <select
                 value={builderFailOn}
                 onChange={(e) => setBuilderFailOn(e.target.value)}
-                style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-subtle, #ccc)', background: 'var(--bg-surface, #fff)' }}
+                className="cli-builder-select"
               >
                 <option value="none">None (don't fail on findings)</option>
                 <option value="critical">critical (fail only on critical)</option>
@@ -852,12 +793,12 @@ export function CLIPage() {
               </select>
             </div>
 
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px' }}>Format (--format)</label>
+            <div className="cli-builder-field">
+              <label className="cli-builder-label">Format (--format)</label>
               <select
                 value={builderFormat}
                 onChange={(e) => setBuilderFormat(e.target.value)}
-                style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-subtle, #ccc)', background: 'var(--bg-surface, #fff)' }}
+                className="cli-builder-select"
               >
                 <option value="text">text (terminal table)</option>
                 <option value="sarif">sarif (OASIS SARIF 2.1.0 log)</option>
@@ -868,19 +809,19 @@ export function CLIPage() {
               </select>
             </div>
 
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px' }}>Output File (--output)</label>
+            <div className="cli-builder-field">
+              <label className="cli-builder-label">Output File (--output)</label>
               <input
                 type="text"
                 placeholder="leave empty for stdout"
                 value={builderOutput}
                 onChange={(e) => setBuilderOutput(e.target.value)}
-                style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-subtle, #ccc)' }}
+                className="cli-builder-input"
               />
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '8px' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer' }}>
+            <div className="cli-builder-checkboxes">
+              <label className="cli-builder-check-label">
                 <input
                   type="checkbox"
                   checked={builderIncremental}
@@ -888,7 +829,7 @@ export function CLIPage() {
                 />
                 Incremental Scan (--incremental)
               </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer' }}>
+              <label className="cli-builder-check-label">
                 <input
                   type="checkbox"
                   checked={builderQuiet}
@@ -900,35 +841,22 @@ export function CLIPage() {
           </div>
 
           {/* Generated Command Box */}
-          <div style={{ marginTop: '16px' }}>
-            <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '6px', color: 'var(--text-secondary)' }}>Generated Command:</div>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                background: 'var(--bg-code, #1e1e1e)',
-                color: 'var(--text-code, #f3f4f6)',
-                padding: '14px',
-                borderRadius: '6px',
-                fontFamily: 'monospace',
-                fontSize: '13px',
-                gap: '12px',
-              }}
-            >
-              <code style={{ wordBreak: 'break-all' }}>{generatedBuilderCommand}</code>
+          <div className="cli-generated-wrap">
+            <div className="cli-section-label">Generated Command:</div>
+            <div className="cli-generated-box">
+              <code className="cli-generated-code">{generatedBuilderCommand}</code>
               <Button
                 variant="secondary"
                 size="sm"
                 onClick={() => copy(generatedBuilderCommand)}
-                style={{ flexShrink: 0 }}
+                className="shrink-0"
               >
-                {copiedText === generatedBuilderCommand ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
+                {copiedText === generatedBuilderCommand ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
                 {copiedText === generatedBuilderCommand ? 'Copied' : 'Copy'}
               </Button>
             </div>
           </div>
-        </div>
+        </section>
       )}
     </div>
   );

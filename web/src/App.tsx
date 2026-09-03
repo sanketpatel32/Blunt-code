@@ -215,7 +215,7 @@ function Page({ route, go, notify, onAdd, onUpdateHandoff }: { route: Route; go:
     case 'workspace': return id ? <WorkspacePage id={id} go={go} notify={notify} /> : <NotFoundPage go={go} />;
     case 'files': return id ? <FilesPage id={id} go={go} notify={notify} /> : <NotFoundPage go={go} />;
     case 'history': return id ? <HistoryPage workspaceId={id} go={go} /> : <NotFoundPage go={go} />;
-    case 'scan': return id ? <ScanPage id={id} notify={notify} /> : <NotFoundPage go={go} />;
+    case 'scan': return id ? <ScanPage id={id} go={go} notify={notify} /> : <NotFoundPage go={go} />;
     case 'search': return <SearchPage go={go} />;
     case 'tools': return <ToolsPage notify={notify} go={go} />;
     case 'cli': return <CLIPage />;

@@ -13,6 +13,7 @@ import { SkeletonLines } from '../components/skeletons';
 import { WorkspaceContextSidebar } from '../components/WorkspaceContext';
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
+import { PathCopy } from '../components/PathCopy';
 import { ALL_LANGUAGES } from '../lib/analyzerCatalog';
 
 interface RuleDraft { uid: number; rule_type: 'include' | 'exclude'; pattern: string; enabled?: boolean }
@@ -95,8 +96,15 @@ export function FilesPage({ id, go, notify }: { id: string; go?: (r: Route) => v
       <div className="workspace-page-body">
         <PageHeader
           eyebrow="File selection"
-          title={workspace.data?.name ?? 'Workspace files'}
-          description={<code className="workspace-root text-xs text-[var(--color-ink-faint)] font-mono" title={workspace.data?.root_path}>{workspace.data?.root_path}</code>}
+          title={workspace.data?.name ? `${workspace.data.name} — Files` : 'Workspace files'}
+          description={
+            workspace.data?.root_path ? (
+              <span className="flex items-center gap-1.5 font-mono text-xs">
+                <span className="workspace-root truncate max-w-md sm:max-w-xl text-[var(--color-ink-faint)]" title={workspace.data.root_path}>{workspace.data.root_path}</span>
+                <PathCopy path={workspace.data.root_path} />
+              </span>
+            ) : 'Include or ignore source files and directories for analysis.'
+          }
           actions={
             <div className="files-toolbar flex items-center gap-2">
               <Button variant="ghost" size="sm" onClick={() => { setRules({ rules: [] }); setOverrides([]); }} className="gap-1.5 text-xs">

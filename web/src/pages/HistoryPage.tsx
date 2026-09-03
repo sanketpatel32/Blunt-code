@@ -22,6 +22,7 @@ function useDateFilter() {
 export function HistoryPage({ workspaceId, go }: { workspaceId: string; go: (r: Route) => void }) {
   const [page, setPage] = useState(1);
   const dateFilter = useDateFilter();
+  const workspace = useLoad(() => api.workspace(workspaceId), [workspaceId]);
   const state = useLoad(() => api.scansPage(workspaceId, page, historyPageSize), [workspaceId, page]);
   useEffect(() => {
     if (state.data && state.data.items.length === 0 && state.data.total > 0 && page > 1) setPage(1);
@@ -32,9 +33,9 @@ export function HistoryPage({ workspaceId, go }: { workspaceId: string; go: (r: 
       <div className="workspace-page-body">
         <PageHeader
           eyebrow="History"
-          title="Previous analyses"
+          title={workspace.data?.name ? `${workspace.data.name} — History` : 'Previous analyses'}
           badge={state.data ? <Badge variant="secondary" className="text-xs font-mono tabular-nums">{state.data.total} {state.data.total === 1 ? 'scan' : 'scans'}</Badge> : undefined}
-          description="Reports and findings are stored only on this computer."
+          description="Past analysis reports, severity trends, and findings stored locally on this computer."
         />
         <div className="history-filter-bar"><label className="history-filter-field"><span className="history-filter-label">From</span><span className="history-filter-input-wrap"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 9h18"/></svg><input type="date" value={dateFilter.from} onChange={(e)=>{dateFilter.setFrom(e.target.value); setPage(1);}} className="history-filter-input" aria-label="Filter from date" /></span></label><label className="history-filter-field"><span className="history-filter-label">To</span><span className="history-filter-input-wrap"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 9h18"/></svg><input type="date" value={dateFilter.to} onChange={(e)=>{dateFilter.setTo(e.target.value); setPage(1);}} className="history-filter-input" aria-label="Filter to date" /></span></label>{dateFilter.hasFilter && <button type="button" className="history-filter-clear" onClick={()=>{dateFilter.setFrom(''); dateFilter.setTo(''); setPage(1);}} aria-label="Clear date filters">✕ Clear</button>}<span className="history-filter-count tabular-nums" aria-live="polite">{state.data ? `${state.data.total} scan${state.data.total === 1 ? '' : 's'}` : ''}</span></div>{state.loading ? <SkeletonTable rows={6} cols={7} /> : state.error ? <ErrorPanel error={state.error} retry={state.reload} /> : <HistoryTable scans={state.data?.items ?? []} go={go} paging={{ page, pageSize: historyPageSize, total: state.data?.total ?? 0, hasNext: state.data?.has_next ?? false, onPage: setPage }} dateFrom={dateFilter.from} dateTo={dateFilter.to} />}
       </div>

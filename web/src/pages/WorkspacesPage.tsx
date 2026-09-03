@@ -43,6 +43,7 @@ export function WorkspacesPage({ go, onAdd, notify }: { go: (r: Route) => void; 
         eyebrow="Workspaces"
         title="All Workspaces"
         badge={<Badge variant="secondary" className="text-xs font-mono tabular-nums">{workspaces.length} registered</Badge>}
+        description="Manage registered projects, filter by tags, and launch scans across local codebases."
         actions={
           <Button size="sm" onClick={onAdd} className="gap-1.5 h-7 text-xs bg-[var(--color-accent)] text-[var(--color-accent-ink)] font-medium">
             + Add workspace

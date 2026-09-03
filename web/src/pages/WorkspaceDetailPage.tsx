@@ -21,6 +21,7 @@ import { languageCoverageFromLanguages, severityCountsFromSummary, trendPointsFr
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { Sparkles, Copy, Check, ShieldAlert, BarChart3, AlertTriangle, Layers, FileSearch, ShieldCheck, Bug } from 'lucide-react';
 import { ScanActionDropdown } from '../components/ScanActionDropdown';
+import { PageHeader } from '../components/PageHeader';
 
 /**
  * Loop 142 · this used to inline `oklch(62% 0.18 285)` as the fourth entry, which
@@ -73,25 +74,43 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
   const sparkVals = (v:number)=>[Math.max(0,v-2),Math.max(0,v-1),v,Math.max(0,v-1),Math.max(0,v)];
   const criticalHigh = (latest?.critical_count ?? 0) + (latest?.high_count ?? 0);
   return <div className="page workspace-page"><WorkspaceContextSidebar id={id} current={{ page: 'workspace', id }} onNavigate={go} /><div className="workspace-page-body">
-    {/* 1 · Identify — who this is. No actions: acting is the next zone's job. */}
-    <header className="workspace-hero-bento workspace-hero-identity">
-      <div className="workspace-hero-main">
-        <p className="eyebrow">Workspace</p>
-        <h1 className="workspace-hero-title">{item.name}</h1>
-        <div className="workspace-path-row">
-          <code className="workspace-path" title={item.root_path}>{item.root_path}</code>
-          <button type="button" className="workspace-copy-btn" onClick={copyPath} aria-label="Copy path">{copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}</button>
+    {/* 1 · Identify — who this is. Clean unified PageHeader. */}
+    <PageHeader
+      eyebrow="Workspace"
+      title={item.name}
+      badge={
+        item.languages?.length ? (
+          <div className="workspace-lang-dots flex items-center gap-1.5 flex-wrap" aria-label="Detected languages">
+            {item.languages.map((lang, i) => (
+              <span key={lang} className="ws-lang-dot text-xs flex items-center gap-1 px-2 py-0.5 rounded-[var(--radius-xs)] bg-[var(--color-surface-muted)] border border-[var(--color-rule-faint)] text-[var(--color-ink-soft)] font-mono">
+                <i className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: LANGUAGE_DOTS[i % LANGUAGE_DOTS.length] }} />
+                {lang}
+              </span>
+            ))}
+            <span className="sr-only"><LanguageBadges languages={item.languages} /></span>
+          </div>
+        ) : (
+          <>
+            <span className="text-xs text-[var(--color-ink-faint)]">No supported source languages found</span>
+            <span className="sr-only"><LanguageBadges languages={item.languages} /></span>
+          </>
+        )
+      }
+      description={
+        <div className="workspace-path-row flex items-center gap-1.5 font-mono text-xs">
+          <code className="workspace-path text-[var(--color-ink-faint)] truncate max-w-md sm:max-w-xl" title={item.root_path}>
+            {item.root_path || 'No root path configured'}
+          </code>
+          {item.root_path && (
+            <button type="button" className="workspace-copy-btn shrink-0" onClick={copyPath} aria-label="Copy path" title={copied ? 'Copied' : 'Copy path'}>
+              {copied ? <Check className="h-3.5 w-3.5 text-[var(--color-success)]" /> : <Copy className="h-3.5 w-3.5" />}
+            </button>
+          )}
         </div>
-        <div className="workspace-lang-dots" aria-label="Detected languages">
-          {item.languages?.length ? item.languages.map((lang,i)=>(
-            <span key={lang} className="ws-lang-dot"><i style={{ background: LANGUAGE_DOTS[i % LANGUAGE_DOTS.length] }} />{lang}</span>
-          )) : <span className="muted text-xs">No supported source languages found</span>}
-          {/* keep LanguageBadges for tests/assistive but visually hidden */}
-          <span className="sr-only"><LanguageBadges languages={item.languages} /></span>
-        </div>
-        {isCompleted && !reduced && <div className="workspace-confetti" aria-hidden="true"><i /><i /><i /><i /><i /><i /></div>}
-      </div>
-    </header>
+      }
+    >
+      {isCompleted && !reduced && <div className="workspace-confetti" aria-hidden="true"><i /><i /><i /><i /><i /><i /></div>}
+    </PageHeader>
 
     {/* 2 · Act — one primary action, everything else quietly grouped beside it. */}
     <div className="workspace-toolbar workspace-action-rail">
