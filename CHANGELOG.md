@@ -5,6 +5,12 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.2] - 2026-09-03
+
+### Fixed
+- **Scans now honor the configured files**: directory-walking analyzers (gitleaks, checkov, sonarqube, trivy, osv) traverse the whole workspace root no matter which files they are handed, so their reports could name files the workspace configuration excludes. The scan pipeline now drops any finding inside an excluded override path (longest match wins) or an enabled user exclude rule before persisting it — project-level findings without a file attribution are always kept. Verified live: excluding one cache directory cut a scan's gitleaks findings from 10,768 to 2 with zero findings under the excluded path.
+- **Stable loopback port**: the app bound a random free port on every launch, so bookmarks and tabs broke on restart and repeat launches stacked servers on new ports. The default bind is now port 8787 (`--port 0` still picks a free port, explicit `--port N` is honored), the running server records its port, and a second launch hands off to the existing instance ("Blunt Code already running on …") instead of starting another server.
+
 ## [0.20.1] - 2026-09-03
 
 ### Fixed

@@ -107,7 +107,7 @@ bluntcode llm | llms                                      # cat this file to std
 
 ## HTTP API (when web UI is running on 127.0.0.1)
 
-Base: `http://127.0.0.1:<port>/api/v1` (port printed on stdout, or `--port 0` picks free)
+Base: `http://127.0.0.1:8787/api/v1` (default port 8787, printed on stdout; `--port 0` picks a free port; a second launch opens the running instance instead of a new server)
 
 - `GET /health`, `GET /meta` (version), `GET /workspaces`, `POST /system/select-folder`
 - `GET /workspaces/{id}`, `GET /workspaces/{id}/scans?page&page_size`, `GET /workspaces/{id}/trends?limit=20`

@@ -109,6 +109,122 @@ func TestApplyPathOverridesUsesMostSpecificPath(t *testing.T) {
 	}
 }
 
+func TestDeselectMatcherHonorsOverridesAndRules(t *testing.T) {
+	overrides := []core.PathOverride{{RelativePath: "src", Mode: "exclude"}, {RelativePath: "src/keep.py", Mode: "include"}}
+	deselect := deselectMatcher(overrides, []string{"**/generated/**"})
+	cases := map[string]bool{
+		"src/drop.py":        true,  // covered by the src exclude
+		"src/nested/deep.py": true,  // prefix matching reaches any depth
+		"src/keep.py":        false, // longest match wins: the include carve-out
+		"main.py":            false, // untouched paths stay selected
+		"gen/generated/x.py": true,  // the ** rule reaches nested segments
+		"gen/other/x.py":     false,
+		"a/generated/b.py":   true,
+		"":                   false, // project-level findings cannot be attributed
+	}
+	for path, want := range cases {
+		if got := deselect(path); got != want {
+			t.Errorf("deselect(%q) = %v, want %v", path, got, want)
+		}
+	}
+	if kept := dropDeselectedFindings([]analyzers.Finding{{RelativePath: "src/drop.py"}, {RelativePath: "main.py"}, {}}, deselect); len(kept) != 2 || kept[0].RelativePath != "main.py" {
+		t.Fatalf("unexpected kept findings: %#v", kept)
+	}
+	if kept := dropDeselectedFindings(nil, deselect); len(kept) != 0 {
+		t.Fatalf("nil findings must stay nil-length: %#v", kept)
+	}
+}
+
+// noisyAnalyzer simulates a directory-walking tool (gitleaks, checkov,
+// sonarqube): it reports findings for hardcoded paths no matter which files
+// the orchestrator handed it.
+type noisyAnalyzer struct{ paths []string }
+
+func (n noisyAnalyzer) ID() string          { return "noisy" }
+func (n noisyAnalyzer) DisplayName() string { return "Noisy" }
+func (n noisyAnalyzer) SupportedLanguages() []analyzers.Language {
+	return []analyzers.Language{analyzers.LanguagePython}
+}
+func (noisyAnalyzer) Check(context.Context, analyzers.ToolEnvironment) analyzers.ToolStatus {
+	return analyzers.ToolStatus{Ready: true, Version: "test"}
+}
+func (noisyAnalyzer) EnsureInstalled(context.Context, analyzers.ToolEnvironment) error { return nil }
+func (noisyAnalyzer) Plan(context.Context, analyzers.ScanRequest) (analyzers.AnalyzerPlan, error) {
+	return analyzers.AnalyzerPlan{AnalyzerID: "noisy", Version: "test"}, nil
+}
+func (noisyAnalyzer) Run(context.Context, analyzers.AnalyzerPlan, analyzers.EventEmitter) (analyzers.AnalyzerResult, error) {
+	return analyzers.AnalyzerResult{}, nil
+}
+func (n noisyAnalyzer) Normalize(context.Context, analyzers.AnalyzerResult) ([]analyzers.Finding, []analyzers.Metric, error) {
+	out := make([]analyzers.Finding, 0, len(n.paths))
+	for _, path := range n.paths {
+		f := analyzers.Finding{AnalyzerID: "noisy", RuleID: "N1", Severity: analyzers.SeverityMedium, Category: analyzers.CategoryCorrectness, Title: "Noisy", Message: "noise", RelativePath: path, StartLine: 1}
+		f.SetFingerprint()
+		out = append(out, f)
+	}
+	return out, nil, nil
+}
+
+func TestScanDropsFindingsInExcludedPaths(t *testing.T) {
+	root := t.TempDir()
+	for _, path := range []string{"keep/main.py", "drop/other.py"} {
+		full := filepath.Join(root, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(full), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("x=1"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	paths, err := config.NewPaths(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := database.Open(context.Background(), paths.DBPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	work, err := db.CreateWorkspace(context.Background(), core.Workspace{Name: "Fixture", RootPath: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.ReplacePathOverrides(context.Background(), work.ID, []core.PathOverride{{RelativePath: "drop", Mode: "exclude"}}); err != nil {
+		t.Fatal(err)
+	}
+	registry := analyzers.NewRegistry()
+	if err := registry.Register(noisyAnalyzer{paths: []string{"keep/main.py", "drop/other.py"}}); err != nil {
+		t.Fatal(err)
+	}
+	service := New(db, registry, events.New(), filepath.Join(paths.DataDir, "reports"), paths.ToolsDir, nil)
+	scan, err := service.DiscoverAndStart(context.Background(), work, "standard", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		current, scanErr := db.Scan(context.Background(), scan.ID)
+		if scanErr != nil {
+			t.Fatal(scanErr)
+		}
+		if terminal(current.State) {
+			if current.State != "completed" {
+				t.Fatalf("scan state %q", current.State)
+			}
+			findings, findErr := db.Findings(context.Background(), scan.ID)
+			if findErr != nil {
+				t.Fatal(findErr)
+			}
+			if len(findings) != 1 || findings[0].RelativePath != "keep/main.py" {
+				t.Fatalf("excluded-path finding leaked into the scan: %#v", findings)
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("scan did not finish")
+}
+
 func TestAnalyzerTimeouts(t *testing.T) {
 	if analyzerTimeout("ruff") != 10*time.Minute || analyzerTimeout("sonarqube") != 30*time.Minute {
 		t.Fatalf("unexpected analyzer timeouts")

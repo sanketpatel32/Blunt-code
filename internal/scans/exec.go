@@ -90,7 +90,7 @@ func (c *scanCounters) snapshot() (successful, failed int) {
 // execution, normalization, persistence, and events. It is the exact body the
 // sequential loop historically ran inline, extracted so the bounded driver can
 // share it; the loop's continue/return statements became outcome returns.
-func (s *Service) executeAnalyzer(ctx context.Context, scan core.Scan, work core.Workspace, languages []analyzers.Language, filesByLanguage map[analyzers.Language][]string, adapter analyzers.Analyzer, counters *scanCounters) analyzerOutcome {
+func (s *Service) executeAnalyzer(ctx context.Context, scan core.Scan, work core.Workspace, languages []analyzers.Language, filesByLanguage map[analyzers.Language][]string, adapter analyzers.Analyzer, counters *scanCounters, deselect func(string) bool) analyzerOutcome {
 	// Each adapter is handed only the selected files whose language it
 	// supports. Gating on the workspace language list alone was not
 	// enough: a mixed-language workspace used to pass every file to
@@ -161,6 +161,11 @@ func (s *Service) executeAnalyzer(ctx context.Context, scan core.Scan, work core
 		var findings []analyzers.Finding
 		var metrics []analyzers.Metric
 		findings, metrics, err = adapter.Normalize(ctx, result)
+		// Directory-walking analyzers traverse the workspace root no matter
+		// which files they were handed, so their reports can name files the
+		// workspace configuration excludes. Enforcement lands here, once for
+		// every adapter, instead of trusting each tool's scoping.
+		findings = dropDeselectedFindings(findings, deselect)
 		if err == nil {
 			_, err = s.db.SaveAnalyzerResult(context.Background(), scan.ID, database.AnalyzerRunInput{AnalyzerID: adapter.ID(), Version: plan.Version, State: "succeeded", StartedAt: started, FinishedAt: finished, ExitCode: result.ExitCode}, findings, metrics)
 			if err == nil {
@@ -182,13 +187,13 @@ func (s *Service) executeAnalyzer(ctx context.Context, scan core.Scan, work core
 // observed between runs or right after a run stops the whole scan. It returns
 // false when the scan was cancelled; the scan is already marked cancelled, so
 // the caller must stop without writing a report.
-func (s *Service) runAnalyzersSequential(ctx context.Context, scan core.Scan, work core.Workspace, languages []analyzers.Language, filesByLanguage map[analyzers.Language][]string, counters *scanCounters) bool {
+func (s *Service) runAnalyzersSequential(ctx context.Context, scan core.Scan, work core.Workspace, languages []analyzers.Language, filesByLanguage map[analyzers.Language][]string, counters *scanCounters, deselect func(string) bool) bool {
 	for _, adapter := range s.registry.All() {
 		if ctx.Err() != nil {
 			s.finishCancelled(scan.ID)
 			return false
 		}
-		if s.executeAnalyzer(ctx, scan, work, languages, filesByLanguage, adapter, counters) == analyzerAborted {
+		if s.executeAnalyzer(ctx, scan, work, languages, filesByLanguage, adapter, counters, deselect) == analyzerAborted {
 			s.finishCancelled(scan.ID)
 			return false
 		}
@@ -202,7 +207,7 @@ func (s *Service) runAnalyzersSequential(ctx context.Context, scan core.Scan, wo
 // contexts and skip persisting their results. The return value is the message
 // of a recovered adapter panic (empty when none panicked): the caller fails
 // the scan with it, mirroring what run()'s recover does for sequential scans.
-func (s *Service) runAnalyzersBounded(ctx context.Context, scan core.Scan, work core.Workspace, languages []analyzers.Language, filesByLanguage map[analyzers.Language][]string, counters *scanCounters, jobs int) string {
+func (s *Service) runAnalyzersBounded(ctx context.Context, scan core.Scan, work core.Workspace, languages []analyzers.Language, filesByLanguage map[analyzers.Language][]string, counters *scanCounters, jobs int, deselect func(string) bool) string {
 	sem := make(chan struct{}, jobs)
 	var wg sync.WaitGroup
 	var panicValue atomic.Value
@@ -224,7 +229,7 @@ func (s *Service) runAnalyzersBounded(ctx context.Context, scan core.Scan, work 
 				return
 			}
 			defer func() { <-sem }()
-			s.executeAnalyzer(ctx, scan, work, languages, filesByLanguage, adapter, counters)
+			s.executeAnalyzer(ctx, scan, work, languages, filesByLanguage, adapter, counters, deselect)
 		}()
 	}
 	wg.Wait()

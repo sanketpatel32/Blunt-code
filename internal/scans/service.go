@@ -60,7 +60,7 @@ func (s *Service) start(ctx context.Context, work core.Workspace, profile string
 	s.mu.Lock()
 	s.cancels[scan.ID] = cancel
 	s.mu.Unlock()
-	go s.run(runCtx, scan, work, files, opts)
+	go s.run(runCtx, scan, work, files, opts, s.selectionDeselected(ctx, work.ID))
 	return scan, nil
 }
 
@@ -154,7 +154,7 @@ func (s *Service) Shutdown() {
 func (s *Service) emit(scanID, event string, data map[string]any) {
 	s.bus.Publish(events.Event{Type: event, ScanID: scanID, Data: data})
 }
-func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, files []core.FileEntry, opts ScanOptions) {
+func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, files []core.FileEntry, opts ScanOptions, deselect func(string) bool) {
 	defer func() { s.mu.Lock(); delete(s.cancels, scan.ID); s.mu.Unlock() }()
 	// A panic inside an adapter must not take the whole application down with
 	// it or leave the scan row non-terminal: contain it, fail the scan, and
@@ -197,12 +197,12 @@ func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, 
 	if jobs := opts.Jobs; jobs >= 1 {
 		// A recovered worker panic fails the scan exactly like the run-level
 		// recover below does for sequential scans.
-		if panicValue := s.runAnalyzersBounded(ctx, scan, work, languages, analyzerFilesByLanguage, counters, jobs); panicValue != "" {
+		if panicValue := s.runAnalyzersBounded(ctx, scan, work, languages, analyzerFilesByLanguage, counters, jobs, deselect); panicValue != "" {
 			_ = s.db.UpdateScanState(context.Background(), scan.ID, "failed", fmt.Sprintf("Internal scan error: %v", panicValue))
 			s.emit(scan.ID, "scan.completed", map[string]any{"state": "failed"})
 			return
 		}
-	} else if !s.runAnalyzersSequential(ctx, scan, work, languages, analyzerFilesByLanguage, counters) {
+	} else if !s.runAnalyzersSequential(ctx, scan, work, languages, analyzerFilesByLanguage, counters, deselect) {
 		return
 	}
 	// Copy the previous scan's findings for unchanged files into this scan
@@ -485,7 +485,7 @@ func applyPathOverrides(files []core.FileEntry, overrides []core.PathOverride) {
 		path := filepath.ToSlash(files[index].RelativePath)
 		for _, override := range overrides {
 			overridePath := strings.Trim(filepath.ToSlash(override.RelativePath), "/")
-			if overridePath == "" || (path != overridePath && !strings.HasPrefix(path, overridePath+"/")) {
+			if !overrideCovers(overridePath, path) {
 				continue
 			}
 			if len(overridePath) > bestLength {
@@ -496,4 +496,78 @@ func applyPathOverrides(files []core.FileEntry, overrides []core.PathOverride) {
 			files[index].Selected = bestMode == "include"
 		}
 	}
+}
+
+// overrideCovers reports whether an override path selects a file path: an
+// exact match or a strict parent directory. Both sides arrive slash-separated
+// with slashes trimmed by the caller.
+func overrideCovers(overridePath, path string) bool {
+	return overridePath != "" && (path == overridePath || strings.HasPrefix(path, overridePath+"/"))
+}
+
+// deselectMatcher enforces the workspace file configuration at the finding
+// level. Directory-walking analyzers (gitleaks, checkov, sonarqube, trivy,
+// osv) traverse the whole workspace root no matter which files they were
+// handed, so their reports can name files the user configured out; anything
+// matching an exclude override (longest match wins, exactly like
+// applyPathOverrides) or an enabled user exclude rule is dropped. Paths
+// without a file attribution are always kept.
+func deselectMatcher(overrides []core.PathOverride, excludePatterns []string) func(string) bool {
+	return func(rel string) bool {
+		rel = normalizeReusePath(rel)
+		if rel == "" {
+			return false
+		}
+		bestLength := -1
+		bestMode := ""
+		for _, override := range overrides {
+			overridePath := strings.Trim(filepath.ToSlash(override.RelativePath), "/")
+			if !overrideCovers(overridePath, rel) {
+				continue
+			}
+			if len(overridePath) > bestLength {
+				bestLength, bestMode = len(overridePath), override.Mode
+			}
+		}
+		if bestMode != "" {
+			return bestMode == "exclude"
+		}
+		return discovery.ExcludedByUser(rel, excludePatterns)
+	}
+}
+
+// selectionDeselected loads the workspace file configuration for finding
+// enforcement. A lookup failure degrades to the historical behavior
+// (deselect nothing) rather than failing the scan.
+func (s *Service) selectionDeselected(ctx context.Context, workspaceID string) func(string) bool {
+	overrides, err := s.db.PathOverrides(ctx, workspaceID)
+	if err != nil {
+		overrides = nil
+	}
+	rules, err := s.db.Rules(ctx, workspaceID)
+	var patterns []string
+	if err == nil {
+		for _, rule := range rules {
+			if rule.RuleType == "exclude" && rule.Enabled {
+				patterns = append(patterns, rule.Pattern)
+			}
+		}
+	}
+	return deselectMatcher(overrides, patterns)
+}
+
+// dropDeselectedFindings removes findings reported inside configured-out
+// paths, keeping the returned slice's order.
+func dropDeselectedFindings(findings []analyzers.Finding, deselect func(string) bool) []analyzers.Finding {
+	if deselect == nil {
+		return findings
+	}
+	kept := make([]analyzers.Finding, 0, len(findings))
+	for _, finding := range findings {
+		if deselect(finding.RelativePath) {
+			continue
+		}
+		kept = append(kept, finding)
+	}
+	return kept
 }

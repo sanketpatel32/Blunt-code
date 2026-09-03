@@ -217,6 +217,15 @@ func Tree(ctx context.Context, root, relative string, userExcludes []string) ([]
 	}
 	return items, nil
 }
+// ExcludedByUser reports whether a workspace-relative path matches any user
+// exclude pattern, with exactly the semantics Discover and Tree enforce.
+// Scans reuse it to drop findings that directory-walking analyzers
+// (gitleaks, checkov, sonarqube, trivy, osv) report inside configured-out
+// paths their tools insist on traversing.
+func ExcludedByUser(rel string, patterns []string) bool {
+	return excludedByUser(rel, patterns)
+}
+
 func excludedByUser(rel string, patterns []string) bool {
 	rel = strings.ToLower(filepath.ToSlash(rel))
 	for _, pattern := range patterns {

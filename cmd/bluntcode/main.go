@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -24,10 +25,18 @@ import (
 	"bluntcode/internal/build"
 	"bluntcode/internal/config"
 	"bluntcode/internal/doctor"
+	"bluntcode/internal/instance"
 	"bluntcode/internal/tools"
 )
 
 const version = build.Version // single source: internal/build/version.go
+
+// defaultPort is the stable loopback port the app binds when --port is not
+// given, so bookmarks, history entries, and pinned tabs survive restarts.
+// --port 0 keeps the old free-port behavior; an explicit --port N is honored,
+// and when that port already serves Blunt Code the new process hands off to
+// the running instance instead of starting a second server.
+const defaultPort = 8787
 
 //go:embed static/*
 var staticFiles embed.FS
@@ -110,7 +119,7 @@ func runServer(args []string) {
 	flags.SetOutput(os.Stderr)
 	flags.BoolVar(&noBrowser, "no-browser", false, "do not open a browser")
 	flags.BoolVar(&showVersion, "version", false, "print version")
-	flags.IntVar(&port, "port", 0, "loopback port (0 selects a free port)")
+	flags.IntVar(&port, "port", defaultPort, "loopback port (0 selects a free port)")
 	if err := flags.Parse(args); err != nil {
 		os.Exit(2)
 	}
@@ -132,6 +141,11 @@ func runServer(args []string) {
 	// registry, scan service) lives in bootstrap.go and is reused by `scan`.
 	app, release, err := openCore()
 	if err != nil {
+		// A second launch while the app is already running just reveals the
+		// running instance instead of stacking another server on a new port.
+		if errors.Is(err, instance.ErrAlreadyRunning) && handoffToRunning(noBrowser) {
+			return
+		}
 		fatal(err)
 	}
 	defer release()
@@ -142,9 +156,21 @@ func runServer(args []string) {
 	}
 	listener, err := net.Listen("tcp4", fmt.Sprintf("127.0.0.1:%d", port))
 	if err != nil {
+		// The default port is taken: when its owner is a live Blunt Code
+		// server (a previous launch, or one raced here), hand off to it
+		// rather than failing or wandering to a random port.
+		if port != 0 && handoffToPort(port, noBrowser) {
+			return
+		}
 		fatal(fmt.Errorf("listen on loopback: %w", err))
 	}
 	defer listener.Close()
+	if bound := boundPort(listener); bound != 0 {
+		// Best-effort hint so a later handoff knows where this instance
+		// serves; stale hints are harmless because handoff probes first.
+		writeServerPort(bound)
+		defer removeServerPort()
+	}
 	server := api.New(app.db, app.bus, app.scans, app.toolService, app.paths, version, app.logger)
 	root := http.NewServeMux()
 	root.Handle("/api/", server.Handler())
@@ -267,6 +293,85 @@ func openBrowser(url string, logger *slog.Logger) {
 	if err := exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", url).Start(); err != nil {
 		logger.Warn("could not open browser", "error", err)
 	}
+}
+
+// boundPort extracts the loopback port from a bound listener, or 0 when the
+// address is not a TCP address.
+func boundPort(listener net.Listener) int {
+	addr, ok := listener.Addr().(*net.TCPAddr)
+	if !ok {
+		return 0
+	}
+	return addr.Port
+}
+
+// serverPortPath locates the hint file where a running server records the
+// port it bound, so a later launch can find the existing instance.
+func serverPortPath() (string, error) {
+	paths, err := config.DefaultPaths()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(paths.DataDir, "server.port"), nil
+}
+
+func writeServerPort(port int) {
+	path, err := serverPortPath()
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(path, []byte(fmt.Sprintf("%d", port)), 0o600)
+}
+
+func removeServerPort() {
+	path, err := serverPortPath()
+	if err != nil {
+		return
+	}
+	_ = os.Remove(path)
+}
+
+// handoffToPort probes a loopback port for a live Blunt Code server and, when
+// found, opens the browser there instead of starting a second instance. It
+// reports whether the handoff happened; anything else (foreign owner, dead
+// port, stale hint) leaves the caller to proceed normally.
+func handoffToPort(port int, noBrowser bool) bool {
+	if port <= 0 {
+		return false
+	}
+	url := fmt.Sprintf("http://127.0.0.1:%d/", port)
+	client := &http.Client{Timeout: 3 * time.Second}
+	response, err := client.Get(url + "api/v1/meta")
+	if err != nil {
+		return false
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return false
+	}
+	fmt.Println("Blunt Code already running on " + url)
+	if !noBrowser {
+		openBrowser(url, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	}
+	return true
+}
+
+// handoffToRunning hands off to the instance holding the single-instance lock
+// by probing its recorded port hint.
+func handoffToRunning(noBrowser bool) bool {
+	path, err := serverPortPath()
+	if err != nil {
+		return false
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var port int
+	if _, err := fmt.Sscanf(strings.TrimSpace(string(raw)), "%d", &port); err != nil {
+		return false
+	}
+	return handoffToPort(port, noBrowser)
 }
 func fatal(err error) { fmt.Fprintln(os.Stderr, "bluntcode:", err); os.Exit(1) }
 
