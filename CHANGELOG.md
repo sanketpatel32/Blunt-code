@@ -5,6 +5,13 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.1] - 2026-09-03
+
+### Fixed
+- **Files page (`/workspaces/:id/files`) could never save**: `api.saveRules` sent the rules as a bare array while `PUT /workspaces/:id/rules` requires the `{"rules": [...]}` envelope, so every "Save selection" click failed with `400 INVALID_JSON` — reproduced against the live server and covered by a regression test asserting the envelope. Unfinished rule drafts (empty pattern rows) are now filtered client-side instead of tripping the server's `INVALID_RULE` rejection.
+- **Bulk file selection**: new toolbar above the source tree with Select all / Exclude all / Invert plus a live "N of M shown selected" count. Unfiltered it targets top-level folders (one prefix override covers the whole subtree, loaded or not); while searching it hits exactly the matches; under a language filter it hits the loaded files of that language. Redundant child overrides are pruned, and folder checkboxes now show honest tri-state (mixed loaded subtree reads as partial; an explicit choice clears it).
+- **Files page visual refresh**: roomier rows, bordered expander squares, larger checkboxes, accent-tinted included rows, excluded-reason pills, and a language filter rail that only offers languages present in the loaded tree.
+
 ## [0.20.0] - 2026-09-03
 
 ### Changed

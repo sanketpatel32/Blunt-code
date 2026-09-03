@@ -445,15 +445,23 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 @keyframes tree-enter { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 .file-tree > li { border-bottom: var(--rule) solid var(--color-rule-faint); }
 .file-tree > li:last-child { border-bottom: 0; }
-.tree-row { display: flex; align-items: center; gap: var(--space-sm); min-height: 2.6rem; padding: 2px var(--space-xs); border-radius: var(--radius-sm); font-size: var(--text-sm); transition: background var(--dur-fast) var(--ease-out); }
-.tree-row:hover { background: color-mix(in oklch, var(--color-accent) 4%, transparent); }
-.tree-row input[type="checkbox"] { accent-color: var(--color-accent); width: 1rem; height: 1rem; }
-.tree-toggle { width: 1.5rem; height: 1.5rem; display: grid; place-items: center; padding: 0; border: var(--rule) solid transparent; background: transparent; color: var(--color-ink-faint); font-size: var(--text-sm); font-weight: 700; border-radius: var(--radius-xs); transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out); }
-.tree-toggle:hover:not(:disabled) { background: var(--color-surface-muted); color: var(--color-ink); border-color: var(--color-rule); }
-.tree-toggle:disabled { opacity: .35; }
-.tree-name { min-width: 6rem; display: inline-flex; align-items: center; gap: var(--space-2xs); }
+.tree-row { display: flex; align-items: center; gap: var(--space-sm); min-height: 2.75rem; padding: var(--space-2xs) var(--space-sm); border-radius: var(--radius-md); font-size: var(--text-sm); transition: background var(--dur-fast) var(--ease-out); }
+.tree-row:hover { background: color-mix(in oklch, var(--color-accent) 5%, transparent); }
+/* Included rows carry a whisper of accent so mass selections read at a glance. */
+.tree-row:has(input[type="checkbox"]:checked) { background: color-mix(in oklch, var(--color-accent) 6%, transparent); }
+.tree-row:has(input[type="checkbox"]:checked):hover { background: color-mix(in oklch, var(--color-accent) 9%, transparent); }
+.tree-row input[type="checkbox"] { accent-color: var(--color-accent); width: 1.15rem; height: 1.15rem; flex: none; cursor: pointer; }
+.tree-toggle { width: 1.65rem; height: 1.65rem; flex: none; display: grid; place-items: center; padding: 0; border: var(--rule) solid var(--color-rule); background: var(--color-surface); color: var(--color-ink-soft); font-family: var(--font-mono); font-size: var(--text-sm); font-weight: 700; line-height: 1; border-radius: var(--radius-xs); transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out); }
+.tree-toggle:hover:not(:disabled) { background: var(--color-surface-muted); color: var(--color-ink); border-color: var(--color-rule-strong); }
+.tree-toggle:disabled { opacity: .3; border-color: transparent; background: transparent; }
+/* Bulk selection bar: one click for what used to be one checkbox per row. */
+.tree-bulkbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); flex-wrap: wrap; margin-bottom: var(--space-sm); padding: var(--space-xs) var(--space-sm); border: var(--rule) solid var(--color-rule-faint); border-radius: var(--radius-md); background: var(--color-surface-muted); }
+.tree-bulkbar-count { color: var(--color-ink-soft); font-size: var(--text-xs); }
+.tree-bulkbar-actions { display: flex; align-items: center; gap: var(--space-2xs); flex-wrap: wrap; }
+.tree-bulkbar-btn { min-height: 2rem; padding: 0 var(--space-sm); font-size: var(--text-xs); }
+.tree-name { min-width: 6rem; display: inline-flex; align-items: center; gap: var(--space-xs); font-weight: 550; letter-spacing: -.005em; }
 .tree-lang-badge { display: inline-flex; align-items: center; padding: 1px 6px; border-radius: var(--radius-xs); background: var(--color-surface-muted); color: var(--color-ink-faint); font: 600 10px var(--font-mono); letter-spacing: .02em; }
-.tree-excluded { color: var(--color-warning); font-size: var(--text-xs); overflow-wrap: anywhere; }
+.tree-excluded { display: inline-flex; align-items: center; padding: 1px var(--space-xs); border-radius: var(--radius-pill); background: var(--color-warning-soft); color: var(--color-warning-ink, var(--color-warning)); font-size: 11px; font-weight: 600; overflow-wrap: anywhere; }
 .tree-hit { padding: 0 4px; border-radius: var(--radius-pill); background: var(--color-accent-soft); color: var(--color-accent-strong); font-weight: 700; }
 .tree-children { margin-left: var(--space-md); border-left: 1px solid var(--color-rule-faint); padding-left: var(--space-md); margin-top: 2px; overflow: hidden; transition: height 200ms var(--ease-out); will-change: height; }
 .rule-editor-head { display: flex; align-items: flex-start; justify-content: space-between; }

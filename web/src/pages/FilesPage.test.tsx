@@ -167,6 +167,103 @@ describe('FilesPage tree search', () => {
   });
 });
 
+describe('FilesPage bulk selection', () => {
+  function bulkButton(host: HTMLElement, label: string) {
+    return [...host.querySelectorAll<HTMLButtonElement>('.tree-bulkbar-actions button')].find((button) => button.textContent === label)!;
+  }
+
+  function checkedCount(host: HTMLElement) {
+    return [...host.querySelectorAll<HTMLInputElement>('.tree-row input[type="checkbox"]')].filter((input) => input.checked).length;
+  }
+
+  it('selects, excludes, and inverts every shown path in one click', async () => {
+    const host = await render();
+    expect(host.querySelector('.tree-bulkbar-count')!.textContent).toContain('2 of 2 shown selected');
+    expect(checkedCount(host)).toBe(2); // both top-level dirs start included
+
+    await act(async () => { bulkButton(host, 'Exclude all').click(); await flush(); });
+    expect(checkedCount(host)).toBe(0);
+    expect(host.querySelector('.tree-bulkbar-count')!.textContent).toContain('0 of 2 shown selected');
+
+    await act(async () => { bulkButton(host, 'Select all').click(); await flush(); });
+    expect(checkedCount(host)).toBe(2);
+
+    await act(async () => { bulkButton(host, 'Invert').click(); await flush(); });
+    expect(checkedCount(host)).toBe(0);
+  });
+
+  it('a folder checkbox cascades to its loaded children and clears the partial flag once uniform', async () => {
+    enqueueChild('src', [
+      { path: 'src/a.py', name: 'a.py', type: 'file', included: true },
+      { path: 'src/b.py', name: 'b.py', type: 'file', included: true },
+    ]);
+    const host = await render();
+    await act(async () => { toggle(host, 'Expand src')!.click(); await flush(); });
+    const boxes = [...host.querySelectorAll<HTMLInputElement>('[aria-label^="Include "]')];
+    expect(boxes).toHaveLength(4);
+
+    // Exclude one child: the src folder must read as partial.
+    await act(async () => { boxes.find((box) => box.getAttribute('aria-label') === 'Include src/a.py')!.click(); await flush(); });
+    const srcBox = host.querySelector<HTMLInputElement>('[aria-label="Include src"]')!;
+    expect(srcBox.checked).toBe(true); // longest-prefix still includes src itself
+    expect(srcBox.indeterminate).toBe(true);
+
+    // Excluding the folder itself is a decision: uniform, no longer partial.
+    await act(async () => { srcBox.click(); await flush(); });
+    expect(host.querySelector<HTMLInputElement>('[aria-label="Include src"]')!.indeterminate).toBe(false);
+    expect(checkedCount(host)).toBe(1); // only docs stays checked
+  });
+});
+
+describe('FilesPage save', () => {
+  async function renderWithNotify() {
+    const seen: Notice[] = [];
+    vi.stubGlobal('fetch', fetchMock);
+    const host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+    await act(async () => { root.render(<FilesPage id="ws-1" notify={(notice) => { seen.push(notice); }} />); });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    return { host, seen };
+  }
+
+  function saveButton(host: HTMLElement) {
+    return [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.includes('Save selection'))!;
+  }
+
+  function putBodies() {
+    const calls = fetchMock.mock.calls as unknown as Array<[string, RequestInit?]>;
+    return calls
+      .filter(([, init]) => init?.method === 'PUT')
+      .map(([input, init]) => ({ url: String(input), body: JSON.parse(String(init?.body)) }));
+  }
+
+  it('sends the {rules} envelope the backend requires and reports success', async () => {
+    fetchMock.mockClear();
+    const { host, seen } = await renderWithNotify();
+    await act(async () => { saveButton(host).click(); await flush(); await flush(); });
+    const puts = putBodies();
+    expect(puts).toHaveLength(2);
+    expect(puts[0]!.url).toContain('/rules');
+    expect(puts[0]!.body).toEqual({ rules: [] }); // bare arrays used to earn a 400 INVALID_JSON here
+    expect(puts[1]!.url).toContain('/path-overrides');
+    expect(puts[1]!.body).toEqual({ overrides: [] });
+    expect(seen.at(-1)).toMatchObject({ kind: 'info' });
+  });
+
+  it('saves checkbox overrides and drops unfinished empty-pattern rule drafts', async () => {
+    fetchMock.mockClear();
+    const { host } = await renderWithNotify();
+    await act(async () => { toggle(host, 'Expand src')!.click(); await flush(); });
+    await act(async () => { host.querySelector<HTMLInputElement>('[aria-label="Include src"]')!.click(); await flush(); });
+    await act(async () => { [...host.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.includes('Add rule'))!.click(); await flush(); });
+    await act(async () => { saveButton(host).click(); await flush(); await flush(); });
+    const puts = putBodies();
+    expect(puts[0]!.body).toEqual({ rules: [] }); // the untouched draft never leaves the client
+    expect(puts[1]!.body).toEqual({ overrides: [{ relative_path: 'src', mode: 'exclude' }] });
+  });
+});
+
 describe('FilesPage tree helpers', () => {
   it('shows the workspace root path and a loaded-path count', async () => {
     enqueueChild('src', [{ path: 'src/main.py', name: 'main.py', type: 'file', included: true }]);

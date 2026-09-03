@@ -56,7 +56,7 @@ export const api = {
     const value = await request<{ items?: unknown[]; rules?: unknown[] } | null>(`/workspaces/${encodeURIComponent(id)}/rules`);
     return { rules: value?.rules ?? value?.items ?? [] };
   },
-  saveRules: (id: string, rules: unknown) => request(`/workspaces/${encodeURIComponent(id)}/rules`, { method: 'PUT', body: JSON.stringify(rules) }),
+  saveRules: (id: string, rules: unknown) => request(`/workspaces/${encodeURIComponent(id)}/rules`, { method: 'PUT', body: JSON.stringify({ rules }) }),
   scans: async (id: string) => list<Scan>(await request<Scan[] | { scans?: Scan[] }>(`/workspaces/${encodeURIComponent(id)}/scans`)),
   /** Server-paged scan history for one workspace; `page` is 1-based and capped at page_size 100 by the API. */
   scansPage: (id: string, page: number, pageSize: number) => request<ScanPage>(`/workspaces/${encodeURIComponent(id)}/scans?page=${page}&page_size=${pageSize}`),
