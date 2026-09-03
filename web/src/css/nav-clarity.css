@@ -125,6 +125,7 @@
    visual container, so repeating a border per control doubles the noise. */
 .nav-utils .nav-util,
 .nav-utils .nav-shortcuts,
+.nav-utils .nav-bell,
 .nav-utils .theme-toggle {
   display: inline-flex;
   align-items: center;
@@ -140,12 +141,13 @@
 }
 .nav-utils .nav-util:hover,
 .nav-utils .nav-shortcuts:hover,
+.nav-utils .nav-bell:hover,
 .nav-utils .theme-toggle:hover {
   background: var(--color-surface);
   color: var(--color-ink);
 }
 
-.nav-utils .nav-shortcuts { width: 2rem; justify-content: center; padding: 0; }
+.nav-utils .nav-shortcuts, .nav-utils .nav-bell { width: 2rem; justify-content: center; padding: 0; }
 
 .nav-lang-select {
   max-width: 3.4rem;

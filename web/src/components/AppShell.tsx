@@ -148,11 +148,13 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
       <div className="nav-actions">
         {seqArmed && <span className="seq-hint" aria-hidden="true">g…</span>}
         {flat && <Button variant="ghost" size="sm" className="close-app" onClick={onClose}>{t('common.closeApp')}</Button>}
-        <NotificationsCenter />
         {/* Preferences are chosen once and then never touched. They read as one
             cohesive group instead of four competing buttons — and every one of
-            them is still reachable from the command palette (Ctrl/Cmd+K). */}
+            them is still reachable from the command palette (Ctrl/Cmd+K).
+            Notifications live here too: it is a utility, and styling it apart
+            made it the loudest thing in the row for the wrong reason. */}
         <div className="nav-utils">
+          <NotificationsCenter />
           <fieldset className="nav-util nav-lang segmented" aria-label={t('common.language')}>
             <Languages className="h-4 w-4 shrink-0" aria-hidden="true" />
             {LOCALES.map((l) => <button key={l.value} type="button" title={l.label} aria-label={l.label} aria-pressed={locale === l.value} onClick={() => setLocale(l.value as never)}>{l.label}</button>)}

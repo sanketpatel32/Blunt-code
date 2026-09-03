@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SonarQube findings pointed at a workspace UUID instead of a file**: Blunt Code's SonarQube project key is `bluntcode:<workspace-id>`, and the adapter trimmed issue components at the first colon — which only removed `bluntcode:`, storing every path as `<workspace-uuid>:src/...`. The report's FILE column showed a truncated hash, same-rule rows looked byte-identical, and the source pane had no real file to open. The adapter now trims the whole project key, and a one-time repair on database open rewrites stored paths, recomputes their fingerprints (suppressions move with them), and heals existing scans without a rescan.
 
 ### Changed
+- **Notifications bell joined the nav's utility cluster**: it was a bordered box outside the group with two overlapping red indicators (a corner badge plus a decorative dot) that read as a smear — it now styles like its ghost siblings and carries a single, legible unread-count badge.
 - **Findings table readability**: the FILE column shows the path tail plus line number (full path on hover) and clicking it opens the source pane like the rest of the row; the Tool cell shows one display-name badge (SonarQube, Gitleaks, Trivy, …) instead of a raw id plus a duplicate of the rule id; Type chips read human labels (Code smell, not code_smell); the floating active-filter chip row no longer repeats filters whose pressed state the toolbar chips already show.
 
 ## [0.20.3] - 2026-09-03

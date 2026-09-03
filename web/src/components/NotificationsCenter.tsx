@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Bell, Check, Trash2, Volume2, VolumeX } from 'lucide-react';
 import { Button } from './ui/button';
-import { Badge } from './ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator } from './ui/dropdown-menu';
 import { getNotifications, markAllRead, markRead, clearNotifications, type AppNotification } from '../lib/notifications';
 import { relativeTime } from '../lib/format';
@@ -84,20 +83,15 @@ export function NotificationsCenter() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button
-          variant="outline"
-          size="icon"
-          className="relative rounded-[var(--radius-button)] h-[2.15rem] w-[2.15rem] border-[var(--color-rule)] hover:border-[var(--color-rule-strong)]"
-          aria-label={unread ? `Notifications, ${unread} unread` : 'Notifications'}
-        >
+        {/* Lives inside the nav's utility cluster (see AppShell): the cluster CSS
+            in nav-clarity.css strips per-control chrome, so the bell reads as one
+            quiet control among prefs/shortcuts/theme instead of a boxed outsider. */}
+        <Button variant="ghost" size="icon" className="nav-bell relative" aria-label={unread ? `Notifications, ${unread} unread` : 'Notifications'}>
           <Bell className="h-4 w-4" aria-hidden="true" />
           {unread > 0 && (
-            <>
-              <Badge className="absolute -right-1 -top-1 h-4 min-w-4 justify-center px-1 py-0 text-[10px] leading-none bg-[var(--color-danger-strong)] text-[var(--color-on-accent)] border-transparent">
-                {unread > 99 ? '99+' : String(unread)}
-              </Badge>
-              <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-[var(--color-danger)] ring-2 ring-[var(--color-surface)] motion-reduce:hidden" aria-hidden="true" />
-            </>
+            <span className="absolute -right-0.5 -top-0.5 flex h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-full bg-[var(--color-danger-strong)] px-1 text-[10px] font-bold leading-none text-[var(--color-on-accent)] ring-2 ring-[var(--color-surface-muted)]">
+              {unread > 99 ? '99+' : unread}
+            </span>
           )}
         </Button>
       </DropdownMenuTrigger>
