@@ -84,14 +84,14 @@ curl -fsSL -o "%TEMP%\install-bluntcode.cmd" https://github.com/sanketpatel32/Bl
 ```
 Installs to `%LOCALAPPDATA%\Programs\BluntCode`, verifies SHA-256, creates Start Menu shortcut, launches app. No admin.
 
-**Options** `install-latest.ps1 -Version 0.16.7 -Silent -DesktopShortcut -WhatIf -WaitForCloseSeconds 30`
+**Options** `install-latest.ps1 -Version 0.21.0 -Silent -DesktopShortcut -WhatIf -WaitForCloseSeconds 30`
 
 **Portable ZIP**
 
-1. Download `BluntCode-0.16.7-windows-amd64.zip` + `.sha256` from [Releases](https://github.com/sanketpatel32/Blunt-code/releases/latest)
+1. Download `BluntCode-0.21.0-windows-amd64.zip` + `.sha256` from [Releases](https://github.com/sanketpatel32/Blunt-code/releases/latest)
 2. Verify & run:
 ```powershell
-$pkg='.\BluntCode-0.16.7-windows-amd64.zip'
+$pkg='.\BluntCode-0.21.0-windows-amd64.zip'
 if((Get-FileHash $pkg -Algorithm SHA256).Hash -ne (Get-Content "$pkg.sha256").Split()[0]){throw 'checksum mismatch'}
 Expand-Archive $pkg -DestinationPath .\BluntCode -Force; .\BluntCode\BluntCode*\bluntcode.exe
 ```
@@ -128,14 +128,15 @@ Keyboard: `g h/w/t/s/a` navigate · `n` add workspace · `/` search · `?` help 
 | **Workspaces that scale** | Tag chips with `+N` overflow, debounced tag filter, sort by Name / Last scan / Findings, 51→2 queries at 50 workspaces |
 | **Reports you can use** | Sticky filter toolbar, severity-tinted row edges, removable chips, `page`/`page_size` toggles (25/50/100/200 rows), hostile-corpus HTML-escaped |
 | **CI-grade CLI** | Profiles, gates, baselines, watch mode — see [CLI](#-cli) |
-| **Tested** | 726 automated tests (457 Go · 269 web) |
+| **Tested** | 700+ automated tests (Go + web) |
 
-<details><summary><strong>What's new in 0.16.x</strong> — analyzers revived, UI decluttered</summary>
+<details><summary><strong>What's new in 0.21.x</strong> — quieter scans, live progress, readable findings</summary>
 
-- **Analyzer pipeline fixed end-to-end** — semgrep's bundled rulepack (invalid YAML + pattern grammar) and SonarQube's 5-minute compute timeout had silently returned zero findings on every scan. Both fixed, with `doctor --fix` recovery and regression tests guarding the whole class.
-- **Simpler navigation & dashboard** — three primary destinations plus a "More" menu; the dashboard rebuilt around one metric row and the activity feed.
-- **Readable workspaces & reports** — short workspace paths with copy-full-path, per-language color dots, honest scan-status tones, and a rows-per-page window (25/50/100/200) on the findings table.
-- **WCAG AA contrast guard** — `npm run audit:contrast` fails the build on any shipped color pairing below 4.5:1.
+- **Smart skip for generated files** — discovery no longer reads build output, dependency dirs, minified bundles, lockfiles, or files over 10 MiB; artifact findings are filtered before persistence (secret detectors still surface credentials baked into shipped bundles).
+- **Live scan progress with real severity totals** — per-analyzer findings counts and critical/high/medium/low chips update while the scan runs, with no double-counting on reconnect.
+- **Readable findings table** — path tail + line number in FILE (full path on hover, click opens source pane), one tool badge per row, human Type labels, no duplicate filter chips.
+- **Full headless CLI + `/cli` docs page** — every UI capability (workspaces, findings, reports, history compare, suppressions, rules, tools, `pentest probe`, stats/trends/risk, doctor, update) scriptable from terminal or CI; see [CLI](#-cli) and [docs/CLI.md](docs/CLI.md).
+- **Analysis workbench** — docked source viewer beside the list, verdict-led header with risk grade, one always-visible filter toolbar, load-more pagination.
 
 > Earlier releases shipped the shadcn/Tailwind UI, global search, risk scores, scan pruning, workspace tags, CSV/SARIF/JSONL exports, and gated CI. See [CHANGELOG.md](CHANGELOG.md).
 </details>
@@ -330,7 +331,7 @@ Installer auto-cleans Start Menu shortcut and refuses while app is running.
 ```powershell
 go test ./...                # Go vet/build/tests
 cd web; npm test; npm run build
-.\scripts\package.ps1 -Version 0.16.7
+.\scripts\package.ps1 -Version 0.21.0
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) · [docs/architecture.md](docs/architecture.md) — shadcn tokens live in `web/src/tokens.css` (`--color-paper/ink/accent`, `--radius-*`, `--shadow-*`), components in `web/src/components/ui/*`.
