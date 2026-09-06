@@ -318,11 +318,22 @@ export function RiskCard({ risk }: { risk?: RiskProfile | null }) {
   const arrow = risk.trend === 'up' ? '▲' : risk.trend === 'down' ? '▼' : '＝';
   const delta = typeof risk.previous_score === 'number' ? ` · ${arrow} ${Math.abs(Math.round(risk.score - risk.previous_score))}` : '';
   const gradeTone = risk.grade === 'A' ? 'positive' : risk.grade === 'B' ? 'medium' : 'high';
-  return <div className={`summary-card premium-card risk-hero ${gradeTone}`}>
+  // A grade is only as strong as the scan behind it: when analyzer runs
+  // failed or degraded, the score reflects partial coverage and the card
+  // must say so instead of implying full assurance.
+  const coverage = risk.coverage;
+  const partial = coverage && risk.complete === false;
+  const coverageNote = partial
+    ? `partial coverage: ${coverage!.succeeded}/${coverage!.total} analyzers clean` +
+      (coverage!.failed > 0 ? `, ${coverage!.failed} failed` : '') +
+      (coverage!.warned > 0 ? `, ${coverage!.warned} degraded` : '')
+    : null;
+  return <div className={`summary-card premium-card risk-hero ${gradeTone}`} title={risk.finished_at ? `Latest scan finished ${risk.finished_at}` : undefined}>
     <span className="premium-card-icon"><ShieldAlert className="h-4 w-4" /></span>
     <span className="risk-grade">{risk.grade}</span>
     <strong className="risk-score">{Math.round(risk.score)}</strong>
     <span>Risk {risk.grade}{delta}</span>
+    {coverageNote && <span className="risk-coverage-note" data-partial="true">{coverageNote}</span>}
   </div>;
 }
 

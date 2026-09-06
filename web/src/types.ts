@@ -13,6 +13,8 @@ export interface Workspace {
   last_scan_at?: string | null;
   last_opened_at?: string | null;
   latest_scan?: Scan;
+  /** Analyzer outcome counts for `latest_scan` (absent when it recorded no runs) — pairs every dashboard grade with its coverage. */
+  latest_scan_coverage?: ScanCoverage;
 }
 
 export interface Scan {
@@ -104,6 +106,14 @@ export interface SearchFindingsPage {
 }
 
 /** Weighted risk score from `GET /workspaces/{id}/risk`. Weights: critical 10, high 5, medium 2, low 1. Grade A<5, B<20, C<50, D otherwise. */
+/** How much of a scan's analyzer set actually completed — the pairing that keeps a low-finding partial scan from reading as full assurance. */
+export interface ScanCoverage {
+  total: number;
+  succeeded: number;
+  failed: number;
+  warned: number;
+}
+
 export interface RiskProfile {
   available: boolean;
   scan_id?: string;
@@ -113,6 +123,11 @@ export interface RiskProfile {
   previous_score?: number;
   previous_scan_id?: string;
   counts?: Record<string, number>;
+  scan_state?: string;
+  finished_at?: string;
+  coverage?: ScanCoverage;
+  /** True only when every analyzer run succeeded with no degraded output; a grade without it reflects partial coverage. */
+  complete?: boolean;
 }
 
 /** Tool readiness pair on the global overview; the whole field is absent when no tools service is wired into the server. */

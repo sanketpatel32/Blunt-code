@@ -276,7 +276,11 @@ type TextRange struct {
 }
 
 func (x Issue) Finding() analyzers.Finding {
-	f := analyzers.Finding{AnalyzerID: ID, RuleID: x.Rule, Severity: sonarSeverity(x.Severity), Category: sonarCategory(x.Type), Title: x.Rule, Message: x.Message, RelativePath: x.Component, RawSeverity: x.Severity, Metadata: map[string]any{"issue_key": x.Key, "type": x.Type}}
+	sev, severityMapped := sonarSeverity(x.Severity)
+	f := analyzers.Finding{AnalyzerID: ID, RuleID: x.Rule, Severity: sev, Category: sonarCategory(x.Type), Title: x.Rule, Message: x.Message, RelativePath: x.Component, RawSeverity: x.Severity, Metadata: map[string]any{"issue_key": x.Key, "type": x.Type}}
+	if !severityMapped {
+		analyzers.MarkSeverityUnmapped(&f)
+	}
 	if x.TextRange != nil {
 		f.StartLine = x.TextRange.StartLine
 		f.StartColumn = x.TextRange.StartOffset
@@ -285,18 +289,22 @@ func (x Issue) Finding() analyzers.Finding {
 	}
 	return f
 }
-func sonarSeverity(s string) analyzers.Severity {
+
+// sonarSeverity projects SonarQube's severity vocabulary onto the normalized
+// scale. The bool reports whether the raw value was recognized; unknown
+// values fall back to Info and the finding is marked unmapped by the caller.
+func sonarSeverity(s string) (analyzers.Severity, bool) {
 	switch strings.ToUpper(s) {
 	case "BLOCKER":
-		return analyzers.SeverityCritical
+		return analyzers.SeverityCritical, true
 	case "CRITICAL":
-		return analyzers.SeverityHigh
+		return analyzers.SeverityHigh, true
 	case "MAJOR":
-		return analyzers.SeverityMedium
+		return analyzers.SeverityMedium, true
 	case "MINOR":
-		return analyzers.SeverityLow
+		return analyzers.SeverityLow, true
 	default:
-		return analyzers.SeverityInfo
+		return analyzers.SeverityInfo, false
 	}
 }
 func sonarCategory(t string) analyzers.Category {

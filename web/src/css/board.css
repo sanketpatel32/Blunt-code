@@ -118,6 +118,25 @@
 
 .verdict-line strong { color: var(--color-ink); }
 
+/* IMP-13: a grade from a partially-covered scan must say so. */
+.verdict-caveat {
+  margin: 2px 0 0;
+  font-size: var(--text-xs);
+  color: var(--color-warning-ink, var(--color-ink-soft));
+}
+
+.ledger-partial-badge {
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--color-warning-ink, var(--color-ink-soft));
+  border: 1px solid currentColor;
+  border-radius: var(--radius-button);
+  padding: 0 4px;
+  cursor: help;
+}
+
 .verdict-bands {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

@@ -57,11 +57,14 @@ type Server struct {
 
 // workspaceView keeps the dashboard payload small while including the two
 // pieces of context people need before opening a workspace: source languages
-// and the most recent analysis.
+// and the most recent analysis. latest_scan_coverage pairs that analysis
+// with how much of its analyzer set actually completed (IMP-13): a grade
+// from a partial scan must not read as the assurance of a complete one.
 type workspaceView struct {
 	core.Workspace
-	Languages  []string   `json:"languages,omitempty"`
-	LatestScan *core.Scan `json:"latest_scan,omitempty"`
+	Languages     []string               `json:"languages,omitempty"`
+	LatestScan    *core.Scan             `json:"latest_scan,omitempty"`
+	LatestScanCov *database.ScanCoverage `json:"latest_scan_coverage,omitempty"`
 }
 
 func New(db *database.DB, bus *events.Bus, scanService *scans.Service, toolService *tools.Service, paths config.Paths, version string, logger *slog.Logger) *Server {
@@ -239,6 +242,12 @@ func (s *Server) listWorkspaces(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, "DATABASE_ERROR", "Could not load workspace analysis.")
 		return
 	}
+	// ...and one for how much of each latest scan's analyzer set completed.
+	coverageByWorkspace, err := s.db.LatestScanCoverage(r.Context())
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load workspace analysis.")
+		return
+	}
 	views := make([]workspaceView, 0, len(items))
 	for _, item := range items {
 		var latest *core.Scan
@@ -249,6 +258,10 @@ func (s *Server) listWorkspaces(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			fail(w, 500, "DATABASE_ERROR", "Could not load workspace analysis.")
 			return
+		}
+		if coverage, ok := coverageByWorkspace[item.ID]; ok {
+			cov := coverage
+			view.LatestScanCov = &cov
 		}
 		views = append(views, view)
 	}
@@ -1068,6 +1081,22 @@ func (s *Server) workspaceRisk(w http.ResponseWriter, r *http.Request) {
 		"grade":     riskGrade(score),
 		"counts":    map[string]int{"critical": latest.Critical, "high": latest.High, "medium": latest.Medium, "low": latest.Low, "info": latest.Info},
 		"weights":   riskSeverityWeights,
+	}
+	// The grade is only as good as the scan behind it: pair it with the
+	// scan's state, when it finished, and how much of its analyzer set
+	// completed (IMP-13). A partial scan's low score must not read as the
+	// assurance of a complete one.
+	if scan, err := s.db.Scan(r.Context(), latest.ScanID); err == nil {
+		response["scan_state"] = scan.State
+		if scan.FinishedAt != nil && !scan.FinishedAt.IsZero() {
+			response["finished_at"] = scan.FinishedAt.UTC().Format(time.RFC3339)
+		}
+	}
+	if coverage, err := s.db.ScanAnalyzerCoverage(r.Context(), latest.ScanID); err == nil && coverage.Total > 0 {
+		response["coverage"] = map[string]int{
+			"total": coverage.Total, "succeeded": coverage.Succeeded, "failed": coverage.Failed, "warned": coverage.Warned,
+		}
+		response["complete"] = coverage.Complete()
 	}
 	if len(snaps) > 1 {
 		previous := riskScoreOf(snaps[1])
@@ -2023,8 +2052,8 @@ func (s *Server) reportModel(ctx context.Context, scan core.Scan, work core.Work
 	return reports.Build(reports.Input{
 		WorkspaceName: work.Name, WorkspacePath: work.RootPath, ScanID: scan.ID, Profile: scan.Profile, State: scan.State, BluntCodeVersion: bluntCodeVersion,
 		StartedAt: startedAtValue(startedAt), FinishedAt: finishedAtValue(scan.FinishedAt), Files: files, SkippedFiles: make([]string, skippedCount), Findings: findings, Metrics: metrics, Runs: runs,
-		Comparison:  reports.Comparison{New: comparison.New, Fixed: comparison.Fixed, Persistent: comparison.Persistent, NotEvaluatedAnalyzerIDs: comparison.NotEvaluatedAnalyzerIDs},
-		Provenance:  provenance,
+		Comparison: reports.Comparison{New: comparison.New, Fixed: comparison.Fixed, Persistent: comparison.Persistent, NotEvaluatedAnalyzerIDs: comparison.NotEvaluatedAnalyzerIDs},
+		Provenance: provenance,
 	}), nil
 }
 

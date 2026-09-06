@@ -188,22 +188,30 @@ func (a *Adapter) Normalize(_ context.Context, r analyzers.AnalyzerResult) ([]an
 		if c, ok := x.Extra.Metadata["category"].(string); ok {
 			cat = category(c)
 		}
-		f := analyzers.Finding{AnalyzerID: ID, RuleID: x.CheckID, Severity: severity(x.Extra.Severity), Category: cat, Title: x.CheckID, Message: msg, RelativePath: filepath.ToSlash(path), StartLine: x.Start.Line, StartColumn: x.Start.Col, EndLine: x.End.Line, EndColumn: x.End.Col, Remediation: x.Extra.Fix, RawSeverity: x.Extra.Severity, Metadata: x.Extra.Metadata}
+		sev, severityMapped := severity(x.Extra.Severity)
+		f := analyzers.Finding{AnalyzerID: ID, RuleID: x.CheckID, Severity: sev, Category: cat, Title: x.CheckID, Message: msg, RelativePath: filepath.ToSlash(path), StartLine: x.Start.Line, StartColumn: x.Start.Col, EndLine: x.End.Line, EndColumn: x.End.Col, Remediation: x.Extra.Fix, RawSeverity: x.Extra.Severity, Metadata: x.Extra.Metadata}
+		if !severityMapped {
+			analyzers.MarkSeverityUnmapped(&f)
+		}
 		f.SetFingerprint()
 		out = append(out, f)
 	}
 	return out, nil, nil
 }
-func severity(s string) analyzers.Severity {
+
+// severity projects semgrep's result severity onto the normalized scale.
+// The bool reports whether the raw value was recognized; unknown values fall
+// back to Low and the finding is marked unmapped by the caller.
+func severity(s string) (analyzers.Severity, bool) {
 	switch strings.ToLower(s) {
 	case "error", "critical":
-		return analyzers.SeverityHigh
+		return analyzers.SeverityHigh, true
 	case "warning":
-		return analyzers.SeverityMedium
+		return analyzers.SeverityMedium, true
 	case "info":
-		return analyzers.SeverityInfo
+		return analyzers.SeverityInfo, true
 	default:
-		return analyzers.SeverityLow
+		return analyzers.SeverityLow, false
 	}
 }
 func category(s string) analyzers.Category {

@@ -255,8 +255,9 @@ func (a *Adapter) Normalize(_ context.Context, result analyzers.AnalyzerResult) 
 			if id == "" {
 				continue
 			}
+			misuseSev, misuseMapped := severity(m.Severity)
 			f := analyzers.Finding{
-				AnalyzerID: ID, RuleID: id, Severity: severity(m.Severity), Category: analyzers.CategorySecurity,
+				AnalyzerID: ID, RuleID: id, Severity: misuseSev, Category: analyzers.CategorySecurity,
 				Title:        truncate(m.Title, maxTitleRunes),
 				Message:      truncate(fmt.Sprintf("%s: %s. %s", id, m.Title, m.Description), maxMessageRunes),
 				RelativePath: path,
@@ -265,6 +266,9 @@ func (a *Adapter) Normalize(_ context.Context, result analyzers.AnalyzerResult) 
 				DocumentationURL: m.PrimaryURL,
 				RawSeverity:      m.Severity,
 				Metadata:         map[string]any{"file_type": r.Type},
+			}
+			if !misuseMapped {
+				analyzers.MarkSeverityUnmapped(&f)
 			}
 			f.SetFingerprint()
 			out = append(out, f)
@@ -277,8 +281,9 @@ func (a *Adapter) Normalize(_ context.Context, result analyzers.AnalyzerResult) 
 			if v.FixedVersion != "" {
 				remediation = fmt.Sprintf("Upgrade %s to %s", v.PkgName, v.FixedVersion)
 			}
+			vulnSev, vulnMapped := severity(v.Severity)
 			f := analyzers.Finding{
-				AnalyzerID: ID, RuleID: v.VulnerabilityID, Severity: severity(v.Severity), Category: analyzers.CategoryVulnerability,
+				AnalyzerID: ID, RuleID: v.VulnerabilityID, Severity: vulnSev, Category: analyzers.CategoryVulnerability,
 				Title:            truncate(v.Title, maxTitleRunes),
 				Message:          truncate(fmt.Sprintf("%s: %s@%s - %s", v.VulnerabilityID, v.PkgName, v.InstalledVersion, v.Title), maxMessageRunes),
 				RelativePath:     path,
@@ -288,6 +293,9 @@ func (a *Adapter) Normalize(_ context.Context, result analyzers.AnalyzerResult) 
 				Metadata: map[string]any{
 					"package": v.PkgName, "installed_version": v.InstalledVersion, "fixed_version": v.FixedVersion, "status": v.Status,
 				},
+			}
+			if !vulnMapped {
+				analyzers.MarkSeverityUnmapped(&f)
 			}
 			f.SetFingerprint()
 			out = append(out, f)
@@ -299,14 +307,18 @@ func (a *Adapter) Normalize(_ context.Context, result analyzers.AnalyzerResult) 
 			// The matched value must never leave the raw report; trivy masks
 			// it in JSON output, but the adapter does not rely on that and
 			// keeps the message to rule metadata only.
+			secretSev, secretMapped := severity(s.Severity)
 			f := analyzers.Finding{
-				AnalyzerID: ID, RuleID: s.RuleID, Severity: severity(s.Severity), Category: analyzers.CategorySecurity,
+				AnalyzerID: ID, RuleID: s.RuleID, Severity: secretSev, Category: analyzers.CategorySecurity,
 				Title:        truncate(s.Title, maxTitleRunes),
 				Message:      truncate(fmt.Sprintf("%s: potential %s secret detected (matched value not captured)", s.Title, s.Category), maxMessageRunes),
 				RelativePath: path,
 				StartLine:    s.StartLine, EndLine: s.EndLine,
 				RawSeverity: s.Severity,
 				Metadata:    map[string]any{"category": s.Category},
+			}
+			if !secretMapped {
+				analyzers.MarkSeverityUnmapped(&f)
 			}
 			f.SetFingerprint()
 			out = append(out, f)
@@ -315,18 +327,21 @@ func (a *Adapter) Normalize(_ context.Context, result analyzers.AnalyzerResult) 
 	return out, nil, nil
 }
 
-func severity(s string) analyzers.Severity {
+// severity projects trivy's severity vocabulary onto the normalized scale.
+// The bool reports whether the raw value was recognized; unknown values fall
+// back to Info and the finding is marked unmapped by the caller.
+func severity(s string) (analyzers.Severity, bool) {
 	switch strings.ToUpper(s) {
 	case "CRITICAL":
-		return analyzers.SeverityCritical
+		return analyzers.SeverityCritical, true
 	case "HIGH":
-		return analyzers.SeverityHigh
+		return analyzers.SeverityHigh, true
 	case "MEDIUM":
-		return analyzers.SeverityMedium
+		return analyzers.SeverityMedium, true
 	case "LOW":
-		return analyzers.SeverityLow
+		return analyzers.SeverityLow, true
 	default:
-		return analyzers.SeverityInfo
+		return analyzers.SeverityInfo, false
 	}
 }
 

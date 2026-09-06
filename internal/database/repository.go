@@ -384,6 +384,7 @@ func (d *DB) CreateScanWithFiles(ctx context.Context, scan core.Scan, files []co
 	}
 	return scan, nil
 }
+
 // scanSelectColumns lists every scans column hydrated into core.Scan, in the
 // exact order hydrateScanRow reads them. The optional alias qualifies the
 // table on joined queries (e.g. "scans").
@@ -617,6 +618,61 @@ func (d *DB) RecentCompletedSeverityCounts(ctx context.Context, workspaceID stri
 		out = append(out, c)
 	}
 	return out, rows.Err()
+}
+
+// ScanCoverage summarizes how much of the planned analyzer set one scan
+// actually completed: runs recorded, succeeded, failed, and succeeded with
+// degraded output (warning_count > 0). Risk grades pair with it so a
+// low-finding partial scan cannot read as the assurance of a complete scan.
+type ScanCoverage struct {
+	ScanID    string
+	Total     int
+	Succeeded int
+	Failed    int
+	Warned    int
+}
+
+// Complete reports whether the scan ran its full analyzer set cleanly — the
+// precondition under which the letter grade alone is meaningful.
+func (c ScanCoverage) Complete() bool {
+	return c.Failed == 0 && c.Warned == 0 && c.Total > 0
+}
+
+// scanCoverageRow is the shared aggregate shape of the coverage queries.
+const scanCoverageSQL = `SELECT ?1,COUNT(*),COALESCE(SUM(state='succeeded'),0),COALESCE(SUM(state<>'succeeded'),0),COALESCE(SUM(state='succeeded' AND warning_count>0),0) FROM analyzer_runs WHERE scan_id=?`
+
+// ScanAnalyzerCoverage is ScanCoverage for one scan.
+func (d *DB) ScanAnalyzerCoverage(ctx context.Context, scanID string) (ScanCoverage, error) {
+	var c ScanCoverage
+	err := d.SQL.QueryRowContext(ctx, scanCoverageSQL, scanID, scanID).Scan(&c.ScanID, &c.Total, &c.Succeeded, &c.Failed, &c.Warned)
+	if err != nil {
+		return ScanCoverage{}, err
+	}
+	return c, nil
+}
+
+// LatestScanCoverage returns ScanCoverage for the same latest-per-workspace
+// scans LatestScans serves (any state), keyed by workspace id, so dashboards
+// can pair every grade with its coverage without per-workspace queries.
+// Workspaces whose latest scan recorded no analyzer runs are absent.
+func (d *DB) LatestScanCoverage(ctx context.Context) (map[string]ScanCoverage, error) {
+	rows, err := d.SQL.QueryContext(ctx, `SELECT s.workspace_id,s.id,col.total,col.succeeded,col.failed,col.warned
+FROM (SELECT id,workspace_id FROM (SELECT id,workspace_id,ROW_NUMBER() OVER (PARTITION BY workspace_id ORDER BY started_at DESC,id DESC) AS recency FROM scans) ranked WHERE recency=1) s
+JOIN (SELECT scan_id,COUNT(*) AS total,COALESCE(SUM(state='succeeded'),0) AS succeeded,COALESCE(SUM(state<>'succeeded'),0) AS failed,COALESCE(SUM(state='succeeded' AND warning_count>0),0) AS warned FROM analyzer_runs GROUP BY scan_id) col ON col.scan_id=s.id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := map[string]ScanCoverage{}
+	for rows.Next() {
+		var workspaceID string
+		var c ScanCoverage
+		if err := rows.Scan(&workspaceID, &c.ScanID, &c.Total, &c.Succeeded, &c.Failed, &c.Warned); err != nil {
+			return nil, err
+		}
+		result[workspaceID] = c
+	}
+	return result, rows.Err()
 }
 
 // SeverityTrend returns the newest limit completed scans of one workspace,

@@ -157,7 +157,11 @@ func (a *Adapter) Normalize(_ context.Context, r analyzers.AnalyzerResult) ([]an
 		if len(d.Advices) > 0 {
 			remediation = d.Advices[0].Log
 		}
-		f := analyzers.Finding{AnalyzerID: ID, RuleID: rule, Severity: mapSeverity(d.Severity), Category: mapCategory(rule), Title: title, Message: message, RelativePath: filepath.ToSlash(path), Remediation: remediation, RawSeverity: d.Severity, Metadata: map[string]any{"biome_category": d.Category}}
+		sev, severityMapped := mapSeverity(d.Severity)
+		f := analyzers.Finding{AnalyzerID: ID, RuleID: rule, Severity: sev, Category: mapCategory(rule), Title: title, Message: message, RelativePath: filepath.ToSlash(path), Remediation: remediation, RawSeverity: d.Severity, Metadata: map[string]any{"biome_category": d.Category}}
+		if !severityMapped {
+			analyzers.MarkSeverityUnmapped(&f)
+		}
 		if d.Location.Start != nil {
 			f.StartLine, f.StartColumn = d.Location.Start.Line, d.Location.Start.Column
 			if d.Location.End != nil {
@@ -194,16 +198,20 @@ func sourcePosition(path string, offset int) (line, column int) {
 	}
 	return line, column
 }
-func mapSeverity(s string) analyzers.Severity {
+
+// mapSeverity projects biome's diagnostic level onto the normalized scale.
+// The bool reports whether the raw value was recognized; unknown values fall
+// back to Info and the finding is marked unmapped by the caller.
+func mapSeverity(s string) (analyzers.Severity, bool) {
 	switch strings.ToLower(s) {
 	case "fatal":
-		return analyzers.SeverityHigh
+		return analyzers.SeverityHigh, true
 	case "error":
-		return analyzers.SeverityMedium
+		return analyzers.SeverityMedium, true
 	case "warning":
-		return analyzers.SeverityLow
+		return analyzers.SeverityLow, true
 	default:
-		return analyzers.SeverityInfo
+		return analyzers.SeverityInfo, false
 	}
 }
 func mapCategory(rule string) analyzers.Category {

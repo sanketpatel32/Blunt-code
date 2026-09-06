@@ -57,13 +57,17 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
     return (workspaces.data ?? []).map((workspace) => {
       const current = currentScan(workspace);
       const score = current ? riskScore(severityCountsOf(current)) : null;
-      return { workspace, current, score, total: current?.total_findings ?? 0 };
+      const coverage = workspace.latest_scan_coverage;
+      const partial = !!current && !!coverage && (coverage.failed > 0 || coverage.warned > 0);
+      return { workspace, current, score, total: current?.total_findings ?? 0, coverage, partial };
     });
   }, [workspaces.data]);
 
   const verdict = useMemo(() => {
     const counts: Record<Severity, number> = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
     let reported = 0; // total_findings straight from the scans, for rows whose severity counts are missing
+    let partialScans = 0;
+    let lastFinished: string | null = null;
     for (const row of ledgerBase) {
       if (!row.current) continue;
       counts.critical += row.current.critical_count ?? 0;
@@ -72,11 +76,14 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
       counts.low += row.current.low_count ?? 0;
       counts.info += row.current.info_count ?? 0;
       reported += row.current.total_findings ?? 0;
+      if (row.partial) partialScans += 1;
+      const finished = row.current.finished_at;
+      if (finished && (!lastFinished || finished > lastFinished)) lastFinished = finished;
     }
     const tallied = counts.critical + counts.high + counts.medium + counts.low + counts.info;
     const score = riskScore(counts);
     const scanned = ledgerBase.filter((row) => row.current).length;
-    return { counts, score, grade: riskGrade(score), scanned, totalFindings: tallied > 0 ? tallied : reported };
+    return { counts, score, grade: riskGrade(score), scanned, totalFindings: tallied > 0 ? tallied : reported, partialScans, lastFinished };
   }, [ledgerBase]);
 
   // ── The ledger: workspaces ranked by risk, unscanned last ──
@@ -239,6 +246,12 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
                 <>Add a workspace to start grading your code.</>
               )}
             </p>
+            {verdictTallied && verdict.partialScans > 0 && (
+              <p className="verdict-caveat">
+                {verdict.partialScans} of {verdict.scanned} scanned workspace{verdict.partialScans === 1 ? '' : 's'} ran
+                with partial analyzer coverage — their grades reflect only what completed.
+              </p>
+            )}
 
             <div
               className="verdict-bands"
@@ -273,6 +286,10 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
               <dd className="tabular-nums">
                 {verdict.scanned} <span className="rail-of">of {workspaces.data?.length ?? 0}</span>
               </dd>
+            </div>
+            <div className="rail-stat">
+              <dt>Last scan finished</dt>
+              <dd>{verdict.lastFinished ? relativeTime(verdict.lastFinished) : '—'}</dd>
             </div>
             <div className="rail-stat">
               <dt>Engines</dt>
@@ -594,6 +611,10 @@ function LedgerRow({
   const total = current?.total_findings ?? present.reduce((sum, [, count]) => sum + (count ?? 0), 0);
   const breakdown = present.length ? present.map(([severity, count]) => `${count} ${severity}`).join(', ') : 'none';
   const grade = score !== null ? riskGrade(score) : null;
+  // The row's grade is only as strong as its scan: flag rows whose latest
+  // scan lost analyzer runs, so "few findings" never reads as full assurance.
+  const coverage = workspace.latest_scan_coverage;
+  const partialCoverage = !!current && !!coverage && (coverage.failed > 0 || coverage.warned > 0);
 
   return (
     <li className="ledger-row" data-scored={score !== null || undefined}>
@@ -629,6 +650,14 @@ function LedgerRow({
             <span className="ledger-count tabular-nums">
               {total} {total === 1 ? 'finding' : 'findings'}
             </span>
+            {partialCoverage && coverage && (
+              <span
+                className="ledger-partial-badge"
+                title={`Partial analyzer coverage: ${coverage.succeeded}/${coverage.total} clean${coverage.failed > 0 ? `, ${coverage.failed} failed` : ''}${coverage.warned > 0 ? `, ${coverage.warned} degraded` : ''}`}
+              >
+                partial
+              </span>
+            )}
           </>
         ) : (
           <span className="ledger-never">

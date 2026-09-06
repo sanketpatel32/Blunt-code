@@ -130,6 +130,28 @@ type Finding struct {
 // are never silently reinterpreted.
 const FingerprintVersion = 2
 
+// SeverityMappingVersion versions the per-analyzer tables that project a
+// tool's own severity vocabulary (BLOCKER, error, CRITICAL, ...) onto the
+// five normalized severities. A mapping change is a re-rating: bump this
+// when a table changes what a raw value maps to. Unknown raw values are
+// never invented into a severity — they fall through to the adapter's
+// documented fallback, keep the tool's value in RawSeverity, and are marked
+// with MarkSeverityUnmapped so consumers can show the gap instead of a
+// silently re-rated finding.
+const SeverityMappingVersion = 1
+
+// MarkSeverityUnmapped flags a finding whose analyzer-reported severity
+// string matched no row of the adapter's mapping table (see
+// SeverityMappingVersion). The marker lands in metadata (persisted with the
+// finding) so UIs and exports can present the normalized severity as a
+// mapping problem rather than the tool's own claim.
+func MarkSeverityUnmapped(f *Finding) {
+	if f.Metadata == nil {
+		f.Metadata = map[string]any{}
+	}
+	f.Metadata["severity_unmapped"] = true
+}
+
 // SetFingerprint creates the V1-compatible base identity.  Do not include line
 // numbers: a moved issue should remain comparable across scans.
 func (f *Finding) SetFingerprint() {

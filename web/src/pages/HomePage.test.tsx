@@ -146,6 +146,39 @@ describe('HomePage risk board — verdict', () => {
     expect(legend.map((li) => li.textContent)).toEqual(['critical3', 'high4', 'medium9', 'low5', 'info0']);
   });
 
+  it('pairs the grade with partial analyzer coverage instead of implying full assurance', async () => {
+    const host = await render(homeFetchMock(
+      { scans: [scanItem()], total: 1, summary },
+      {
+        items: [
+          workspaceItem({
+            latest_scan: latestScan({ state: 'completed_with_warnings' }),
+            latest_scan_coverage: { total: 5, succeeded: 3, failed: 1, warned: 1 },
+          }),
+        ],
+      },
+    ));
+
+    const caveat = host.querySelector('.verdict-caveat');
+    expect(caveat?.textContent).toContain('1 of 1 scanned workspace ran');
+    expect(caveat?.textContent).toContain('partial analyzer coverage');
+    const badge = host.querySelector('.ledger-partial-badge');
+    expect(badge?.textContent).toBe('partial');
+    expect(badge?.getAttribute('title')).toContain('3/5 clean');
+    expect(badge?.getAttribute('title')).toContain('1 failed');
+    expect(badge?.getAttribute('title')).toContain('1 degraded');
+  });
+
+  it('claims no partial caveat when every analyzer run completed cleanly', async () => {
+    const host = await render(homeFetchMock(
+      { scans: [scanItem()], total: 1, summary },
+      { items: [workspaceItem({ latest_scan_coverage: { total: 5, succeeded: 5, failed: 0, warned: 0 } })] },
+    ));
+
+    expect(host.querySelector('.verdict-caveat')).toBeNull();
+    expect(host.querySelector('.ledger-partial-badge')).toBeNull();
+  });
+
   it('shows the real activity stats in the rail, not scores invented by the UI', async () => {
     const host = await render(homeFetchMock({ scans: [scanItem()], total: 1, summary }));
 

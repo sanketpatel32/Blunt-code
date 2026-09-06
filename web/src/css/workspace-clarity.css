@@ -157,6 +157,15 @@
 .workspace-verdict .risk-hero .risk-grade { font-size: 2rem; }
 .workspace-verdict .risk-hero .risk-score { font-size: 1.75rem; }
 
+/* IMP-13: partial-coverage note under a workspace's grade — a low score
+   from a scan that lost analyzer runs must not read as full assurance. */
+.risk-coverage-note {
+  flex: 1 0 100%;
+  font-size: var(--text-2xs, .6875rem);
+  font-weight: 600;
+  color: var(--color-warning-ink, inherit);
+}
+
 /* Stagger lives in CSS (see PremiumSummaryCard) so reduced motion can
    switch the whole grid off at once. */
 @keyframes workspace-rise {

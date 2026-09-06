@@ -397,18 +397,59 @@ func TestRunLoadsAndRemovesOutputFile(t *testing.T) {
 }
 
 func TestSeverityMapping(t *testing.T) {
-	cases := map[string]analyzers.Severity{
-		"CRITICAL": analyzers.SeverityCritical,
-		"HIGH":     analyzers.SeverityHigh,
-		"MEDIUM":   analyzers.SeverityMedium,
-		"LOW":      analyzers.SeverityLow,
-		"UNKNOWN":  analyzers.SeverityInfo,
-		"":         analyzers.SeverityInfo,
+	cases := []struct {
+		raw    string
+		want   analyzers.Severity
+		mapped bool
+	}{
+		{"CRITICAL", analyzers.SeverityCritical, true},
+		{"critical", analyzers.SeverityCritical, true},
+		{"HIGH", analyzers.SeverityHigh, true},
+		{"High", analyzers.SeverityHigh, true},
+		{"MEDIUM", analyzers.SeverityMedium, true},
+		{"LOW", analyzers.SeverityLow, true},
+		// Unrecognized values keep the tool's claim in RawSeverity, fall back
+		// to Info, and are flagged as mapping problems — never re-rated
+		// silently.
+		{"UNKNOWN", analyzers.SeverityInfo, false},
+		{"catastrophic", analyzers.SeverityInfo, false},
+		{"", analyzers.SeverityInfo, false},
 	}
-	for raw, want := range cases {
-		if got := severity(raw); got != want {
-			t.Fatalf("severity(%q) = %s, want %s", raw, got, want)
+	for _, tc := range cases {
+		got, mapped := severity(tc.raw)
+		if got != tc.want || mapped != tc.mapped {
+			t.Fatalf("severity(%q) = (%s, mapped=%v), want (%s, mapped=%v)", tc.raw, got, mapped, tc.want, tc.mapped)
 		}
+	}
+}
+
+// TestSeverityUnmappedMarkerPersistsThroughFinding verifies the IMP-13
+// contract end to end at the adapter level: an unrecognized raw severity is
+// preserved verbatim, normalized to the documented fallback, and marked in
+// metadata so exports and UIs can show the gap.
+func TestSeverityUnmappedMarkerPersistsThroughFinding(t *testing.T) {
+	doc := `{"SchemaVersion":2,"ArtifactName":"pkg","Results":[{"Target":"package-lock.json","Type":"npm","Vulnerabilities":[{"VulnerabilityID":"CVE-1","PkgName":"left-pad","InstalledVersion":"1.0.0","Title":"weird one","Severity":"CATASTROPHIC"}]}]}`
+	adapter := New("trivy.exe", "0.74.0")
+	findings, _, err := adapter.Normalize(context.Background(), analyzers.AnalyzerResult{
+		Stdout:   []byte(doc),
+		ExitCode: 0,
+		Plan:     analyzers.AnalyzerPlan{AnalyzerID: ID, Commands: []analyzers.ProcessSpec{{Dir: `C:\ws`}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(findings) != 1 {
+		t.Fatalf("findings = %d, want 1", len(findings))
+	}
+	f := findings[0]
+	if f.RawSeverity != "CATASTROPHIC" {
+		t.Fatalf("raw severity = %q, want the tool's own value", f.RawSeverity)
+	}
+	if f.Severity != analyzers.SeverityInfo {
+		t.Fatalf("normalized severity = %s, want the Info fallback", f.Severity)
+	}
+	if f.Metadata["severity_unmapped"] != true {
+		t.Fatalf("severity_unmapped marker missing: %v", f.Metadata)
 	}
 }
 

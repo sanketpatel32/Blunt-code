@@ -228,10 +228,11 @@ func (a *Adapter) Normalize(_ context.Context, r analyzers.AnalyzerResult) ([]an
 		passed += rep.Summary.Passed
 		resources += rep.Summary.Resources
 		for _, c := range rep.Results.FailedChecks {
+			sev, severityMapped := severity(c.Severity, c.CheckID)
 			f := analyzers.Finding{
 				AnalyzerID:       ID,
 				RuleID:           c.CheckID,
-				Severity:         severity(c.Severity, c.CheckID),
+				Severity:         sev,
 				Category:         analyzers.CategorySecurity,
 				Title:            c.CheckName,
 				Message:          fmt.Sprintf("%s: %s", c.CheckID, c.CheckName),
@@ -239,6 +240,9 @@ func (a *Adapter) Normalize(_ context.Context, r analyzers.AnalyzerResult) ([]an
 				DocumentationURL: c.Guideline,
 				RawSeverity:      c.Severity,
 				Metadata:         map[string]any{"check_type": rep.CheckType, "resource": c.Resource},
+			}
+			if !severityMapped {
+				analyzers.MarkSeverityUnmapped(&f)
 			}
 			if len(c.FileLineRange) > 0 {
 				f.StartLine = c.FileLineRange[0]
@@ -279,23 +283,28 @@ func decodeReports(data []byte) ([]report, error) {
 // Prisma Cloud policy metadata download succeeded. The default offline
 // install reports no severity at all, so unmatched checks default to
 // medium and the informational operational-hygiene checks opt down to low.
-func severity(reported, checkID string) analyzers.Severity {
+// The bool reports a mapping problem the caller marks on the finding: a
+// non-empty severity the table does not recognize. An empty report is the
+// documented offline case — the adapter default applies without a marker,
+// because there is no tool claim to re-rate.
+func severity(reported, checkID string) (analyzers.Severity, bool) {
+	claimed := strings.TrimSpace(reported) != ""
 	switch strings.ToUpper(strings.TrimSpace(reported)) {
 	case "CRITICAL":
-		return analyzers.SeverityCritical
+		return analyzers.SeverityCritical, true
 	case "HIGH":
-		return analyzers.SeverityHigh
+		return analyzers.SeverityHigh, true
 	case "MEDIUM":
-		return analyzers.SeverityMedium
+		return analyzers.SeverityMedium, true
 	case "LOW":
-		return analyzers.SeverityLow
+		return analyzers.SeverityLow, true
 	case "INFO", "INFORMATIONAL":
-		return analyzers.SeverityInfo
+		return analyzers.SeverityInfo, true
 	}
 	if informationalChecks[checkID] {
-		return analyzers.SeverityLow
+		return analyzers.SeverityLow, claimed
 	}
-	return analyzers.SeverityMedium
+	return analyzers.SeverityMedium, claimed
 }
 
 // informationalChecks are policy failures about operational hygiene rather
