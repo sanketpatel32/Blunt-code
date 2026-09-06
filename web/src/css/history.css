@@ -184,6 +184,11 @@ tr.is-expanded .history-date::before { border-color: var(--color-accent); backgr
 .history-detail-meta dd { margin: 2px 0 0; color: var(--color-ink); font-size: var(--text-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .history-analyzers { display: flex; flex-wrap: wrap; gap: var(--space-2xs) var(--space-sm); margin: 0; padding: 0; list-style: none; }
+
+/* IMP-14: discovery coverage line — what the walk selected, and what it
+   skipped (with reasons), straight from the scan's persisted snapshot. */
+.history-coverage { margin: var(--space-2xs) 0 0; font-size: var(--text-xs); color: var(--color-ink-soft); }
+.history-coverage strong { color: var(--color-ink); }
 .history-analyzers li {
   display: inline-flex; align-items: center; gap: var(--space-2xs);
   padding: var(--space-3xs) var(--space-xs) var(--space-3xs) var(--space-sm);

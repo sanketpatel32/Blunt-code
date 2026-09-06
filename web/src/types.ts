@@ -35,6 +35,18 @@ export interface Scan {
   duration_ms?: number;
   error_summary?: string | null;
   analyzer_runs?: AnalyzerRun[];
+  /** Discovery snapshot the server already persists per scan; present on workspace scan lists and scan detail, absent on the global feed. */
+  snapshot?: ScanSnapshot;
+}
+
+/** What discovery selected and why (see core.ScanSnapshot): candidate vs selected file counts, skip reasons, exclusions, and the analyzers the scan enabled. */
+export interface ScanSnapshot {
+  candidate_file_count?: number;
+  selected_file_count?: number;
+  languages?: Record<string, number>;
+  exclusions?: string[];
+  enabled_analyzers?: string[];
+  skip_counts?: Record<string, number>;
 }
 
 export interface AnalyzerRun {

@@ -25,6 +25,9 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
   const eventSeq = useRef(0);
   const [streamState, setStreamState] = useState<'connecting' | 'live' | 'reconnecting'>('connecting');
   const [streamAttempts, setStreamAttempts] = useState(0);
+  // Cancel in-flight guard: a second click while the request is out would
+  // otherwise surface the server's 409 as an error toast for a normal race.
+  const [cancelling, setCancelling] = useState(false);
   const scanState = scan.data?.state;
   const scanReload = scan.reload;
   useEffect(() => {
@@ -82,7 +85,11 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
   const reportedFindings = [...completions.values()].reduce((acc, event) => acc + (event.findings ?? 0), 0);
   const liveSeverity = severityTotalsSoFar(events);
   const findingsSoFar = Math.max(current?.total_findings ?? 0, reportedFindings);
-  async function cancel() { try { await api.cancelScan(id); await scan.reload(); } catch (e) { notify({ kind: 'error', text: message(e) }); } }
+  async function cancel() {
+    if (cancelling) return;
+    setCancelling(true);
+    try { await api.cancelScan(id); await scan.reload(); } catch (e) { notify({ kind: 'error', text: message(e) }); } finally { setCancelling(false); }
+  }
   if (scan.loading) return <div className="page"><Loading /></div>;
   if (scan.error) return <div className="page"><ErrorPanel error={scan.error} retry={scan.reload} /></div>;
   if (!current) return <div className="page"><Loading /></div>;
@@ -115,7 +122,10 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
   return <div className="page scan-page">
     <header className="scan-hero" data-tone={heroTone}>
       <div className="scan-hero-main">
-        <p className="eyebrow">Analysis · {current.profile} profile</p>
+        <p className="eyebrow">
+          Analysis · {current.profile} profile
+          <span className={`scan-state-badge variant-${state.variant}`}>{state.label}</span>
+        </p>
         <div className="scan-hero-title-row">
           {graded && grade
             ? <span className="scan-grade" data-grade={grade} aria-hidden="true">{grade}</span>
@@ -133,6 +143,12 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
                 <span>{succeeded} of {runs.length} {runs.length === 1 ? 'engine' : 'engines'} succeeded</span>
               </>}
             </p>
+            {/* The reason a scan failed or warned must survive outside the
+                live panel — "no eligible inputs" scans fail instantly, so
+                their explanation would otherwise never be seen here. */}
+            {terminal && current.error_summary && (
+              <p className="scan-hero-reason" role="note">{current.error_summary}</p>
+            )}
           </div>
         </div>
         {live && <div className="scan-hero-progress"><ScanProgressBar scan={current} events={events} /></div>}
@@ -144,8 +160,8 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
         </span>
         <div className="scan-hero-actions">
           {live && (
-            <Button variant="destructive" size="sm" onClick={cancel}>
-              Cancel scan
+            <Button variant="destructive" size="sm" onClick={cancel} disabled={cancelling}>
+              {cancelling ? 'Cancelling…' : 'Cancel scan'}
             </Button>
           )}
           {go && current.workspace_id && (

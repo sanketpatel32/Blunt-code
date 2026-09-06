@@ -166,6 +166,23 @@
   color: var(--color-warning-ink, inherit);
 }
 
+/* IMP-14: pre-flight line under the scan action rail — expected engines,
+   readiness, and exclusions, before the scan starts. */
+.pre-scan-summary {
+  margin: var(--space-2xs) 0 0;
+  font-size: var(--text-xs);
+  color: var(--color-ink-soft);
+}
+.pre-scan-summary[data-tone='warning'] { color: var(--color-warning-ink, var(--color-ink-soft)); }
+.pre-scan-summary strong { color: var(--color-ink); }
+.pre-scan-engine-list {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-2xs, .6875rem);
+  color: var(--color-ink-faint);
+  overflow-wrap: anywhere;
+}
+
 /* Stagger lives in CSS (see PremiumSummaryCard) so reduced motion can
    switch the whole grid off at once. */
 @keyframes workspace-rise {

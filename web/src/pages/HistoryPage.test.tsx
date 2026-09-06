@@ -159,6 +159,31 @@ describe('HistoryTable expandable rows', () => {
     expect(second.getAttribute('aria-expanded')).toBe('false');
     expect(host.querySelectorAll('.history-detail-row')).toHaveLength(1);
   });
+
+  it('explains discovery coverage from the snapshot: selected vs candidate, skip reasons, exclusions', async () => {
+    const withSnapshot = detailed('scan-1', {
+      snapshot: {
+        candidate_file_count: 120,
+        selected_file_count: 84,
+        skip_counts: { symlink: 2, generated_content: 31, excluded_user: 3 },
+        exclusions: ['build/**', 'vendor/**'],
+      },
+    });
+    const { host } = await renderTable([withSnapshot]);
+    await act(async () => { host.querySelector<HTMLButtonElement>('.history-disclose')!.click(); });
+    const coverage = host.querySelector('.history-coverage')!;
+    expect(coverage.textContent).toContain('Selected 84 of 120 candidate files');
+    expect(coverage.textContent).toContain('2 symlinks');
+    expect(coverage.textContent).toContain('31 as generated artifacts');
+    expect(coverage.textContent).toContain('3 by your exclusions');
+    expect(coverage.textContent).toContain('2 exclusions in effect');
+  });
+
+  it('omits the coverage line when the scan carries no snapshot', async () => {
+    const { host } = await renderTable([detailed('scan-1')]);
+    await act(async () => { host.querySelector<HTMLButtonElement>('.history-disclose')!.click(); });
+    expect(host.querySelector('.history-coverage')).toBeNull();
+  });
 });
 
 describe('HistoryTable scan rows', () => {

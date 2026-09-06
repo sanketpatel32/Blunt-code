@@ -230,3 +230,42 @@ describe('ScanPage live results panel', () => {
     expect(digits(host.querySelector('.severity-counts .medium')?.textContent)).toBe('5');
   });
 });
+
+describe('ScanPage terminal and action states (IMP-14)', () => {
+  it('shows why a failed scan failed — no-eligible-inputs scans never fail silently', async () => {
+    const { host } = await renderScanPage(scanFixture({ state: 'failed', total_findings: 0, error_summary: 'No supported source files were selected.' }));
+    expect(host.querySelector('.scan-hero-reason')?.textContent).toContain('No supported source files were selected.');
+    expect(host.querySelector('.scan-state-badge')?.textContent).toBe('Failed');
+  });
+
+  it('labels warned scans with a literal state badge and no fabricated reason', async () => {
+    const { host } = await renderScanPage(scanFixture({ state: 'completed_with_warnings', total_findings: 0 }));
+    expect(host.querySelector('.scan-state-badge')?.textContent).toBe('Completed with warnings');
+    expect(host.querySelector('.scan-hero-reason')).toBeNull();
+  });
+
+  it('disables the cancel button while the cancel request is in flight', async () => {
+    let releaseCancel: (() => void) | undefined;
+    const fetchMock = vi.fn((input: string) => {
+      if (input.endsWith('/scans/scan-1')) return Promise.resolve(json(liveFixture()));
+      if (input.endsWith('/scans/scan-1/cancel')) return new Promise<Response>((resolve) => { releaseCancel = () => resolve(json({})); });
+      return Promise.resolve(json({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('EventSource', FakeEventSource);
+    const host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+    await act(async () => { root.render(<ScanPage id="scan-1" go={vi.fn<(route: Route) => void>()} notify={vi.fn<(notice: Notice) => void>()} />); });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    const cancel = [...host.querySelectorAll('button')].find((button) => button.textContent?.includes('Cancel scan'))!;
+    expect(cancel).toBeDefined();
+    expect(cancel.hasAttribute('disabled')).toBe(false);
+    await act(async () => { cancel.click(); });
+    const busy = [...host.querySelectorAll('button')].find((button) => button.textContent?.includes('Cancelling'))!;
+    expect(busy.hasAttribute('disabled')).toBe(true);
+    await act(async () => { releaseCancel?.(); await Promise.resolve(); await Promise.resolve(); });
+    const after = [...host.querySelectorAll('button')].find((button) => button.textContent?.includes('Cancel scan'));
+    expect(after?.hasAttribute('disabled')).toBe(false);
+  });
+});

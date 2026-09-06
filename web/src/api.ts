@@ -3,7 +3,7 @@ import type { AnalyzerStatus, FindingPage, FindingsQuery, FixedFindingsResponse,
 const PREFIX = '/api/v1';
 
 export class ApiError extends Error {
-  constructor(public readonly code: string, message: string, public readonly status?: number) {
+  constructor(public readonly code: string, message: string, public readonly status?: number, /** Optional machine-readable payload from the error envelope, e.g. the active scan id on 409 SCAN_ALREADY_ACTIVE. */ public readonly details?: Record<string, unknown>) {
     super(message);
   }
 }
@@ -14,8 +14,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers: { Accept: 'application/json', ...(init?.body ? { 'Content-Type': 'application/json' } : {}), ...init?.headers },
   });
   if (!response.ok) {
-    const body = await response.json().catch(() => null) as { error?: { code?: string; message?: string } } | null;
-    throw new ApiError(body?.error?.code ?? 'REQUEST_FAILED', body?.error?.message ?? `Request failed (${response.status})`, response.status);
+    const body = await response.json().catch(() => null) as { error?: { code?: string; message?: string; details?: Record<string, unknown> } } | null;
+    throw new ApiError(body?.error?.code ?? 'REQUEST_FAILED', body?.error?.message ?? `Request failed (${response.status})`, response.status, body?.error?.details);
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;

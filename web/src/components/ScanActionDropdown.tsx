@@ -9,7 +9,7 @@ import {
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
 import { ChevronDown, Play, Sparkles, Zap, ShieldAlert, ShieldCheck, Layers } from 'lucide-react';
-import { api } from '../api';
+import { ApiError, api } from '../api';
 import type { Route } from '../lib/router';
 import type { Notice } from '../lib/notice';
 import { message } from '../lib/notice';
@@ -47,7 +47,19 @@ export function ScanActionDropdown({
       onScanStarted?.(active.id);
       go({ page: 'scan', id: active.id });
     } catch (e) {
-      notify?.({ kind: 'error', text: message(e) });
+      // A scan already running for this workspace is not an error to fight —
+      // the 409 carries the active scan id, so offer to open it instead of
+      // leaving the user with a bare toast.
+      if (e instanceof ApiError && e.code === 'SCAN_ALREADY_ACTIVE' && typeof e.details?.scan_id === 'string') {
+        const activeId = e.details.scan_id as string;
+        notify?.({
+          kind: 'info',
+          text: 'A scan is already running for this workspace.',
+          action: { label: 'View scan', onClick: () => go({ page: 'scan', id: activeId }) },
+        });
+      } else {
+        notify?.({ kind: 'error', text: message(e) });
+      }
     } finally {
       setRunning(false);
     }

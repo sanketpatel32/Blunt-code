@@ -544,6 +544,20 @@ describe('ReportView suppression actions', () => {
     expect(host.querySelector('.suppress-finding')).toBeNull();
     expect(host.querySelector('.restore-finding')).toBeNull();
   });
+
+  it('shows the recorded suppression reason inline on the suppressed row (IMP-14)', async () => {
+    await fetchMock.withImplementation((input: string) => {
+      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, warnings: [], findings: [suppressedItem] }));
+      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: [suppressedItem], total: 1, limit: 100, offset: 0, has_more: false, has_next: false }));
+      if (input.includes('/workspaces/ws-1/suppressions')) return Promise.resolve(json({ items: [{ fingerprint: FINGERPRINT, reason: 'third-party generated code', created_at: '2026-08-24T00:00:00Z' }] }));
+      return Promise.resolve(json({ items: [] }));
+    }, async () => {
+      const host = await render();
+      const reason = host.querySelector('.suppression-reason')!;
+      expect(reason.textContent).toBe('third-party generated code');
+      expect(reason.getAttribute('title')).toBe('Suppressed: third-party generated code');
+    });
+  });
 });
 
 describe('ReportView bulk actions', () => {

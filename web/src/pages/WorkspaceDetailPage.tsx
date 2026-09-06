@@ -21,6 +21,7 @@ import { languageCoverageFromLanguages, severityCountsFromSummary, trendPointsFr
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { Sparkles, Copy, Check, ShieldAlert, BarChart3, AlertTriangle, Layers, FileSearch, ShieldCheck, Bug } from 'lucide-react';
 import { ScanActionDropdown } from '../components/ScanActionDropdown';
+import { PreScanSummary } from '../components/PreScanSummary';
 import { PageHeader } from '../components/PageHeader';
 
 /**
@@ -43,6 +44,11 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
   const workspace = useLoad(() => api.workspace(id), [id]);
   const scans = useLoad(() => api.scans(id), [id]);
   const risk = useLoad(() => api.risk(id), [id]);
+  // Pre-flight data (IMP-14): what the selected profile will run, whether the
+  // engines are installed, and which exclusions will shape the selection.
+  const analyzers = useLoad(api.analyzers, []);
+  const rules = useLoad(() => api.rules(id), [id]);
+  const overrides = useLoad(() => api.pathOverrides(id), [id]);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [profile, setProfile] = useState('standard');
@@ -128,6 +134,19 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
         <button type="button" className="button ghost workspace-danger-item" onClick={()=>setDeleteOpen(true)}>Remove workspace</button>
       </div>
     </div>
+    {/* Pre-flight: what this profile will run before it runs (IMP-14). */}
+    <PreScanSummary
+      profile={profile}
+      languages={item.languages}
+      analyzers={analyzers.data ?? []}
+      exclusionCount={
+        (rules.data?.rules ?? []).filter((rule) => {
+          const typed = rule as { rule_type?: string; enabled?: boolean };
+          return typed.enabled !== false && typed.rule_type?.includes('exclude');
+        }).length +
+        (overrides.data ?? []).filter((override) => override.mode === 'exclude').length
+      }
+    />
     {pruneOpen && <form className="settings-editor" onSubmit={(event) => { event.preventDefault(); void prune(); }} aria-label="Prune scan history"><label>Keep newest<input type="number" min={1} max={100} value={pruneKeep} onChange={(event) => setPruneKeep(Number(event.target.value))} /></label><div className="editor-actions"><button type="submit" className="button primary" disabled={pruning}>Delete older scans</button><button type="button" className="button secondary" onClick={() => setPruneOpen(false)}>Cancel</button></div></form>}
     {editing && <form className="settings-editor" onSubmit={(event) => { event.preventDefault(); saveSettings(); }} aria-label="Workspace settings"><label>Name<input value={nameDraft} onChange={(event) => setNameDraft(event.target.value)} maxLength={80} /></label><div className="settings-editor-profile"><span>Default profile</span><fieldset className="segmented" aria-label="Default profile">{['quick', 'standard', 'deep', 'pentest'].map((value) => <button key={value} type="button" aria-pressed={profileDraft === value} onClick={() => setProfileDraft(value)}>{value}</button>)}</fieldset></div><div className="editor-actions"><button type="submit" className="button primary" disabled={savingSettings}>Save</button><button type="button" className="button secondary" onClick={() => setEditing(false)}>Cancel</button></div></form>}
 
