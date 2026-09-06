@@ -118,11 +118,19 @@ func openCore() (core *appCore, release func(), err error) {
 	_ = registry.Register(ruff.New(filepath.Join(paths.ToolsDir, "ruff", "0.16.0", "ruff.exe"), "0.16.0"))
 	_ = registry.Register(biome.New(filepath.Join(paths.ToolsDir, "biome", "2.5.6", "biome.exe"), "2.5.6"))
 	_ = registry.Register(gitleaks.New(filepath.Join(paths.ToolsDir, "gitleaks-secrets", "8.30.1", "gitleaks.exe"), "8.30.1"))
-	_ = registry.Register(analyzersosv.New(filepath.Join(paths.ToolsDir, "osv-dependencies", "2.5.1", "osv-scanner.exe"), "2.5.1"))
+	// Offline mode extends to the dependency scanners: osv gets the local-DB
+	// flag plus a managed cache directory (refusing to run when the databases
+	// were never downloaded), and trivy refuses cold-cache scans so neither
+	// tool ever reaches for the network in offline mode.
+	osvAdapter := analyzersosv.New(filepath.Join(paths.ToolsDir, "osv-dependencies", "2.5.1", "osv-scanner.exe"), "2.5.1")
+	osvAdapter.Offline = appSettings.Offline
+	osvAdapter.DBCacheDir = filepath.Join(paths.DataDir, "osv-db-cache")
+	_ = registry.Register(osvAdapter)
 	// trivy's vulnerability DB decompresses to ~1.3 GB, so its cache is pinned
 	// inside the app data dir instead of trivy's user-wide %LOCALAPPDATA% default.
 	trivyAdapter := analyzerstrivy.New(filepath.Join(paths.ToolsDir, "container-trivy", "0.74.0", "trivy.exe"), "0.74.0")
 	trivyAdapter.CacheDir = filepath.Join(paths.DataDir, "trivy-cache")
+	trivyAdapter.Offline = appSettings.Offline
 	_ = registry.Register(trivyAdapter)
 	// checkov runs through its uv tool venv's interpreter (uv's Windows shim
 	// resolves python from PATH, so python -m checkov.main is the hermetic

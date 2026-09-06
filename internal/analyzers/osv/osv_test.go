@@ -133,6 +133,38 @@ func TestPlanOfflineModeAndManagedCache(t *testing.T) {
 	}
 }
 
+// TestCheckOfflineRequiresDatabases pins the offline network policy: with
+// Offline set, readiness demands the downloaded local databases (one zip per
+// ecosystem in the managed cache); without them the scanner cannot answer
+// without hitting the OSV API, which offline mode must never do.
+func TestCheckOfflineRequiresDatabases(t *testing.T) {
+	exe := filepath.Join(t.TempDir(), "osv-scanner.exe")
+	if err := os.WriteFile(exe, []byte("stub"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cold := New(exe, "2.5.1")
+	cold.Offline = true
+	cold.DBCacheDir = t.TempDir()
+	if status := cold.Check(context.Background(), analyzers.ToolEnvironment{}); status.Ready {
+		t.Fatalf("offline + no databases must not be ready: %#v", status)
+	} else if !strings.Contains(status.Detail, "offline mode") {
+		t.Fatalf("detail should explain the offline refusal: %q", status.Detail)
+	}
+
+	cache := cold.DBCacheDir
+	if err := os.WriteFile(filepath.Join(cache, "maven.zip"), []byte("zip"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if status := cold.Check(context.Background(), analyzers.ToolEnvironment{}); !status.Ready {
+		t.Fatalf("offline + downloaded databases must be ready: %#v", status)
+	}
+
+	online := New(exe, "2.5.1")
+	if status := online.Check(context.Background(), analyzers.ToolEnvironment{}); !status.Ready {
+		t.Fatalf("online mode stays ready without local databases: %#v", status)
+	}
+}
+
 func TestPlanRefusesUnusableRequests(t *testing.T) {
 	adapter := New("osv-scanner.exe", "2.5.1")
 	// No workspace root means "." would resolve against Blunt Code's own

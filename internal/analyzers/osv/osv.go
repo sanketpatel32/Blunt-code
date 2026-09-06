@@ -63,7 +63,36 @@ func (a *Adapter) SupportedLanguages() []analyzers.Language {
 }
 func (a *Adapter) Check(_ context.Context, _ analyzers.ToolEnvironment) analyzers.ToolStatus {
 	_, err := os.Stat(a.Executable)
-	return analyzers.ToolStatus{Ready: err == nil, Version: a.Version, Detail: statusDetail(err)}
+	if err != nil {
+		return analyzers.ToolStatus{Version: a.Version, Detail: statusDetail(err)}
+	}
+	// Offline mode must never fall back to the OSV API: without the
+	// downloaded local databases the scanner cannot answer at all (it exits
+	// 127), so readiness says so up front instead of letting every scan
+	// record a cryptic offline failure.
+	if a.Offline && !a.offlineDatabasesPresent() {
+		return analyzers.ToolStatus{Version: a.Version, Detail: "offline mode: OSV vulnerability databases not downloaded; run one online deep scan to populate the local cache"}
+	}
+	return analyzers.ToolStatus{Ready: true, Version: a.Version}
+}
+
+// offlineDatabasesPresent reports whether the local DB cache directory holds
+// at least one downloaded ecosystem database (osv-scanner stores one zip per
+// ecosystem there). An empty or missing cache means offline scans cannot run.
+func (a *Adapter) offlineDatabasesPresent() bool {
+	if a.DBCacheDir == "" {
+		return false
+	}
+	entries, err := os.ReadDir(a.DBCacheDir)
+	if err != nil {
+		return false
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasSuffix(strings.ToLower(entry.Name()), ".zip") {
+			return true
+		}
+	}
+	return false
 }
 func (a *Adapter) EnsureInstalled(context.Context, analyzers.ToolEnvironment) error {
 	if a.Executable == "" {

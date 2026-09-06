@@ -6,27 +6,12 @@
     <link rel="icon" type="image/svg+xml" href="/bluntcode-mark.svg" />
     <meta name="theme-color" content="#ffffff" />
     <title>Blunt Code — Local code analysis</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <!--
-      Loaded non-blocking: media="print" keeps it out of the critical path and the
-      onload handler promotes it once it arrives. The old version was an @import at
-      the top of tokens.css, which made the entire cascade wait on two serial round
-      trips. Offline (packaged desktop binary) the request just fails and the
-      system-font fallbacks in --font-body / --font-mono carry the UI.
+      No webfont requests: this is a local-first desktop app, so the UI never
+      dials fonts.googleapis.com. The font stacks in tokens.css lead with
+      "IBM Plex Sans"/"IBM Plex Mono" (used when installed locally) and fall
+      back to system-ui/ui-monospace otherwise.
     -->
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
-      media="print"
-      onload="this.media='all'"
-    />
-    <noscript>
-      <link
-        rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
-      />
-    </noscript>
     <script>
       (function () {
         try {

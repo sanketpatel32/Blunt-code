@@ -42,6 +42,10 @@ type Adapter struct {
 	// ~1.3 GB decompressed DB inside the app's data dir. Empty means trivy's
 	// own resolution: TRIVY_CACHE_DIR, then %LOCALAPPDATA%\trivy on Windows.
 	CacheDir string
+	// Offline refuses to plan a scan when the vulnerability DB is cold:
+	// offline mode must never trigger trivy's DB download, so a cold cache
+	// is a clean, explainable failure instead of a mid-scan network error.
+	Offline bool
 }
 
 func New(executable, version string) *Adapter {
@@ -100,6 +104,9 @@ func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.
 	tmp.Close()
 
 	warm := a.dbCacheWarm()
+	if a.Offline && !warm {
+		return analyzers.AnalyzerPlan{}, fmt.Errorf("offline mode: trivy vulnerability DB is not downloaded yet; run one online deep scan to populate the cache")
+	}
 	args := []string{"fs", "--format", "json", "--output", outputPath, "--scanners", "vuln,secret,misconfig"}
 	if warm {
 		// Verified against trivy 0.74.0: with a populated cache the flag is
@@ -121,7 +128,7 @@ func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.
 		AnalyzerID: ID,
 		Version:    a.Version,
 		Commands:   []analyzers.ProcessSpec{command},
-		Metadata:   map[string]any{planKeyOutput: outputPath, planKeyWarmDB: warm},
+		Metadata:   map[string]any{planKeyOutput: outputPath, planKeyWarmDB: warm, "offline": a.Offline},
 	}, nil
 }
 

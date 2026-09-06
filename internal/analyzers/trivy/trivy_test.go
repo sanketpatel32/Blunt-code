@@ -248,6 +248,46 @@ func TestPlanIsDeepProfileOnly(t *testing.T) {
 	}
 }
 
+// TestPlanOfflineRefusesColdCache pins the offline network policy: offline
+// mode must never trigger trivy's DB download, so a cold cache refuses to
+// plan with an actionable message, and a warm cache scans locally with
+// --skip-db-update exactly like an online warm run.
+func TestPlanOfflineRefusesColdCache(t *testing.T) {
+	adapter := New("trivy.exe", "0.74.0")
+	adapter.CacheDir = t.TempDir()
+	adapter.Offline = true
+	req := analyzers.ScanRequest{
+		WorkspaceRoot: `C:\ws`,
+		Profile:       analyzers.ProfileDeep,
+		Files:         []string{`C:\ws\Dockerfile`},
+		Languages:     []analyzers.Language{analyzers.LanguageDockerfile},
+	}
+	_, err := adapter.Plan(context.Background(), req)
+	if err == nil || !strings.Contains(err.Error(), "offline mode") {
+		t.Fatalf("cold offline plan err = %v, want offline-mode refusal", err)
+	}
+
+	if err := os.MkdirAll(filepath.Join(adapter.CacheDir, "db"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(adapter.CacheDir, "db", "metadata.json"), []byte(`{}`), 0o644)
+	os.WriteFile(filepath.Join(adapter.CacheDir, "db", "trivy.db"), []byte("x"), 0o644)
+	plan, err := adapter.Plan(context.Background(), req)
+	if err != nil {
+		t.Fatalf("warm offline plan: %v", err)
+	}
+	defer os.Remove(plan.Metadata[planKeyOutput].(string))
+	skip := false
+	for _, arg := range plan.Commands[0].Args {
+		if arg == "--skip-db-update" {
+			skip = true
+		}
+	}
+	if !skip {
+		t.Fatalf("warm offline args must include --skip-db-update: %#v", plan.Commands[0].Args)
+	}
+}
+
 func TestPlanArgumentsColdAndWarmCache(t *testing.T) {
 	adapter := New("trivy.exe", "0.74.0")
 	adapter.CacheDir = t.TempDir()
