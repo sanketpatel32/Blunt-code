@@ -5,7 +5,7 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.21.1] - 2026-09-06
+## [0.21.2] - 2026-09-06
 
 ### Changed
 - **Navigation language switcher**: converted the horizontal row of language buttons in the navigation utility cluster into a clean dropdown menu with locale codes, native names, and active checkmarks.
