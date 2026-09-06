@@ -15,7 +15,7 @@ func TestIdentity(t *testing.T) {
 	if adapter.ID() != "iac-checkov" || adapter.DisplayName() != "Checkov" {
 		t.Fatalf("id=%q display=%q", adapter.ID(), adapter.DisplayName())
 	}
-	want := []analyzers.Language{analyzers.LanguageYAML, analyzers.LanguageJSON, analyzers.LanguageDockerfile}
+	want := []analyzers.Language{analyzers.LanguageYAML, analyzers.LanguageJSON, analyzers.LanguageDockerfile, analyzers.LanguageTerraform}
 	if got := adapter.SupportedLanguages(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("languages = %#v, want %#v", got, want)
 	}
@@ -105,15 +105,24 @@ func TestPlanScansWorkspaceDirectoryOnce(t *testing.T) {
 }
 
 func TestPlanSkipsWorkspacesWithoutRoutableFiles(t *testing.T) {
-	// Terraform has no Language enum value yet, so a pure-.tf workspace is
-	// not routed to checkov today even on the deep profile.
 	adapter := New("python.exe", "3.3.16")
-	req := analyzers.ScanRequest{
+	// Terraform now routes (discovery classifies .tf/.tfvars/.hcl), so a
+	// pure-.tf workspace APPLIES — this test used to pin the gap.
+	tfOnly := analyzers.ScanRequest{
 		WorkspaceRoot: `C:\tf-only`,
 		Files:         []string{`C:\tf-only\main.tf`},
 		Profile:       analyzers.ProfileDeep,
 	}
-	if _, err := adapter.Plan(context.Background(), req); err == nil {
+	if _, err := adapter.Plan(context.Background(), tfOnly); err != nil {
+		t.Fatalf("a pure-terraform workspace must route to checkov: %v", err)
+	}
+	// A workspace with nothing checkov reads still does not apply.
+	none := analyzers.ScanRequest{
+		WorkspaceRoot: `C:\src-only`,
+		Files:         []string{`C:\src-only\main.py`, `C:\src-only\app.ts`},
+		Profile:       analyzers.ProfileDeep,
+	}
+	if _, err := adapter.Plan(context.Background(), none); err == nil {
 		t.Fatal("plan must refuse a workspace with no routable IaC files")
 	}
 }

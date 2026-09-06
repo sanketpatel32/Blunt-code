@@ -51,12 +51,12 @@ func (a *Adapter) ID() string          { return ID }
 func (a *Adapter) DisplayName() string { return "Trivy" }
 
 // SupportedLanguages routes by the manifest and infrastructure formats the
-// shared classifier knows: Dockerfiles, YAML, JSON, and TOML. Terraform has
-// no entry in the Language enum (discovery does not classify .tf at all), so
-// a terraform-only workspace will not select trivy; the closest declarative
-// formats above do, and trivy itself scans the whole workspace root anyway.
+// shared classifier knows: Dockerfiles, YAML, JSON, TOML, and Terraform
+// (.tf/.tfvars/.hcl). Trivy scans the whole workspace root anyway; this
+// list decides whether the workspace has IaC/dependency signal at all, and
+// a terraform-only workspace now qualifies.
 func (a *Adapter) SupportedLanguages() []analyzers.Language {
-	return []analyzers.Language{analyzers.LanguageDockerfile, analyzers.LanguageYAML, analyzers.LanguageJSON, analyzers.LanguageTOML}
+	return []analyzers.Language{analyzers.LanguageDockerfile, analyzers.LanguageYAML, analyzers.LanguageJSON, analyzers.LanguageTOML, analyzers.LanguageTerraform}
 }
 func (a *Adapter) Check(_ context.Context, _ analyzers.ToolEnvironment) analyzers.ToolStatus {
 	_, err := os.Stat(a.Executable)

@@ -51,6 +51,10 @@ var extensionLanguages = map[string]string{
 	".rb": "ruby", ".php": "php", ".rs": "rust", ".swift": "swift", ".scala": "scala",
 	".m": "objective-c", ".mm": "objective-c",
 	".vue": "vue", ".svelte": "svelte",
+	// Infrastructure-as-code. Terraform is classified so IaC analyzers
+	// (checkov, trivy) can route on it: before this, a pure-.tf workspace
+	// had no language at all and no IaC scan ever applied to it.
+	".tf": "terraform", ".tfvars": "terraform", ".hcl": "terraform",
 	// Web and data.
 	".css": "css", ".scss": "scss", ".less": "less",
 	".html": "html", ".htm": "html",
@@ -81,9 +85,9 @@ func ExtensionLanguages() map[string]string {
 
 // Language classifies a path into a normalized lowercase language name, or ""
 // when the file is not a scan candidate. Extensions are matched first; a few
-// dotfile and extension-less basenames (.env*, Dockerfile*) are classified by
-// name because their "extension" is either the whole filename (".env.local"
-// has extension ".local") or absent ("Dockerfile").
+// dotfile and extension-less basenames (.env*, Dockerfile*, LICENSE*) are
+// classified by name because their "extension" is either the whole filename
+// (".env.local" has extension ".local") or absent ("Dockerfile", "LICENSE").
 func Language(path string) string {
 	if lang, ok := extensionLanguages[strings.ToLower(filepath.Ext(path))]; ok {
 		return lang
@@ -93,19 +97,70 @@ func Language(path string) string {
 		return "dockerfile"
 	case base == ".env" || strings.HasPrefix(base, ".env."):
 		return "env"
+	case IsLicenseFileName(base):
+		return "text"
 	}
 	return ""
+}
+
+// licenseFileNamePrefixes mark plain-text license artifacts. Extension-less
+// or oddly-suffixed names (LICENSE, LICENSE-MIT, COPYING.LESSER with an
+// unknown ".LESSER" extension) would otherwise be invisible to every
+// language route, including the license scanner's own.
+var licenseFileNamePrefixes = []string{"license", "licence", "copying", "notice"}
+
+// IsLicenseFileName reports whether a lowercase basename is a license
+// artifact: exactly one of the known names, or that name followed by a
+// separator and a suffix (LICENSE.md, COPYING.LESSER, LICENSE-MIT). It never
+// matches a longer word that merely starts with "license".
+func IsLicenseFileName(lowerBase string) bool {
+	for _, prefix := range licenseFileNamePrefixes {
+		if lowerBase == prefix {
+			return true
+		}
+		for _, sep := range []string{".", "-", "_"} {
+			if strings.HasPrefix(lowerBase, prefix+sep) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 type Result struct {
 	Files     []core.FileEntry `json:"files"`
 	Languages map[string]int   `json:"languages"`
 	Skipped   int              `json:"skipped"`
+	// SkipCounts breaks Skipped down by reason (symlink, excluded_default,
+	// excluded_user, outside_root, generated_content) so a scan can explain
+	// its coverage instead of one opaque number.
+	SkipCounts map[string]int `json:"skip_counts"`
+	// DependencyInputs lists workspace-relative dependency manifests and
+	// lockfiles seen during the walk — including ones smart-skip excluded
+	// from Files (lockfiles are inputs to osv/trivy, not per-file analyzers,
+	// so their exclusion from Files must not hide them from routing).
+	// Capped at maxDependencyInputs entries.
+	DependencyInputs []string `json:"dependency_inputs"`
 }
+
+// Skip reason keys for SkipCounts.
+const (
+	SkipSymlink         = "symlink"
+	SkipDefaultExcluded = "excluded_default"
+	SkipUserExcluded    = "excluded_user"
+	SkipOutsideRoot     = "outside_root"
+	SkipGenerated       = "generated_content"
+)
+
+const maxDependencyInputs = 500
 
 func Discover(ctx context.Context, root string, userExcludes []string) (Result, error) {
 	userExcludes = WorkspaceExcludes(root, userExcludes)
-	result := Result{Languages: map[string]int{}}
+	result := Result{Languages: map[string]int{}, SkipCounts: map[string]int{}}
+	skip := func(reason string) {
+		result.Skipped++
+		result.SkipCounts[reason]++
+	}
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -122,14 +177,24 @@ func Discover(ctx context.Context, root string, userExcludes []string) (Result, 
 		}
 		rel = filepath.Clean(rel)
 		if entry.Type()&fs.ModeSymlink != 0 {
-			result.Skipped++
+			skip(SkipSymlink)
 			if entry.IsDir() {
 				return filepath.SkipDir
 			}
 			return nil
 		}
+		// Dependency inputs are tracked before any exclusion so a lockfile
+		// hidden from Files (smart skip) still routes osv/trivy — their
+		// vulnerability coverage is the reason lockfiles are kept at all.
+		if !entry.IsDir() && len(result.DependencyInputs) < maxDependencyInputs && isDependencyInput(filepath.Base(rel)) {
+			result.DependencyInputs = append(result.DependencyInputs, filepath.ToSlash(rel))
+		}
 		if DefaultExcluded(rel, entry.IsDir()) || excludedByUser(rel, userExcludes) {
-			result.Skipped++
+			reason := SkipDefaultExcluded
+			if !DefaultExcluded(rel, entry.IsDir()) {
+				reason = SkipUserExcluded
+			}
+			skip(reason)
 			if entry.IsDir() {
 				return filepath.SkipDir
 			}
@@ -147,7 +212,7 @@ func Discover(ctx context.Context, root string, userExcludes []string) (Result, 
 		}
 		within, _ := workspace.IsWithin(root, resolved)
 		if !within {
-			result.Skipped++
+			skip(SkipOutsideRoot)
 			return nil
 		}
 		lang := Language(rel)
@@ -162,7 +227,7 @@ func Discover(ctx context.Context, root string, userExcludes []string) (Result, 
 		// head is one enormous line (minified bundles under a source-looking
 		// name) are generated output too (see artifacts.go).
 		if skipGeneratedContent(path, info.Size()) {
-			result.Skipped++
+			skip(SkipGenerated)
 			return nil
 		}
 		result.Languages[lang]++
@@ -170,6 +235,27 @@ func Discover(ctx context.Context, root string, userExcludes []string) (Result, 
 		return nil
 	})
 	return result, err
+}
+
+// manifestFileNames are dependency manifests (not lockfiles): files that
+// declare dependencies an ecosystem scanner reads for versions and licenses.
+var manifestFileNames = map[string]struct{}{
+	"package.json": {}, "requirements.txt": {}, "pyproject.toml": {}, "pipfile": {},
+	"go.mod": {}, "cargo.toml": {}, "composer.json": {}, "pom.xml": {},
+	"gemfile": {}, "packages.config": {}, "deno.lock": {}, "flake.lock": {},
+	"mix.lock": {}, "pubspec.lock": {}, "chart.lock": {},
+}
+
+// isDependencyInput reports whether a basename is a dependency manifest or
+// lockfile. It reuses the artifact tables (lockFileNames) so "lockfile as a
+// dependency input" and "lockfile as an artifact" can never drift apart.
+func isDependencyInput(base string) bool {
+	lower := strings.ToLower(base)
+	if _, ok := lockFileNames[lower]; ok {
+		return true
+	}
+	_, ok := manifestFileNames[lower]
+	return ok
 }
 
 // Tree returns only immediate safe children. The UI requests children when a

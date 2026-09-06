@@ -198,7 +198,7 @@ func TestIdentityAndLanguages(t *testing.T) {
 	if adapter.DisplayName() != "Trivy" {
 		t.Fatalf("DisplayName = %q", adapter.DisplayName())
 	}
-	want := []analyzers.Language{analyzers.LanguageDockerfile, analyzers.LanguageYAML, analyzers.LanguageJSON, analyzers.LanguageTOML}
+	want := []analyzers.Language{analyzers.LanguageDockerfile, analyzers.LanguageYAML, analyzers.LanguageJSON, analyzers.LanguageTOML, analyzers.LanguageTerraform}
 	if !reflect.DeepEqual(adapter.SupportedLanguages(), want) {
 		t.Fatalf("SupportedLanguages = %#v, want %#v", adapter.SupportedLanguages(), want)
 	}

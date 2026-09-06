@@ -173,6 +173,29 @@ func TestUnlicensedManifestMarkerWithoutFile(t *testing.T) {
 	}
 }
 
+// TestNestedLicenseFilesAreRead pins the routed-selection path: license-like
+// files anywhere in the tree (not just the historical root probes) flow
+// through discovery into the plan and are classified like root licenses.
+func TestNestedLicenseFilesAreRead(t *testing.T) {
+	findings, rules := runScan(t, map[string]string{
+		"docs/LICENSE.md":     "Permission is hereby granted, free of charge, to any person obtaining a copy",
+		"third_party/COPYING": "GNU GENERAL PUBLIC LICENSE",
+	})
+	if !hasRule(rules, "license-permissive") {
+		t.Fatalf("nested MIT license must be classified: %v", rules)
+	}
+	paths := map[string]bool{}
+	for _, f := range findings {
+		paths[f.RelativePath] = true
+	}
+	if !paths["docs/LICENSE.md"] {
+		t.Fatalf("docs/LICENSE.md missing from findings: %+v", paths)
+	}
+	if hasRule(rules, "license-undeclared") {
+		t.Fatalf("a workspace with a readable license file is not undeclared: %v", rules)
+	}
+}
+
 func TestConsistentPermissiveNoConflict(t *testing.T) {
 	_, rules := runScan(t, map[string]string{
 		"LICENSE":      "Permission is hereby granted, free of charge, to any person obtaining a copy",

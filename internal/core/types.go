@@ -87,7 +87,14 @@ type ScanSnapshot struct {
 	PathOverrides      []PathOverride    `json:"path_overrides"`
 	EnabledAnalyzers   []string          `json:"enabled_analyzers"`
 	AnalyzerVersions   map[string]string `json:"analyzer_versions"`
-	Git                ScanGitSnapshot   `json:"git"`
+	// SkipCounts explains the discovery walk's coverage by reason (symlink,
+	// excluded_default, excluded_user, outside_root, generated_content).
+	SkipCounts map[string]int `json:"skip_counts,omitempty"`
+	// DependencyInputs lists the workspace-relative dependency manifests and
+	// lockfiles discovery saw (lockfiles included even though smart-skip
+	// keeps them out of SelectedFiles). Capped; empty means none were found.
+	DependencyInputs []string        `json:"dependency_inputs,omitempty"`
+	Git              ScanGitSnapshot `json:"git"`
 }
 
 type ScanGitSnapshot struct {

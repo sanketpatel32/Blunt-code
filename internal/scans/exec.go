@@ -105,6 +105,16 @@ func severityCounts(findings []analyzers.Finding) map[string]int {
 	return counts
 }
 
+// scanDependencyInputs surfaces the discovery-tracked dependency manifests
+// (workspace-relative) from the scan snapshot; nil-safe for scans whose
+// snapshot predates the field.
+func scanDependencyInputs(scan core.Scan) []string {
+	if scan.Snapshot == nil {
+		return nil
+	}
+	return scan.Snapshot.DependencyInputs
+}
+
 // executeAnalyzer runs the full pipeline for one adapter: language gating,
 // profile filtering, tool readiness (with managed installation), planning,
 // execution, normalization, persistence, and events. It is the exact body the
@@ -118,7 +128,18 @@ func (s *Service) executeAnalyzer(ctx context.Context, scan core.Scan, work core
 	// parsing it as Python.
 	adapterFiles := filesForLanguages(filesByLanguage, adapter.SupportedLanguages()...)
 	if len(adapterFiles) == 0 {
-		return analyzerSkipped
+		// Dependency-driven adapters (osv, trivy) key off dependency inputs,
+		// not source languages: a workspace whose only dependency signal is a
+		// lockfile has no language-routable file at all (lockfiles are
+		// smart-skipped as artifacts), and skipping here would hide dependency
+		// coverage from exactly the workspaces that need it.
+		var dependencyInputs []string
+		if scan.Snapshot != nil {
+			dependencyInputs = scan.Snapshot.DependencyInputs
+		}
+		if !analyzers.TakesDependencyInputs(adapter.ID()) || len(dependencyInputs) == 0 {
+			return analyzerSkipped
+		}
 	}
 	// Profile tiers:
 	//   quick    - ruff and biome only: a fast language-specific pass that
@@ -162,7 +183,7 @@ func (s *Service) executeAnalyzer(ctx context.Context, scan core.Scan, work core
 		s.emit(scan.ID, "analyzer.failed", map[string]any{"analyzer_id": adapter.ID(), "error": errorText})
 		return analyzerFailed
 	}
-	plan, err := adapter.Plan(ctx, analyzers.ScanRequest{WorkspaceID: work.ID, ScanID: scan.ID, WorkspaceRoot: work.RootPath, Files: adapterFiles, Languages: languages, Profile: scan.Profile})
+	plan, err := adapter.Plan(ctx, analyzers.ScanRequest{WorkspaceID: work.ID, ScanID: scan.ID, WorkspaceRoot: work.RootPath, Files: adapterFiles, Languages: languages, Profile: scan.Profile, DependencyInputs: scanDependencyInputs(scan)})
 	if err != nil {
 		_, _ = s.db.SaveAnalyzerResult(context.Background(), scan.ID, database.AnalyzerRunInput{AnalyzerID: adapter.ID(), Version: status.Version, State: "failed", StartedAt: started, FinishedAt: time.Now(), Error: err.Error()}, nil, nil)
 		counters.markFailed()

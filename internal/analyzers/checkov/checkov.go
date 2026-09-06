@@ -64,12 +64,11 @@ func (a *Adapter) DisplayName() string { return "Checkov" }
 
 // SupportedLanguages declares the routable IaC formats. yaml covers
 // kubernetes and cloudformation manifests, json covers cloudformation
-// templates, and dockerfile covers Dockerfile basenames. Terraform (.tf)
-// has no Language enum value, so a pure-.tf workspace is not routed to
-// checkov today; when a yaml, json, or dockerfile file selects the
-// analyzer, the directory scan still covers .tf files in the workspace.
+// templates, dockerfile covers Dockerfile basenames, and terraform covers
+// .tf/.tfvars/.hcl — so a pure-.tf workspace routes to checkov too, not
+// only workspaces that happen to carry a yaml/json/dockerfile file.
 func (a *Adapter) SupportedLanguages() []analyzers.Language {
-	return []analyzers.Language{analyzers.LanguageYAML, analyzers.LanguageJSON, analyzers.LanguageDockerfile}
+	return []analyzers.Language{analyzers.LanguageYAML, analyzers.LanguageJSON, analyzers.LanguageDockerfile, analyzers.LanguageTerraform}
 }
 
 // Check verifies the managed interpreter exists, then makes one best-effort

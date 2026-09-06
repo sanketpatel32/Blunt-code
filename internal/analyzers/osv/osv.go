@@ -88,7 +88,13 @@ func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.
 	if req.WorkspaceRoot == "" {
 		return analyzers.AnalyzerPlan{}, fmt.Errorf("osv scanner requires a workspace root")
 	}
-	if !analyzers.HasLanguage(req.Languages, a.SupportedLanguages()...) {
+	// Applicability keys off dependency inputs first: a workspace whose only
+	// dependency signal is a lockfile has no source language to route on
+	// (package-lock.json is smart-skipped as an artifact), so the language
+	// list alone would wrongly call the scanner inapplicable. The language
+	// fallback keeps source-only workspaces eligible — the recursive walk
+	// then reports "no lockfiles" cleanly via --allow-no-lockfiles.
+	if len(req.DependencyInputs) == 0 && !analyzers.HasLanguage(req.Languages, a.SupportedLanguages()...) {
 		return analyzers.AnalyzerPlan{}, fmt.Errorf("osv scanner does not apply")
 	}
 	args := []string{
@@ -118,7 +124,7 @@ func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.
 			Dir:        req.WorkspaceRoot, // "." above resolves against the workspace
 			Env:        env,
 		}},
-		Metadata: map[string]any{"offline": a.Offline},
+		Metadata: map[string]any{"offline": a.Offline, "dependency_inputs": len(req.DependencyInputs)},
 	}, nil
 }
 

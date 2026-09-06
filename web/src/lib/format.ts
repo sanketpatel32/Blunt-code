@@ -79,7 +79,7 @@ export const languageNames: Record<string, string> = {
   css: 'CSS', scss: 'SCSS', sass: 'Sass', less: 'Less',
   json: 'JSON', jsonc: 'JSONC', json5: 'JSON5', yaml: 'YAML', yml: 'YAML',
   toml: 'TOML', xml: 'XML', ini: 'INI', cfg: 'Config', conf: 'Config',
-  env: 'Environment File', properties: 'Properties', tf: 'Terraform', dockerfile: 'Dockerfile',
+  env: 'Environment File', properties: 'Properties', tf: 'Terraform', terraform: 'Terraform', dockerfile: 'Dockerfile',
   markdown: 'Markdown', text: 'Text',
 };
 
@@ -103,7 +103,7 @@ export const languageColors: Record<string, string> = {
   css: '#663399', scss: '#c6538c', sass: '#c6538c', less: '#2f5aa8',
   json: '#8a8a8a', jsonc: '#8a8a8a', json5: '#8a8a8a', yaml: '#cb171e', yml: '#cb171e',
   toml: '#9c4221', xml: '#0060ac', ini: '#a1a1aa', cfg: '#a1a1aa', conf: '#a1a1aa',
-  env: '#ecd53f', properties: '#a1a1aa', tf: '#844FBA', dockerfile: '#2496ED',
+  env: '#ecd53f', properties: '#a1a1aa', tf: '#844FBA', terraform: '#844FBA', dockerfile: '#2496ED',
   markdown: '#083fa1', text: '#94a3b8',
 };
 

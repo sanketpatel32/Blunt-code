@@ -232,6 +232,22 @@ func KeepsArtifactFindings(analyzerID string) bool {
 	return false
 }
 
+// TakesDependencyInputs reports whether the analyzer consumes dependency
+// manifests/lockfiles as an input class. The scan orchestrator uses it to
+// keep such adapters eligible for workspaces whose only dependency signal
+// is a lockfile (smart-skipped out of the per-file selection, so no source
+// language route exists).
+func TakesDependencyInputs(analyzerID string) bool {
+	if cap, ok := capabilityTable[analyzerID]; ok {
+		for _, kind := range cap.InputKinds {
+			if kind == InputDependencies {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // TimeoutClassFor routes the per-analyzer deadline budget.
 func TimeoutClassFor(analyzerID string) string {
 	if cap, ok := capabilityTable[analyzerID]; ok && cap.TimeoutClass != "" {

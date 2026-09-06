@@ -29,7 +29,7 @@ func TestLanguageClassificationMirrorsDiscovery(t *testing.T) {
 			t.Errorf("extension %s: analyzers classifies it but discovery does not", ext)
 		}
 	}
-	for _, path := range []string{".env", ".env.local", "Dockerfile", "ci/Dockerfile.prod", "photo.png", "Makefile"} {
+	for _, path := range []string{".env", ".env.local", "Dockerfile", "ci/Dockerfile.prod", "photo.png", "Makefile", "main.tf", "vars.tfvars", "policy.hcl", "LICENSE", "LICENSE.md", "COPYING.LESSER", "NOTICE", "LICENSE-MIT", "license-checker.config.json"} {
 		if got, want := languageOfPath(path), Language(discovery.Language(path)); got != want {
 			t.Errorf("path %q: analyzers classifies %q, discovery %q", path, got, want)
 		}

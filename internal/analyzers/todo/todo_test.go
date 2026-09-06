@@ -45,6 +45,7 @@ var excludedLanguages = map[analyzers.Language]bool{
 	analyzers.LanguageHTML: true, analyzers.LanguageJSON: true, analyzers.LanguageXML: true,
 	analyzers.LanguageSQL: true, analyzers.LanguageGraphQL: true,
 	analyzers.LanguageText: true, analyzers.LanguageEnv: true, analyzers.LanguageCertificate: true,
+	analyzers.LanguageTerraform: true,
 }
 
 // TestSupportedLanguagesCoverDiscovery keeps the routing invariant honest in

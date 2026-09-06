@@ -145,7 +145,7 @@ Auth: none (loopback). Rate limit: token bucket 30/30m on mutations -> `429 RATE
 - **secrets:** AWS/GH/Slack/Google/JWT/Stripe/OpenAI/Anthropic/Azure, entropy + placeholder filtering, msg = `prefix + length` never secret
 - **todo:** `TODO|FIXME|HACK|XXX|BUG` whole-word, case-sensitive, 200 chars, follower heuristics
 
-Languages: 40+ via `internal/discovery` — Py, JS/TS, Go, Java, Kotlin, C#, C/C++, Ruby, PHP, Rust, Swift, Scala, ObjC, Vue, Svelte, CSS/SCSS/HTML/JSON/YAML/TOML/XML/SQL/GraphQL, sh/ps1/bat, MD/INI/properties/.env/Dockerfile/PEM
+Languages: 40+ via `internal/discovery` — Py, JS/TS, Go, Java, Kotlin, C#, C/C++, Ruby, PHP, Rust, Swift, Scala, ObjC, Vue, Svelte, CSS/SCSS/HTML/JSON/YAML/TOML/XML/SQL/GraphQL, sh/ps1/bat, MD/INI/properties/.env/Dockerfile/PEM/Terraform (.tf/.tfvars/.hcl); license files (LICENSE*/COPYING*/NOTICE*) classify as text; lockfiles are tracked as dependency inputs (osv/trivy routing) but excluded from per-file scans
 
 ## Agent best practices
 

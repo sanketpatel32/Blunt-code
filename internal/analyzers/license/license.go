@@ -62,13 +62,16 @@ func (a *Adapter) EnsureInstalled(context.Context, analyzers.ToolEnvironment) er
 const (
 	planKeyManifests = "manifests"
 	planKeyRoot      = "workspace_root"
+	planKeyLicenses  = "license_files"
 )
 
-// manifestBasenames are the dependency manifests whose license field is read.
+// manifestBasenames are the dependency manifests whose license field is
+// read. Keys are lowercase; the lookup lowercases the basename so
+// Cargo.toml/CARGO.TOML both match.
 var manifestBasenames = map[string]bool{
 	"package.json":   true,
 	"pyproject.toml": true,
-	"Cargo.toml":     true,
+	"cargo.toml":     true,
 	"composer.json":  true,
 }
 
@@ -87,21 +90,31 @@ func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.
 	// files into the scan.
 	routed := analyzers.FilesForLanguages(req.Files, a.SupportedLanguages()...)
 	manifests := make([]string, 0, len(routed))
+	licenseFiles := make([]string, 0)
 	for _, file := range routed {
-		if manifestBasenames[filepath.Base(filepath.ToSlash(file))] {
+		base := strings.ToLower(filepath.Base(filepath.ToSlash(file)))
+		if manifestBasenames[base] {
 			manifests = append(manifests, file)
+			continue
+		}
+		// License-like files anywhere in the tree (docs/LICENSE.md,
+		// third_party/COPYING), whatever their extension: the selection now
+		// carries them because discovery classifies license basenames.
+		if analyzers.IsLicenseBaseName(base) {
+			licenseFiles = append(licenseFiles, file)
 		}
 	}
-	// A license file at the root is read from disk directly (discovery may
-	// not classify a bare LICENSE into the selection), so the plan applies
-	// whenever there is a workspace root even without routed manifests.
-	if len(manifests) == 0 && req.WorkspaceRoot == "" {
+	// A license file at the root is read from disk directly (a deselected or
+	// unclassified LICENSE must not silence the undeclared-license finding),
+	// so the plan applies whenever there is a workspace root even without
+	// routed inputs.
+	if len(manifests) == 0 && len(licenseFiles) == 0 && req.WorkspaceRoot == "" {
 		return analyzers.AnalyzerPlan{}, fmt.Errorf("license scanner does not apply")
 	}
 	return analyzers.AnalyzerPlan{
 		AnalyzerID: ID,
 		Version:    version,
-		Metadata:   map[string]any{planKeyManifests: manifests, planKeyRoot: req.WorkspaceRoot},
+		Metadata:   map[string]any{planKeyManifests: manifests, planKeyRoot: req.WorkspaceRoot, planKeyLicenses: licenseFiles},
 	}, nil
 }
 
@@ -125,7 +138,7 @@ type rawEnvelope struct {
 // contract.
 func (a *Adapter) Run(ctx context.Context, plan analyzers.AnalyzerPlan, _ analyzers.EventEmitter) (analyzers.AnalyzerResult, error) {
 	started := time.Now()
-	manifests, root, err := planSelection(plan)
+	manifests, licenseFiles, root, err := planSelection(plan)
 	if err != nil {
 		return analyzers.AnalyzerResult{Plan: plan}, err
 	}
@@ -154,6 +167,39 @@ func (a *Adapter) Run(ctx context.Context, plan analyzers.AnalyzerPlan, _ analyz
 		// conflict detection; later files still report their own findings.
 		if fileSPDX == "" {
 			fileSPDX, filePath = spdx, name
+		}
+	}
+
+	// License files routed through the selection (docs/LICENSE.md,
+	// third_party/COPYING) are classified like the root probes; the relative
+	// path set skips a file the probe loop already handled.
+	probed := map[string]bool{}
+	for _, name := range licenseFileNames {
+		probed[name] = true
+	}
+	for _, file := range licenseFiles {
+		if err := ctx.Err(); err != nil {
+			return analyzers.AnalyzerResult{Plan: plan}, err
+		}
+		relPath := relative(root, file)
+		if probed[relPath] {
+			continue
+		}
+		data, readErr := os.ReadFile(file)
+		if readErr != nil {
+			env.Notes = append(env.Notes, fmt.Sprintf("%s unreadable: %v", relPath, readErr))
+			continue
+		}
+		spdx := classifyText(string(data))
+		env.Diagnostics = append(env.Diagnostics, rawDiagnostic{
+			Rule:    ruleForSPDX(spdx),
+			SPDX:    spdx,
+			Source:  "file",
+			Path:    relPath,
+			Message: messageForFile(filepath.Base(filepath.ToSlash(file)), spdx),
+		})
+		if fileSPDX == "" {
+			fileSPDX, filePath = spdx, relPath
 		}
 	}
 
@@ -325,26 +371,39 @@ func isUnlicensedMarker(spdx string) bool {
 	return false
 }
 
-func planSelection(plan analyzers.AnalyzerPlan) ([]string, string, error) {
+func planSelection(plan analyzers.AnalyzerPlan) ([]string, []string, string, error) {
 	manifests, _ := plan.Metadata[planKeyManifests].([]string)
 	if manifests == nil {
 		list, ok := plan.Metadata[planKeyManifests].([]any)
 		if !ok {
-			return nil, "", fmt.Errorf("license plan is missing its manifest list")
+			return nil, nil, "", fmt.Errorf("license plan is missing its manifest list")
 		}
 		for _, v := range list {
 			s, ok := v.(string)
 			if !ok {
-				return nil, "", fmt.Errorf("license plan manifest entry is not a string")
+				return nil, nil, "", fmt.Errorf("license plan manifest entry is not a string")
 			}
 			manifests = append(manifests, s)
 		}
 	}
+	licenseFiles, _ := plan.Metadata[planKeyLicenses].([]string)
+	if licenseFiles == nil {
+		list, ok := plan.Metadata[planKeyLicenses].([]any)
+		if ok {
+			for _, v := range list {
+				s, ok := v.(string)
+				if !ok {
+					return nil, nil, "", fmt.Errorf("license plan license-file entry is not a string")
+				}
+				licenseFiles = append(licenseFiles, s)
+			}
+		}
+	}
 	root, _ := plan.Metadata[planKeyRoot].(string)
 	if root == "" {
-		return nil, "", fmt.Errorf("license plan is missing its workspace root")
+		return nil, nil, "", fmt.Errorf("license plan is missing its workspace root")
 	}
-	return manifests, root, nil
+	return manifests, licenseFiles, root, nil
 }
 
 func relative(root, path string) string {

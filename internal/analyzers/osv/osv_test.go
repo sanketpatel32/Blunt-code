@@ -147,6 +147,26 @@ func TestPlanRefusesUnusableRequests(t *testing.T) {
 	}
 }
 
+// TestPlanAppliesOnDependencyInputs pins the eligibility fix: a workspace
+// whose only dependency signal is a lockfile has no source language to route
+// on (package.json classifies as json, lockfiles are artifact-skipped), so
+// DependencyInputs — not Languages — decides osv applies.
+func TestPlanAppliesOnDependencyInputs(t *testing.T) {
+	adapter := New("osv-scanner.exe", "2.5.1")
+	plan, err := adapter.Plan(context.Background(), analyzers.ScanRequest{
+		WorkspaceRoot:    `C:\lockfile-only`,
+		Languages:        []analyzers.Language{analyzers.LanguageJSON},
+		DependencyInputs: []string{"package-lock.json"},
+		Profile:          analyzers.ProfileDeep,
+	})
+	if err != nil {
+		t.Fatalf("dependency inputs must make osv apply without source languages: %v", err)
+	}
+	if count, _ := plan.Metadata["dependency_inputs"].(int); count != 1 {
+		t.Fatalf("plan metadata dependency_inputs = %#v, want 1", plan.Metadata["dependency_inputs"])
+	}
+}
+
 // reportWorkspaceRoot extracts the directory the real report was produced in,
 // keeping the fixture byte-for-byte real (machine-specific absolute source
 // paths included) while the assertions stay machine-independent.

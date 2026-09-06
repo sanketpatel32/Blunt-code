@@ -44,14 +44,21 @@ func New(db *database.DB, registry *analyzers.Registry, bus *events.Bus, reports
 }
 
 func (s *Service) Start(ctx context.Context, work core.Workspace, profile string, files []core.FileEntry) (core.Scan, error) {
-	return s.start(ctx, work, profile, files, nil, ScanOptions{})
+	return s.start(ctx, work, profile, files, nil, ScanOptions{}, discoveryExtras{})
 }
 
-func (s *Service) start(ctx context.Context, work core.Workspace, profile string, files []core.FileEntry, excludes []string, opts ScanOptions) (core.Scan, error) {
+// discoveryExtras carries discovery-walk context (skip reasons, dependency
+// inputs) into the scan snapshot; the zero value means no discovery result.
+type discoveryExtras struct {
+	skipCounts       map[string]int
+	dependencyInputs []string
+}
+
+func (s *Service) start(ctx context.Context, work core.Workspace, profile string, files []core.FileEntry, excludes []string, opts ScanOptions, extras discoveryExtras) (core.Scan, error) {
 	if profile == "" {
 		profile = "standard"
 	}
-	snapshot := s.snapshot(ctx, work, profile, files, excludes)
+	snapshot := s.snapshot(ctx, work, profile, files, excludes, extras.skipCounts, extras.dependencyInputs)
 	scan, err := s.db.CreateScanWithFiles(ctx, core.Scan{WorkspaceID: work.ID, Profile: profile, State: "queued", CandidateFileCount: len(files), SelectedFileCount: snapshot.SelectedFileCount, Snapshot: snapshot}, files)
 	if err != nil {
 		return core.Scan{}, err
@@ -64,7 +71,10 @@ func (s *Service) start(ctx context.Context, work core.Workspace, profile string
 	return scan, nil
 }
 
-func (s *Service) snapshot(ctx context.Context, work core.Workspace, profile string, files []core.FileEntry, excludes []string) *core.ScanSnapshot {
+// snapshot captures the scan's input context once. skipCounts and
+// dependencyInputs come from the discovery walk (start's caller passes them;
+// direct start callers without a discovery result keep them nil).
+func (s *Service) snapshot(ctx context.Context, work core.Workspace, profile string, files []core.FileEntry, excludes []string, skipCounts map[string]int, dependencyInputs []string) *core.ScanSnapshot {
 	languages := map[string]int{}
 	selectedFiles := make([]string, 0, len(files))
 	for _, file := range files {
@@ -112,6 +122,8 @@ func (s *Service) snapshot(ctx context.Context, work core.Workspace, profile str
 		PathOverrides:      overrides,
 		EnabledAnalyzers:   analyzerIDs,
 		AnalyzerVersions:   analyzerVersions,
+		SkipCounts:         skipCounts,
+		DependencyInputs:   dependencyInputs,
 		Git:                gitSnapshot(ctx, work.RootPath),
 	}
 }
@@ -485,7 +497,7 @@ func (s *Service) DiscoverAndStartWithOptions(ctx context.Context, work core.Wor
 		return core.Scan{}, err
 	}
 	applyPathOverrides(found.Files, overrides)
-	return s.start(ctx, work, profile, found.Files, excludes, opts)
+	return s.start(ctx, work, profile, found.Files, excludes, opts, discoveryExtras{skipCounts: found.SkipCounts, dependencyInputs: found.DependencyInputs})
 }
 
 func applyPathOverrides(files []core.FileEntry, overrides []core.PathOverride) {

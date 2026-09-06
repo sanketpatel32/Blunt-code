@@ -61,6 +61,7 @@ const (
 	LanguageEnv         Language = "env"
 	LanguageDockerfile  Language = "dockerfile"
 	LanguageCertificate Language = "certificate"
+	LanguageTerraform   Language = "terraform"
 )
 
 type Severity string
@@ -165,6 +166,13 @@ type ScanRequest struct {
 	// Adapters without tier-specific behavior may ignore it, and the empty
 	// value must behave exactly like standard.
 	Profile string
+	// DependencyInputs lists workspace-relative dependency manifests and
+	// lockfiles discovery saw, including ones excluded from Files (lockfiles
+	// are smart-skipped as artifacts). Dependency-driven adapters (osv, trivy)
+	// key their applicability off this list, not off source languages: a
+	// workspace whose only dependency signal is package-lock.json has no
+	// routable language file at all.
+	DependencyInputs []string
 }
 
 type ProcessSpec struct {
@@ -277,6 +285,7 @@ var languageExtensions = map[string]Language{
 	".rb": LanguageRuby, ".php": LanguagePHP, ".rs": LanguageRust, ".swift": LanguageSwift, ".scala": LanguageScala,
 	".m": LanguageObjectiveC, ".mm": LanguageObjectiveC,
 	".vue": LanguageVue, ".svelte": LanguageSvelte,
+	".tf": LanguageTerraform, ".tfvars": LanguageTerraform, ".hcl": LanguageTerraform,
 	".css": LanguageCSS, ".scss": LanguageSCSS, ".less": LanguageLess,
 	".html": LanguageHTML, ".htm": LanguageHTML,
 	".json": LanguageJSON, ".jsonc": LanguageJSON,
@@ -302,8 +311,29 @@ func languageOfPath(file string) Language {
 		return LanguageDockerfile
 	case base == ".env" || strings.HasPrefix(base, ".env."):
 		return LanguageEnv
+	case IsLicenseBaseName(base):
+		return LanguageText
 	}
 	return ""
+}
+
+// IsLicenseBaseName mirrors discovery.IsLicenseFileName (extension-less
+// LICENSE/COPYING/NOTICE artifacts classify as text) so FilesForLanguages
+// agrees with the walk that found the file. The license adapter reuses it to
+// pick license-like files out of its routed selection, whatever their
+// extension (LICENSE.md is markdown, COPYING is text).
+func IsLicenseBaseName(lowerBase string) bool {
+	for _, prefix := range []string{"license", "licence", "copying", "notice"} {
+		if lowerBase == prefix {
+			return true
+		}
+		for _, sep := range []string{".", "-", "_"} {
+			if strings.HasPrefix(lowerBase, prefix+sep) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // AllLanguages returns every language the shared classifier can produce,
