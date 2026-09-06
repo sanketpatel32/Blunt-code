@@ -2,11 +2,11 @@
 
 > Blunt Code is a local-first code quality & security analyzer for Windows. One `bluntcode.exe` runs Ruff, Biome, Gitleaks, Semgrep, SonarQube, OSV Scanner, Trivy, Checkov, License Scanner, Pentest Suite, plus built-in secrets/TODO detectors on loopback 127.0.0.1 (no cloud, no telemetry). Use headless `bluntcode scan` for automation/CI.
 
-- **Version:** 0.16.21 (2026-09-02)
+- **Version:** 0.22.0 (2026-09-06)
 - **Repo:** https://github.com/sanketpatel32/Blunt-code
 - **Platform:** Windows 10/11 amd64, standard user, no admin, no global Python/Java/Node
 - **License:** MIT (`LICENSE`), third-party notices (`THIRD_PARTY_NOTICES.md`)
-- **Latest release ZIP:** `BluntCode-0.16.21-windows-amd64.zip` + `.sha256`
+- **Latest release ZIP:** `BluntCode-0.22.0-windows-amd64.zip` + `.sha256`
 
 ## When to use Blunt Code (agent decision tree)
 
@@ -66,10 +66,12 @@ bluntcode llm | llms                                      # cat this file to std
 ```
 
 ### `bluntcode scan` exit codes
-- `0` completed (warnings ok) or gate passed
-- `1` failed/cancelled/interrupted/timed out OR gate tripped (`fail: ...` on stderr)
-- `2` usage error (bad flag/path, unreadable baseline)
-- `130` Ctrl+C (graceful then forced)
+- `0` completed with full coverage and gate passed
+- `1` gate tripped (`fail: ...` on stderr) on an otherwise-complete scan; gates never run on an incomplete one
+- `2` usage error (bad flag, bad path argument, unreadable baseline)
+- `3` operational failure or incomplete coverage: failed, timed out, interrupted, or `completed_with_warnings` (analyzer failures/degraded output — zero findings never read as a pass)
+- `4` cancelled (single Ctrl+C)
+- `130` double Ctrl+C (forced stop)
 - With `--baseline`, gate counts only *new* findings not in baseline. Baseline `Split` prints `baseline: X known excluded, Y new`.
 
 ### `bluntcode scan --json` schema (stable, snake_case)
@@ -80,7 +82,7 @@ bluntcode llm | llms                                      # cat this file to std
   "timed_out": false, "started_at": "2026-09-02T00:00:00Z", "finished_at": "...", "duration_ms": 1234,
   "total_findings": 8, "severity": {"critical":0,"high":1,"medium":2,"low":3,"info":2,"total":8},
   "comparison": {"available": true, "new": 3, "fixed": 1, "persistent": 5},
-  "analyzers": [{"id":"ruff","version":"0.9...","state":"succeeded","findings":2,"duration_ms": 400,"error":""}],
+  "analyzers": [{"id":"ruff","version":"0.9...","state":"succeeded","findings":2,"duration_ms": 400,"warning_count":0,"error":""}],
   "report_markdown_path": "C:\\...\\reports\\...", "error": ""
 }
 ```
