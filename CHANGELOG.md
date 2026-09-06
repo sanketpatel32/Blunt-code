@@ -5,7 +5,7 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.22.0] - 2026-09-06
 
 ### Added
 - **Single capability inventory for all analyzers**: one machine-readable table of what each analyzer is (execution kind, input kinds, profiles, network class, timeout class, managed tooling), served from `GET /api/v1/analyzers`; orchestration, discovery, and the Tools page consult it instead of scattering per-analyzer conditionals.
