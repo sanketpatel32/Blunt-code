@@ -5,6 +5,24 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Single capability inventory for all analyzers**: one machine-readable table of what each analyzer is (execution kind, input kinds, profiles, network class, timeout class, managed tooling), served from `GET /api/v1/analyzers`; orchestration, discovery, and the Tools page consult it instead of scattering per-analyzer conditionals.
+- **Honest scan outcomes**: a precise CLI exit-code contract (0 clean, 1 gate failure only, 2 usage, 3 operational failure or incomplete coverage, 4 user cancel, 130 double Ctrl+C), quality gates evaluated only on complete scans, analyzer runs carrying a persisted `warning_count`, and scans whose analyzers ran degraded completing as `completed_with_warnings` — with the scan page headline ("No findings — but coverage was incomplete") and report tool chips marking the gap instead of claiming all-clear.
+- **Analyzer-aware discovery**: Terraform files (`.tf`, `.tfvars`, `.hcl`) route to checkov and trivy; license files (`LICENSE*`, `COPYING*`, `NOTICE*`) feed the license analyzer even without manifests; dependency manifests and lockfiles are tracked as scan inputs (osv now applies to lockfile-only workspaces and says "does not apply" only when there is truly nothing to scan); snapshots record `skip_counts` by reason so exclusions are auditable.
+- **Offline network policy**: with offline mode set, osv and trivy refuse cold-cache scans with actionable errors instead of silently dialing out, and the UI ships zero third-party requests (Google Fonts removed).
+- **Pentest redirect containment**: the probe refuses redirects to any host other than the one you entered and reports the attempt as a CWE-601 finding.
+- **Process supervision**: every external analyzer process joins a kill-on-close Windows job object (8 GiB commit cap per run) so analyzer trees end with their run — and with a Blunt Code crash; analyzer output, installer output, and post-run normalization (SonarQube's compute wait) are all bounded; at most three scans run concurrently and further starts return HTTP 503 `SCAN_CAPACITY` / CLI exit 3.
+- **Workspace integrity regression test**: every workspace file is hashed before and after a completed scan, pinning the read-only source contract.
+
+### Changed
+- **Loopback-only UI serving**: the embedded web app now sits behind the API's security middleware — foreign `Host` headers get 421 and every response carries the baseline security headers; single-instance handoff verifies `/api/v1/meta` identity before handing the browser to a port's owner, so an impostor server can't capture the launch.
+- **Junction-safe containment**: `ValidateRelativePath` and every file-consuming analyzer adapter resolve NTFS junctions before the containment check, so a junction inside the workspace pointing outward can no longer leak out-of-workspace files — while junctions that stay inside the workspace keep validating.
+
+### Fixed
+- **Tools page hostile-input hardening**: missing analyzer display fields fall back to the analyzer id instead of rendering `undefined`, and a missing `profiles` array no longer crashes the page.
+
 ## [0.21.2] - 2026-09-06
 
 ### Changed
