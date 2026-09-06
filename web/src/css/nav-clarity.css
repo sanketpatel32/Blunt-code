@@ -140,6 +140,7 @@
   transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
 }
 .nav-utils .nav-util:hover,
+.nav-utils .nav-util[data-state="open"],
 .nav-utils .nav-shortcuts:hover,
 .nav-utils .nav-bell:hover,
 .nav-utils .theme-toggle:hover {

@@ -1,13 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 export type Locale = 'en' | 'es' | 'fr' | 'de' | 'ja' | 'hi';
-export const LOCALES: { value: Locale; label: string }[] = [
-  { value: 'en', label: 'EN' },
-  { value: 'es', label: 'ES' },
-  { value: 'fr', label: 'FR' },
-  { value: 'de', label: 'DE' },
-  { value: 'ja', label: 'JA' },
-  { value: 'hi', label: 'HI' },
+export const LOCALES: { value: Locale; label: string; name: string }[] = [
+  { value: 'en', label: 'EN', name: 'English' },
+  { value: 'es', label: 'ES', name: 'Español' },
+  { value: 'fr', label: 'FR', name: 'Français' },
+  { value: 'de', label: 'DE', name: 'Deutsch' },
+  { value: 'ja', label: 'JA', name: '日本語' },
+  { value: 'hi', label: 'HI', name: 'हिन्दी' },
 ];
 
 const STORAGE_KEY = 'bluntcode.lang';

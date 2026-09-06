@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { href, type Route } from '../lib/router';
 import type { Theme } from '../hooks/useTheme';
 import { Button } from './ui/button';
-import { HelpCircle, Moon, Sun, Plus, Languages, ChevronDown } from 'lucide-react';
+import { HelpCircle, Moon, Sun, Plus, Languages, ChevronDown, Check } from 'lucide-react';
 import { NotificationsCenter } from './NotificationsCenter';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { cn } from '../lib/utils';
 import { LOCALES, useT } from '../lib/i18n';
 import { useReducedMotion } from '../hooks/useReducedMotion';
@@ -155,10 +156,40 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
             made it the loudest thing in the row for the wrong reason. */}
         <div className="nav-utils">
           <NotificationsCenter />
-          <fieldset className="nav-util nav-lang segmented" aria-label={t('common.language')}>
-            <Languages className="h-4 w-4 shrink-0" aria-hidden="true" />
-            {LOCALES.map((l) => <button key={l.value} type="button" title={l.label} aria-label={l.label} aria-pressed={locale === l.value} onClick={() => setLocale(l.value as never)}>{l.label}</button>)}
-          </fieldset>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="nav-util nav-lang gap-1 px-2 font-mono text-xs font-semibold"
+                aria-label={t('common.language')}
+                title={t('common.language')}
+              >
+                <Languages className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span className="uppercase">{locale}</span>
+                <ChevronDown className="h-3 w-3 opacity-60" aria-hidden="true" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-36 p-1">
+              <DropdownMenuLabel className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[var(--color-ink-faint)]">
+                {t('common.language')}
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {LOCALES.map((l) => (
+                <DropdownMenuItem
+                  key={l.value}
+                  onClick={() => setLocale(l.value as never)}
+                  className="flex items-center justify-between gap-2 px-2 py-1.5 text-xs cursor-pointer"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="font-mono font-bold">{l.label}</span>
+                    <span className="text-[var(--color-ink-soft)]">{l.name}</span>
+                  </span>
+                  {locale === l.value && <Check className="h-3.5 w-3.5 text-[var(--color-accent-strong)]" />}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button variant="ghost" size="icon" className="nav-shortcuts" onClick={() => onShowShortcuts?.()} title={t('common.shortcuts')} aria-label={t('common.shortcuts')}>
             <HelpCircle className="h-4 w-4" />
           </Button>

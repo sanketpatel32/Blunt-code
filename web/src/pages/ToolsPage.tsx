@@ -55,33 +55,6 @@ function ToolActions({ tool, activeOperation, onAction }: { tool: Tool; activeOp
   </div>;
 }
 
-function CategoryAccordion({ category, tools, busy, onAction, tableClassName = "tool-table" }: { category: AnalyzerCategory; tools: Tool[]; busy?: BusyAction; onAction: (tool: Tool, op: ToolOperation) => void; tableClassName?: string }) {
-  const [open, setOpen] = useState(true);
-  const meta = ANALYZER_CATALOG.filter((a) => a.category === category);
-  const ready = tools.filter((t) => t.ready).length;
-  const Icon = categoryIcons[category] ?? Wrench;
-  return (
-    <details open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)} className="tool-category border rounded-lg bg-[var(--color-surface)] mb-3">
-      <summary className="flex items-center gap-2 px-4 py-3 cursor-pointer list-none">
-        <span className="flex h-7 w-7 items-center justify-center rounded-md border" style={{ background: `color-mix(in oklch, ${categoryColor(category)} 16%, var(--color-surface))`, color: categoryColor(category), borderColor: `color-mix(in oklch, ${categoryColor(category)} 34%, var(--color-rule))` }}><Icon className="h-4 w-4" /></span>
-        <strong>{CATEGORY_LABELS[category]}</strong>
-        <span className="badge ml-2">{ready} of {tools.length} ready</span>
-        <span className="ml-auto text-xs text-[var(--color-ink-faint)]">{open ? 'Hide' : 'Show'}</span>
-      </summary>
-      <div className="px-2 pb-3">
-        <div className={`${tableClassName} table-wrap`}><table><thead><tr><th scope="col">Tool</th><th scope="col">Version</th><th scope="col">Status</th><th scope="col">Languages</th><th scope="col">Details</th><th scope="col">Actions</th></tr></thead><tbody>{tools.map((tool) => {
-          const activeOperation = busy && busy.tool === tool.id ? busy.operation : undefined;
-          const metaEntry = analyzerMeta(tool.id);
-          const detail = tool.detail ?? (tool.ready ? 'Ready for local analysis.' : 'Coming soon — managed install');
-          return <tr key={tool.id}><td><strong className="flex items-center gap-1.5">{tool.name ?? tool.id}{metaEntry && <span className="badge text-[10px]" style={{ borderColor: categoryColor(metaEntry.category), color: categoryColor(metaEntry.category) }}>{metaEntry.category}</span>}</strong></td><td><span className="badge tool-version">{tool.version ? `v${tool.version}` : 'Managed version'}</span></td><td><span className={`state ${tool.ready ? 'ready' : 'not-ready'}`}>{tool.ready ? 'Ready' : 'Not installed'}</span></td><td><span className="flex flex-wrap gap-1">{(metaEntry?.languages.slice(0, 3) ?? []).map((l) => <span key={l} className="badge text-[10px]">{l}</span>)}</span></td><td className="text-xs max-w-[18rem] truncate" title={detail}>{detail}</td><td className="table-actions" aria-busy={activeOperation ? true : undefined}>
-            <span className="flex gap-1">{(['install', 'repair', 'update'] as const).map((operation) => <button type="button" key={operation} className="text-button" disabled={!tool.can_install || activeOperation !== undefined} onClick={() => void onAction(tool, operation)}>{activeOperation === operation ? <><span className="spinner" aria-hidden="true" />{operationBusyLabels[operation]}</> : operationLabels[operation]}</button>)}</span>
-          </td></tr>;
-        })}</tbody></table></div>
-      </div>
-    </details>
-  );
-}
-
 export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r: Route) => void }) {
   const tools = useLoad(api.tools, []);
   const [busy, setBusy] = useState<BusyAction>();
@@ -89,31 +62,7 @@ export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r
 
   const backend = tools.data ?? [];
 
-  const grouped = useMemo(() => {
-    const map = new Map<AnalyzerCategory, Tool[]>();
-    for (const tool of backend) {
-      const cat = analyzerMeta(tool.id)?.category ?? 'security' as AnalyzerCategory;
-      const arr = map.get(cat) ?? [];
-      arr.push(tool);
-      map.set(cat, arr);
-    }
-    return map;
-  }, [backend]);
-
   const builtIns = useMemo(() => ANALYZER_CATALOG.filter((a) => BUILT_IN_IDS.has(a.id)), []);
-
-  const placeholderGrouped = useMemo(() => {
-    const map = new Map<AnalyzerCategory, Tool[]>();
-    const ids = new Set(backend.map((t) => t.id));
-    for (const a of ANALYZER_CATALOG.filter((x) => !ids.has(x.id) && !BUILT_IN_IDS.has(x.id))) {
-      const tool: Tool = { id: a.id, name: a.displayName, ready: false, can_install: false, detail: 'Coming soon — managed install' };
-      const cat = a.category;
-      const arr = map.get(cat) ?? [];
-      arr.push(tool);
-      map.set(cat, arr);
-    }
-    return map;
-  }, [backend]);
 
   return (
     <div className="page">
@@ -124,9 +73,43 @@ export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r
         description="Manage local analyzers, linters, and vulnerability engines configured on this machine."
       />
       {tools.loading ? <SkeletonTable rows={4} cols={5} className="tool-table" /> : tools.error ? <ErrorPanel error={tools.error} retry={tools.reload} /> : !backend.length ? <Empty title="No managed tools" icon={<WrenchIcon />}>Tool status appears here after the backend registers analyzers.</Empty> : <><ReadinessStrip tools={backend} busy={busy} />
-    {[...grouped.entries()].map(([cat, list]) => <CategoryAccordion key={cat} category={cat} tools={list} busy={busy} onAction={action} />)}
+      <div className="tool-table table-wrap border rounded-lg bg-[var(--color-surface)] overflow-hidden">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Tool</th>
+              <th scope="col">Category</th>
+              <th scope="col">Version</th>
+              <th scope="col">Status</th>
+              <th scope="col">Details</th>
+              <th scope="col">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {backend.map((tool) => {
+              const activeOperation = busy && busy.tool === tool.id ? busy.operation : undefined;
+              const metaEntry = analyzerMeta(tool.id);
+              const cat = metaEntry?.category ?? ('security' as AnalyzerCategory);
+              const detail = tool.detail ?? (tool.ready ? 'Ready for local analysis.' : 'Coming soon — managed install');
+              const Icon = categoryIcons[cat] ?? Wrench;
+              return (
+                <tr key={tool.id}>
+                  <td><strong className="flex items-center gap-1.5">{tool.name ?? tool.id}</strong></td>
+                  <td><span className="badge inline-flex items-center gap-1 text-[10px]" style={{ borderColor: `color-mix(in oklch, ${categoryColor(cat)} 34%, var(--color-rule))`, color: categoryColor(cat), background: `color-mix(in oklch, ${categoryColor(cat)} 12%, var(--color-surface))` }}><Icon className="h-3 w-3" />{CATEGORY_LABELS[cat] ?? cat}</span></td>
+                  <td><span className="badge tool-version">{tool.version ? `v${tool.version}` : 'Managed version'}</span></td>
+                  <td><span className={`state ${tool.ready ? 'ready' : 'not-ready'}`}>{tool.ready ? 'Ready' : 'Not installed'}</span></td>
+                  <td className="text-xs max-w-[18rem] truncate" title={detail}>{detail}</td>
+                  <td className="table-actions" aria-busy={activeOperation ? true : undefined}>
+                    <span className="flex gap-1">{(['install', 'repair', 'update'] as const).map((operation) => <button type="button" key={operation} className="text-button" disabled={!tool.can_install || activeOperation !== undefined} onClick={() => void action(tool, operation)}>{activeOperation === operation ? <><span className="spinner" aria-hidden="true" />{operationBusyLabels[operation]}</> : operationLabels[operation]}</button>)}</span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     {builtIns.length > 0 && <section className="builtin-analyzers" aria-label="Built-in analyzers"><h3 className="text-sm font-semibold mt-4">Built-in analyzers</h3><p className="text-xs text-[var(--color-ink-soft)]">Bundled in-process — nothing to install. They run on standard and deep scans (skipped in offline mode).</p>
-      <div className="builtin-table table-wrap"><table><thead><tr><th scope="col">Tool</th><th scope="col">Status</th><th scope="col">Languages</th><th scope="col">Details</th></tr></thead><tbody>{builtIns.map((a) => <tr key={a.id}><td><strong className="flex items-center gap-1.5">{a.displayName}<span className="badge text-[10px]" style={{ borderColor: categoryColor(a.category), color: categoryColor(a.category) }}>{a.category}</span></strong></td><td><span className="state ready">Built-in</span></td><td><span className="flex flex-wrap gap-1">{a.languages.slice(0, 3).map((l) => <span key={l} className="badge text-[10px]">{l}</span>)}<span className="badge text-[10px]">+{a.languages.length - 3} more</span></span></td><td className="text-xs max-w-[18rem] truncate" title={a.description}>{a.description}</td></tr>)}</tbody></table></div>
+      <div className="builtin-table table-wrap"><table><thead><tr><th scope="col">Tool</th><th scope="col">Category</th><th scope="col">Status</th><th scope="col">Details</th></tr></thead><tbody>{builtIns.map((a) => <tr key={a.id}><td><strong className="flex items-center gap-1.5">{a.displayName}</strong></td><td><span className="badge text-[10px]" style={{ borderColor: categoryColor(a.category), color: categoryColor(a.category) }}>{a.category}</span></td><td><span className="state ready">Built-in</span></td><td className="text-xs max-w-[18rem] truncate" title={a.description}>{a.description}</td></tr>)}</tbody></table></div>
     </section>}
       <LanguageCoverage />
     </>}

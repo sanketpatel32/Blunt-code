@@ -5,6 +5,13 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.21.1] - 2026-09-06
+
+### Changed
+- **Navigation language switcher**: converted the horizontal row of language buttons in the navigation utility cluster into a clean dropdown menu with locale codes, native names, and active checkmarks.
+- **Workspaces filter toolbar**: keep workspace search and tag filters on a single horizontal row alongside the sort controls without wrapping or stacking.
+- **Tools table unification**: removed the category accordion boxes in favor of a single unified tools table, and removed the redundant languages column across managed and built-in analyzer tables.
+
 ## [0.21.0] - 2026-09-04
 
 ### Added
