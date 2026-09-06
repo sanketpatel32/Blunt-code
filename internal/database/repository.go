@@ -1685,29 +1685,34 @@ func (d *DB) SetWorkspaceTags(ctx context.Context, workspaceID string, tags []st
 // PruneOldScans keeps the N most recent terminal scans for a workspace and
 // deletes older scans. Non-terminal scans are never deleted. Deletion cascades
 // via foreign keys to findings, metrics, scan_files, scan_file_hashes,
-// scan_hash_meta, and analyzer_runs.
-func (d *DB) PruneOldScans(ctx context.Context, workspaceID string, keep int) (int64, error) {
+// scan_hash_meta, and analyzer_runs. The deleted ids are returned — never
+// discarded — because a deleted scan can be referenced externally: a CI
+// `--baseline <scan-id>` or a baseline SARIF exported from it. Callers report
+// the ids so retention cannot silently invalidate a referenced baseline.
+// Suppression history is unaffected: suppressions live on the workspace, not
+// on scan rows.
+func (d *DB) PruneOldScans(ctx context.Context, workspaceID string, keep int) ([]string, error) {
 	if keep < 1 || keep > 100 {
-		return 0, fmt.Errorf("keep must be between 1 and 100")
+		return nil, fmt.Errorf("keep must be between 1 and 100")
 	}
 	rows, err := d.SQL.QueryContext(ctx, `SELECT id FROM scans WHERE workspace_id=? AND state IN ('completed','completed_with_warnings','failed','cancelled','interrupted') ORDER BY started_at DESC, id DESC LIMIT -1 OFFSET ?`, workspaceID, keep)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	defer rows.Close()
 	var ids []string
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {
-			return 0, err
+			return nil, err
 		}
 		ids = append(ids, id)
 	}
 	if err := rows.Err(); err != nil {
-		return 0, err
+		return nil, err
 	}
 	if len(ids) == 0 {
-		return 0, nil
+		return nil, nil
 	}
 	placeholders := make([]string, len(ids))
 	args := make([]any, len(ids))
@@ -1715,12 +1720,10 @@ func (d *DB) PruneOldScans(ctx context.Context, workspaceID string, keep int) (i
 		placeholders[i] = "?"
 		args[i] = id
 	}
-	result, err := d.SQL.ExecContext(ctx, `DELETE FROM scans WHERE id IN (`+strings.Join(placeholders, ",")+`)`, args...)
-	if err != nil {
-		return 0, err
+	if _, err := d.SQL.ExecContext(ctx, `DELETE FROM scans WHERE id IN (`+strings.Join(placeholders, ",")+`)`, args...); err != nil {
+		return nil, err
 	}
-	n, _ := result.RowsAffected()
-	return n, nil
+	return ids, nil
 }
 
 // DeleteScan removes one scan by ID. Only terminal scans may be deleted; a

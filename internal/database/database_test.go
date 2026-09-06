@@ -1121,3 +1121,69 @@ func TestLargeVolumeWorkspaceListView(t *testing.T) {
 	}
 	t.Logf("single-aggregate alternative (1 query, latest scan only): p95=%v worst=%v", aggP95, aggWorst)
 }
+
+// TestPruneKeepsComparisonAnchorAndSuppressionHistory pins the retention
+// relationships (IMP-11): pruning keeps the N most recent terminal scans —
+// in particular the newest completed scan, the anchor the next scan compares
+// against and the natural --baseline reference — never touches non-terminal
+// scans, returns exactly the deleted ids (so callers can warn about dangling
+// baseline references), and never disturbs suppression history, which belongs
+// to the workspace, not to any scan row.
+func TestPruneKeepsComparisonAnchorAndSuppressionHistory(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "bluntcode.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	work, err := db.CreateWorkspace(ctx, core.Workspace{Name: "Retention", RootPath: "C:/retention"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var completedIDs []string
+	for i := 0; i < 3; i++ {
+		scan, err := db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: "running"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.SaveAnalyzerResult(ctx, scan.ID, AnalyzerRunInput{AnalyzerID: "ruff", Version: "test", State: "succeeded"}, nil, nil); err != nil {
+			t.Fatal(err)
+		}
+		if err := db.CompleteScan(ctx, scan.ID, "completed", ""); err != nil {
+			t.Fatal(err)
+		}
+		completedIDs = append(completedIDs, scan.ID)
+	}
+	running, err := db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: "running"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.AddSuppression(ctx, work.ID, "fp-fingerprint-1", "not a bug"); err != nil {
+		t.Fatal(err)
+	}
+
+	deleted, err := db.PruneOldScans(ctx, work.ID, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(deleted) != 1 || deleted[0] != completedIDs[0] {
+		t.Fatalf("deleted = %v, want exactly the oldest completed scan %s", deleted, completedIDs[0])
+	}
+	if _, err := db.Scan(ctx, completedIDs[0]); err == nil {
+		t.Fatal("oldest scan was not deleted")
+	}
+	// The newest completed scan (the comparison anchor) survives.
+	newest := completedIDs[len(completedIDs)-1]
+	if previous, err := db.PreviousCompletedScanID(ctx, work.ID, "nonexistent"); err != nil || previous != newest {
+		t.Fatalf("comparison anchor after prune = %q, %v; want %q", previous, err, newest)
+	}
+	// Non-terminal scans are never deletion candidates.
+	if _, err := db.Scan(ctx, running.ID); err != nil {
+		t.Fatalf("running scan was pruned: %v", err)
+	}
+	// Suppression history is workspace-scoped and survives scan deletion.
+	suppressed, err := db.SuppressedFingerprints(ctx, work.ID)
+	if err != nil || !suppressed["fp-fingerprint-1"] {
+		t.Fatalf("suppression history lost after prune: %v %v", suppressed, err)
+	}
+}

@@ -19,6 +19,18 @@ var migrationFiles embed.FS
 
 type DB struct{ SQL *sql.DB }
 
+// Open owns the database file at path. Coordination and durability contract
+// (IMP-11): process-level ownership is the instance package's machine-wide
+// data-directory guard, so under normal operation exactly one process writes
+// here; the connection still sets a 5-second busy timeout and enforces
+// foreign keys, so an overlapping reader (read-only doctor against a live
+// server) waits briefly instead of failing, and cascading deletes can never
+// orphan findings, metrics, or hash rows. Migrations run inside one
+// transaction each; a crash mid-migration rolls back cleanly, and result
+// persistence (SaveAnalyzerResult) is transactional — a killed process leaves
+// either fully committed results or a scan row the next start relabels
+// "interrupted" (MarkInterruptedScans). Disk-full surfaces as ordinary SQLite
+// write errors: scans fail honestly, never partially.
 func Open(ctx context.Context, path string) (*DB, error) {
 	db, err := sql.Open("sqlite", path+"?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)")
 	if err != nil {

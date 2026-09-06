@@ -73,5 +73,14 @@ func runPrune(args []string) {
 		fmt.Fprintf(os.Stderr, "bluntcode prune: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Fprintf(os.Stdout, "pruned %d scan(s), kept %d most recent for workspace %s\n", deleted, keep, work.Name)
+	fmt.Fprintf(os.Stdout, "pruned %d scan(s), kept %d most recent for workspace %s\n", len(deleted), keep, work.Name)
+	// A deleted scan may still be referenced: a CI --baseline <scan-id> (or a
+	// baseline SARIF exported from it) breaks the moment its scan is gone.
+	// Retention stays allowed, but never silent about what it invalidated.
+	if len(deleted) > 0 {
+		fmt.Fprintln(os.Stdout, "deleted scan ids (check any --baseline references):")
+		for _, id := range deleted {
+			fmt.Fprintf(os.Stdout, "  %s\n", id)
+		}
+	}
 }

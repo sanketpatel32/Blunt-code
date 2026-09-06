@@ -1,6 +1,17 @@
 //go:build windows
 
 // Package instance keeps one Blunt Code backend attached to a data directory.
+//
+// Ownership contract: one backend per data directory per machine — the mutex
+// lives in the Global namespace, so simultaneous starts from different Windows
+// sessions (fast user switching), different users, or a server session cannot
+// each claim the same user-local database; the loser gets ErrAlreadyRunning
+// instead of becoming an ambiguous second owner. The name is derived from the
+// canonical absolute data-directory path (case-folded), so independent
+// portable installs with distinct directories never block one another. What
+// the lock coordinates is runtime ownership only: it holds no state on disk,
+// and leftover application metadata (stale staging, backups) is the installer
+// sweep's business, not the lock's.
 package instance
 
 import (
@@ -16,9 +27,7 @@ import (
 
 var ErrAlreadyRunning = errors.New("Blunt Code is already running for this data directory")
 
-// Guard owns a per-user-session named mutex until Close is called. The mutex
-// name is derived from the data directory, so independent portable installs do
-// not block one another and the directory itself is not exposed system-wide.
+// Guard owns the per-data-directory named mutex until Close is called.
 type Guard struct{ handle windows.Handle }
 
 func Acquire(dataDir string) (*Guard, error) {
@@ -47,11 +56,15 @@ func (g *Guard) Close() error {
 	return err
 }
 
+// mutexName derives a machine-wide mutex name from the canonical data
+// directory. Global\ (not Local\) is what makes the guard visible across
+// Windows sessions and users; the hash keeps the directory path itself out of
+// the machine-wide namespace.
 func mutexName(dataDir string) string {
 	canonical, err := filepath.Abs(dataDir)
 	if err != nil {
 		canonical = filepath.Clean(dataDir)
 	}
 	digest := sha256.Sum256([]byte(strings.ToLower(filepath.Clean(canonical))))
-	return "Local\\BluntCode-" + hex.EncodeToString(digest[:16])
+	return "Global\\BluntCode-" + hex.EncodeToString(digest[:16])
 }
