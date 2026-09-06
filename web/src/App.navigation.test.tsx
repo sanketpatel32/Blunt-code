@@ -89,3 +89,55 @@ describe('navigation resilience', () => {
     expect(host.querySelector('.palette-note')?.textContent).toBe('2 workspaces indexed');
   });
 });
+
+describe('browser history and hostile URLs', () => {
+  beforeEach(() => { window.history.replaceState({}, '', '/'); });
+  afterEach(async () => { await act(async () => { root?.unmount(); }); document.body.replaceChildren(); vi.unstubAllGlobals(); });
+
+  /** Models the browser's Back/Forward buttons: the URL is already the target
+   *  entry and popstate tells the app to re-parse it. */
+  async function popTo(path: string, host: HTMLElement) {
+    window.history.replaceState({}, '', path);
+    await act(async () => { window.dispatchEvent(new PopStateEvent('popstate')); });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    return host;
+  }
+
+  it('follows back and forward navigation (popstate) without remounting the app', async () => {
+    const host = await renderApp();
+    const about = host.querySelector<HTMLAnchorElement>('.app-nav nav a[href="/about"]')!;
+    await act(async () => { about.click(); await Promise.resolve(); await Promise.resolve(); });
+    expect(window.location.pathname).toBe('/about');
+    expect(host.textContent).toContain('Local by default');
+
+    await popTo('/', host); // Back: home again
+    expect(window.location.pathname).toBe('/');
+    expect(host.textContent).toContain('Point Blunt Code at a project');
+    expect(host.textContent).not.toContain('Local by default');
+
+    await popTo('/about', host); // Forward: About again
+    expect(window.location.pathname).toBe('/about');
+    expect(host.textContent).toContain('Local by default');
+  });
+
+  it('shows the error panel for an unknown scan id and never executes the id as markup', async () => {
+    window.history.replaceState({}, '', '/scans/zzz%3Cscript%3Ealert(1)%3C%2Fscript%3E');
+    vi.stubGlobal('EventSource', class { addEventListener() {} close() {} }); // jsdom has no SSE; the page must still render its error state
+    const fetchMock = vi.fn(() => Promise.resolve(json({}, 404)));
+    const host = await renderApp(fetchMock);
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(host.querySelector('[role="alert"].error-panel')).not.toBeNull();
+    expect(host.textContent).toContain('Could not load this view');
+    expect(host.querySelectorAll('script, img').length).toBe(0); // the hostile id stayed inert data
+  });
+
+  it('renders hostile URL parameters as inert input values, never markup', async () => {
+    window.history.replaceState({}, '', '/search?q=%3Cimg%20src%3Dx%20onerror%3Dalert(1)%3E');
+    const host = await renderApp();
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(host.querySelectorAll('img[onerror], script').length).toBe(0);
+    const box = host.querySelector<HTMLInputElement>('[role="search"] input[aria-label="Search findings"]')!;
+    expect(box.value).toBe('<img src=x onerror=alert(1)>');
+    expect(host.querySelector('#search-results')?.textContent ?? '').not.toContain('<img');
+  });
+});

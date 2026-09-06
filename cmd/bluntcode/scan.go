@@ -38,7 +38,7 @@ const (
 	scanStatePollInterval = 2 * time.Second
 )
 
-const scanUsage = "usage: bluntcode scan <path> [--profile quick|standard|deep|pentest] [--format text|json|github|sarif|csv|jsonl|markdown] [--json] [--timeout 30m] [--quiet] [--fail-on high+] [--max-findings N] [--baseline <scan-id-or-sarif>] [--jobs N] [--incremental] [--watch]"
+const scanUsage = "usage: bluntcode scan <path> [--profile quick|standard|deep|pentest] [--format text|json|github|sarif|csv|jsonl|markdown] [--json] [--output <file>] [--timeout 30m] [--quiet] [--fail-on high+] [--max-findings N] [--baseline <scan-id-or-sarif>] [--save-baseline <file>] [--gate-analyzer <ids>] [--gate-category <categories>] [--jobs N] [--incremental] [--github-cap N] [--watch] [--watch-poll <interval>] [--watch-quiet <window>]"
 
 // The stdout report formats of `bluntcode scan`. text (the default) keeps the
 // historical human summary; json prints the full versioned JSON report

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -31,5 +32,34 @@ func TestParseScanFlagsGithubCapValidation(t *testing.T) {
 	}
 	if _, err := parseScanFlags([]string{"--format", "github", "--github-cap", "99", `C:\proj`}, &errOut); err == nil {
 		t.Fatalf("cap above 50 must be rejected")
+	}
+}
+
+// TestScanUsageAndManualDocumentEveryScanFlag is the flag-contract test: the
+// FlagSet's own defaults dump is ground truth for accepted flags, and every
+// one of them must appear in both the usage line and the CLI manual's scan
+// section so the interactive manual can never drift from the parser again.
+func TestScanUsageAndManualDocumentEveryScanFlag(t *testing.T) {
+	var errOut bytes.Buffer
+	if _, err := parseScanFlags([]string{"-h"}, &errOut); err == nil {
+		t.Fatal("-h must surface flag.ErrHelp, not parse successfully")
+	}
+	names := regexp.MustCompile(`(?m)^\s+-([a-z][a-z0-9-]+)`).FindAllStringSubmatch(errOut.String(), -1)
+	if len(names) < 15 {
+		t.Fatalf("expected the full scan flag set in the defaults dump, got %d flags:\n%s", len(names), errOut.String())
+	}
+	var stdout, stderr bytes.Buffer
+	if code := runCLIDocs([]string{"scan"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("runCLIDocs(scan) returned %d", code)
+	}
+	manual := stdout.String()
+	for _, match := range names {
+		name := match[1]
+		if !strings.Contains(scanUsage, "--"+name) {
+			t.Errorf("flag --%s is accepted by parseScanFlags but missing from scanUsage", name)
+		}
+		if !strings.Contains(manual, "--"+name) {
+			t.Errorf("flag --%s is accepted by parseScanFlags but missing from the CLI manual scan section", name)
+		}
 	}
 }

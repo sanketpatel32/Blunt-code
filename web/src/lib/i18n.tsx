@@ -248,7 +248,7 @@ const hi: Dict = {
   'common.noAccount': 'कोई खाता नहीं। कोई टेलीमेट्री नहीं।',
 };
 
-const dictionaries: Record<Locale, Dict> = { en, es, fr, de, ja, hi };
+export const dictionaries: Record<Locale, Dict> = { en, es, fr, de, ja, hi };
 
 function resolveLocale(raw: string | null): Locale {
   if (raw === 'es' || raw === 'fr' || raw === 'de' || raw === 'ja' || raw === 'hi' || raw === 'en') return raw;

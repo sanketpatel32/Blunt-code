@@ -2,11 +2,11 @@
 
 > Blunt Code is a local-first code quality & security analyzer for Windows. One `bluntcode.exe` runs Ruff, Biome, Gitleaks, Semgrep, SonarQube, OSV Scanner, Trivy, Checkov, License Scanner, Pentest Suite, plus built-in secrets/TODO detectors on loopback 127.0.0.1 (no cloud, no telemetry). Use headless `bluntcode scan` for automation/CI.
 
-- **Version:** 0.16.21 (2026-09-02)
+- **Version:** 0.22.0 (2026-09-06)
 - **Repo:** https://github.com/sanketpatel32/Blunt-code
 - **Platform:** Windows 10/11 amd64, standard user, no admin, no global Python/Java/Node
 - **License:** MIT (`LICENSE`), third-party notices (`THIRD_PARTY_NOTICES.md`)
-- **Latest release ZIP:** `BluntCode-0.16.21-windows-amd64.zip` + `.sha256`
+- **Latest release ZIP:** `BluntCode-0.22.0-windows-amd64.zip` + `.sha256`
 
 ## When to use Blunt Code (agent decision tree)
 
