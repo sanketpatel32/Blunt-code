@@ -131,28 +131,28 @@ func (s *Service) snapshot(ctx context.Context, work core.Workspace, profile str
 	}
 	sort.Strings(analyzerIDs)
 	return &core.ScanSnapshot{
-		WorkspaceID:             work.ID,
-		WorkspaceRoot:           work.RootPath,
-		WorkspaceName:           work.Name,
-		BluntCodeVersion:        bluntCodeVersion,
-		Profile:                 profile,
-		CandidateFileCount:      len(files),
-		SelectedFileCount:       len(selectedFiles),
-		SelectedFiles:           selectedFiles,
-		Languages:               languages,
-		Rules:                   rules,
-		Exclusions:              append([]string(nil), excludes...),
-		PathOverrides:           overrides,
-		EnabledAnalyzers:        analyzerIDs,
-		AnalyzerVersions:        analyzerVersions,
-		SkipCounts:              skipCounts,
-		DependencyInputs:        dependencyInputs,
-		DependencyDigest:        dependencyDigest(dependencyInputs),
-		ConfigDigest:            configDigest(rules, excludes, overrides),
-		DiscoveryPolicyVersion:  discovery.PolicyVersion,
-		FingerprintVersion:      analyzers.FingerprintVersion,
-		Platform:                platformSnapshot(),
-		Git:                     gitSnapshot(ctx, work.RootPath),
+		WorkspaceID:            work.ID,
+		WorkspaceRoot:          work.RootPath,
+		WorkspaceName:          work.Name,
+		BluntCodeVersion:       bluntCodeVersion,
+		Profile:                profile,
+		CandidateFileCount:     len(files),
+		SelectedFileCount:      len(selectedFiles),
+		SelectedFiles:          selectedFiles,
+		Languages:              languages,
+		Rules:                  rules,
+		Exclusions:             append([]string(nil), excludes...),
+		PathOverrides:          overrides,
+		EnabledAnalyzers:       analyzerIDs,
+		AnalyzerVersions:       analyzerVersions,
+		SkipCounts:             skipCounts,
+		DependencyInputs:       dependencyInputs,
+		DependencyDigest:       dependencyDigest(dependencyInputs),
+		ConfigDigest:           configDigest(rules, excludes, overrides),
+		DiscoveryPolicyVersion: discovery.PolicyVersion,
+		FingerprintVersion:     analyzers.FingerprintVersion,
+		Platform:               platformSnapshot(),
+		Git:                    gitSnapshot(ctx, work.RootPath),
 	}
 }
 
@@ -240,14 +240,16 @@ func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, 
 	}
 	// An incremental scan reuses the previous completed scan's findings for
 	// unchanged files; prepareIncremental degrades to nil (a full scan) on
-	// every refusal path, logging why.
+	// every refusal path, logging why. File-scope analyzers re-run on the
+	// changed subset only; workspace-scope walkers re-run on the full
+	// selection whenever anything changed (see scanRouting).
 	var incremental *incrementalState
+	routing := fullRouting(filesByLanguage)
 	if opts.Incremental {
 		incremental = s.prepareIncremental(ctx, scan, work, files, fileHashes, filesByLanguage)
-	}
-	analyzerFilesByLanguage := filesByLanguage
-	if incremental != nil {
-		analyzerFilesByLanguage = incremental.changedByLanguage
+		if incremental != nil {
+			routing = scanRouting{files: incremental.changedByLanguage, full: filesByLanguage, incremental: true, anyChange: incremental.changedCount > 0}
+		}
 	}
 	// Analyzers run either sequentially (the historical default, jobs < 1) or
 	// with at most jobs runs in flight (jobs >= 1). Both drivers share the
@@ -257,19 +259,26 @@ func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, 
 	if jobs := opts.Jobs; jobs >= 1 {
 		// A recovered worker panic fails the scan exactly like the run-level
 		// recover below does for sequential scans.
-		if panicValue := s.runAnalyzersBounded(ctx, scan, work, languages, analyzerFilesByLanguage, counters, jobs, deselect); panicValue != "" {
+		if panicValue := s.runAnalyzersBounded(ctx, scan, work, languages, routing, counters, jobs, deselect); panicValue != "" {
 			_ = s.db.UpdateScanState(context.Background(), scan.ID, "failed", fmt.Sprintf("Internal scan error: %v", panicValue))
 			s.emit(scan.ID, "scan.completed", map[string]any{"state": "failed"})
 			return
 		}
-	} else if !s.runAnalyzersSequential(ctx, scan, work, languages, analyzerFilesByLanguage, counters, deselect) {
+	} else if !s.runAnalyzersSequential(ctx, scan, work, languages, routing, counters, deselect) {
 		return
 	}
 	// Copy the previous scan's findings for unchanged files into this scan
 	// before totals, the report, and the comparison are computed, so an
-	// incremental scan is indistinguishable from a full one downstream.
+	// incremental scan is indistinguishable from a full one downstream. The
+	// reuse manifest lands on the snapshot: reports and the API can state
+	// what was reused instead of implying full coverage.
 	if incremental != nil {
-		s.finishIncremental(scan, incremental, counters)
+		if manifest := s.finishIncremental(scan, incremental, counters); manifest != nil && scan.Snapshot != nil {
+			scan.Snapshot.Incremental = manifest
+			if err := s.db.SaveScanSnapshot(context.Background(), scan.ID, scan.Snapshot); err != nil {
+				log.Printf("incremental: could not record the reuse manifest for scan %s (%v)", scan.ID, err)
+			}
+		}
 	}
 	successful, failed, warned := counters.snapshot()
 	state := "completed"
@@ -544,6 +553,7 @@ func (s *Service) writeReport(scan core.Scan, work core.Workspace, files []core.
 			FingerprintVersion:     snapshot.FingerprintVersion,
 			Platform:               snapshot.Platform,
 			DriftDetected:          snapshot.DriftDetected,
+			Incremental:            snapshot.Incremental,
 		}
 	}
 	markdown := reports.Markdown(reports.Build(reports.Input{WorkspaceName: work.Name, WorkspacePath: work.RootPath, ScanID: scan.ID, Profile: scan.Profile, StartedAt: startedAt, Files: selected, SkippedFiles: skipped, Findings: findings, Metrics: metrics, Runs: runs, Comparison: comparison, Provenance: provenance}))

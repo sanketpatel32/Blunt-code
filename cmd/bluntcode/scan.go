@@ -689,6 +689,7 @@ func buildScanReportModel(ctx context.Context, db *database.DB, work core.Worksp
 			FingerprintVersion:     snapshot.FingerprintVersion,
 			Platform:               snapshot.Platform,
 			DriftDetected:          snapshot.DriftDetected,
+			Incremental:            snapshot.Incremental,
 		}
 	}
 	if len(files) == 0 && scan.SelectedFileCount > 0 {

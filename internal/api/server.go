@@ -1997,9 +1997,21 @@ func (s *Server) reportModel(ctx context.Context, scan core.Scan, work core.Work
 	}
 	files := []string(nil)
 	bluntCodeVersion := ""
+	var provenance *reports.Provenance
 	if scan.Snapshot != nil {
 		files = append(files, scan.Snapshot.SelectedFiles...)
 		bluntCodeVersion = scan.Snapshot.BluntCodeVersion
+		provenance = &reports.Provenance{
+			InputDigest:            scan.Snapshot.InputDigest,
+			ConfigDigest:           scan.Snapshot.ConfigDigest,
+			GitCommit:              scan.Snapshot.Git.Commit,
+			GitDirty:               scan.Snapshot.Git.Dirty,
+			DiscoveryPolicyVersion: scan.Snapshot.DiscoveryPolicyVersion,
+			FingerprintVersion:     scan.Snapshot.FingerprintVersion,
+			Platform:               scan.Snapshot.Platform,
+			DriftDetected:          scan.Snapshot.DriftDetected,
+			Incremental:            scan.Snapshot.Incremental,
+		}
 	}
 	if len(files) == 0 && scan.SelectedFileCount > 0 {
 		files = make([]string, scan.SelectedFileCount)
@@ -2011,7 +2023,8 @@ func (s *Server) reportModel(ctx context.Context, scan core.Scan, work core.Work
 	return reports.Build(reports.Input{
 		WorkspaceName: work.Name, WorkspacePath: work.RootPath, ScanID: scan.ID, Profile: scan.Profile, State: scan.State, BluntCodeVersion: bluntCodeVersion,
 		StartedAt: startedAtValue(startedAt), FinishedAt: finishedAtValue(scan.FinishedAt), Files: files, SkippedFiles: make([]string, skippedCount), Findings: findings, Metrics: metrics, Runs: runs,
-		Comparison: reports.Comparison{New: comparison.New, Fixed: comparison.Fixed, Persistent: comparison.Persistent, NotEvaluatedAnalyzerIDs: comparison.NotEvaluatedAnalyzerIDs},
+		Comparison:  reports.Comparison{New: comparison.New, Fixed: comparison.Fixed, Persistent: comparison.Persistent, NotEvaluatedAnalyzerIDs: comparison.NotEvaluatedAnalyzerIDs},
+		Provenance:  provenance,
 	}), nil
 }
 

@@ -42,15 +42,23 @@ import (
 // upgrades that should have invalidated reuse and mislabeling reports.
 const bluntCodeVersion = build.Version
 
-// scanHashIdentity is the analyzer configuration a set of file hashes was
+// scanHashIdentity is the complete configuration a set of file hashes was
 // produced under. Any difference between two scans' identities - a changed
-// analyzer version, a different profile (deep widens ruff's rule set), or a
-// new Blunt Code build - means the previous findings may not reproduce, so
-// reuse is refused and every file re-runs.
+// analyzer version, a different profile (deep widens ruff's rule set), a new
+// Blunt Code build, changed rules/exclusions/overrides (ConfigDigest),
+// changed dependency manifests (DependencyDigest), a discovery-classifier
+// change (DiscoveryPolicyVersion), or a finding-identity schema change
+// (FingerprintVersion) - means the previous findings may not reproduce, so
+// reuse is refused and every file re-runs. The bundled semgrep rulepack ships
+// with the build, so BluntCodeVersion covers rule updates too.
 type scanHashIdentity struct {
-	BluntCodeVersion string            `json:"bluntcode_version"`
-	Profile          string            `json:"profile"`
-	Analyzers        map[string]string `json:"analyzers"`
+	BluntCodeVersion       string            `json:"bluntcode_version"`
+	Profile                string            `json:"profile"`
+	Analyzers              map[string]string `json:"analyzers"`
+	ConfigDigest           string            `json:"config_digest,omitempty"`
+	DependencyDigest       string            `json:"dependency_digest,omitempty"`
+	DiscoveryPolicyVersion int               `json:"discovery_policy_version,omitempty"`
+	FingerprintVersion     int               `json:"fingerprint_version,omitempty"`
 }
 
 // incrementalState is the prepared plan of one incremental scan. active is
@@ -153,10 +161,19 @@ func profileAllowsAnalyzer(profile, analyzerID string) bool {
 // behind.
 func (s *Service) selectedAnalyzerIdentity(scan core.Scan, filesByLanguage map[analyzers.Language][]string) (scanHashIdentity, bool) {
 	versions := map[string]string{}
+	identity := scanHashIdentity{BluntCodeVersion: bluntCodeVersion, Profile: scan.Profile, Analyzers: map[string]string{}}
 	if scan.Snapshot != nil {
 		versions = scan.Snapshot.AnalyzerVersions
+		// The provenance fields (IMP-07) become reuse-eligibility inputs
+		// (IMP-09): findings are only comparable when the shaping config,
+		// dependency set, and schema versions match. Their omission in a
+		// snapshot predating IMP-07 leaves them empty here, which mismatches
+		// any modern identity and correctly forces a full scan.
+		identity.ConfigDigest = scan.Snapshot.ConfigDigest
+		identity.DependencyDigest = scan.Snapshot.DependencyDigest
+		identity.DiscoveryPolicyVersion = scan.Snapshot.DiscoveryPolicyVersion
+		identity.FingerprintVersion = scan.Snapshot.FingerprintVersion
 	}
-	identity := scanHashIdentity{BluntCodeVersion: bluntCodeVersion, Profile: scan.Profile, Analyzers: map[string]string{}}
 	for _, adapter := range s.registry.All() {
 		if !profileAllowsAnalyzer(scan.Profile, adapter.ID()) {
 			continue
@@ -264,6 +281,15 @@ func (s *Service) prepareIncremental(ctx context.Context, scan core.Scan, work c
 		if len(filesForLanguages(state.changedByLanguage, adapter.SupportedLanguages()...)) > 0 {
 			state.changedForAnalyzer[adapter.ID()] = true
 		}
+		// Workspace-scope analyzers (directory walkers, managed-server
+		// project scans) cannot have their cross-file impact modeled from
+		// routed languages alone: their output depends on the whole tree, so
+		// any change anywhere re-runs them. scanRouting hands them the full
+		// selection; this flag keeps a failed walker from having stale
+		// findings copied forward as if its result were still authoritative.
+		if analyzers.ReusesWorkspaceScope(adapter.ID()) && state.changedCount > 0 {
+			state.changedForAnalyzer[adapter.ID()] = true
+		}
 	}
 
 	previousFindings, err := s.db.Findings(ctx, previousID)
@@ -294,8 +320,11 @@ func (s *Service) prepareIncremental(ctx context.Context, scan core.Scan, work c
 // subset and copies the previous scan's findings for unchanged files into the
 // new scan:
 //
-//   - an analyzer that ran and succeeded gets its reused findings appended to
-//     the real run (finding counts updated; runs stay honest);
+//   - a file-scope analyzer that ran and succeeded gets its reused findings
+//     appended to the real run (finding counts updated; runs stay honest);
+//   - a workspace-scope analyzer that ran already rescanned the entire tree,
+//     so its fresh output is authoritative for everything — appending reused
+//     findings on top would double-count every unchanged finding;
 //   - an analyzer with zero changed files never re-ran, so its entire result
 //     set (including path-less project findings and metrics) is copied forward
 //     under a zero-duration succeeded run - the run row is what keeps the
@@ -304,11 +333,19 @@ func (s *Service) prepareIncremental(ctx context.Context, scan core.Scan, work c
 //     full scan.
 //
 // Fully-reused analyzers are marked succeeded so an unchanged workspace still
-// completes (a full scan of it would too).
-func (s *Service) finishIncremental(scan core.Scan, state *incrementalState, counters *scanCounters) {
+// completes (a full scan of it would too). The returned manifest records what
+// was reused versus freshly evaluated (persisted on the snapshot).
+func (s *Service) finishIncremental(scan core.Scan, state *incrementalState, counters *scanCounters) *core.IncrementalReuse {
+	manifest := &core.IncrementalReuse{ReusedFromScanID: state.previousID, ReusedFileCount: len(state.unchanged), ChangedFileCount: state.changedCount}
 	for _, analyzerID := range state.identityAnalyzers {
 		reused := state.reusedFindings[analyzerID]
 		if counters.succeeded(analyzerID) {
+			manifest.RanAnalyzers = append(manifest.RanAnalyzers, analyzerID)
+			if analyzers.ReusesWorkspaceScope(analyzerID) {
+				// The walker's fresh run covered the whole workspace;
+				// anything copied on top would be a duplicate.
+				continue
+			}
 			if len(reused) == 0 {
 				continue
 			}
@@ -335,8 +372,10 @@ func (s *Service) finishIncremental(scan core.Scan, state *incrementalState, cou
 			continue
 		}
 		counters.markSucceeded(analyzerID)
+		manifest.ReusedAnalyzers = append(manifest.ReusedAnalyzers, analyzerID)
 		s.emit(scan.ID, "analyzer.completed", map[string]any{"analyzer_id": analyzerID, "findings": len(reused), "reused": true})
 	}
+	return manifest
 }
 
 // analyzerRunInputForReuse shapes the run row for a fully-reused analyzer: a

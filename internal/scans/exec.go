@@ -115,18 +115,45 @@ func scanDependencyInputs(scan core.Scan) []string {
 	return scan.Snapshot.DependencyInputs
 }
 
+// scanRouting carries the two file views an incremental scan produces: the
+// changed-file subset that file-scope analyzers re-analyze, and the full
+// selection. A full scan has both views identical. Workspace-scope analyzers
+// (directory walkers, managed-server project scans) always rescan the whole
+// tree, so once anything changed they get the full selection — handing them
+// the subset would only misreport their inputs, and their fresh output is
+// authoritative for the entire workspace either way.
+type scanRouting struct {
+	files       map[analyzers.Language][]string
+	full        map[analyzers.Language][]string
+	incremental bool
+	anyChange   bool
+}
+
+// fullRouting is the routing of a non-incremental scan.
+func fullRouting(filesByLanguage map[analyzers.Language][]string) scanRouting {
+	return scanRouting{files: filesByLanguage, full: filesByLanguage}
+}
+
+// forAnalyzer picks the file view one adapter should receive.
+func (r scanRouting) forAnalyzer(analyzerID string) map[analyzers.Language][]string {
+	if r.incremental && r.anyChange && analyzers.ReusesWorkspaceScope(analyzerID) {
+		return r.full
+	}
+	return r.files
+}
+
 // executeAnalyzer runs the full pipeline for one adapter: language gating,
 // profile filtering, tool readiness (with managed installation), planning,
 // execution, normalization, persistence, and events. It is the exact body the
 // sequential loop historically ran inline, extracted so the bounded driver can
 // share it; the loop's continue/return statements became outcome returns.
-func (s *Service) executeAnalyzer(ctx context.Context, scan core.Scan, work core.Workspace, languages []analyzers.Language, filesByLanguage map[analyzers.Language][]string, adapter analyzers.Analyzer, counters *scanCounters, deselect func(string) bool) analyzerOutcome {
+func (s *Service) executeAnalyzer(ctx context.Context, scan core.Scan, work core.Workspace, languages []analyzers.Language, routing scanRouting, adapter analyzers.Analyzer, counters *scanCounters, deselect func(string) bool) analyzerOutcome {
 	// Each adapter is handed only the selected files whose language it
 	// supports. Gating on the workspace language list alone was not
 	// enough: a mixed-language workspace used to pass every file to
 	// every analyzer, so ruff received minified JavaScript and failed
 	// parsing it as Python.
-	adapterFiles := filesForLanguages(filesByLanguage, adapter.SupportedLanguages()...)
+	adapterFiles := filesForLanguages(routing.forAnalyzer(adapter.ID()), adapter.SupportedLanguages()...)
 	if len(adapterFiles) == 0 {
 		// Dependency-driven adapters (osv, trivy) key off dependency inputs,
 		// not source languages: a workspace whose only dependency signal is a
@@ -251,13 +278,13 @@ func (s *Service) executeAnalyzer(ctx context.Context, scan core.Scan, work core
 // observed between runs or right after a run stops the whole scan. It returns
 // false when the scan was cancelled; the scan is already marked cancelled, so
 // the caller must stop without writing a report.
-func (s *Service) runAnalyzersSequential(ctx context.Context, scan core.Scan, work core.Workspace, languages []analyzers.Language, filesByLanguage map[analyzers.Language][]string, counters *scanCounters, deselect func(string) bool) bool {
+func (s *Service) runAnalyzersSequential(ctx context.Context, scan core.Scan, work core.Workspace, languages []analyzers.Language, routing scanRouting, counters *scanCounters, deselect func(string) bool) bool {
 	for _, adapter := range s.registry.All() {
 		if ctx.Err() != nil {
 			s.finishCancelled(scan.ID)
 			return false
 		}
-		if s.executeAnalyzer(ctx, scan, work, languages, filesByLanguage, adapter, counters, deselect) == analyzerAborted {
+		if s.executeAnalyzer(ctx, scan, work, languages, routing, adapter, counters, deselect) == analyzerAborted {
 			s.finishCancelled(scan.ID)
 			return false
 		}
@@ -271,7 +298,7 @@ func (s *Service) runAnalyzersSequential(ctx context.Context, scan core.Scan, wo
 // contexts and skip persisting their results. The return value is the message
 // of a recovered adapter panic (empty when none panicked): the caller fails
 // the scan with it, mirroring what run()'s recover does for sequential scans.
-func (s *Service) runAnalyzersBounded(ctx context.Context, scan core.Scan, work core.Workspace, languages []analyzers.Language, filesByLanguage map[analyzers.Language][]string, counters *scanCounters, jobs int, deselect func(string) bool) string {
+func (s *Service) runAnalyzersBounded(ctx context.Context, scan core.Scan, work core.Workspace, languages []analyzers.Language, routing scanRouting, counters *scanCounters, jobs int, deselect func(string) bool) string {
 	sem := make(chan struct{}, jobs)
 	var wg sync.WaitGroup
 	var panicValue atomic.Value
@@ -293,7 +320,7 @@ func (s *Service) runAnalyzersBounded(ctx context.Context, scan core.Scan, work 
 				return
 			}
 			defer func() { <-sem }()
-			s.executeAnalyzer(ctx, scan, work, languages, filesByLanguage, adapter, counters, deselect)
+			s.executeAnalyzer(ctx, scan, work, languages, routing, adapter, counters, deselect)
 		}()
 	}
 	wg.Wait()

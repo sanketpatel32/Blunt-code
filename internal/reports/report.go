@@ -3,11 +3,13 @@
 package reports
 
 import (
-	"bluntcode/internal/analyzers"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
+
+	"bluntcode/internal/analyzers"
+	"bluntcode/internal/core"
 )
 
 type Run struct {
@@ -58,6 +60,9 @@ type Provenance struct {
 	FingerprintVersion     int
 	Platform               map[string]string
 	DriftDetected          bool
+	// Incremental states what an incremental scan reused versus freshly
+	// evaluated; nil on full scans.
+	Incremental *core.IncrementalReuse
 }
 type Model struct {
 	Input

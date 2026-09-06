@@ -46,15 +46,15 @@ type Suppression struct {
 }
 
 type Scan struct {
-	ID                 string        `json:"id"`
-	WorkspaceID        string        `json:"workspace_id"`
-	State              string        `json:"state"`
-	Profile            string        `json:"profile"`
-	StartedAt          *time.Time    `json:"started_at,omitempty"`
-	FinishedAt         *time.Time    `json:"finished_at,omitempty"`
-	CandidateFileCount int           `json:"candidate_file_count"`
-	SelectedFileCount  int           `json:"selected_file_count"`
-	TotalFindings      int           `json:"total_findings"`
+	ID                 string     `json:"id"`
+	WorkspaceID        string     `json:"workspace_id"`
+	State              string     `json:"state"`
+	Profile            string     `json:"profile"`
+	StartedAt          *time.Time `json:"started_at,omitempty"`
+	FinishedAt         *time.Time `json:"finished_at,omitempty"`
+	CandidateFileCount int        `json:"candidate_file_count"`
+	SelectedFileCount  int        `json:"selected_file_count"`
+	TotalFindings      int        `json:"total_findings"`
 	// Severity split persisted once by CompleteScan; zero until the scan
 	// finishes. Suppressed findings are excluded, so the split can disagree
 	// with a raw findings query on the same scan.
@@ -64,8 +64,8 @@ type Scan struct {
 	LowCount      int           `json:"low_count"`
 	InfoCount     int           `json:"info_count"`
 	ErrorSummary  string        `json:"error_summary,omitempty"`
-	Snapshot           *ScanSnapshot `json:"snapshot,omitempty"`
-	SnapshotJSON       string        `json:"-"`
+	Snapshot      *ScanSnapshot `json:"snapshot,omitempty"`
+	SnapshotJSON  string        `json:"-"`
 }
 
 // ScanSnapshot is captured once, before any analyzer is started. It is kept
@@ -117,7 +117,28 @@ type ScanSnapshot struct {
 	// DriftDetected marks a scan whose workspace content changed between
 	// start and completion; its results may mix two versions of the tree.
 	DriftDetected bool `json:"drift_detected,omitempty"`
-	Git           ScanGitSnapshot `json:"git"`
+	// Incremental records what an incremental scan reused versus freshly
+	// evaluated; nil on full scans. It is the machine-readable counterpart of
+	// the scan note and lets reports state reuse instead of implying full
+	// coverage.
+	Incremental *IncrementalReuse `json:"incremental,omitempty"`
+	Git         ScanGitSnapshot   `json:"git"`
+}
+
+// IncrementalReuse is the reuse manifest of one incremental scan: which
+// previous scan findings were copied from, how the selected files split into
+// reused and re-analyzed, and which analyzers were copied wholesale (never
+// re-ran) versus re-executed.
+type IncrementalReuse struct {
+	ReusedFromScanID string `json:"reused_from_scan_id"`
+	ReusedFileCount  int    `json:"reused_file_count"`
+	ChangedFileCount int    `json:"changed_file_count"`
+	// ReusedAnalyzers did not re-run at all: their entire result set
+	// (findings, project findings, metrics) was copied forward.
+	ReusedAnalyzers []string `json:"reused_analyzers,omitempty"`
+	// RanAnalyzers executed fresh this scan (their unchanged-file findings
+	// may still have been appended when reuse scope is per-file).
+	RanAnalyzers []string `json:"ran_analyzers,omitempty"`
 }
 
 type ScanGitSnapshot struct {

@@ -57,6 +57,27 @@ const (
 	TimeoutSonar = "sonar"
 )
 
+// ReuseScope declares the granularity at which incremental reuse is sound for
+// one analyzer (IMP-09). It decides what the orchestrator may copy forward
+// and what must re-run when only some files changed.
+type ReuseScope string
+
+const (
+	// ReuseScopeFile: findings attach to the exact files handed to the
+	// analyzer, so a run over a changed subset is authoritative for exactly
+	// that subset. Findings on unchanged files may be copied forward from the
+	// previous scan and merged into the fresh run.
+	ReuseScopeFile ReuseScope = "file"
+	// ReuseScopeWorkspace: the analyzer walks the whole workspace root no
+	// matter which files it was handed (directory walkers, managed-server
+	// project scans, dependency scanners), so any run is authoritative for
+	// the entire tree. Two consequences: a re-run's fresh output must never
+	// have unchanged-file findings appended on top (they would double), and
+	// any change in the workspace re-runs the analyzer, because which files
+	// influence its output cannot be modeled from its routed languages alone.
+	ReuseScopeWorkspace ReuseScope = "workspace"
+)
+
 type Capability struct {
 	ID          string        `json:"id"`
 	DisplayName string        `json:"display_name"`
@@ -79,7 +100,11 @@ type Capability struct {
 	KeepArtifactFindings bool `json:"keep_artifact_findings"`
 	// TimeoutClass routes the per-analyzer deadline.
 	TimeoutClass string `json:"timeout_class"`
-	Description  string `json:"description"`
+	// Reuse declares the incremental-reuse granularity; empty means the
+	// per-file default. Workspace-scope analyzers re-run on any workspace
+	// change and never have unchanged findings appended after a fresh run.
+	Reuse       ReuseScope `json:"reuse_scope,omitempty"`
+	Description string     `json:"description"`
 }
 
 // capabilityOrder is the presentation order (registry order).
@@ -107,32 +132,32 @@ var capabilityTable = map[string]Capability{
 		ID: "gitleaks-secrets", DisplayName: "Gitleaks", Category: "secrets",
 		Execution: ExecutionExternal, Profiles: []string{ProfileStandard, ProfileDeep, ProfilePentest},
 		InputKinds: []InputKind{InputSource}, ManagedTool: "gitleaks-secrets",
-		Network: NetworkNone, KeepArtifactFindings: true, TimeoutClass: TimeoutFast,
+		Network: NetworkNone, KeepArtifactFindings: true, TimeoutClass: TimeoutFast, Reuse: ReuseScopeWorkspace,
 		Description: "Committed-credential detector that walks the whole workspace on disk (no git history; --no-git).",
 	},
 	"osv-dependencies": {
 		ID: "osv-dependencies", DisplayName: "OSV Scanner", Category: "dependencies",
 		Execution: ExecutionExternal, Profiles: []string{ProfileDeep},
 		InputKinds: []InputKind{InputDependencies}, ManagedTool: "osv-dependencies",
-		Network:     NetworkOutbound,
-		NetworkNote: "Queries the OSV.dev API at scan time unless offline vulnerability databases are provisioned (offline mode fails readiness instead of dialing out).",
-		TimeoutClass: TimeoutFast,
+		Network:      NetworkOutbound,
+		NetworkNote:  "Queries the OSV.dev API at scan time unless offline vulnerability databases are provisioned (offline mode fails readiness instead of dialing out).",
+		TimeoutClass: TimeoutFast, Reuse: ReuseScopeWorkspace,
 		Description: "Dependency vulnerability scanner over lockfiles and manifests; deep scans only.",
 	},
 	"container-trivy": {
 		ID: "container-trivy", DisplayName: "Trivy", Category: "dependencies",
 		Execution: ExecutionExternal, Profiles: []string{ProfileDeep},
 		InputKinds: []InputKind{InputDependencies, InputIaC}, ManagedTool: "container-trivy",
-		Network:     NetworkOutbound,
-		NetworkNote: "Downloads its vulnerability database on a cold cache at scan time; warm caches and offline mode scan locally (offline mode fails readiness when the database was never provisioned).",
-		TimeoutClass: TimeoutFast,
+		Network:      NetworkOutbound,
+		NetworkNote:  "Downloads its vulnerability database on a cold cache at scan time; warm caches and offline mode scan locally (offline mode fails readiness when the database was never provisioned).",
+		TimeoutClass: TimeoutFast, Reuse: ReuseScopeWorkspace,
 		Description: "Filesystem scanner for dependency vulnerabilities, secrets, and misconfigurations; deep scans only.",
 	},
 	"iac-checkov": {
 		ID: "iac-checkov", DisplayName: "Checkov", Category: "infrastructure",
 		Execution: ExecutionExternal, Profiles: []string{ProfileDeep},
 		InputKinds: []InputKind{InputIaC}, ManagedTool: "iac-checkov",
-		Network: NetworkNone, TimeoutClass: TimeoutFast,
+		Network: NetworkNone, TimeoutClass: TimeoutFast, Reuse: ReuseScopeWorkspace,
 		Description: "Infrastructure-as-code policy checks (Terraform, Dockerfile, Kubernetes, CloudFormation); deep scans only.",
 	},
 	"semgrep": {
@@ -146,37 +171,37 @@ var capabilityTable = map[string]Capability{
 		ID: "sonarqube", DisplayName: "SonarQube", Category: "code-quality",
 		Execution: ExecutionManagedServer, Profiles: []string{ProfileStandard, ProfileDeep, ProfilePentest},
 		InputKinds: []InputKind{InputSource}, ManagedTool: "sonarqube",
-		Network: NetworkLoopbackOnly,
-		NetworkNote: "Talks to the locally managed SonarQube server it starts on a dynamic loopback port; never an external host.",
-		TimeoutClass: TimeoutSonar,
+		Network:      NetworkLoopbackOnly,
+		NetworkNote:  "Talks to the locally managed SonarQube server it starts on a dynamic loopback port; never an external host.",
+		TimeoutClass: TimeoutSonar, Reuse: ReuseScopeWorkspace,
 		Description: "Managed SonarQube Community Build with a private scanner over Python, JavaScript, and TypeScript.",
 	},
 	"pentest": {
 		ID: "pentest", DisplayName: "Pentest & Vulnerability Suite", Category: "security",
 		Execution: ExecutionInProcess, Profiles: []string{ProfileStandard, ProfileDeep, ProfilePentest},
 		InputKinds: []InputKind{InputSource},
-		Network: NetworkNone, TimeoutClass: TimeoutFast,
+		Network:    NetworkNone, TimeoutClass: TimeoutFast,
 		Description: "Static pass for exploitable patterns (injection sinks, weak crypto, debug endpoints). Dynamic probes are a separate, explicitly targeted operation.",
 	},
 	"secrets": {
 		ID: "secrets", DisplayName: "Secrets Detector", Category: "secrets",
 		Execution: ExecutionInProcess, Profiles: []string{ProfileStandard, ProfileDeep, ProfilePentest},
 		InputKinds: []InputKind{InputSource},
-		Network: NetworkNone, KeepArtifactFindings: true, TimeoutClass: TimeoutFast,
+		Network:    NetworkNone, KeepArtifactFindings: true, TimeoutClass: TimeoutFast,
 		Description: "Built-in credential detector over the selected files (40+ languages) with entropy floors and placeholder rejection.",
 	},
 	"todo": {
 		ID: "todo", DisplayName: "TODO Comment Tracker", Category: "maintainability",
 		Execution: ExecutionInProcess, Profiles: []string{ProfileStandard, ProfileDeep, ProfilePentest},
 		InputKinds: []InputKind{InputSource},
-		Network: NetworkNone, TimeoutClass: TimeoutFast,
+		Network:    NetworkNone, TimeoutClass: TimeoutFast,
 		Description: "Counts TODO/FIXME debt with owner and ticket attribution from comments.",
 	},
 	"license-scan": {
 		ID: "license-scan", DisplayName: "License Scanner", Category: "compliance",
 		Execution: ExecutionInProcess, Profiles: []string{ProfileStandard, ProfileDeep, ProfilePentest},
 		InputKinds: []InputKind{InputLicenseFiles, InputDependencies},
-		Network: NetworkNone, TimeoutClass: TimeoutFast,
+		Network:    NetworkNone, TimeoutClass: TimeoutFast,
 		Description: "License identification from license files and package manifests (SPDX normalization, policy flags).",
 	},
 }
@@ -254,4 +279,20 @@ func TimeoutClassFor(analyzerID string) string {
 		return cap.TimeoutClass
 	}
 	return TimeoutFast
+}
+
+// ReuseScopeFor reports the incremental-reuse granularity of an analyzer.
+// Unknown ids and undeclared adapters keep the per-file default, which is both
+// the historical behavior and the safe default for test fixtures.
+func ReuseScopeFor(analyzerID string) ReuseScope {
+	if cap, ok := capabilityTable[analyzerID]; ok && cap.Reuse != "" {
+		return cap.Reuse
+	}
+	return ReuseScopeFile
+}
+
+// ReusesWorkspaceScope reports whether an analyzer walks the whole workspace
+// regardless of the file list it was handed.
+func ReusesWorkspaceScope(analyzerID string) bool {
+	return ReuseScopeFor(analyzerID) == ReuseScopeWorkspace
 }

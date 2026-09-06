@@ -107,6 +107,13 @@ func scanDetails(b *strings.Builder, m Model) {
 		if p.DriftDetected {
 			detailRow(b, "Input drift", "DETECTED — workspace changed during the scan")
 		}
+		if reuse := p.Incremental; reuse != nil {
+			detail := fmt.Sprintf("reused %d unchanged file(s) from scan %s, re-analyzed %d changed file(s)", reuse.ReusedFileCount, shortDigest(reuse.ReusedFromScanID), reuse.ChangedFileCount)
+			if len(reuse.ReusedAnalyzers) > 0 {
+				detail += fmt.Sprintf("; copied wholesale: %s", strings.Join(reuse.ReusedAnalyzers, ", "))
+			}
+			detailRow(b, "Incremental reuse", detail)
+		}
 	}
 	b.WriteString("\n")
 }

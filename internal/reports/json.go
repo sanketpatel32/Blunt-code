@@ -56,6 +56,12 @@ type jsonScan struct {
 	PlatformOS             string `json:"platform_os,omitempty"`
 	PlatformArch           string `json:"platform_arch,omitempty"`
 	DriftDetected          bool   `json:"drift_detected,omitempty"`
+	// Incremental reuse manifest (additive); absent on full scans.
+	IncrementalReusedFrom       string   `json:"incremental_reused_from_scan_id,omitempty"`
+	IncrementalReusedFileCount  int      `json:"incremental_reused_files,omitempty"`
+	IncrementalChangedFileCount int      `json:"incremental_changed_files,omitempty"`
+	IncrementalReusedAnalyzers  []string `json:"incremental_reused_analyzers,omitempty"`
+	IncrementalRanAnalyzers     []string `json:"incremental_ran_analyzers,omitempty"`
 }
 type jsonFiles struct {
 	Candidate int `json:"candidate"`
@@ -144,6 +150,17 @@ func jsonScanFromModel(m Model) jsonScan {
 		scan.PlatformOS = scrubControls(p.Platform["os"])
 		scan.PlatformArch = scrubControls(p.Platform["arch"])
 		scan.DriftDetected = p.DriftDetected
+		if reuse := p.Incremental; reuse != nil {
+			scan.IncrementalReusedFrom = scrubControls(reuse.ReusedFromScanID)
+			scan.IncrementalReusedFileCount = reuse.ReusedFileCount
+			scan.IncrementalChangedFileCount = reuse.ChangedFileCount
+			for _, id := range reuse.ReusedAnalyzers {
+				scan.IncrementalReusedAnalyzers = append(scan.IncrementalReusedAnalyzers, scrubControls(id))
+			}
+			for _, id := range reuse.RanAnalyzers {
+				scan.IncrementalRanAnalyzers = append(scan.IncrementalRanAnalyzers, scrubControls(id))
+			}
+		}
 	}
 	return scan
 }

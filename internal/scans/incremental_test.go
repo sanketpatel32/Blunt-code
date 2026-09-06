@@ -540,3 +540,230 @@ func equalStrings(a, b []string) bool {
 	}
 	return true
 }
+
+// The reuse identity must now carry the provenance contract (IMP-09): the
+// config digest and schema versions are recorded beside the analyzer set, so
+// two scans are only comparable under identical shaping configuration and
+// finding-identity schemas.
+func TestIncrementalIdentityCarriesProvenance(t *testing.T) {
+	analyzer := &fileEchoAnalyzer{id: "fake", version: "v1"}
+	fixture := newIncrementalFixture(t, []analyzers.Analyzer{analyzer}, map[string]string{"a.py": "x=1\n"})
+
+	first := fixture.startScanWithOptions(t, ScanOptions{})
+	if final := fixture.waitForTerminal(t, first.ID); final.State != "completed" {
+		t.Fatalf("first scan state = %q", first.State)
+	}
+	identity, err := fixture.db.ScanHashAnalyzerSet(context.Background(), first.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"config_digest"`, `"fingerprint_version":` + fmt.Sprint(analyzers.FingerprintVersion), `"discovery_policy_version"`} {
+		if !strings.Contains(identity, want) {
+			t.Fatalf("recorded identity %s lacks %s", identity, want)
+		}
+	}
+}
+
+// Identities recorded before IMP-09 (no provenance fields) must not match a
+// modern identity: findings produced under an unstated configuration are not
+// comparable, so reuse refuses and the scan runs full.
+func TestIncrementalLegacyIdentityForcesFullScan(t *testing.T) {
+	analyzer := &fileEchoAnalyzer{id: "fake", version: "v1"}
+	fixture := newIncrementalFixture(t, []analyzers.Analyzer{analyzer}, map[string]string{"a.py": "x=1\n", "b.py": "y=2\n"})
+
+	first := fixture.startScanWithOptions(t, ScanOptions{})
+	if final := fixture.waitForTerminal(t, first.ID); final.State != "completed" {
+		t.Fatalf("first scan state = %q", first.State)
+	}
+	legacy := fmt.Sprintf(`{"bluntcode_version":%q,"profile":"standard","analyzers":{"fake":"v1"}}`, bluntCodeVersion)
+	if _, err := fixture.db.SQL.ExecContext(context.Background(), `UPDATE scan_hash_meta SET analyzers_json=? WHERE scan_id=?`, legacy, first.ID); err != nil {
+		t.Fatal(err)
+	}
+	second := fixture.startScanWithOptions(t, ScanOptions{Incremental: true})
+	if final := fixture.waitForTerminal(t, second.ID); final.State != "completed" {
+		t.Fatalf("second scan state = %q (error: %s)", final.State, final.ErrorSummary)
+	}
+	if got := analyzer.planCount(); got != 2 {
+		t.Fatalf("analyzer planned %d times, want 2 (a legacy identity must force a full re-run)", got)
+	}
+}
+
+// Changing the shaping configuration between scans (a workspace rule) changes
+// the ConfigDigest and must refuse reuse: findings produced under different
+// rules are not comparable.
+func TestIncrementalConfigChangeForcesFullScan(t *testing.T) {
+	analyzer := &fileEchoAnalyzer{id: "fake", version: "v1"}
+	fixture := newIncrementalFixture(t, []analyzers.Analyzer{analyzer}, map[string]string{"a.py": "x=1\n", "b.py": "y=2\n"})
+
+	first := fixture.startScanWithOptions(t, ScanOptions{})
+	if final := fixture.waitForTerminal(t, first.ID); final.State != "completed" {
+		t.Fatalf("first scan state = %q", first.State)
+	}
+	rule := core.WorkspaceRule{WorkspaceID: fixture.work.ID, RuleType: "exclude", Pattern: "legacy/", Source: "user", Enabled: true}
+	if err := fixture.db.ReplaceUserRules(context.Background(), fixture.work.ID, []core.WorkspaceRule{rule}); err != nil {
+		t.Fatal(err)
+	}
+	second := fixture.startScanWithOptions(t, ScanOptions{Incremental: true})
+	if final := fixture.waitForTerminal(t, second.ID); final.State != "completed" {
+		t.Fatalf("second scan state = %q (error: %s)", final.State, final.ErrorSummary)
+	}
+	if got := analyzer.planCount(); got != 2 {
+		t.Fatalf("analyzer planned %d times, want 2 (a config change must force a full re-run)", got)
+	}
+}
+
+// walkerAnalyzer simulates a workspace-scope analyzer (the gitleaks shape): it
+// records what it was handed but reports findings for every Python file in the
+// workspace by walking the root itself — its output always covers the whole
+// tree no matter which files the orchestrator passed.
+type walkerAnalyzer struct {
+	mu      sync.Mutex
+	version string
+	root    string
+	planned [][]string
+}
+
+func (a *walkerAnalyzer) ID() string          { return "gitleaks-secrets" }
+func (a *walkerAnalyzer) DisplayName() string { return "Walker" }
+func (a *walkerAnalyzer) SupportedLanguages() []analyzers.Language {
+	return []analyzers.Language{analyzers.LanguagePython}
+}
+func (a *walkerAnalyzer) Check(context.Context, analyzers.ToolEnvironment) analyzers.ToolStatus {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return analyzers.ToolStatus{Ready: true, Version: a.version}
+}
+func (a *walkerAnalyzer) EnsureInstalled(context.Context, analyzers.ToolEnvironment) error { return nil }
+func (a *walkerAnalyzer) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.AnalyzerPlan, error) {
+	rels := make([]string, 0, len(req.Files))
+	for _, abs := range req.Files {
+		rel, err := filepath.Rel(req.WorkspaceRoot, abs)
+		if err != nil {
+			return analyzers.AnalyzerPlan{}, err
+		}
+		rels = append(rels, filepath.ToSlash(rel))
+	}
+	a.mu.Lock()
+	a.root = req.WorkspaceRoot
+	a.planned = append(a.planned, rels)
+	a.mu.Unlock()
+	return analyzers.AnalyzerPlan{AnalyzerID: a.ID(), Version: a.version}, nil
+}
+func (a *walkerAnalyzer) Run(context.Context, analyzers.AnalyzerPlan, analyzers.EventEmitter) (analyzers.AnalyzerResult, error) {
+	return analyzers.AnalyzerResult{}, nil
+}
+func (a *walkerAnalyzer) Normalize(context.Context, analyzers.AnalyzerResult) ([]analyzers.Finding, []analyzers.Metric, error) {
+	a.mu.Lock()
+	root := a.root
+	a.mu.Unlock()
+	var findings []analyzers.Finding
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil || entry.IsDir() || !strings.HasSuffix(path, ".py") {
+			return err
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		finding := analyzers.Finding{
+			AnalyzerID: a.ID(), RuleID: "W1", Severity: analyzers.SeverityLow, Category: analyzers.CategorySecurity,
+			Message: "walker: " + string(content), RelativePath: filepath.ToSlash(rel), StartLine: 1,
+		}
+		finding.SetFingerprint()
+		findings = append(findings, finding)
+		return nil
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	return findings, nil, nil
+}
+
+func (a *walkerAnalyzer) planCount() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return len(a.planned)
+}
+
+func (a *walkerAnalyzer) lastPlanned() []string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if len(a.planned) == 0 {
+		return nil
+	}
+	return a.planned[len(a.planned)-1]
+}
+
+// TestIncrementalWorkspaceWalkerRerunsWholeTreeAndNeverDoubles pins the
+// workspace-scope reuse contract: once anything changed, a directory-walking
+// analyzer is handed the full selection (not the changed subset), its fresh
+// output is the whole-tree truth, and unchanged-file findings are never
+// appended on top. Without this, a re-run walker's report would double every
+// unchanged finding. A later no-change scan copies the walker wholesale.
+func TestIncrementalWorkspaceWalkerRerunsWholeTreeAndNeverDoubles(t *testing.T) {
+	walker := &walkerAnalyzer{version: "v1"}
+	fixture := newIncrementalFixture(t, []analyzers.Analyzer{walker}, map[string]string{"a.py": "x=1\n", "b.py": "y=2\n"})
+
+	first := fixture.startScanWithOptions(t, ScanOptions{})
+	firstFinal := fixture.waitForTerminal(t, first.ID)
+	if firstFinal.State != "completed" {
+		t.Fatalf("first scan state = %q (error: %s)", firstFinal.State, firstFinal.ErrorSummary)
+	}
+	before := scanFingerprints(t, fixture, first.ID)
+	if len(before) != 2 {
+		t.Fatalf("first scan findings = %v, want one per file", before)
+	}
+
+	writeFixtureFile(t, fixture, "a.py", "x=42\n")
+	second := fixture.startScanWithOptions(t, ScanOptions{Incremental: true})
+	secondFinal := fixture.waitForTerminal(t, second.ID)
+	if secondFinal.State != "completed" {
+		t.Fatalf("second scan state = %q (error: %s)", secondFinal.State, secondFinal.ErrorSummary)
+	}
+	if got := walker.planCount(); got != 2 {
+		t.Fatalf("walker planned %d times, want 2 (any change re-runs a workspace-scope analyzer)", got)
+	}
+	if handed := walker.lastPlanned(); !equalStrings(handed, []string{"a.py", "b.py"}) {
+		t.Fatalf("walker handed files = %v, want the FULL selection (routing must not narrow walkers)", handed)
+	}
+	after := scanFingerprints(t, fixture, second.ID)
+	if len(after) != 2 {
+		t.Fatalf("incremental walker findings = %d (%v), want exactly 2 — never the fresh report plus reused copies", len(after), after)
+	}
+	if secondFinal.TotalFindings != 2 {
+		t.Fatalf("second scan total = %d, want 2", secondFinal.TotalFindings)
+	}
+	// The reuse manifest is recorded on the snapshot: one changed file, one
+	// reused, and the walker counted as freshly run (not copied wholesale).
+	if manifest := secondFinal.Snapshot.Incremental; manifest == nil {
+		t.Fatal("incremental scan records no reuse manifest on the snapshot")
+	} else {
+		if manifest.ReusedFromScanID != first.ID || manifest.ChangedFileCount != 1 || manifest.ReusedFileCount != 1 {
+			t.Fatalf("reuse manifest = %+v", manifest)
+		}
+		if len(manifest.RanAnalyzers) != 1 || manifest.RanAnalyzers[0] != walker.ID() {
+			t.Fatalf("manifest ran analyzers = %v, want the walker", manifest.RanAnalyzers)
+		}
+		if len(manifest.ReusedAnalyzers) != 0 {
+			t.Fatalf("manifest reused analyzers = %v, want none (the walker re-ran)", manifest.ReusedAnalyzers)
+		}
+	}
+
+	// With no further changes the walker is copied wholesale: no re-plan and
+	// identical fingerprints.
+	third := fixture.startScanWithOptions(t, ScanOptions{Incremental: true})
+	thirdFinal := fixture.waitForTerminal(t, third.ID)
+	if thirdFinal.State != "completed" {
+		t.Fatalf("third scan state = %q (error: %s)", thirdFinal.State, thirdFinal.ErrorSummary)
+	}
+	if got := walker.planCount(); got != 2 {
+		t.Fatalf("walker planned %d times, want 2 (unchanged workspace must copy the walker wholesale)", got)
+	}
+	if got, want := scanFingerprints(t, fixture, third.ID), after; !equalStrings(got, want) {
+		t.Fatalf("third scan fingerprints = %v, want %v", got, want)
+	}
+}
