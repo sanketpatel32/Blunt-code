@@ -61,20 +61,44 @@ func Run(ctx context.Context, req Request) (Result, error) {
 		return nil
 	}
 	cmd.WaitDelay = cancelGrace
-	out := &limitedBuffer{limit: limit, onWrite: func(p []byte) {
+	out := &CappedBuffer{limit: limit, onWrite: func(p []byte) {
 		if req.OnOutput != nil {
 			req.OnOutput("stdout", string(p))
 		}
 	}}
-	errout := &limitedBuffer{limit: limit, onWrite: func(p []byte) {
+	errout := &CappedBuffer{limit: limit, onWrite: func(p []byte) {
 		if req.OnOutput != nil {
 			req.OnOutput("stderr", string(p))
 		}
 	}}
 	cmd.Stdout = out
 	cmd.Stderr = errout
+	// Every executed child joins a kill-on-close job object for its whole
+	// life: descendants that outlive cancellation (pipe-holding
+	// grandchildren) are ended by the operating system when the job handle
+	// closes after Wait, and a crash of Blunt Code itself takes the entire
+	// analyzer tree down instead of leaking it onto the machine. Job
+	// supervision is best effort — if the platform refuses it, the
+	// taskkill/tree cancellation below remains the containment story.
+	job, jobErr := newKillOnCloseJob()
+	if jobErr == nil {
+		defer job.close()
+	}
 	started := time.Now()
-	err := cmd.Run()
+	err := cmd.Start()
+	if err != nil {
+		return Result{}, err
+	}
+	if jobErr == nil {
+		if err := job.assign(cmd.Process); err != nil {
+			// The window between Start and assign can leak the child out of
+			// the job; end it now rather than run unsupervised.
+			_ = terminateTree(cmd.Process.Pid)
+			_ = cmd.Wait()
+			return Result{}, fmt.Errorf("supervise process: %w", err)
+		}
+	}
+	err = cmd.Wait()
 	result := Result{Stdout: out.Bytes(), Stderr: errout.Bytes(), Duration: time.Since(started), Truncated: out.truncated || errout.truncated}
 	if exit, ok := err.(*exec.ExitError); ok {
 		result.ExitCode = exit.ExitCode()
@@ -114,7 +138,11 @@ func terminateTree(pid int) error {
 	return nil
 }
 
-type limitedBuffer struct {
+// CappedBuffer is a byte buffer that stops retaining output once it holds
+// limit bytes, while still reporting writes as successful so a flooding
+// child never blocks or fails its run. It is safe for concurrent use, so one
+// buffer can serve as both Stdout and Stderr of a single command.
+type CappedBuffer struct {
 	mu        sync.Mutex
 	b         bytes.Buffer
 	limit     int
@@ -122,7 +150,29 @@ type limitedBuffer struct {
 	onWrite   func([]byte)
 }
 
-func (l *limitedBuffer) Write(p []byte) (int, error) {
+// NewCappedBuffer returns a CappedBuffer that retains at most limit bytes.
+func NewCappedBuffer(limit int) *CappedBuffer {
+	if limit <= 0 {
+		limit = DefaultOutputLimit
+	}
+	return &CappedBuffer{limit: limit}
+}
+
+// Truncated reports whether any output was discarded.
+func (l *CappedBuffer) Truncated() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.truncated
+}
+
+// Bytes returns a copy of the retained output.
+func (l *CappedBuffer) Bytes() []byte {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([]byte(nil), l.b.Bytes()...)
+}
+
+func (l *CappedBuffer) Write(p []byte) (int, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.onWrite != nil {
@@ -140,9 +190,4 @@ func (l *limitedBuffer) Write(p []byte) (int, error) {
 	}
 	_, _ = l.b.Write(p)
 	return len(p), nil
-}
-func (l *limitedBuffer) Bytes() []byte {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return append([]byte(nil), l.b.Bytes()...)
 }

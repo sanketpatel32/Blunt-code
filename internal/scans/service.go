@@ -3,6 +3,7 @@ package scans
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -31,7 +32,19 @@ type Service struct {
 	tools      *tools.Service
 	mu         sync.Mutex
 	cancels    map[string]context.CancelFunc
+	// active counts started-but-not-finished scans (a reserved slot counts
+	// from start until run's cleanup), bounding total load on the machine.
+	active int
 }
+
+// MaxConcurrentScans bounds how many scans may run at once. Per-scan worker
+// pools already parallelize analyzers inside a scan; without this cap,
+// stacked CLI/UI starts would multiply whole analyzer trees on one machine.
+const MaxConcurrentScans = 3
+
+// ErrTooManyScans reports that MaxConcurrentScans scans are already running;
+// the API surfaces it as 503 and the CLI as an operational failure (exit 3).
+var ErrTooManyScans = errors.New("scan capacity reached: too many concurrent scans")
 
 const (
 	fastAnalyzerTimeout  = 10 * time.Minute
@@ -58,9 +71,19 @@ func (s *Service) start(ctx context.Context, work core.Workspace, profile string
 	if profile == "" {
 		profile = "standard"
 	}
+	s.mu.Lock()
+	if s.active >= MaxConcurrentScans {
+		s.mu.Unlock()
+		return core.Scan{}, ErrTooManyScans
+	}
+	s.active++
+	s.mu.Unlock()
 	snapshot := s.snapshot(ctx, work, profile, files, excludes, extras.skipCounts, extras.dependencyInputs)
 	scan, err := s.db.CreateScanWithFiles(ctx, core.Scan{WorkspaceID: work.ID, Profile: profile, State: "queued", CandidateFileCount: len(files), SelectedFileCount: snapshot.SelectedFileCount, Snapshot: snapshot}, files)
 	if err != nil {
+		s.mu.Lock()
+		s.active--
+		s.mu.Unlock()
 		return core.Scan{}, err
 	}
 	runCtx, cancel := context.WithCancel(context.Background())
@@ -173,7 +196,12 @@ func (s *Service) emit(scanID, event string, data map[string]any) {
 	s.bus.Publish(events.Event{Type: event, ScanID: scanID, Data: data})
 }
 func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, files []core.FileEntry, opts ScanOptions, deselect func(string) bool) {
-	defer func() { s.mu.Lock(); delete(s.cancels, scan.ID); s.mu.Unlock() }()
+	defer func() {
+		s.mu.Lock()
+		delete(s.cancels, scan.ID)
+		s.active--
+		s.mu.Unlock()
+	}()
 	// A panic inside an adapter must not take the whole application down with
 	// it or leave the scan row non-terminal: contain it, fail the scan, and
 	// still publish a terminal event so streams and the UI resolve.

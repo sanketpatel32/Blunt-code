@@ -74,3 +74,32 @@ update check are refused, the built-in in-process analyzers are withheld so
 an offline scan cannot silently "succeed" on reduced coverage, osv/trivy fail
 readiness without their local databases, and the UI ships no webfont or other
 third-party asset requests.
+
+## Process supervision and source protection
+
+Every external analyzer process Blunt Code starts is supervised for its whole
+lifetime, not just launched:
+
+- **Tree-wide lifetime.** Each run joins a Windows job object with
+  kill-on-close semantics: when the run finishes (or Blunt Code itself dies),
+  the operating system ends everything the analyzer spawned — JVMs, Python
+  wrappers, pipe-holding grandchildren included. Cancellation additionally
+  terminates the whole tree immediately.
+- **Bounded waits.** Analyzer deadlines cap both execution and
+  post-processing (including SonarQube's compute-engine wait), a cancelled or
+  pipe-blocked child cannot stall the wait past a fixed grace period, and at
+  most three scans run at once; further starts are refused with a capacity
+  error until one finishes.
+- **Bounded capture.** Analyzer output and installer output are capped in
+  memory; a flooding tool truncates its log instead of growing without bound.
+- **Bounded memory.** Each analyzer run's process tree carries an 8 GiB
+  commit-charge limit, so a runaway child cannot page the machine.
+
+**Read-only contract, honestly scoped.** Scans are designed to leave source
+trees untouched: analyzers receive read-only scan arguments, caches and
+temporary directories point outside the workspace, and a regression test
+hashes every workspace file before and after a scan. This is an application
+contract, not an OS-enforced sandbox — Blunt Code does not restrict analyzer
+filesystem access at the operating-system level, and repository
+configuration an analyzer honors (for example a `.editorconfig`) is read, not
+executed. Repository hooks and build scripts are never run by a scan.

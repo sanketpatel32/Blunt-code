@@ -14,6 +14,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"bluntcode/internal/process"
 )
 
 type Manager struct {
@@ -215,9 +217,24 @@ func (m Manager) runCommand(ctx context.Context, executable string, args []strin
 	// A cancelled installer child (uv, Python) can leave pipe-holding
 	// grandchildren behind; bound the wait so install cancellation returns.
 	cmd.WaitDelay = 5 * time.Second
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(output)))
+	// Installer output feeds error messages, not parsing, so it is capped
+	// instead of collected wholesale: a broken installer dumping gigabytes
+	// must not grow this process without bound.
+	output := process.NewCappedBuffer(2 << 20)
+	cmd.Stdout = output
+	cmd.Stderr = output
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	if err := cmd.Wait(); err != nil {
+		text := strings.TrimSpace(string(output.Bytes()))
+		if text == "" {
+			return err
+		}
+		if output.Truncated() {
+			text += " (installer output truncated)"
+		}
+		return fmt.Errorf("%w: %s", err, text)
 	}
 	return nil
 }

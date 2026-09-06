@@ -201,7 +201,13 @@ func (s *Service) executeAnalyzer(ctx context.Context, scan core.Scan, work core
 	if err == nil {
 		var findings []analyzers.Finding
 		var metrics []analyzers.Metric
-		findings, metrics, err = adapter.Normalize(ctx, result)
+		// Normalize gets its own analyzer-class deadline: it is where slow
+		// post-run work lives (SonarQube polls its compute engine for up to
+		// twenty minutes), and running it on the raw scan context left that
+		// wait outside every timeout.
+		normalizeCtx, normalizeCancel := context.WithTimeout(ctx, analyzerTimeout(adapter.ID()))
+		findings, metrics, err = adapter.Normalize(normalizeCtx, result)
+		normalizeCancel()
 		// Directory-walking analyzers traverse the workspace root no matter
 		// which files they were handed, so their reports can name files the
 		// workspace configuration excludes. Enforcement lands here, once for

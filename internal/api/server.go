@@ -1139,12 +1139,12 @@ func (s *Server) startScan(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "INVALID_PROFILE", "profile must be quick, standard, deep, or pentest.")
 		return
 	}
-	scans, err := s.db.Scans(r.Context(), work.ID)
+	recent, err := s.db.Scans(r.Context(), work.ID)
 	if err != nil {
 		fail(w, 500, "DATABASE_ERROR", "Could not check active scan.")
 		return
 	}
-	for _, scan := range scans {
+	for _, scan := range recent {
 		if !terminalScanState(scan.State) {
 			writeJSON(w, 409, map[string]any{"error": map[string]any{"code": "SCAN_ALREADY_ACTIVE", "message": "A scan is already active.", "details": map[string]string{"scan_id": scan.ID}}})
 			return
@@ -1157,6 +1157,10 @@ func (s *Server) startScan(w http.ResponseWriter, r *http.Request) {
 	patterns, _ := s.userExcludes(r.Context(), work.ID)
 	scan, err := s.scans.DiscoverAndStart(r.Context(), work, input.Profile, patterns)
 	if err != nil {
+		if errors.Is(err, scans.ErrTooManyScans) {
+			fail(w, 503, "SCAN_CAPACITY", "Too many scans are already running. Wait for one to finish.")
+			return
+		}
 		fail(w, 500, "DATABASE_ERROR", "Could not create scan.")
 		return
 	}
