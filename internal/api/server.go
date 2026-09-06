@@ -74,6 +74,13 @@ func New(db *database.DB, bus *events.Bus, scanService *scans.Service, toolServi
 }
 func (s *Server) Handler() http.Handler { return securityMiddleware(rateLimitMiddleware(s.mux)) }
 
+// StaticGuard applies the API's loopback Host check and baseline security
+// headers to a non-API handler (the embedded UI). The UI has no
+// state-changing routes of its own, but without the guard it could be
+// embedded in a foreign page or reached through a non-loopback Host
+// (DNS rebinding) while sharing origin with the API.
+func StaticGuard(next http.Handler) http.Handler { return securityMiddleware(next) }
+
 // SetShutdown connects the local stop action to the host application's
 // graceful shutdown lifecycle. It is deliberately supplied by cmd, not HTTP.
 func (s *Server) SetShutdown(fn func()) { s.shutdown = fn }

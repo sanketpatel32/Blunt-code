@@ -61,9 +61,16 @@ func ValidateRelativePath(root, relative string) (string, error) {
 		return "", fmt.Errorf("path escapes workspace")
 	}
 	full := filepath.Join(root, clean)
-	resolved, err := filepath.EvalSymlinks(full)
-	if err != nil {
+	// Junctions are resolved before EvalSymlinks because EvalSymlinks errors
+	// on any path that passes through a junction: without this pass, a
+	// junction inside the workspace would fail with a resolve error instead
+	// of the containment verdict, and a junction that stays inside root would
+	// be rejected outright.
+	resolved := ResolveJunctionPath(full)
+	if r, err := filepath.EvalSymlinks(resolved); err != nil {
 		return "", fmt.Errorf("resolve requested path: %w", err)
+	} else {
+		resolved = ResolveJunctionPath(r)
 	}
 	ok, err := IsWithin(root, resolved)
 	if err != nil {

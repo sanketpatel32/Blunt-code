@@ -77,7 +77,7 @@ func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.
 		"--metrics=off", "--disable-version-check", "--oss-only",
 	}
 	commands := make([]analyzers.ProcessSpec, 0)
-	for _, args := range analyzers.FileArgumentBatches(prefix, req.Files) {
+	for _, args := range analyzers.FileArgumentBatches(prefix, analyzers.FilesInside(req.WorkspaceRoot, req.Files)) {
 		commands = append(commands, analyzers.ProcessSpec{
 			Executable: a.Executable,
 			Args:       args,

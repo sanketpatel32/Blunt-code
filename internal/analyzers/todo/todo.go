@@ -86,7 +86,7 @@ func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.
 	// The orchestrator already routes by language, but the adapter filters
 	// again (the convention ruff set) so no caller can smuggle unrelated
 	// files into the scan.
-	files := analyzers.FilesForLanguages(req.Files, a.SupportedLanguages()...)
+	files := analyzers.FilesForLanguagesInside(req.WorkspaceRoot, req.Files, a.SupportedLanguages()...)
 	if len(files) == 0 {
 		return analyzers.AnalyzerPlan{}, fmt.Errorf("todo does not apply")
 	}

@@ -12,6 +12,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"bluntcode/internal/workspace"
 )
 
 type Language string
@@ -366,6 +368,61 @@ func FilesForLanguages(files []string, langs ...Language) []string {
 	out := make([]string, 0, len(files))
 	for _, file := range files {
 		if wanted[languageOfPath(file)] {
+			out = append(out, file)
+		}
+	}
+	return out
+}
+
+// RelativeInside reports whether path is inside root once symlinks and NTFS
+// junctions are resolved. A path that is not even lexically under root is
+// rejected without touching the disk; an empty root has nothing to contain
+// against, so everything passes (adapters that need a root already refuse
+// one in Plan). Adapters apply this before handing files to external tools
+// or reading them in-process, so no caller can smuggle workspace-external
+// files onto a scan.
+func RelativeInside(root, path string) bool {
+	if root == "" {
+		return true
+	}
+	if ok, err := workspace.IsWithin(root, path); err != nil || !ok {
+		return false
+	}
+	// Junction resolution runs before EvalSymlinks: EvalSymlinks errors on
+	// any path that passes through a junction (and leaves the junction itself
+	// in place), so it can neither detect nor survive the escape. A path that
+	// does not exist (deleted since discovery, or a synthetic request) cannot
+	// leak anything, so the junction-resolved lexical verdict stands.
+	resolved := workspace.ResolveJunctionPath(path)
+	if r, err := filepath.EvalSymlinks(resolved); err == nil {
+		resolved = workspace.ResolveJunctionPath(r)
+	}
+	ok, err := workspace.IsWithin(root, resolved)
+	return err == nil && ok
+}
+
+// FilesInside drops files that do not resolve inside root.
+func FilesInside(root string, files []string) []string {
+	out := make([]string, 0, len(files))
+	for _, file := range files {
+		if RelativeInside(root, file) {
+			out = append(out, file)
+		}
+	}
+	return out
+}
+
+// FilesForLanguagesInside is FilesForLanguages plus the RelativeInside
+// containment check, so the returned selection is both language-routable and
+// provably inside the workspace root.
+func FilesForLanguagesInside(root string, files []string, langs ...Language) []string {
+	wanted := make(map[Language]bool, len(langs))
+	for _, lang := range langs {
+		wanted[lang] = true
+	}
+	out := make([]string, 0, len(files))
+	for _, file := range files {
+		if wanted[languageOfPath(file)] && RelativeInside(root, file) {
 			out = append(out, file)
 		}
 	}

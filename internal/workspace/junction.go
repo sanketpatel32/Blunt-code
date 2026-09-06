@@ -21,6 +21,30 @@ func ResolveJunctions(abs string) string {
 	if abs == "" {
 		return abs
 	}
+	resolved := resolveJunctionComponents(abs)
+	if info, err := os.Stat(resolved); err != nil || !info.IsDir() {
+		return abs
+	}
+	return resolved
+}
+
+// ResolveJunctionPath is ResolveJunctions for paths whose endpoint may be a
+// file: the same per-component junction resolution, but a resolved path that
+// exists at all (file or directory) is accepted. Containment checks on file
+// paths need this — a junction one directory above the file points outside
+// even though the full path ends in a file.
+func ResolveJunctionPath(abs string) string {
+	if abs == "" {
+		return abs
+	}
+	resolved := resolveJunctionComponents(abs)
+	if _, err := os.Stat(resolved); err != nil {
+		return abs
+	}
+	return resolved
+}
+
+func resolveJunctionComponents(abs string) string {
 	volume := filepath.VolumeName(abs)
 	separator := string(filepath.Separator)
 	rest := strings.TrimPrefix(filepath.Clean(abs), volume+separator)
@@ -44,9 +68,5 @@ func ResolveJunctions(abs string) string {
 		}
 		current = next + separator
 	}
-	resolved := filepath.Clean(current)
-	if info, err := os.Stat(resolved); err != nil || !info.IsDir() {
-		return abs
-	}
-	return resolved
+	return filepath.Clean(current)
 }

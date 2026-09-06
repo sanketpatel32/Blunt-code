@@ -30,7 +30,7 @@ func TestHandoffToPortFindsLiveServer(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintln(w, `{"version":"test"}`)
+		fmt.Fprintln(w, `{"version":"test","api_version":"v1"}`)
 	}))
 	defer server.Close()
 	if !handoffToPort(portOfServer(t, server), true) {
@@ -45,6 +45,17 @@ func TestHandoffToPortRejectsForeignAndDeadPorts(t *testing.T) {
 	defer foreign.Close()
 	if handoffToPort(portOfServer(t, foreign), true) {
 		t.Fatal("handoff must not claim a non-Blunt-Code server")
+	}
+	// A foreign server that happens to answer 200 on /api/v1/meta must still
+	// be rejected: the handoff verifies the meta payload identifies Blunt
+	// Code (api_version) instead of trusting any 200.
+	impostor := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintln(w, `{"status":"ok"}`)
+	}))
+	defer impostor.Close()
+	if handoffToPort(portOfServer(t, impostor), true) {
+		t.Fatal("handoff must not claim a server whose meta payload is not Blunt Code's")
 	}
 	held, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {

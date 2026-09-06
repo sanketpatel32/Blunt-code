@@ -174,7 +174,7 @@ func runServer(args []string) {
 	server := api.New(app.db, app.bus, app.scans, app.toolService, app.paths, version, app.logger)
 	root := http.NewServeMux()
 	root.Handle("/api/", server.Handler())
-	root.Handle("/", staticHandler())
+	root.Handle("/", api.StaticGuard(staticHandler()))
 	url := "http://" + listener.Addr().String() + "/"
 	fmt.Println("Blunt Code listening on " + url)
 	app.logger.Info("server started", "url", url)
@@ -332,9 +332,11 @@ func removeServerPort() {
 }
 
 // handoffToPort probes a loopback port for a live Blunt Code server and, when
-// found, opens the browser there instead of starting a second instance. It
-// reports whether the handoff happened; anything else (foreign owner, dead
-// port, stale hint) leaves the caller to proceed normally.
+// found, opens the browser there instead of starting a second instance. The
+// probe verifies the meta payload's api_version so a foreign 200-on-that-path
+// can never capture the handoff. It reports whether the handoff happened;
+// anything else (foreign owner, dead port, stale hint) leaves the caller to
+// proceed normally.
 func handoffToPort(port int, noBrowser bool) bool {
 	if port <= 0 {
 		return false
@@ -347,6 +349,16 @@ func handoffToPort(port int, noBrowser bool) bool {
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
+		return false
+	}
+	var meta struct {
+		APIVersion string `json:"api_version"`
+		Version    string `json:"version"`
+	}
+	if err := json.NewDecoder(io.LimitReader(response.Body, 4096)).Decode(&meta); err != nil {
+		return false
+	}
+	if meta.APIVersion != api.APIVersion || meta.Version == "" {
 		return false
 	}
 	fmt.Println("Blunt Code already running on " + url)

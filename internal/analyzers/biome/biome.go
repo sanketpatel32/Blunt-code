@@ -36,7 +36,7 @@ func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.
 	// but the adapter filters again so no caller can hand biome files it
 	// cannot lint: explicit non-web paths would otherwise depend on
 	// --no-errors-on-unmatched to be silently ignored.
-	webFiles := analyzers.FilesForLanguages(req.Files, analyzers.LanguageJavaScript, analyzers.LanguageTypeScript)
+	webFiles := analyzers.FilesForLanguagesInside(req.WorkspaceRoot, req.Files, analyzers.LanguageJavaScript, analyzers.LanguageTypeScript)
 	if len(webFiles) == 0 {
 		return analyzers.AnalyzerPlan{}, fmt.Errorf("biome does not apply")
 	}

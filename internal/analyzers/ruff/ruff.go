@@ -64,7 +64,7 @@ func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.
 	// filters again so no caller can hand ruff a JavaScript or TypeScript
 	// file: ruff parses whatever it is given as Python, and a minified web
 	// bundle then produces megabytes of syntax-error JSON.
-	pyFiles := analyzers.FilesForLanguages(req.Files, analyzers.LanguagePython)
+	pyFiles := analyzers.FilesForLanguagesInside(req.WorkspaceRoot, req.Files, analyzers.LanguagePython)
 	if len(pyFiles) == 0 {
 		return analyzers.AnalyzerPlan{}, fmt.Errorf("ruff does not apply")
 	}

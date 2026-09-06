@@ -124,7 +124,7 @@ func TestPlanBatchesLargeWorkspaceFileLists(t *testing.T) {
 	// must split file arguments exactly like the biome and semgrep adapters.
 	files := make([]string, 692)
 	for i := range files {
-		files[i] = `C:\Users\sanpa\OneDrive\Desktop\Claire\claire-backend\src\some\deeply\nested\package\module_file_with_a_long_name_` + strings.Repeat("x", 4) + fmt.Sprint(i) + ".py"
+		files[i] = `C:\ws\src\some\deeply\nested\package\module_file_with_a_long_name_` + strings.Repeat("x", 4) + fmt.Sprint(i) + ".py"
 	}
 	adapter := New("ruff.exe", "test")
 	plan, err := adapter.Plan(context.Background(), analyzers.ScanRequest{WorkspaceRoot: `C:\ws`, Files: files, Languages: []analyzers.Language{analyzers.LanguagePython}})
