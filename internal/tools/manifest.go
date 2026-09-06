@@ -1,5 +1,12 @@
 // Package tools manages private, pinned analyzer binaries. It never searches
 // PATH and it never builds a shell command from a workspace path.
+//
+// Trust mechanism, stated precisely: every artifact carries a SHA-256 digest
+// pinned in the manifest compiled into this binary, and installation verifies
+// the downloaded bytes against it over HTTPS before anything is activated.
+// This is pinned-digest comparison, not a signed manifest — the trust root is
+// the Blunt Code build itself, and changing any pin requires a new build.
+// ChecksumURL is provenance for humans; the installer never consults it.
 package tools
 
 import (
@@ -25,6 +32,18 @@ func DefaultManifest() (Manifest, error) {
 	return manifest, manifest.Validate()
 }
 
+// SmokeTest is the post-activation probe of one artifact: the installed
+// executable is run with Args and must exit 0; when Expect is set, the
+// combined output must mention it (case-insensitive) — normally the pinned
+// version. Artifacts whose executable is a launcher with side effects
+// (SonarQube's StartSonar.bat) declare none, and a missing probe is always
+// valid: hash verification stays the mandatory gate, the smoke test is the
+// extra "the bytes actually run" check.
+type SmokeTest struct {
+	Args   []string `json:"args"`
+	Expect string   `json:"expect,omitempty"`
+}
+
 type Artifact struct {
 	ToolID      string `json:"tool_id"`
 	Version     string `json:"version"`
@@ -34,11 +53,12 @@ type Artifact struct {
 	ArchiveType string `json:"archive_type"` // exe, zip, or uv_tool wheel
 	// Executable is relative to this artifact's private version directory.
 	// It may point into an archive's top-level directory.
-	Executable  string `json:"executable"`
-	LicenseURL  string `json:"license_url"`
-	ChecksumURL string `json:"checksum_url,omitempty"`
-	InstallKind string `json:"install_kind,omitempty"` // artifact or uv_tool
-	Package     string `json:"package,omitempty"`
+	Executable  string     `json:"executable"`
+	LicenseURL  string     `json:"license_url"`
+	ChecksumURL string     `json:"checksum_url,omitempty"`
+	InstallKind string     `json:"install_kind,omitempty"` // artifact or uv_tool
+	Package     string     `json:"package,omitempty"`
+	Smoke       *SmokeTest `json:"smoke,omitempty"`
 }
 
 func (a Artifact) Validate() error {
@@ -64,6 +84,9 @@ func (a Artifact) Validate() error {
 	}
 	if a.ArchiveType != "exe" && a.ArchiveType != "zip" && !(a.InstallKind == "uv_tool" && a.ArchiveType == "wheel") {
 		return fmt.Errorf("tool %s has unsupported archive type %q", a.ToolID, a.ArchiveType)
+	}
+	if a.Smoke != nil && len(a.Smoke.Args) == 0 {
+		return fmt.Errorf("tool %s declares a smoke test without arguments", a.ToolID)
 	}
 	if err := validateRelativeArchivePath(a.Executable); err != nil {
 		return fmt.Errorf("tool %s executable: %w", a.ToolID, err)

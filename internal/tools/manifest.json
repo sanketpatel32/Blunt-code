@@ -8,7 +8,13 @@
       "sha256": "c5d1185c47261f86361d03b547da25be79120226a6f1721d623b2aba9d27668b",
       "archive_type": "zip",
       "executable": "ruff.exe",
-      "license_url": "https://github.com/astral-sh/ruff/blob/0.16.0/LICENSE-APACHE"
+      "license_url": "https://github.com/astral-sh/ruff/blob/0.16.0/LICENSE-APACHE",
+      "smoke": {
+        "args": [
+          "--version"
+        ],
+        "expect": "0.16.0"
+      }
     },
     {
       "tool_id": "biome",
@@ -18,7 +24,13 @@
       "sha256": "47b7c8f59181870782dbeb26bfa45a51229a277ffd458f5cf852dc96dfd3999c",
       "archive_type": "exe",
       "executable": "biome.exe",
-      "license_url": "https://github.com/biomejs/biome/blob/%40biomejs/biome%402.5.6/LICENSE-MIT"
+      "license_url": "https://github.com/biomejs/biome/blob/%40biomejs/biome%402.5.6/LICENSE-MIT",
+      "smoke": {
+        "args": [
+          "--version"
+        ],
+        "expect": "2.5.6"
+      }
     },
     {
       "tool_id": "gitleaks-secrets",
@@ -28,7 +40,13 @@
       "sha256": "d29144deff3a68aa93ced33dddf84b7fdc26070add4aa0f4513094c8332afc4e",
       "archive_type": "zip",
       "executable": "gitleaks.exe",
-      "license_url": "https://github.com/gitleaks/gitleaks/blob/v8.30.1/LICENSE"
+      "license_url": "https://github.com/gitleaks/gitleaks/blob/v8.30.1/LICENSE",
+      "smoke": {
+        "args": [
+          "version"
+        ],
+        "expect": "8.30.1"
+      }
     },
     {
       "tool_id": "osv-dependencies",
@@ -38,7 +56,13 @@
       "sha256": "25e42f5ef6711fd8c0fb45390972205891dd44c6bd02ac93f0f63e8e98d9bfb6",
       "archive_type": "exe",
       "executable": "osv-scanner.exe",
-      "license_url": "https://github.com/google/osv-scanner/blob/main/LICENSE"
+      "license_url": "https://github.com/google/osv-scanner/blob/main/LICENSE",
+      "smoke": {
+        "args": [
+          "--version"
+        ],
+        "expect": "2.5.1"
+      }
     },
     {
       "tool_id": "container-trivy",
@@ -48,7 +72,13 @@
       "sha256": "94c40e0696e4b907a74b7b2e1438d5d72ebaca83115817407f568a002d520842",
       "archive_type": "zip",
       "executable": "trivy.exe",
-      "license_url": "https://github.com/aquasecurity/trivy/blob/v0.74.0/LICENSE"
+      "license_url": "https://github.com/aquasecurity/trivy/blob/v0.74.0/LICENSE",
+      "smoke": {
+        "args": [
+          "--version"
+        ],
+        "expect": "0.74.0"
+      }
     },
     {
       "tool_id": "iac-checkov",
@@ -70,7 +100,13 @@
       "sha256": "dd9d6d6554bfab265bfa98aa8e8a406c5c3a7b97582f93de1f4d48d9154a0395",
       "archive_type": "zip",
       "executable": "uv.exe",
-      "license_url": "https://github.com/astral-sh/uv/blob/0.11.16/LICENSE-APACHE"
+      "license_url": "https://github.com/astral-sh/uv/blob/0.11.16/LICENSE-APACHE",
+      "smoke": {
+        "args": [
+          "--version"
+        ],
+        "expect": "0.11.16"
+      }
     },
     {
       "tool_id": "semgrep",
@@ -82,7 +118,13 @@
       "executable": "semgrep.exe",
       "license_url": "https://github.com/semgrep/semgrep/blob/v1.172.0/LICENSE",
       "install_kind": "uv_tool",
-      "package": "semgrep==1.172.0"
+      "package": "semgrep==1.172.0",
+      "smoke": {
+        "args": [
+          "--version"
+        ],
+        "expect": "1.172.0"
+      }
     },
     {
       "tool_id": "sonarqube-server",
@@ -112,7 +154,13 @@
       "sha256": "9ba963ee2371874a74185d18bc7bb2ab9407df7683300855ed7606e0662321d0",
       "archive_type": "zip",
       "executable": "jdk-21.0.12+8/bin/java.exe",
-      "license_url": "https://adoptium.net/about/"
+      "license_url": "https://adoptium.net/about/",
+      "smoke": {
+        "args": [
+          "-version"
+        ],
+        "expect": "21.0.12"
+      }
     }
   ]
 }

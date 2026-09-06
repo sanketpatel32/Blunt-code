@@ -34,7 +34,11 @@ func NewService(root string, manifest Manifest, offline bool) *Service {
 }
 func (s *Service) Offline() bool         { s.mu.RLock(); defer s.mu.RUnlock(); return s.offline }
 func (s *Service) SetOffline(value bool) { s.mu.Lock(); s.offline = value; s.mu.Unlock() }
-func platform() string                   { return runtime.GOOS + "-" + runtime.GOARCH }
+
+// SweepStaging recovers the tools directory from interrupted updates (see
+// Manager.SweepStaging); run once at startup.
+func (s *Service) SweepStaging() { s.Manager.SweepStaging() }
+func platform() string           { return runtime.GOOS + "-" + runtime.GOARCH }
 func (s *Service) Status(id string) (status Status) {
 	defer func() { status.Name = toolName(id) }()
 	if id == "sonarqube" {
