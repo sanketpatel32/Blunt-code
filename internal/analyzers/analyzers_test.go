@@ -61,6 +61,63 @@ func TestFingerprintIgnoresPositionAndMessageSpacing(t *testing.T) {
 	}
 }
 
+func TestSetFingerprintsGivesDuplicatesDistinctIdentities(t *testing.T) {
+	dupe := func(line, col int) Finding {
+		return Finding{AnalyzerID: "todo", RuleID: "todo", RelativePath: "notes.txt", Message: "TODO fix", StartLine: line, StartColumn: col}
+	}
+	findings := []Finding{dupe(3, 1), dupe(3, 1), dupe(7, 5), {AnalyzerID: "ruff", RuleID: "F401", RelativePath: "app.py", Message: "unused"}}
+	SetFingerprints(findings)
+	seen := map[string]bool{}
+	for _, f := range findings {
+		if seen[f.Fingerprint] {
+			t.Fatalf("duplicate fingerprint after assignment: %s", f.Fingerprint)
+		}
+		seen[f.Fingerprint] = true
+	}
+	// Occurrence 1 keeps the V1 base identity so suppressions and baselines
+	// recorded before V2 still match the first occurrence.
+	base := dupe(3, 1)
+	base.SetFingerprint()
+	if findings[0].Fingerprint != base.Fingerprint {
+		t.Fatalf("first occurrence must keep the base fingerprint: %s vs %s", findings[0].Fingerprint, base.Fingerprint)
+	}
+	if findings[1].Fingerprint == base.Fingerprint {
+		t.Fatal("second occurrence must be re-fingerprinted")
+	}
+	// The unrelated finding is untouched by the dedup machinery (base value).
+	solo := findings[3]
+	solo.SetFingerprint()
+	if findings[3].Fingerprint != solo.Fingerprint {
+		t.Fatal("unique findings keep their base fingerprint")
+	}
+}
+
+// Assignment is stable under input reordering: the occurrence order is derived
+// from position, not slice order, so two runs of the same analyzer produce the
+// same fingerprint per occurrence.
+func TestSetFingerprintsStableUnderReorder(t *testing.T) {
+	mk := func(line int) Finding {
+		return Finding{AnalyzerID: "biome", RuleID: "noUnusedVars", RelativePath: "a.ts", Message: "x is unused", StartLine: line}
+	}
+	forward := []Finding{mk(1), mk(2), mk(3)}
+	backward := []Finding{mk(3), mk(1), mk(2)}
+	SetFingerprints(forward)
+	SetFingerprints(backward)
+	byLine := func(list []Finding, line int) string {
+		for _, f := range list {
+			if f.StartLine == line {
+				return f.Fingerprint
+			}
+		}
+		return ""
+	}
+	for _, line := range []int{1, 2, 3} {
+		if byLine(forward, line) != byLine(backward, line) {
+			t.Fatalf("line %d got different fingerprints depending on slice order", line)
+		}
+	}
+}
+
 func TestRunDirectCapsOutput(t *testing.T) {
 	result, err := RunDirect(context.Background(), AnalyzerPlan{AnalyzerID: "test", Commands: []ProcessSpec{{Executable: "powershell.exe", Args: []string{"-NoProfile", "-Command", "[Console]::Out.Write('x' * (9MB))"}}}}, nil)
 	if err == nil || !result.OutputTruncated || len(result.Stdout) != 8<<20 {

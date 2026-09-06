@@ -20,7 +20,10 @@ type Run struct {
 }
 type Comparison struct {
 	New, Fixed, Persistent []analyzers.Finding
-	UnknownAnalyzerIDs     []string
+	// NotEvaluatedAnalyzerIDs lists analyzers whose previous findings could
+	// not be classified in this scan (analyzer did not complete successfully,
+	// or the findings' files were not part of this scan's inputs).
+	NotEvaluatedAnalyzerIDs []string
 }
 type Input struct {
 	WorkspaceName, WorkspacePath, ScanID, Profile, BluntCodeVersion string
@@ -77,8 +80,8 @@ func Build(in Input) Model {
 			m.Warnings = append(m.Warnings, fmt.Sprintf("%s: %s", display(r), strings.TrimSpace(r.ErrorSummary)))
 		}
 	}
-	for _, id := range in.Comparison.UnknownAnalyzerIDs {
-		m.Warnings = append(m.Warnings, fmt.Sprintf("%s did not produce a valid current result; its previous findings are not considered fixed.", id))
+	for _, id := range in.Comparison.NotEvaluatedAnalyzerIDs {
+		m.Warnings = append(m.Warnings, fmt.Sprintf("%s could not be fully evaluated in this scan (analyzer did not complete successfully, or some of its files were not part of the scan); its previous findings are not considered fixed.", id))
 	}
 	if in.Provenance != nil && in.Provenance.DriftDetected {
 		m.Warnings = append(m.Warnings, "Workspace content changed during the scan; results may mix two versions of the tree.")

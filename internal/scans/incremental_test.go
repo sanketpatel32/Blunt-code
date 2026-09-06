@@ -471,7 +471,7 @@ func TestIncrementalSuppressionAndComparisonSurviveReuse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	diff := Compare(FilterSuppressed(stored, suppressed), FilterSuppressed(firstFindings, suppressed), coverage)
+	diff := Compare(FilterSuppressed(stored, suppressed), FilterSuppressed(firstFindings, suppressed), NewComparisonCoverage(coverage, nil))
 	if len(diff.Persistent) != 1 || len(diff.New) != 0 || len(diff.Fixed) != 0 {
 		t.Fatalf("comparison = new:%d fixed:%d persistent:%d, want 0/0/1 (persistent b.py)", len(diff.New), len(diff.Fixed), len(diff.Persistent))
 	}

@@ -1673,7 +1673,11 @@ func (s *Server) scanCompare(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, "DATABASE_ERROR", "Could not load analyzer coverage.")
 		return
 	}
-	cmp := scans.Compare(scans.FilterSuppressed(currentFindings, suppressed), scans.FilterSuppressed(previousFindings, suppressed), succeeded)
+	currentSelected := []string(nil)
+	if scan.Snapshot != nil {
+		currentSelected = scan.Snapshot.SelectedFiles
+	}
+	cmp := scans.Compare(scans.FilterSuppressed(currentFindings, suppressed), scans.FilterSuppressed(previousFindings, suppressed), scans.NewComparisonCoverage(succeeded, currentSelected))
 	writeJSON(w, 200, map[string]any{
 		"available":        true,
 		"current_scan_id":  scan.ID,
@@ -1681,6 +1685,7 @@ func (s *Server) scanCompare(w http.ResponseWriter, r *http.Request) {
 		"new":              cmp.New,
 		"fixed":            cmp.Fixed,
 		"persistent":       cmp.Persistent,
+		"not_evaluated":    cmp.NotEvaluatedAnalyzerIDs,
 		"summary":          map[string]int{"new": len(cmp.New), "fixed": len(cmp.Fixed), "persistent": len(cmp.Persistent)},
 	})
 }
@@ -1975,11 +1980,15 @@ func (s *Server) reportModel(ctx context.Context, scan core.Scan, work core.Work
 		return reports.Model{}, err
 	}
 	comparison := scans.Comparison{}
+	var selectedPaths []string
+	if scan.Snapshot != nil {
+		selectedPaths = scan.Snapshot.SelectedFiles
+	}
 	if previousID, previousErr := s.db.PreviousCompletedScanID(ctx, scan.WorkspaceID, scan.ID); previousErr == nil {
 		previous, previousFindingsErr := s.db.Findings(ctx, previousID)
 		succeeded, succeededErr := s.db.SuccessfulAnalyzerIDs(ctx, scan.ID)
 		if previousFindingsErr == nil && succeededErr == nil {
-			comparison = scans.Compare(findings, scans.FilterSuppressed(previous, suppressed), succeeded)
+			comparison = scans.Compare(findings, scans.FilterSuppressed(previous, suppressed), scans.NewComparisonCoverage(succeeded, selectedPaths))
 		}
 	}
 	startedAt := scan.StartedAt
@@ -2002,7 +2011,7 @@ func (s *Server) reportModel(ctx context.Context, scan core.Scan, work core.Work
 	return reports.Build(reports.Input{
 		WorkspaceName: work.Name, WorkspacePath: work.RootPath, ScanID: scan.ID, Profile: scan.Profile, State: scan.State, BluntCodeVersion: bluntCodeVersion,
 		StartedAt: startedAtValue(startedAt), FinishedAt: finishedAtValue(scan.FinishedAt), Files: files, SkippedFiles: make([]string, skippedCount), Findings: findings, Metrics: metrics, Runs: runs,
-		Comparison: reports.Comparison{New: comparison.New, Fixed: comparison.Fixed, Persistent: comparison.Persistent, UnknownAnalyzerIDs: comparison.UnknownAnalyzerIDs},
+		Comparison: reports.Comparison{New: comparison.New, Fixed: comparison.Fixed, Persistent: comparison.Persistent, NotEvaluatedAnalyzerIDs: comparison.NotEvaluatedAnalyzerIDs},
 	}), nil
 }
 

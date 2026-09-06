@@ -829,6 +829,10 @@ func (d *DB) SaveAnalyzerResult(ctx context.Context, scanID string, run Analyzer
 		_ = tx.Rollback()
 		return "", err
 	}
+	// Occurrence-distinct identities for fresh output only: reused findings
+	// (AppendReusedFindings) keep their stored fingerprints verbatim so
+	// incremental scans stay comparable with the scan they came from.
+	analyzers.SetFingerprints(findings)
 	for _, finding := range findings {
 		if err = insertFinding(ctx, tx, scanID, runID, finding); err != nil {
 			_ = tx.Rollback()

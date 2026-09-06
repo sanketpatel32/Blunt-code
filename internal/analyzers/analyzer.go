@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -117,13 +118,19 @@ type Finding struct {
 
 // FingerprintVersion versions the finding-identity schema. V1: sha256 over
 // analyzer id, rule id, normalized path, and whitespace-normalized message —
-// deliberately line-free so a moved issue stays comparable across scans. The
-// version is stamped into scan snapshots so identity changes are visible when
-// comparing history, and suppressions recorded under an older version are
-// never silently reinterpreted.
-const FingerprintVersion = 1
+// deliberately line-free so a moved issue stays comparable across scans. V2
+// keeps that base identity byte-for-byte and disambiguates duplicates: when a
+// scan produces several findings with the same base identity (same rule
+// firing twice on one line, or a rule whose message carries no location),
+// occurrence 1 keeps the base fingerprint — so suppressions, baselines, and
+// history recorded under V1 still match — and occurrences 2+ get the base
+// re-hashed with an occurrence suffix, making every persisted row distinct.
+// The version is stamped into scan snapshots so identity changes are visible
+// when comparing history, and suppressions recorded under an older version
+// are never silently reinterpreted.
+const FingerprintVersion = 2
 
-// SetFingerprint creates the V1 heuristic identity.  Do not include line
+// SetFingerprint creates the V1-compatible base identity.  Do not include line
 // numbers: a moved issue should remain comparable across scans.
 func (f *Finding) SetFingerprint() {
 	path := filepath.ToSlash(filepath.Clean(f.RelativePath))
@@ -135,6 +142,53 @@ func (f *Finding) SetFingerprint() {
 	s := strings.Join([]string{f.AnalyzerID, f.RuleID, path, message}, "\x00")
 	hash := sha256.Sum256([]byte(s))
 	f.Fingerprint = hex.EncodeToString(hash[:])
+}
+
+// SetFingerprints assigns occurrence-distinct identities to a full result set.
+// Every finding first gets its base fingerprint; findings that share one are
+// then ordered deterministically (path, start position, end position, rule)
+// and re-fingerprinted so only the first occurrence keeps the base value.
+// Without this, a rule reporting the identical issue twice in one scan
+// collapses to one identity: one stored row is silently dropped in
+// comparisons and suppressing it would dismiss both occurrences at once.
+func SetFingerprints(findings []Finding) {
+	for i := range findings {
+		findings[i].SetFingerprint()
+	}
+	groups := map[string][]int{}
+	for i, f := range findings {
+		if f.Fingerprint != "" {
+			groups[f.Fingerprint] = append(groups[f.Fingerprint], i)
+		}
+	}
+	for _, group := range groups {
+		if len(group) < 2 {
+			continue
+		}
+		sort.Slice(group, func(a, b int) bool {
+			x, y := findings[group[a]], findings[group[b]]
+			if x.RelativePath != y.RelativePath {
+				return x.RelativePath < y.RelativePath
+			}
+			if x.StartLine != y.StartLine {
+				return x.StartLine < y.StartLine
+			}
+			if x.StartColumn != y.StartColumn {
+				return x.StartColumn < y.StartColumn
+			}
+			if x.EndLine != y.EndLine {
+				return x.EndLine < y.EndLine
+			}
+			if x.EndColumn != y.EndColumn {
+				return x.EndColumn < y.EndColumn
+			}
+			return x.RuleID < y.RuleID
+		})
+		for occurrence, index := range group[1:] {
+			hash := sha256.Sum256([]byte(findings[index].Fingerprint + "\x00occ" + strconv.Itoa(occurrence+2)))
+			findings[index].Fingerprint = hex.EncodeToString(hash[:])
+		}
+	}
 }
 
 type Metric struct {

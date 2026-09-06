@@ -393,12 +393,17 @@ func buildScanSummary(ctx context.Context, db *database.DB, work core.Workspace,
 	// New/fixed/persistent against the previous completed scan, with exactly
 	// the same coverage rules as the Markdown report. Suppressed fingerprints
 	// are filtered from both sides so a dismissed finding is never counted as
-	// fixed either.
+	// fixed either. Selected files come from the snapshot; scans without one
+	// compare with analyzer-level coverage only.
+	selectedForCoverage := []string(nil)
+	if scan.Snapshot != nil {
+		selectedForCoverage = scan.Snapshot.SelectedFiles
+	}
 	if previousID, prevErr := db.PreviousCompletedScanID(ctx, work.ID, scanID); prevErr == nil {
 		previousFindings, findErr := db.Findings(ctx, previousID)
 		coverage, coverageErr := db.SuccessfulAnalyzerIDs(ctx, scanID)
 		if findErr == nil && coverageErr == nil {
-			diff := scans.Compare(findings, scans.FilterSuppressed(previousFindings, suppressed), coverage)
+			diff := scans.Compare(findings, scans.FilterSuppressed(previousFindings, suppressed), scans.NewComparisonCoverage(coverage, selectedForCoverage))
 			summary.hasPrevious = true
 			summary.newCount = len(diff.New)
 			summary.fixedCount = len(diff.Fixed)
@@ -669,15 +674,6 @@ func buildScanReportModel(ctx context.Context, db *database.DB, work core.Worksp
 	if err != nil {
 		return reports.Model{}, err
 	}
-	comparison := reports.Comparison{}
-	if previousID, prevErr := db.PreviousCompletedScanID(ctx, work.ID, summary.scanID); prevErr == nil {
-		previousFindings, findErr := db.Findings(ctx, previousID)
-		coverage, coverageErr := db.SuccessfulAnalyzerIDs(ctx, summary.scanID)
-		if findErr == nil && coverageErr == nil {
-			diff := scans.Compare(summary.findings, scans.FilterSuppressed(previousFindings, suppressed), coverage)
-			comparison = reports.Comparison{New: diff.New, Fixed: diff.Fixed, Persistent: diff.Persistent, UnknownAnalyzerIDs: diff.UnknownAnalyzerIDs}
-		}
-	}
 	files := []string(nil)
 	bluntCodeVersion := ""
 	var provenance *reports.Provenance
@@ -697,6 +693,15 @@ func buildScanReportModel(ctx context.Context, db *database.DB, work core.Worksp
 	}
 	if len(files) == 0 && scan.SelectedFileCount > 0 {
 		files = make([]string, scan.SelectedFileCount)
+	}
+	comparison := reports.Comparison{}
+	if previousID, prevErr := db.PreviousCompletedScanID(ctx, work.ID, summary.scanID); prevErr == nil {
+		previousFindings, findErr := db.Findings(ctx, previousID)
+		coverage, coverageErr := db.SuccessfulAnalyzerIDs(ctx, summary.scanID)
+		if findErr == nil && coverageErr == nil {
+			diff := scans.Compare(summary.findings, scans.FilterSuppressed(previousFindings, suppressed), scans.NewComparisonCoverage(coverage, files))
+			comparison = reports.Comparison{New: diff.New, Fixed: diff.Fixed, Persistent: diff.Persistent, NotEvaluatedAnalyzerIDs: diff.NotEvaluatedAnalyzerIDs}
+		}
 	}
 	skipped := scan.CandidateFileCount - scan.SelectedFileCount
 	if skipped < 0 {

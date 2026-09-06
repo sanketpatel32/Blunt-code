@@ -512,21 +512,21 @@ func (s *Service) writeReport(scan core.Scan, work core.Workspace, files []core.
 		return "", err
 	}
 	findings = FilterSuppressed(findings, suppressed)
-	comparison := reports.Comparison{}
-	if previousID, previousErr := s.db.PreviousCompletedScanID(context.Background(), work.ID, scan.ID); previousErr == nil {
-		previousFindings, findErr := s.db.Findings(context.Background(), previousID)
-		coverage, coverageErr := s.db.SuccessfulAnalyzerIDs(context.Background(), scan.ID)
-		if findErr == nil && coverageErr == nil {
-			diff := Compare(findings, FilterSuppressed(previousFindings, suppressed), coverage)
-			comparison = reports.Comparison{New: diff.New, Fixed: diff.Fixed, Persistent: diff.Persistent, UnknownAnalyzerIDs: diff.UnknownAnalyzerIDs}
-		}
-	}
 	var selected, skipped []string
 	for _, file := range files {
 		if file.Selected {
 			selected = append(selected, file.RelativePath)
 		} else {
 			skipped = append(skipped, file.RelativePath)
+		}
+	}
+	comparison := reports.Comparison{}
+	if previousID, previousErr := s.db.PreviousCompletedScanID(context.Background(), work.ID, scan.ID); previousErr == nil {
+		previousFindings, findErr := s.db.Findings(context.Background(), previousID)
+		coverage, coverageErr := s.db.SuccessfulAnalyzerIDs(context.Background(), scan.ID)
+		if findErr == nil && coverageErr == nil {
+			diff := Compare(findings, FilterSuppressed(previousFindings, suppressed), NewComparisonCoverage(coverage, selected))
+			comparison = reports.Comparison{New: diff.New, Fixed: diff.Fixed, Persistent: diff.Persistent, NotEvaluatedAnalyzerIDs: diff.NotEvaluatedAnalyzerIDs}
 		}
 	}
 	startedAt := time.Now()
