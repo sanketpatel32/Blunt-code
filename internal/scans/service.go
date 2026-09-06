@@ -267,7 +267,7 @@ func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, 
 }
 
 func analyzerTimeout(id string) time.Duration {
-	if id == "sonarqube" {
+	if analyzers.TimeoutClassFor(id) == analyzers.TimeoutSonar {
 		return sonarAnalyzerTimeout
 	}
 	return fastAnalyzerTimeout
@@ -576,11 +576,10 @@ func dropDeselectedFindings(findings []analyzers.Finding, deselect func(string) 
 // generated artifacts stay visible. Only the secret detectors qualify: a
 // credential baked into a shipped bundle, a lockfile, or a vendored
 // dependency is a real leak, and hiding it would be the one way artifact
-// filtering could make a scan less honest. Every other analyzer's artifact
-// findings — code smells in dist output, style violations in vendored
-// packages — are noise about files nobody edits.
+// filtering could make a scan less honest. The policy lives in the capability
+// inventory (analyzers.KeepsArtifactFindings).
 func keepsArtifactFindings(analyzerID string) bool {
-	return analyzerID == "secrets" || analyzerID == "gitleaks-secrets"
+	return analyzers.KeepsArtifactFindings(analyzerID)
 }
 
 // dropArtifactFindings removes findings whose path discovery classifies as

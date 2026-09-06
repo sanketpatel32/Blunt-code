@@ -1,4 +1,4 @@
-import type { FindingPage, FindingsQuery, FixedFindingsResponse, GlobalStats, PathOverride, PentestProbeResult, RecentScansResponse, Report, RiskProfile, Scan, ScanPage, SearchFindingsPage, SeverityTrendPoint, SourcePreview, Suppression, Tool, TreeNode, Workspace } from './types';
+import type { AnalyzerStatus, FindingPage, FindingsQuery, FixedFindingsResponse, GlobalStats, PathOverride, PentestProbeResult, RecentScansResponse, Report, RiskProfile, Scan, ScanPage, SearchFindingsPage, SeverityTrendPoint, SourcePreview, Suppression, Tool, TreeNode, Workspace } from './types';
 
 const PREFIX = '/api/v1';
 
@@ -92,6 +92,8 @@ export const api = {
   report: (id: string) => request<Report>(`/scans/${encodeURIComponent(id)}/report`),
   fixedFindings: (scanId: string) => request<FixedFindingsResponse>(`/scans/${encodeURIComponent(scanId)}/fixed`),
   tools: async () => list<Tool>(await request<Tool[] | { tools?: Tool[] }>('/tools')),
+  /** Backend capability inventory: every analyzer with category, profiles, network use, and readiness. */
+  analyzers: async () => list<AnalyzerStatus>(await request<AnalyzerStatus[] | { items?: AnalyzerStatus[] }>('/analyzers')),
   toolAction: (id: string, action: 'install' | 'repair' | 'update') => request<Tool>(`/tools/${encodeURIComponent(id)}/${action}`, { method: 'POST' }),
   stopServer: () => request<{ state: string }>('/system/stop', { method: 'POST' }),
   /** In-app updater: check GitHub releases, then hand off to the staged installer. */

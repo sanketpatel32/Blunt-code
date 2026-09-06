@@ -38,7 +38,7 @@ const (
 	scanStatePollInterval = 2 * time.Second
 )
 
-const scanUsage = "usage: bluntcode scan <path> [--profile quick|standard|deep] [--format text|json|github|sarif] [--json] [--timeout 30m] [--quiet] [--fail-on high+] [--max-findings N] [--baseline <scan-id-or-sarif>] [--jobs N] [--incremental] [--watch]"
+const scanUsage = "usage: bluntcode scan <path> [--profile quick|standard|deep|pentest] [--format text|json|github|sarif|csv|jsonl|markdown] [--json] [--timeout 30m] [--quiet] [--fail-on high+] [--max-findings N] [--baseline <scan-id-or-sarif>] [--jobs N] [--incremental] [--watch]"
 
 // The stdout report formats of `bluntcode scan`. text (the default) keeps the
 // historical human summary; json prints the full versioned JSON report
@@ -122,7 +122,7 @@ type scanConfig struct {
 func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	flags := flag.NewFlagSet("scan", flag.ContinueOnError)
 	flags.SetOutput(errOut)
-	profile := flags.String("profile", "standard", "scan profile: quick, standard, or deep")
+	profile := flags.String("profile", "standard", "scan profile: quick, standard, deep, or pentest")
 	format := flags.String("format", "", "stdout report format: text (human summary, the default), json (the full JSON report document), github (GitHub Actions annotations), sarif (the SARIF 2.1.0 code-scanning document), csv, jsonl, or markdown")
 	jsonOut := flags.Bool("json", false, "print a machine-readable JSON summary instead of human text")
 	timeout := flags.Duration("timeout", scanDefaultTimeout, "abort the scan when it exceeds this duration (for example 5m or 90s)")
@@ -199,8 +199,8 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 		return usageError("exactly one workspace path is required")
 	}
 	cfg := scanConfig{path: positional[0], profile: *profile, json: *jsonOut, format: *format, timeout: *timeout, quiet: *quiet, baseline: *baseline, jobs: *jobs, incremental: *incremental, watch: *watch, output: *output, saveBaseline: *saveBaseline}
-	if cfg.profile != analyzers.ProfileQuick && cfg.profile != analyzers.ProfileStandard && cfg.profile != analyzers.ProfileDeep {
-		return usageError("profile must be quick, standard, or deep")
+	if cfg.profile != analyzers.ProfileQuick && cfg.profile != analyzers.ProfileStandard && cfg.profile != analyzers.ProfileDeep && cfg.profile != analyzers.ProfilePentest {
+		return usageError("profile must be quick, standard, deep, or pentest")
 	}
 	if cfg.format != "" && cfg.format != scanFormatText && cfg.format != scanFormatJSON && cfg.format != scanFormatGitHub && cfg.format != scanFormatSARIF && cfg.format != scanFormatCSV && cfg.format != scanFormatJSONL && cfg.format != scanFormatMarkdown {
 		return usageError("format must be text, json, github, sarif, csv, jsonl, or markdown")

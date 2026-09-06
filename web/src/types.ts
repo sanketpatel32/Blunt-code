@@ -237,6 +237,29 @@ export interface Tool {
   detail?: string;
 }
 
+/** One analyzer from the backend capability inventory (GET /api/v1/analyzers):
+ *  the single source for analyzer count, categories, profiles, network use, and
+ *  readiness — the Tools page renders this instead of a hand-maintained list. */
+export interface AnalyzerStatus {
+  id: string;
+  display_name: string;
+  category: string;
+  execution: 'external' | 'in-process' | 'managed-server';
+  profiles: string[];
+  input_kinds: string[];
+  managed_tool?: string;
+  network: 'none' | 'outbound' | 'loopback-only';
+  network_note?: string;
+  keep_artifact_findings: boolean;
+  timeout_class: string;
+  description: string;
+  languages: string[];
+  version?: string;
+  ready: boolean;
+  detail?: string;
+  registered: boolean;
+}
+
 export interface Report {
   scan: Scan;
   workspace?: Workspace;

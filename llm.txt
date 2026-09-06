@@ -1,12 +1,12 @@
 # Blunt Code — llm.txt for AI agents
 
-> Blunt Code is a local-first code quality & security analyzer for Windows. One `bluntcode.exe` runs Ruff, Biome, Gitleaks, Semgrep, SonarQube, and OSV Scanner, Trivy, and Checkov on deep scans, plus built-in secrets/TODO/license detectors on loopback 127.0.0.1 (no cloud, no telemetry). Use headless `bluntcode scan` for automation/CI.
+> Blunt Code is a local-first code quality & security analyzer for Windows. One `bluntcode.exe` runs Ruff, Biome, Gitleaks, Semgrep, SonarQube, and OSV Scanner, Trivy, and Checkov on deep scans, plus the built-in Pentest & Vulnerability Suite and secrets/TODO/license detectors on loopback 127.0.0.1 (no cloud, no telemetry). Use headless `bluntcode scan` for automation/CI.
 
-- **Version:** 0.7.0 (2026-08-26) — shadcn UI (Tailwind+Radix+CVA+lucide)
+- **Version:** 0.21.2 (2026-09-05) — shadcn UI (Tailwind+Radix+CVA+lucide)
 - **Repo:** https://github.com/sanketpatel32/Blunt-code
 - **Platform:** Windows 10/11 amd64, standard user, no admin, no global Python/Java/Node
 - **License:** MIT (`LICENSE`), third-party notices (`THIRD_PARTY_NOTICES.md`)
-- **Latest release ZIP:** `BluntCode-0.7.0-windows-amd64.zip` + `.sha256`
+- **Latest release ZIP:** `BluntCode-0.21.2-windows-amd64.zip` + `.sha256`
 
 ## When to use Blunt Code (agent decision tree)
 

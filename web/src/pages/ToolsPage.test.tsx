@@ -16,12 +16,23 @@ function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
-const toolsBody = { items: [{ id: 'ruff', name: 'Ruff', version: '0.6.9', ready: true, can_install: true }, { id: 'semgrep', ready: false, can_install: true }] };
+/** A representative slice of the backend capability inventory: two managed
+ *  tools (one ready, one not), two in-process built-ins, and one in-process
+ *  analyzer withheld by offline mode. */
+const analyzersBody = {
+  items: [
+    { id: 'ruff', display_name: 'Ruff', category: 'code-quality', execution: 'external', profiles: ['quick', 'standard', 'deep', 'pentest'], input_kinds: ['source'], managed_tool: 'ruff', network: 'none', keep_artifact_findings: false, timeout_class: 'fast', description: 'Fast Python linter.', languages: ['python'], version: '0.6.9', ready: true, registered: true },
+    { id: 'semgrep', display_name: 'Semgrep', category: 'security', execution: 'external', profiles: ['standard', 'deep', 'pentest'], input_kinds: ['source'], managed_tool: 'semgrep', network: 'none', keep_artifact_findings: false, timeout_class: 'fast', description: 'Pattern-based security scanner.', languages: ['python', 'javascript', 'typescript'], ready: false, detail: 'Executable is missing.', registered: true },
+    { id: 'secrets', display_name: 'Secrets', category: 'secrets', execution: 'in-process', profiles: ['standard', 'deep', 'pentest'], input_kinds: ['source'], managed_tool: '', network: 'none', keep_artifact_findings: true, timeout_class: 'fast', description: 'Built-in credential detection.', languages: ['python'], ready: true, registered: true },
+    { id: 'todo', display_name: 'Todo Scanner', category: 'maintainability', execution: 'in-process', profiles: ['standard', 'deep', 'pentest'], input_kinds: ['source'], managed_tool: '', network: 'none', keep_artifact_findings: false, timeout_class: 'fast', description: 'Tracks TODO/FIXME markers.', languages: ['python'], ready: true, registered: true },
+    { id: 'license-scan', display_name: 'License Scanner', category: 'compliance', execution: 'in-process', profiles: ['standard', 'deep', 'pentest'], input_kinds: ['license-files', 'dependencies'], managed_tool: '', network: 'none', keep_artifact_findings: false, timeout_class: 'fast', description: 'License detection.', languages: ['text'], ready: false, registered: false },
+  ],
+};
 
-/** Fetch stub serving the default two-tool list plus a switchable action responder. */
-function toolsMock(action: (input: string) => Response | Promise<Response> = () => json({})) {
+/** Fetch stub serving the capability inventory plus a switchable action responder. */
+function analyzersMock(action: (input: string) => Response | Promise<Response> = () => json({})) {
   return vi.fn((input: string) => {
-    if (input.endsWith('/tools')) return Promise.resolve(json(toolsBody));
+    if (input.endsWith('/analyzers')) return Promise.resolve(json(analyzersBody));
     return Promise.resolve(action(input));
   });
 }
@@ -48,79 +59,79 @@ afterEach(async () => {
 });
 
 describe('ToolsPage readiness strip', () => {
-  it('summarizes ready counts and chips every non-ready tool with its version badges on rows', async () => {
-    const { host } = await renderPage(toolsMock());
+  it('counts managed tools only and chips every non-ready managed tool', async () => {
+    const { host } = await renderPage(analyzersMock());
     const strip = host.querySelector('.tools-readiness')!;
     expect(strip.textContent).toContain('1 of 2 ready');
     expect(host.querySelector('.tools-all-ready')).toBeNull();
     const chip = [...strip.querySelectorAll('.badge')].find((badge) => badge.textContent !== '1 of 2 ready')!;
     expect(chip.querySelector('.dot.not-ready')).not.toBeNull();
     expect(chip.querySelector('.spinner')).toBeNull();
-    expect(chip.textContent).toContain('semgrep not installed');
+    expect(chip.textContent).toContain('Semgrep not installed');
     expect(row(host, 'Ruff').querySelector('.tool-version')!.textContent).toBe('v0.6.9');
-    expect(row(host, 'semgrep').querySelector('.tool-version')!.textContent).toBe('Managed version');
+    expect(row(host, 'Semgrep').querySelector('.tool-version')!.textContent).toBe('Managed version');
   });
 
-  it('marks an all-ready tool set with the success counter and no pending chips', async () => {
-    const fetchMock = vi.fn((input: string) => (input.endsWith('/tools') ? Promise.resolve(json({ items: [{ id: 'ruff', name: 'Ruff', version: '0.6.9', ready: true }] })) : Promise.resolve(json({}))));
+  it('marks an all-ready managed set with the success counter and no pending chips', async () => {
+    const allReady = { items: analyzersBody.items.map((a) => (a.managed_tool ? { ...a, ready: true } : a)) };
+    const fetchMock = vi.fn((input: string) => (input.endsWith('/analyzers') ? Promise.resolve(json(allReady)) : Promise.resolve(json({}))));
     const { host } = await renderPage(fetchMock);
-    expect(host.querySelector('.tools-all-ready')!.textContent).toBe('1 of 1 ready');
+    expect(host.querySelector('.tools-all-ready')!.textContent).toBe('2 of 2 ready');
     expect(host.querySelectorAll('.tools-readiness .dot').length).toBe(0);
   });
 
   it('turns the non-ready chip into a spinner while that install is in flight', async () => {
     const pending = new Promise<Response>(() => {});
-    const { host } = await renderPage(toolsMock(() => pending));
-    await act(async () => { [...row(host, 'semgrep').querySelectorAll('button')].find((button) => button.textContent === 'Install')!.click(); });
-    const chip = [...host.querySelectorAll('.tools-readiness .badge')].find((badge) => badge.textContent!.includes('semgrep'))!;
+    const { host } = await renderPage(analyzersMock(() => pending));
+    await act(async () => { [...row(host, 'Semgrep').querySelectorAll('button')].find((button) => button.textContent === 'Install')!.click(); });
+    const chip = [...host.querySelectorAll('.tools-readiness .badge')].find((badge) => badge.textContent!.includes('Semgrep'))!;
     expect(chip.querySelector('.spinner')).not.toBeNull();
-    expect(chip.textContent).toContain('semgrep installing…');
-    expect(row(host, 'semgrep').querySelector('.table-actions')!.getAttribute('aria-busy')).toBe('true');
+    expect(chip.textContent).toContain('Semgrep installing…');
+    expect(row(host, 'Semgrep').querySelector('.table-actions')!.getAttribute('aria-busy')).toBe('true');
     expect(host.querySelector('.tools-readiness')!.textContent).toContain('1 of 2 ready');
   });
 });
 
-describe('ToolsPage built-in analyzers', () => {
-  it('lists secrets and todo as built-in with no install actions, not as coming soon', async () => {
-    const { host } = await renderPage(toolsMock());
-    const section = host.querySelector('section[aria-label="Built-in analyzers"]')!;
-    expect(section.querySelector('h3')!.textContent).toBe('Built-in analyzers');
-    const rows = [...section.querySelectorAll('tbody tr')];
-    expect(rows.map((r) => r.textContent)).toEqual(expect.arrayContaining([expect.stringContaining('Secrets'), expect.stringContaining('Todo Scanner')]));
-    for (const row of rows) {
-      expect(row.querySelector('.state.ready')!.textContent).toBe('Built-in');
-      expect(row.textContent).not.toContain('Coming soon');
-    }
-    const actions = [...section.querySelectorAll('button')];
-    expect(actions.filter((button) => ['Install', 'Repair', 'Update'].includes(button.textContent!))).toHaveLength(0);
+describe('ToolsPage inventory table', () => {
+  it('lists every analyzer from the inventory in one table, built-ins with no install actions', async () => {
+    const { host } = await renderPage(analyzersMock());
+    const rows = [...host.querySelectorAll('.tool-table tbody tr')];
+    // Five inventory rows render: managed, built-in, and offline-withheld.
+    expect(rows.length).toBe(5);
+    expect(rows.map((r) => r.textContent)).toEqual(expect.arrayContaining([expect.stringContaining('Ruff'), expect.stringContaining('Secrets'), expect.stringContaining('Todo Scanner')]));
+    const secrets = row(host, 'Secrets');
+    expect(secrets.querySelector('.state.ready')!.textContent).toBe('Built-in');
+    const actions = [...secrets.querySelectorAll('button')].filter((button) => ['Install', 'Repair', 'Update'].includes(button.textContent!));
+    expect(actions).toHaveLength(0);
+    expect(secrets.textContent).not.toContain('Coming soon');
+    expect(host.textContent).not.toContain('Secrets not installed');
   });
 
-  it('keeps the coming-soon section free of the built-in analyzers', async () => {
-    const { host } = await renderPage(toolsMock());
-    const comingSoon = host.querySelector('section[aria-label="Coming soon analyzers"]');
-    if (comingSoon) {
-      // Category headers legitimately repeat words like "Secrets"; only the
-      // tool-name cells must not contain the built-ins.
-      const names = [...comingSoon.querySelectorAll('tbody tr td:first-child strong')].map((cell) => cell.childNodes[0].textContent);
-      expect(names).not.toContain('Secrets');
-      expect(names).not.toContain('Todo Scanner');
-    }
-    expect(host.textContent).not.toContain('Secrets not installed');
+  it('marks analyzers withheld by offline mode as unavailable instead of silently hiding them', async () => {
+    const { host } = await renderPage(analyzersMock());
+    const license = row(host, 'License Scanner');
+    expect(license.querySelector('.state.not-ready')!.textContent).toBe('Offline mode');
+  });
+
+  it('shows scan tiers and network use from the inventory', async () => {
+    const { host } = await renderPage(analyzersMock());
+    expect(row(host, 'Ruff').textContent).toContain('Quick, Standard, Deep, Pentest');
+    expect(row(host, 'Ruff').textContent).toContain('No network');
   });
 });
 
 describe('ToolsPage actions', () => {
-  it('keeps install firing the same POST endpoint and success notice as before', async () => {
-    const fetchMock = toolsMock((input) => (input.endsWith('/tools/semgrep/install') ? json({ id: 'semgrep', ready: true, can_install: false }) : json({})));
+  it('keeps install firing the same POST endpoint with a success notice naming the analyzer', async () => {
+    const fetchMock = analyzersMock((input) => (input.endsWith('/tools/semgrep/install') ? json({ id: 'semgrep', ready: true, can_install: false }) : json({})));
     const { host, notify } = await renderPage(fetchMock);
-    await act(async () => { [...row(host, 'semgrep').querySelectorAll('button')].find((button) => button.textContent === 'Install')!.click(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => { [...row(host, 'Semgrep').querySelectorAll('button')].find((button) => button.textContent === 'Install')!.click(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/tools/semgrep/install', expect.objectContaining({ method: 'POST' }));
-    expect(notify).toHaveBeenCalledWith({ kind: 'info', text: 'semgrep: installed.' });
+    expect(notify).toHaveBeenCalledWith({ kind: 'info', text: 'Semgrep: installed.' });
     expect(notify).not.toHaveBeenCalledWith(expect.objectContaining({ kind: 'error' }));
   });
 
   it('fires repair and update against their own endpoints', async () => {
-    const fetchMock = toolsMock((input) => (input.endsWith('/tools/ruff/update') || input.endsWith('/tools/ruff/repair') ? json({ id: 'ruff', ready: true }) : json({})));
+    const fetchMock = analyzersMock((input) => (input.endsWith('/tools/ruff/update') || input.endsWith('/tools/ruff/repair') ? json({ id: 'ruff', ready: true }) : json({})));
     const { host } = await renderPage(fetchMock);
     await act(async () => { [...row(host, 'Ruff').querySelectorAll('button')].find((button) => button.textContent === 'Update')!.click(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/tools/ruff/update', expect.objectContaining({ method: 'POST' }));
@@ -128,10 +139,10 @@ describe('ToolsPage actions', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/tools/ruff/repair', expect.objectContaining({ method: 'POST' }));
   });
 
-  it('retries the tools load from the error panel', async () => {
+  it('retries the analyzers load from the error panel', async () => {
     let failing = true;
     const fetchMock = vi.fn((input: string) => {
-      if (input.endsWith('/tools')) return failing ? Promise.resolve(json({ error: { code: 'TOOLS_OFFLINE', message: 'Tool service unavailable.' } }, 503)) : Promise.resolve(json(toolsBody));
+      if (input.endsWith('/analyzers')) return failing ? Promise.resolve(json({ error: { code: 'SCANS_UNAVAILABLE', message: 'Scan service unavailable.' } }, 503)) : Promise.resolve(json(analyzersBody));
       return Promise.resolve(json({}));
     });
     const { host } = await renderPage(fetchMock);

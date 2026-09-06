@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"bluntcode/internal/analyzers"
 	"bluntcode/internal/config"
 	"bluntcode/internal/core"
 	"bluntcode/internal/database"
@@ -127,6 +128,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/report.md", s.reportMarkdown)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/report.sarif", s.reportSARIF)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/report.html", s.reportHTML)
+	s.mux.HandleFunc("GET /api/v1/analyzers", s.listAnalyzers)
 	s.mux.HandleFunc("GET /api/v1/tools", s.listTools)
 	s.mux.HandleFunc("POST /api/v1/tools/{id}/install", s.installTool)
 	s.mux.HandleFunc("POST /api/v1/tools/{id}/repair", s.installTool)
@@ -2162,13 +2164,26 @@ func (s *Server) listTools(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, 200, map[string]any{"items": s.tools.All()})
 }
+
+// listAnalyzers serves the capability inventory merged with live registry
+// state: one row per analyzer with category, execution kind, profiles, input
+// kinds, network use, languages, version, and readiness. The Tools page and
+// docs read this instead of keeping hand-maintained analyzer lists.
+func (s *Server) listAnalyzers(w http.ResponseWriter, r *http.Request) {
+	if s.scans == nil {
+		fail(w, 503, "SCANS_UNAVAILABLE", "Scan service is unavailable.")
+		return
+	}
+	writeJSON(w, 200, map[string]any{"items": s.scans.AnalyzerStatuses(r.Context())})
+}
+
 func (s *Server) installTool(w http.ResponseWriter, r *http.Request) {
 	if s.tools == nil {
 		fail(w, 503, "TOOLS_UNAVAILABLE", "Tool service is unavailable.")
 		return
 	}
 	id := r.PathValue("id")
-	if id != "ruff" && id != "biome" && id != "gitleaks-secrets" && id != "osv-dependencies" && id != "container-trivy" && id != "iac-checkov" && id != "semgrep" && id != "sonarqube" {
+	if !analyzers.InstallableTool(id) {
 		fail(w, 404, "TOOL_NOT_FOUND", "Tool was not found.")
 		return
 	}

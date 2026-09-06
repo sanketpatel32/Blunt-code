@@ -51,7 +51,7 @@ func TestParseScanFlagsRejectsBadInput(t *testing.T) {
 		args    []string
 		message string
 	}{
-		{"bad profile", []string{"--profile", "thorough", `C:\proj`}, "profile must be quick, standard, or deep"},
+		{"bad profile", []string{"--profile", "thorough", `C:\proj`}, "profile must be quick, standard, deep, or pentest"},
 		{"zero timeout", []string{"--timeout", "0", `C:\proj`}, "timeout must be a positive duration"},
 		{"negative timeout", []string{"--timeout", "-5m", `C:\proj`}, "timeout must be a positive duration"},
 		{"missing path", nil, "exactly one workspace path is required"},

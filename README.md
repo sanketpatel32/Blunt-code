@@ -33,7 +33,7 @@
 
 ## 🔍 What is this?
 
-- **Eleven analyzers, one app.** Ruff, Biome, Gitleaks, Semgrep, SonarQube, OSV Scanner (deep), Trivy (deep), Checkov (deep), plus built-in secrets, TODO/FIXME, and license detectors — one installer, zero `PATH` fights, no global Python/Java/Node.
+- **Twelve analyzers, one app.** Ruff, Biome, Gitleaks, Semgrep, SonarQube, OSV Scanner (deep), Trivy (deep), Checkov (deep), the Pentest & Vulnerability Suite, plus built-in secrets, TODO/FIXME, and license detectors — one installer, zero `PATH` fights, no global Python/Java/Node.
 - **Everything stays on your machine.** Loopback-only server (`127.0.0.1`), findings in local SQLite, reports on disk. Offline after the first tool download.
 - **Built for real workflows.** Suppress at the source line, gate CI on `--fail-on high+`, diff against a baseline, export SARIF — then get back to writing code.
 
@@ -256,8 +256,9 @@ bluntcode agent scan "C:\my-app" --profile quick --fail-on high+  # forces --jso
 | **Secrets** (built-in) | 40+ types inc. `.env`/Dockerfile/YAML | AWS, GitHub, Slack, JWT, Stripe, OpenAI, Anthropic, Azure |
 | **TODO** (built-in) | Code & config where comments exist | `TODO/FIXME/HACK/XXX/BUG` with owner `TODO(jane):` |
 | **License Scanner** (built-in) | LICENSE/COPYING + package.json/pyproject/Cargo/composer | Copyleft (AGPL high, GPL medium), file-vs-manifest conflicts, undeclared workspaces |
+| **Pentest Suite** (built-in) | All file types | Static OWASP Top 10 pattern pass (injection sinks, weak crypto, debug endpoints); dynamic probes are a separate, explicitly targeted operation |
 
-**Profiles** · Quick `Ruff+Biome` · Standard `+Gitleaks+Semgrep+SonarQube` · Deep `+OSV+Trivy+Checkov+Ruff extended`
+**Profiles** · Quick `Ruff+Biome` · Standard `+Gitleaks+Semgrep+SonarQube+Pentest` · Deep `+OSV+Trivy+Checkov+Ruff extended` · Pentest `security-focused sweep with DAST probing`
 
 Ignore at source: `// bluntcode:ignore` or `// bluntcode:ignore secrets.aws-access-key-id reason: test key` · or suppress by fingerprint with reason (500 chars) · or `.bluntcodeignore` patterns (`dir/**`, `**/name`, basename, `#` comments, 1000/64 KiB cap).
 

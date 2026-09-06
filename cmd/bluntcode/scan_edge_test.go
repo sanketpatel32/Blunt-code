@@ -113,7 +113,7 @@ func TestParseScanFlagsPrintsReason(t *testing.T) {
 		{[]string{`C:\one`, `C:\two`}, "exactly one workspace path is required"},
 		{[]string{"--timeout", "0", `C:\proj`}, "timeout must be a positive duration"},
 		{[]string{"--timeout", "-5m", `C:\proj`}, "timeout must be a positive duration"},
-		{[]string{"--profile", "thorough", `C:\proj`}, "profile must be quick, standard, or deep"},
+		{[]string{"--profile", "thorough", `C:\proj`}, "profile must be quick, standard, deep, or pentest"},
 	}
 	for _, item := range cases {
 		var errOut bytes.Buffer
