@@ -45,6 +45,17 @@ type jsonScan struct {
 	StartedAt        string `json:"started_at"`
 	FinishedAt       string `json:"finished_at"`
 	BluntCodeVersion string `json:"bluntcode_version,omitempty"`
+	// Provenance block (additive; schemaVersion stays 1): identity of the
+	// bytes analyzed and the machinery that analyzed them.
+	InputDigest            string `json:"input_digest,omitempty"`
+	ConfigDigest           string `json:"config_digest,omitempty"`
+	GitCommit              string `json:"git_commit,omitempty"`
+	GitDirty               bool   `json:"git_dirty,omitempty"`
+	DiscoveryPolicyVersion int    `json:"discovery_policy_version,omitempty"`
+	FingerprintVersion     int    `json:"fingerprint_version,omitempty"`
+	PlatformOS             string `json:"platform_os,omitempty"`
+	PlatformArch           string `json:"platform_arch,omitempty"`
+	DriftDetected          bool   `json:"drift_detected,omitempty"`
 }
 type jsonFiles struct {
 	Candidate int `json:"candidate"`
@@ -114,22 +125,42 @@ type jsonComparison struct {
 // and HTML exports: encoding/json escapes the C0 controls but writes DEL
 // through raw, so a hostile finding message must not reach the export
 // unescaped. Tab, LF, and CR survive because JSON quotes them losslessly.
+// jsonScanFromModel renders the scan identity block, provenance included:
+// digests, schema versions, platform, git state, and drift are additive
+// fields, so older consumers keep parsing while new ones can compare runs
+// on more than a timestamp.
+func jsonScanFromModel(m Model) jsonScan {
+	scan := jsonScan{
+		ID: scrubControls(m.ScanID), Profile: scrubControls(m.Profile), State: scrubControls(m.State),
+		StartedAt: jsonTime(m.StartedAt), FinishedAt: jsonTime(m.FinishedAt), BluntCodeVersion: scrubControls(m.BluntCodeVersion),
+	}
+	if p := m.Provenance; p != nil {
+		scan.InputDigest = p.InputDigest
+		scan.ConfigDigest = p.ConfigDigest
+		scan.GitCommit = scrubControls(p.GitCommit)
+		scan.GitDirty = p.GitDirty
+		scan.DiscoveryPolicyVersion = p.DiscoveryPolicyVersion
+		scan.FingerprintVersion = p.FingerprintVersion
+		scan.PlatformOS = scrubControls(p.Platform["os"])
+		scan.PlatformArch = scrubControls(p.Platform["arch"])
+		scan.DriftDetected = p.DriftDetected
+	}
+	return scan
+}
+
 func JSON(m Model) []byte {
 	doc := jsonReport{
 		Schema:        JSONSchema,
 		SchemaVersion: JSONSchemaVersion,
 		Workspace:     jsonWorkspace{Name: scrubControls(m.WorkspaceName), Path: scrubControls(m.WorkspacePath)},
-		Scan: jsonScan{
-			ID: scrubControls(m.ScanID), Profile: scrubControls(m.Profile), State: scrubControls(m.State),
-			StartedAt: jsonTime(m.StartedAt), FinishedAt: jsonTime(m.FinishedAt), BluntCodeVersion: scrubControls(m.BluntCodeVersion),
-		},
-		Files:      jsonFiles{Candidate: len(m.Files) + len(m.SkippedFiles), Selected: len(m.Files), Skipped: len(m.SkippedFiles)},
-		Severity:   severityCountsJSON(m),
-		Analyzers:  make([]jsonAnalyzerRun, 0, len(m.Runs)),
-		Findings:   make([]jsonFinding, 0, len(m.Findings)),
-		Metrics:    make([]jsonMetric, 0, len(m.Metrics)),
-		Comparison: jsonComparison{New: len(m.Comparison.New), Fixed: len(m.Comparison.Fixed), Persistent: len(m.Comparison.Persistent)},
-		Warnings:   make([]string, 0, len(m.Warnings)),
+		Scan:          jsonScanFromModel(m),
+		Files:         jsonFiles{Candidate: len(m.Files) + len(m.SkippedFiles), Selected: len(m.Files), Skipped: len(m.SkippedFiles)},
+		Severity:      severityCountsJSON(m),
+		Analyzers:     make([]jsonAnalyzerRun, 0, len(m.Runs)),
+		Findings:      make([]jsonFinding, 0, len(m.Findings)),
+		Metrics:       make([]jsonMetric, 0, len(m.Metrics)),
+		Comparison:    jsonComparison{New: len(m.Comparison.New), Fixed: len(m.Comparison.Fixed), Persistent: len(m.Comparison.Persistent)},
+		Warnings:      make([]string, 0, len(m.Warnings)),
 	}
 	for _, r := range m.Runs {
 		doc.Analyzers = append(doc.Analyzers, jsonAnalyzerRun{

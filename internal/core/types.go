@@ -93,8 +93,31 @@ type ScanSnapshot struct {
 	// DependencyInputs lists the workspace-relative dependency manifests and
 	// lockfiles discovery saw (lockfiles included even though smart-skip
 	// keeps them out of SelectedFiles). Capped; empty means none were found.
-	DependencyInputs []string        `json:"dependency_inputs,omitempty"`
-	Git              ScanGitSnapshot `json:"git"`
+	DependencyInputs []string `json:"dependency_inputs,omitempty"`
+	// InputDigest digests the content hashes of every analyzed file, recorded
+	// before analyzers start: it identifies the bytes a scan actually
+	// describes. A recomputation at completion that disagrees means the
+	// workspace drifted mid-scan (DriftDetected).
+	InputDigest string `json:"input_digest,omitempty"`
+	// ConfigDigest digests the rules, exclusions, and path overrides that
+	// shaped the scan, so two scans are comparable only under the same
+	// configuration.
+	ConfigDigest string `json:"config_digest,omitempty"`
+	// DependencyDigest digests DependencyInputs; dependency-analysis results
+	// are only comparable when this matches.
+	DependencyDigest string `json:"dependency_digest,omitempty"`
+	// DiscoveryPolicyVersion is the discovery classifier's schema version;
+	// a classification change between scans is visible instead of implied.
+	DiscoveryPolicyVersion int `json:"discovery_policy_version,omitempty"`
+	// FingerprintVersion is the finding-identity schema version in effect
+	// when the scan's fingerprints were computed.
+	FingerprintVersion int `json:"fingerprint_version,omitempty"`
+	// Platform records os/arch/go of the machine that ran the scan.
+	Platform map[string]string `json:"platform,omitempty"`
+	// DriftDetected marks a scan whose workspace content changed between
+	// start and completion; its results may mix two versions of the tree.
+	DriftDetected bool `json:"drift_detected,omitempty"`
+	Git           ScanGitSnapshot `json:"git"`
 }
 
 type ScanGitSnapshot struct {

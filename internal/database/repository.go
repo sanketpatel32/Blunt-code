@@ -1563,6 +1563,23 @@ func (d *DB) SetScanNote(ctx context.Context, scanID, note string) error {
 	return err
 }
 
+// SaveScanSnapshot overwrites a scan's immutable-at-rest snapshot JSON. It
+// exists for the provenance amendments the scan pipeline records while the
+// scan is already running: the input digest once content hashes exist, and
+// the drift flag at completion. Callers amend the same *core.ScanSnapshot the
+// scan row was created with, so in-memory and persisted views stay equal.
+func (d *DB) SaveScanSnapshot(ctx context.Context, scanID string, snapshot *core.ScanSnapshot) error {
+	if snapshot == nil {
+		return fmt.Errorf("snapshot is required")
+	}
+	data, err := json.Marshal(snapshot)
+	if err != nil {
+		return fmt.Errorf("marshal scan snapshot: %w", err)
+	}
+	_, err = d.SQL.ExecContext(ctx, `UPDATE scans SET snapshot_json=? WHERE id=?`, string(data), scanID)
+	return err
+}
+
 // ValidateTag enforces the workspace tag shape: 1-20 lowercase letters,
 // digits, or hyphens. The same rule is encoded in the workspace_tags table
 // CHECK constraint, so API validation and storage agree.

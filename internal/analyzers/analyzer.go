@@ -115,6 +115,14 @@ type Finding struct {
 	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
+// FingerprintVersion versions the finding-identity schema. V1: sha256 over
+// analyzer id, rule id, normalized path, and whitespace-normalized message —
+// deliberately line-free so a moved issue stays comparable across scans. The
+// version is stamped into scan snapshots so identity changes are visible when
+// comparing history, and suppressions recorded under an older version are
+// never silently reinterpreted.
+const FingerprintVersion = 1
+
 // SetFingerprint creates the V1 heuristic identity.  Do not include line
 // numbers: a moved issue should remain comparable across scans.
 func (f *Finding) SetFingerprint() {

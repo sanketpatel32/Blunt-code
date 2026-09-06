@@ -15,8 +15,8 @@ type Run struct {
 	FindingCount                                          int
 	// WarningCount counts degradations that kept the run from full coverage
 	// (unparseable output batches); a warned run is not a clean run.
-	WarningCount                                         int
-	Duration                                             time.Duration
+	WarningCount int
+	Duration     time.Duration
 }
 type Comparison struct {
 	New, Fixed, Persistent []analyzers.Finding
@@ -26,7 +26,11 @@ type Input struct {
 	WorkspaceName, WorkspacePath, ScanID, Profile, BluntCodeVersion string
 	// State is the terminal scan state (for example "completed"); it feeds the
 	// JSON export's scan block and is not rendered by the other formats.
-	State                 string
+	State string
+	// Provenance carries the run manifest (IMP-07): digests of the analyzed
+	// bytes and shaping configuration, schema versions, platform, and drift.
+	// Nil for reports built before snapshots recorded it; renderers skip it.
+	Provenance            *Provenance
 	StartedAt, FinishedAt time.Time
 	Files                 []string
 	SkippedFiles          []string
@@ -34,6 +38,23 @@ type Input struct {
 	Metrics               []analyzers.Metric
 	Runs                  []Run
 	Comparison            Comparison
+}
+
+// Provenance is the compact identity of one scan run: what bytes were
+// analyzed, what configuration shaped the selection, which schema versions
+// classified inputs and identified findings, and where it ran. Two scans
+// with equal provenance are comparable; anything that differs is visible
+// instead of implied. Absolute paths and full file lists stay out on
+// purpose — the digests stand in for them.
+type Provenance struct {
+	InputDigest            string
+	ConfigDigest           string
+	GitCommit              string
+	GitDirty               bool
+	DiscoveryPolicyVersion int
+	FingerprintVersion     int
+	Platform               map[string]string
+	DriftDetected          bool
 }
 type Model struct {
 	Input
@@ -58,6 +79,9 @@ func Build(in Input) Model {
 	}
 	for _, id := range in.Comparison.UnknownAnalyzerIDs {
 		m.Warnings = append(m.Warnings, fmt.Sprintf("%s did not produce a valid current result; its previous findings are not considered fixed.", id))
+	}
+	if in.Provenance != nil && in.Provenance.DriftDetected {
+		m.Warnings = append(m.Warnings, "Workspace content changed during the scan; results may mix two versions of the tree.")
 	}
 	m.Priority = priority(in.Findings)
 	m.Summary = summary(counts, m.Partial)

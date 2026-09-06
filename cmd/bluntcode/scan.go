@@ -680,9 +680,20 @@ func buildScanReportModel(ctx context.Context, db *database.DB, work core.Worksp
 	}
 	files := []string(nil)
 	bluntCodeVersion := ""
-	if scan.Snapshot != nil {
-		files = append(files, scan.Snapshot.SelectedFiles...)
-		bluntCodeVersion = scan.Snapshot.BluntCodeVersion
+	var provenance *reports.Provenance
+	if snapshot := scan.Snapshot; snapshot != nil {
+		files = append(files, snapshot.SelectedFiles...)
+		bluntCodeVersion = snapshot.BluntCodeVersion
+		provenance = &reports.Provenance{
+			InputDigest:            snapshot.InputDigest,
+			ConfigDigest:           snapshot.ConfigDigest,
+			GitCommit:              snapshot.Git.Commit,
+			GitDirty:               snapshot.Git.Dirty,
+			DiscoveryPolicyVersion: snapshot.DiscoveryPolicyVersion,
+			FingerprintVersion:     snapshot.FingerprintVersion,
+			Platform:               snapshot.Platform,
+			DriftDetected:          snapshot.DriftDetected,
+		}
 	}
 	if len(files) == 0 && scan.SelectedFileCount > 0 {
 		files = make([]string, scan.SelectedFileCount)
@@ -697,6 +708,7 @@ func buildScanReportModel(ctx context.Context, db *database.DB, work core.Worksp
 		StartedAt: summary.startedAt, FinishedAt: summary.finishedAt,
 		Files: files, SkippedFiles: make([]string, skipped),
 		Findings: summary.findings, Metrics: metrics, Runs: summary.runs, Comparison: comparison,
+		Provenance: provenance,
 	}), nil
 }
 

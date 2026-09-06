@@ -131,23 +131,28 @@ func (s *Service) snapshot(ctx context.Context, work core.Workspace, profile str
 	}
 	sort.Strings(analyzerIDs)
 	return &core.ScanSnapshot{
-		WorkspaceID:        work.ID,
-		WorkspaceRoot:      work.RootPath,
-		WorkspaceName:      work.Name,
-		BluntCodeVersion:   bluntCodeVersion,
-		Profile:            profile,
-		CandidateFileCount: len(files),
-		SelectedFileCount:  len(selectedFiles),
-		SelectedFiles:      selectedFiles,
-		Languages:          languages,
-		Rules:              rules,
-		Exclusions:         append([]string(nil), excludes...),
-		PathOverrides:      overrides,
-		EnabledAnalyzers:   analyzerIDs,
-		AnalyzerVersions:   analyzerVersions,
-		SkipCounts:         skipCounts,
-		DependencyInputs:   dependencyInputs,
-		Git:                gitSnapshot(ctx, work.RootPath),
+		WorkspaceID:             work.ID,
+		WorkspaceRoot:           work.RootPath,
+		WorkspaceName:           work.Name,
+		BluntCodeVersion:        bluntCodeVersion,
+		Profile:                 profile,
+		CandidateFileCount:      len(files),
+		SelectedFileCount:       len(selectedFiles),
+		SelectedFiles:           selectedFiles,
+		Languages:               languages,
+		Rules:                   rules,
+		Exclusions:              append([]string(nil), excludes...),
+		PathOverrides:           overrides,
+		EnabledAnalyzers:        analyzerIDs,
+		AnalyzerVersions:        analyzerVersions,
+		SkipCounts:              skipCounts,
+		DependencyInputs:        dependencyInputs,
+		DependencyDigest:        dependencyDigest(dependencyInputs),
+		ConfigDigest:            configDigest(rules, excludes, overrides),
+		DiscoveryPolicyVersion:  discovery.PolicyVersion,
+		FingerprintVersion:      analyzers.FingerprintVersion,
+		Platform:                platformSnapshot(),
+		Git:                     gitSnapshot(ctx, work.RootPath),
 	}
 }
 
@@ -224,6 +229,15 @@ func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, 
 	// later incremental scan has a base to compare against, regardless of
 	// how the base scan itself was run.
 	fileHashes := hashSelectedFiles(work.RootPath, files)
+	// Record the input digest before analyzers start: it names the bytes this
+	// scan describes, and surviving a mid-scan crash is exactly when that
+	// matters most. Drift is checked against it at completion.
+	if scan.Snapshot != nil && scan.Snapshot.InputDigest == "" {
+		scan.Snapshot.InputDigest = inputDigest(fileHashes)
+		if err := s.db.SaveScanSnapshot(context.Background(), scan.ID, scan.Snapshot); err != nil {
+			log.Printf("provenance: could not record the input digest for scan %s (%v)", scan.ID, err)
+		}
+	}
 	// An incremental scan reuses the previous completed scan's findings for
 	// unchanged files; prepareIncremental degrades to nil (a full scan) on
 	// every refusal path, logging why.
@@ -262,6 +276,22 @@ func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, 
 	if successful == 0 {
 		state = "failed"
 	}
+	// Drift detection: if the workspace content changed between the input
+	// digest recorded at start and now, the scan's results may mix two
+	// versions of the tree. That is never a clean completed — relabel and
+	// flag the snapshot so comparisons and reports can see it.
+	var driftNote string
+	if scan.Snapshot != nil && scan.Snapshot.InputDigest != "" && state != "failed" {
+		if current := inputDigest(hashSelectedFiles(work.RootPath, files)); current != scan.Snapshot.InputDigest {
+			scan.Snapshot.DriftDetected = true
+			warned++
+			driftNote = "workspace content changed during the scan; results may mix two versions of the tree"
+			if err := s.db.SaveScanSnapshot(context.Background(), scan.ID, scan.Snapshot); err != nil {
+				log.Printf("provenance: could not record drift for scan %s (%v)", scan.ID, err)
+			}
+			s.emit(scan.ID, "scan.warning", map[string]any{"message": "Workspace content changed during the scan; results may be mixed."})
+		}
+	}
 	// A scan that lost analyzer coverage — a failed run, or a run that
 	// completed with degraded output — is never a clean "completed": zero
 	// findings from incomplete coverage must not read as a clean bill of
@@ -290,7 +320,16 @@ func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, 
 	var incrementalNote string
 	if incremental != nil {
 		incrementalNote = fmt.Sprintf("incremental: reused findings for %d unchanged file(s), ran analyzers on %d file(s)", len(incremental.unchanged), incremental.changedCount)
-		_ = s.db.SetScanNote(context.Background(), scan.ID, incrementalNote)
+	}
+	if driftNote != "" || incrementalNote != "" {
+		note := driftNote
+		if incrementalNote != "" {
+			if note != "" {
+				note += "; "
+			}
+			note += incrementalNote
+		}
+		_ = s.db.SetScanNote(context.Background(), scan.ID, note)
 	}
 	s.emit(scan.ID, "scan.stage", map[string]any{"stage": "Generating report"})
 	reportPath, err := s.writeReport(scan, work, files)
@@ -494,7 +533,20 @@ func (s *Service) writeReport(scan core.Scan, work core.Workspace, files []core.
 	if scan.StartedAt != nil {
 		startedAt = *scan.StartedAt
 	}
-	markdown := reports.Markdown(reports.Build(reports.Input{WorkspaceName: work.Name, WorkspacePath: work.RootPath, ScanID: scan.ID, Profile: scan.Profile, StartedAt: startedAt, Files: selected, SkippedFiles: skipped, Findings: findings, Metrics: metrics, Runs: runs, Comparison: comparison}))
+	var provenance *reports.Provenance
+	if snapshot := scan.Snapshot; snapshot != nil {
+		provenance = &reports.Provenance{
+			InputDigest:            snapshot.InputDigest,
+			ConfigDigest:           snapshot.ConfigDigest,
+			GitCommit:              snapshot.Git.Commit,
+			GitDirty:               snapshot.Git.Dirty,
+			DiscoveryPolicyVersion: snapshot.DiscoveryPolicyVersion,
+			FingerprintVersion:     snapshot.FingerprintVersion,
+			Platform:               snapshot.Platform,
+			DriftDetected:          snapshot.DriftDetected,
+		}
+	}
+	markdown := reports.Markdown(reports.Build(reports.Input{WorkspaceName: work.Name, WorkspacePath: work.RootPath, ScanID: scan.ID, Profile: scan.Profile, StartedAt: startedAt, Files: selected, SkippedFiles: skipped, Findings: findings, Metrics: metrics, Runs: runs, Comparison: comparison, Provenance: provenance}))
 	if err := os.MkdirAll(s.reportsDir, 0o700); err != nil {
 		return "", err
 	}

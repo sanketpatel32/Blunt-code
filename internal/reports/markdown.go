@@ -87,7 +87,40 @@ func scanDetails(b *strings.Builder, m Model) {
 	detailRow(b, "Analyzed files", fmt.Sprintf("%d", len(m.Files)))
 	detailRow(b, "Skipped files", fmt.Sprintf("%d", len(m.SkippedFiles)))
 	detailRow(b, "Analysis completeness", map[bool]string{true: "PARTIAL", false: "COMPLETE"}[m.Partial])
+	if p := m.Provenance; p != nil {
+		detailRow(b, "Input digest", shortDigest(p.InputDigest))
+		detailRow(b, "Config digest", shortDigest(p.ConfigDigest))
+		if p.GitCommit != "" {
+			commit := p.GitCommit
+			if len(commit) > 12 {
+				commit = commit[:12]
+			}
+			dirty := ""
+			if p.GitDirty {
+				dirty = " (dirty)"
+			}
+			detailRow(b, "Git", commit+dirty)
+		}
+		if p.DiscoveryPolicyVersion > 0 || p.FingerprintVersion > 0 {
+			detailRow(b, "Schema versions", fmt.Sprintf("discovery v%d, fingerprints v%d", p.DiscoveryPolicyVersion, p.FingerprintVersion))
+		}
+		if p.DriftDetected {
+			detailRow(b, "Input drift", "DETECTED — workspace changed during the scan")
+		}
+	}
 	b.WriteString("\n")
+}
+
+// shortDigest renders a provenance digest as a 12-character prefix — enough
+// to compare two runs at a glance without padding the report.
+func shortDigest(digest string) string {
+	if digest == "" {
+		return "n/a"
+	}
+	if len(digest) > 12 {
+		return digest[:12]
+	}
+	return digest
 }
 
 func detailRow(b *strings.Builder, field, value string) {

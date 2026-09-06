@@ -13,6 +13,18 @@ import (
 	"bluntcode/internal/workspace"
 )
 
+// PolicyVersion versions the discovery classifier's behavior: which
+// extensions map to which language, what counts as a license basename, which
+// files are dependency inputs, and what the smart-skip layer excludes. Any
+// change to classification bumps this number so scan snapshots (and anything
+// comparing them) can see that two scans ran under different policies
+// instead of silently assuming equivalence.
+//
+// 1: classification before 0.22.0.
+// 2: terraform extensions, license basenames, dependency inputs, skip
+//    reasons, and the generated-content smart-skip layer.
+const PolicyVersion = 2
+
 // DefaultExcluded reports whether a path is excluded from scanning without
 // any user configuration: artifact directories (node_modules, dist, target,
 // vendor, ...) for directories, and generated file names (minified bundles,
