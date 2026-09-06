@@ -1,11 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"time"
 
@@ -147,15 +147,13 @@ func runReport(args []string, stdout, stderr io.Writer) int {
 	}
 	model := reports.Build(input)
 
-	dest := stdout
+	// When exporting to a file the document is buffered and committed with one
+	// atomic rename, so an interrupted export never leaves a truncated artifact
+	// that reads as a successful report.
+	var buffer bytes.Buffer
+	dest := io.Writer(stdout)
 	if *outputFlag != "" {
-		f, createErr := os.Create(*outputFlag)
-		if createErr != nil {
-			fmt.Fprintf(stderr, "bluntcode report: create output file: %v\n", createErr)
-			return 1
-		}
-		defer f.Close()
-		dest = f
+		dest = &buffer
 	}
 
 	format := strings.ToLower(strings.TrimSpace(*formatFlag))
@@ -184,6 +182,10 @@ func runReport(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if *outputFlag != "" {
+		if err := reports.WriteBytesAtomic(*outputFlag, buffer.Bytes(), 0o600); err != nil {
+			fmt.Fprintf(stderr, "bluntcode report: could not write output file: %v\n", err)
+			return 1
+		}
 		fmt.Fprintf(stdout, "Report exported to %s (format: %s).\n", *outputFlag, format)
 	}
 	return 0

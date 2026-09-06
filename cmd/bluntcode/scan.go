@@ -592,7 +592,7 @@ func runSingleScan(app *appCore, cfg scanConfig, work core.Workspace, baseline s
 			document = reports.JSON(model)
 		}
 		if cfg.output != "" {
-			if err := os.WriteFile(cfg.output, document, 0o600); err != nil {
+			if err := reports.WriteBytesAtomic(cfg.output, document, 0o600); err != nil {
 				fmt.Fprintf(stderr, "bluntcode scan: could not write %s: %v\n", cfg.output, err)
 				return scanRunResult{code: 3}
 			}
@@ -603,7 +603,7 @@ func runSingleScan(app *appCore, cfg scanConfig, work core.Workspace, baseline s
 		}
 	}
 	if cfg.saveBaseline != "" && summary.state == "completed" {
-		if err := os.WriteFile(cfg.saveBaseline, reports.SARIFBytes(model), 0o600); err != nil {
+		if err := reports.WriteBytesAtomic(cfg.saveBaseline, reports.SARIFBytes(model), 0o600); err != nil {
 			fmt.Fprintf(stderr, "bluntcode scan: could not write baseline %s: %v\n", cfg.saveBaseline, err)
 			return scanRunResult{code: 3}
 		}

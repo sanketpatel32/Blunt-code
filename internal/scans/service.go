@@ -561,7 +561,7 @@ func (s *Service) writeReport(scan core.Scan, work core.Workspace, files []core.
 		return "", err
 	}
 	path := filepath.Join(s.reportsDir, reports.Filename(work.Name, time.Now()))
-	return path, os.WriteFile(path, []byte(markdown), 0o600)
+	return path, reports.WriteBytesAtomic(path, []byte(markdown), 0o600)
 }
 
 // DiscoverAndStart is the API-friendly entry that keeps discovery out of HTTP handlers.

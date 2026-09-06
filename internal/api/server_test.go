@@ -2412,14 +2412,14 @@ func TestPruneWorkspaceScansEndpoint(t *testing.T) {
 	response = httptest.NewRecorder()
 	s.Handler().ServeHTTP(response, request)
 	var body struct {
-		Deleted int64 `json:"deleted"`
-		Kept    int   `json:"kept"`
+		Deleted []string `json:"deleted"`
+		Kept    int      `json:"kept"`
 	}
 	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil {
 		t.Fatalf("prune: %d %s", response.Code, response.Body.String())
 	}
-	if body.Deleted != 2 || body.Kept != 2 {
-		t.Fatalf("prune deleted=%d kept=%d, want 2 and 2", body.Deleted, body.Kept)
+	if len(body.Deleted) != 2 || body.Kept != 2 {
+		t.Fatalf("prune deleted=%d kept=%d, want 2 and 2 (deleted ids: %v)", len(body.Deleted), body.Kept, body.Deleted)
 	}
 	var remaining int
 	if err := s.db.SQL.QueryRowContext(ctx, `SELECT COUNT(*) FROM scans WHERE workspace_id=?`, work.ID).Scan(&remaining); err != nil {

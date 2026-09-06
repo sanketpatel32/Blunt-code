@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/csv"
 	"encoding/json"
@@ -14,6 +15,7 @@ import (
 
 	"bluntcode/internal/analyzers"
 	"bluntcode/internal/database"
+	"bluntcode/internal/reports"
 	"bluntcode/internal/scans"
 	"bluntcode/internal/workspace"
 )
@@ -220,19 +222,28 @@ func runFindingsList(ctx context.Context, app *cliCore, args []string, stdout, s
 		findings = filtered
 	}
 
-	// Select destination
+	// File exports are buffered and committed with one atomic rename, so an
+	// interrupted export never leaves a truncated artifact behind.
+	var buffer bytes.Buffer
 	dest := stdout
 	if *outputFlag != "" {
-		f, createErr := os.Create(*outputFlag)
-		if createErr != nil {
-			fmt.Fprintf(stderr, "bluntcode findings list: could not create output file: %v\n", createErr)
+		dest = &buffer
+	}
+	code := renderFindings(dest, stdout, scan.ID, strings.ToLower(*formatFlag), findings)
+	if code != 0 {
+		return code
+	}
+	if *outputFlag != "" {
+		if err := reports.WriteBytesAtomic(*outputFlag, buffer.Bytes(), 0o600); err != nil {
+			fmt.Fprintf(stderr, "bluntcode findings list: could not write output file: %v\n", err)
 			return 1
 		}
-		defer f.Close()
-		dest = f
 	}
+	return 0
+}
 
-	switch strings.ToLower(*formatFlag) {
+func renderFindings(dest io.Writer, stdout io.Writer, scanID, format string, findings []analyzers.Finding) int {
+	switch format {
 	case "json":
 		return outputJSONFindings(dest, findings)
 	case "jsonl":
@@ -260,10 +271,10 @@ func runFindingsList(ctx context.Context, app *cliCore, args []string, stdout, s
 		return 0
 	case "text":
 		if len(findings) == 0 {
-			fmt.Fprintf(stdout, "No findings for scan %s.\n", scan.ID)
+			fmt.Fprintf(stdout, "No findings for scan %s.\n", scanID)
 			return 0
 		}
-		fmt.Fprintf(dest, "Findings for scan %s (%d findings):\n\n", scan.ID, len(findings))
+		fmt.Fprintf(dest, "Findings for scan %s (%d findings):\n\n", scanID, len(findings))
 		headers := []string{"SEV", "ANALYZER", "LOCATION", "RULE", "MESSAGE"}
 		rows := make([][]string, len(findings))
 		for i, f := range findings {
@@ -277,7 +288,7 @@ func runFindingsList(ctx context.Context, app *cliCore, args []string, stdout, s
 		writeTable(dest, headers, rows)
 		return 0
 	default:
-		fmt.Fprintf(stderr, "bluntcode findings list: unknown format %q (allowed: text, json, jsonl, csv)\n", *formatFlag)
+		fmt.Fprintf(os.Stderr, "bluntcode findings list: unknown format %q (allowed: text, json, jsonl, csv)\n", format)
 		return 2
 	}
 }

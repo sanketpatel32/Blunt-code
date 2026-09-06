@@ -99,7 +99,7 @@ func SARIF(m Model) sarifLog {
 			indexes[f.RuleID] = index
 			rules = append(rules, sarifRule{ID: scrubControls(f.RuleID), ShortDescription: sarifText{Text: ruleName(f)}})
 		}
-		if uri := scrubControls(strings.TrimSpace(f.DocumentationURL)); uri != "" && rules[index].HelpURI == "" {
+		if uri := sarifHelpURI(f.DocumentationURL); uri != "" && rules[index].HelpURI == "" {
 			rules[index].HelpURI = uri
 		}
 		result := sarifResult{RuleID: scrubControls(f.RuleID), RuleIndex: index, Level: sarifLevel(f.Severity), Message: sarifText{Text: sarifMessage(f)}}
@@ -121,6 +121,24 @@ func SARIF(m Model) sarifLog {
 		Tool:    sarifTool{Driver: sarifDriver{Name: "Blunt Code", Version: m.BluntCodeVersion, InformationURI: sarifDriverURI, Rules: rules}},
 		Results: results,
 	}}}
+}
+
+// sarifHelpURI projects a finding's documentation URL onto the rule's help
+// URI. Unlike the HTML export — where html/template's URL filter rewrites
+// unsafe schemes itself — SARIF has no renderer between the file and the
+// consumer, and editors render help URIs as clickable links. Only http and
+// https URLs pass; anything else (javascript:, data:, file:, control-bearing
+// garbage) is dropped rather than trusted.
+func sarifHelpURI(raw string) string {
+	uri := scrubControls(strings.TrimSpace(raw))
+	if uri == "" {
+		return ""
+	}
+	lower := strings.ToLower(uri)
+	if !strings.HasPrefix(lower, "https://") && !strings.HasPrefix(lower, "http://") {
+		return ""
+	}
+	return uri
 }
 
 // SARIFBytes serializes the SARIF log exactly the way the API download route
