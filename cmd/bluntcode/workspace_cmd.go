@@ -18,7 +18,7 @@ func printWorkspaceHelp(w io.Writer) {
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Usage:")
 	fmt.Fprintln(w, "  bluntcode workspace list [--json]")
-	fmt.Fprintln(w, "  bluntcode workspace add <path> [--name <name>] [--profile quick|standard|deep] [--json]")
+	fmt.Fprintln(w, "  bluntcode workspace add <path> [--name <name>] [--profile quick|standard|deep|pentest] [--json]")
 	fmt.Fprintln(w, "  bluntcode workspace show <id|path> [--json]")
 	fmt.Fprintln(w, "  bluntcode workspace delete <id|path> [--json]")
 	fmt.Fprintln(w, "  bluntcode workspace tree <id|path> [--path <subpath>] [--json]")
@@ -108,7 +108,7 @@ func runWorkspaceAdd(ctx context.Context, app *cliCore, args []string, stdout, s
 	flags := flag.NewFlagSet("workspace add", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	nameFlag := flags.String("name", "", "workspace display name")
-	profileFlag := flags.String("profile", "standard", "default scan profile: quick, standard, deep")
+	profileFlag := flags.String("profile", "standard", "default scan profile: quick, standard, deep, or pentest")
 	jsonOut := flags.Bool("json", false, "output JSON")
 	positional, err := parseFlagsInterspersed(flags, args)
 	if err != nil {
@@ -117,7 +117,7 @@ func runWorkspaceAdd(ctx context.Context, app *cliCore, args []string, stdout, s
 
 	if len(positional) == 0 {
 		fmt.Fprintln(stderr, "bluntcode workspace add: missing workspace path")
-		fmt.Fprintln(stderr, "usage: bluntcode workspace add <path> [--name <name>] [--profile quick|standard|deep] [--json]")
+		fmt.Fprintln(stderr, "usage: bluntcode workspace add <path> [--name <name>] [--profile quick|standard|deep|pentest] [--json]")
 		return 2
 	}
 	pathArg := positional[0]

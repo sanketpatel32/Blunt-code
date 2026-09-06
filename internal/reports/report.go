@@ -13,7 +13,10 @@ import (
 type Run struct {
 	AnalyzerID, DisplayName, Version, State, ErrorSummary string
 	FindingCount                                          int
-	Duration                                              time.Duration
+	// WarningCount counts degradations that kept the run from full coverage
+	// (unparseable output batches); a warned run is not a clean run.
+	WarningCount                                         int
+	Duration                                             time.Duration
 }
 type Comparison struct {
 	New, Fixed, Persistent []analyzers.Finding

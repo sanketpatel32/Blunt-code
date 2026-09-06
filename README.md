@@ -208,7 +208,7 @@ bluntcode update check [--json]      # Check for newer releases
 bluntcode cli [command]              # Interactive built-in command documentation
 ```
 
-**Exit codes** · `0` clean / success · `1` failed or `--fail-on`/`--max-findings` gate tripped · `2` usage error · `130` stopped with Ctrl+C
+**Exit codes** · `0` completed with full coverage · `1` `--fail-on`/`--max-findings` gate tripped · `2` usage error · `3` operational failure or incomplete coverage (failed/timed out/interrupted/degraded analyzers) · `4` cancelled · `130` double Ctrl+C
 
 ### In CI — GitHub Actions
 

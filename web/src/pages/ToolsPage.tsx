@@ -77,7 +77,7 @@ export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r
   async function action(analyzer: AnalyzerStatus, operation: ToolOperation) {
     if (!analyzer.managed_tool) return;
     setBusy({ tool: analyzer.managed_tool, operation });
-    try { await api.toolAction(analyzer.managed_tool, operation); await analyzers.reload(); notify({ kind: 'info', text: `${analyzer.display_name}: ${operationVerbs[operation]}.` }); } catch (e) { notify({ kind: 'error', text: message(e) }); } finally { setBusy(undefined); }
+    try { await api.toolAction(analyzer.managed_tool, operation); await analyzers.reload(); notify({ kind: 'info', text: `${analyzer.display_name || analyzer.id}: ${operationVerbs[operation]}.` }); } catch (e) { notify({ kind: 'error', text: message(e) }); } finally { setBusy(undefined); }
   }
 
   const rows = analyzers.data ?? [];
@@ -112,11 +112,14 @@ export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r
               const status = statusLabel(analyzer);
               const Icon = categoryIcons[cat] ?? Wrench;
               const detail = analyzer.detail || analyzer.description;
+              // The inventory always sends display_name, but a hostile or
+              // older payload must degrade to the id, never render "undefined".
+              const name = analyzer.display_name || analyzer.id;
               return (
                 <tr key={analyzer.id}>
-                  <td><strong className="flex items-center gap-1.5">{analyzer.display_name}</strong></td>
+                  <td><strong className="flex items-center gap-1.5">{name}</strong></td>
                   <td><span className="badge inline-flex items-center gap-1 text-[10px]" style={{ borderColor: `color-mix(in oklch, ${categoryColor(cat)} 34%, var(--color-rule))`, color: categoryColor(cat), background: `color-mix(in oklch, ${categoryColor(cat)} 12%, var(--color-surface))` }}><Icon className="h-3 w-3" />{CATEGORY_LABELS[cat] ?? cat}</span></td>
-                  <td className="text-xs">{analyzer.profiles.map((p) => PROFILE_LABELS[p] ?? p).join(', ')}</td>
+                  <td className="text-xs">{(analyzer.profiles ?? []).map((p) => PROFILE_LABELS[p] ?? p).join(', ')}</td>
                   <td><span className="badge text-[10px]" title={analyzer.network_note || undefined}>{NETWORK_LABELS[analyzer.network] ?? analyzer.network}</span></td>
                   <td><span className="badge tool-version">{analyzer.version ? `v${analyzer.version}` : analyzer.execution === 'in-process' ? 'Built-in' : 'Managed version'}</span></td>
                   <td><span className={`state ${status.state === 'not-ready' ? 'not-ready' : 'ready'}`}>{status.text}</span></td>

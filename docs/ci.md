@@ -13,16 +13,22 @@ on a Windows runner (`windows-latest`) in hosted CI.
 
 | Code | Meaning |
 | :--- | :--- |
-| `0` | Scan completed (warnings included — a failed analyzer does not fail the build) |
-| `1` | Scan failed, was cancelled, or timed out — or a `--fail-on`/`--max-findings` gate tripped |
-| `2` | Usage error: bad flags, an invalid `--fail-on`/`--max-findings`/`--jobs` value, or an unknown `--baseline` (reported before any scan starts) |
-| `130` | Stopped with Ctrl+C |
+| `0` | Scan completed with full analyzer coverage and every gate passed |
+| `1` | A `--fail-on`/`--max-findings` gate tripped on an otherwise-complete scan |
+| `2` | Usage error: bad flags, an invalid `--fail-on`/`--max-findings`/`--jobs` value, a bad path argument, or an unknown `--baseline` (reported before any scan starts) |
+| `3` | Operational failure or incomplete coverage: the scan failed, timed out, was interrupted, or ended `completed_with_warnings` (some analyzers failed or ran degraded). Zero findings from an incomplete scan are never a pass. |
+| `4` | The scan was cancelled (single Ctrl+C) |
+| `130` | Stopped with a double Ctrl+C |
+
+Incompleteness takes precedence over the gate: gates are only evaluated on a
+clean, complete scan, so a build never goes green because an analyzer died
+and the findings it would have reported are missing.
 
 With `--watch`, the gate never exits the process: gate failures print per
 scan on stderr and the loop keeps watching. Only Ctrl+C (exit 130) stops it.
 
 The data directory is single-instance locked, exactly like the app. A CI step
-that runs while another Blunt Code process holds the lock exits 1 with a
+that runs while another Blunt Code process holds the lock exits 3 with a
 clear message; redirect `LOCALAPPDATA` (see the workflow below) to isolate CI
 state completely.
 

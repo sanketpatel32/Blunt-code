@@ -260,7 +260,8 @@ func writeSARIFFixtureInvalid(t *testing.T) string {
 
 // TestRunScanCommandBaselineSummaryLine covers the stderr baseline summary with
 // a valid SARIF baseline while offline: the scan still runs (and fails offline
-// with exit 1), and the baseline line reports the scan's findings without
+// with exit 3, the operational-failure code), and the baseline line reports the
+// scan's findings without
 // changing the exit code by itself. Offline analyzers produce no findings, so
 // both counters are zero — the point here is that the line appears and the run
 // proceeds instead of dying at baseline resolution.
@@ -270,8 +271,8 @@ func TestRunScanCommandBaselineSummaryLine(t *testing.T) {
 	sarif := writeSARIFFixture(t, baselineFindings("F401"))
 	var out, errOut bytes.Buffer
 	code := runScanCommand([]string{ws, "--quiet", "--json", "--baseline", sarif}, &out, &errOut)
-	if code != 1 {
-		t.Fatalf("offline scan exit code = %d, want 1 (stderr: %s)", code, errOut.String())
+	if code != 3 {
+		t.Fatalf("offline scan exit code = %d, want 3 (stderr: %s)", code, errOut.String())
 	}
 	if !strings.Contains(errOut.String(), "baseline: 0 known finding(s) excluded from gate, 0 new finding(s)") {
 		t.Fatalf("baseline summary line missing: %q", errOut.String())

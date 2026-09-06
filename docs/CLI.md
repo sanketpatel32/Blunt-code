@@ -31,10 +31,12 @@ CLI queries open the SQLite database directly with shared concurrency, meaning C
 
 All Blunt Code commands return deterministic exit codes suitable for CI/CD automation:
 
-- `0` — **Clean / Success**: Scan completed with no gate violations, or command executed successfully.
-- `1` — **Gate Tripped / Findings Found / Execution Error**: Scan findings tripped `--fail-on` or `--max-findings`, or operation failed.
-- `2` — **Usage / Flag Error**: Missing required arguments, invalid flag value, or syntax error.
-- `130` — **Interrupted**: Execution aborted by `Ctrl+C` (SIGINT).
+- `0` — **Clean / Success**: Scan completed with full analyzer coverage and no gate violations.
+- `1` — **Gate Tripped**: Findings tripped `--fail-on` or `--max-findings` on an otherwise-complete scan.
+- `2` — **Usage / Flag Error**: Missing required arguments, invalid flag value, an invalid path argument, or an unresolvable `--baseline`.
+- `3` — **Operational Failure / Incomplete Coverage**: The scan failed, timed out, was interrupted, ended in `completed_with_warnings` (some analyzers failed or ran degraded), or could not start/persist its result. Zero findings from an incomplete scan never read as a pass.
+- `4` — **Cancelled**: The user cancelled the scan (single `Ctrl+C` graceful stop).
+- `130` — **Forced Interrupt**: A second `Ctrl+C` pressed while the first was still being handled.
 
 ---
 
@@ -47,10 +49,11 @@ bluntcode scan <path> [options]
 ```
 
 ### Flags
-- `--profile quick|standard|deep`: Analyzer depth (default: `standard`).
-  - `quick`: Fast linters (Ruff, Biome, Todo, Secrets).
-  - `standard`: Complete multi-engine suite (adds Semgrep, Gitleaks, Checkov, Trivy, OSV).
-  - `deep`: Exhaustive rule sets and cross-file checks.
+- `--profile quick|standard|deep|pentest`: Analyzer depth (default: `standard`).
+  - `quick`: Fast lint pass only (Ruff, Biome).
+  - `standard`: Adds Semgrep, Gitleaks, SonarQube, the pentest probe suite, license-scan, and the built-in secrets/todo scans.
+  - `deep`: The full catalog — everything in standard plus OSV (dependency CVEs), Trivy (containers), Checkov (IaC), and Ruff's extended rule sets.
+  - `pentest`: Same catalog as standard, oriented around the probe suite.
 - `--fail-on <severity+>`: Trips exit code 1 if findings remain at or above severity (e.g. `critical`, `high+`, `medium+`, `low+`).
 - `--max-findings N`: Trips exit code 1 if total non-suppressed findings exceed N.
 - `--baseline <id-or-sarif>`: Compares findings against a baseline scan ID or SARIF file; only trips gate on **new** findings.
@@ -85,7 +88,7 @@ Manage registered projects, metadata, directories, and tags.
 
 ```bash
 bluntcode workspace list [--json]
-bluntcode workspace add <path> [--name <name>] [--profile quick|standard|deep] [--json]
+bluntcode workspace add <path> [--name <name>] [--profile quick|standard|deep|pentest] [--json]
 bluntcode workspace show <id|path> [--json]
 bluntcode workspace tree <id|path> [--path <subpath>] [--json]
 bluntcode workspace tags <id|path> [--set "tag1,tag2"] [--json]

@@ -56,6 +56,7 @@ const (
 type scanCounters struct {
 	successful   atomic.Int64
 	failed       atomic.Int64
+	warned       atomic.Int64
 	mu           sync.Mutex
 	succeededIDs map[string]bool
 }
@@ -72,6 +73,12 @@ func (c *scanCounters) markSucceeded(analyzerID string) {
 }
 func (c *scanCounters) markFailed() { c.failed.Add(1) }
 
+// markWarned records a run that completed with degraded coverage (unparseable
+// output batches). The scan must end completed_with_warnings — zero findings
+// from a warned run is an observation about incomplete inputs, not a clean
+// bill of health.
+func (c *scanCounters) markWarned() { c.warned.Add(1) }
+
 // succeeded reports whether the analyzer completed a successful run in this
 // scan. Incremental reuse consults it to distinguish "skipped because nothing
 // changed" from "ran and failed".
@@ -81,8 +88,8 @@ func (c *scanCounters) succeeded(analyzerID string) bool {
 	return c.succeededIDs[analyzerID]
 }
 
-func (c *scanCounters) snapshot() (successful, failed int) {
-	return int(c.successful.Load()), int(c.failed.Load())
+func (c *scanCounters) snapshot() (successful, failed, warned int) {
+	return int(c.successful.Load()), int(c.failed.Load()), int(c.warned.Load())
 }
 
 // severityCounts buckets a normalized findings slice by severity for the
@@ -189,10 +196,18 @@ func (s *Service) executeAnalyzer(ctx context.Context, scan core.Scan, work core
 			findings = dropArtifactFindings(findings)
 		}
 		if err == nil {
-			_, err = s.db.SaveAnalyzerResult(context.Background(), scan.ID, database.AnalyzerRunInput{AnalyzerID: adapter.ID(), Version: plan.Version, State: "succeeded", StartedAt: started, FinishedAt: finished, ExitCode: result.ExitCode}, findings, metrics)
+			_, err = s.db.SaveAnalyzerResult(context.Background(), scan.ID, database.AnalyzerRunInput{AnalyzerID: adapter.ID(), Version: plan.Version, State: "succeeded", StartedAt: started, FinishedAt: finished, ExitCode: result.ExitCode, WarningCount: len(result.Warnings)}, findings, metrics)
 			if err == nil {
 				counters.markSucceeded(adapter.ID())
-				s.emit(scan.ID, "analyzer.completed", map[string]any{"analyzer_id": adapter.ID(), "findings": len(findings), "severities": severityCounts(findings)})
+				if len(result.Warnings) > 0 {
+					counters.markWarned()
+				}
+				event := map[string]any{"analyzer_id": adapter.ID(), "findings": len(findings), "severities": severityCounts(findings)}
+				if len(result.Warnings) > 0 {
+					event["warnings"] = len(result.Warnings)
+					event["warning"] = result.Warnings[0]
+				}
+				s.emit(scan.ID, "analyzer.completed", event)
 				return analyzerSucceeded
 			}
 		}

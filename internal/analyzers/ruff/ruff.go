@@ -87,7 +87,8 @@ func (a *Adapter) Run(ctx context.Context, p analyzers.AnalyzerPlan, emit analyz
 	}
 	started := time.Now()
 	merged := make([]rawDiagnostic, 0)
-	for _, command := range p.Commands {
+	warnings := make([]string, 0)
+	for index, command := range p.Commands {
 		partPlan := p
 		partPlan.Commands = []analyzers.ProcessSpec{command}
 		part, err := analyzers.RunDirect(ctx, partPlan, emit)
@@ -99,7 +100,12 @@ func (a *Adapter) Run(ctx context.Context, p analyzers.AnalyzerPlan, emit analyz
 		}
 		var parsed []rawDiagnostic
 		if err := json.Unmarshal(part.Stdout, &parsed); err != nil {
-			return part, nil
+			// One unparseable batch must not throw away the findings of every
+			// other batch: keep them, and record the coverage hole so the scan
+			// can surface it (warning_count, completed_with_warnings) instead
+			// of presenting a full-coverage result.
+			warnings = append(warnings, fmt.Sprintf("batch %d/%d produced unparseable ruff output; its findings are not included", index+1, len(p.Commands)))
+			continue
 		}
 		merged = append(merged, parsed...)
 	}
@@ -111,7 +117,7 @@ func (a *Adapter) Run(ctx context.Context, p analyzers.AnalyzerPlan, emit analyz
 	if len(merged) > 0 {
 		exitCode = 1
 	}
-	return analyzers.AnalyzerResult{Plan: p, Stdout: stdout, ExitCode: exitCode, StartedAt: started, FinishedAt: time.Now()}, nil
+	return analyzers.AnalyzerResult{Plan: p, Stdout: stdout, ExitCode: exitCode, StartedAt: started, FinishedAt: time.Now(), Warnings: warnings}, nil
 }
 
 type rawDiagnostic struct {

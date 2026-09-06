@@ -145,10 +145,11 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 		fmt.Fprintln(errOut)
 		fmt.Fprintln(errOut, "Scans the workspace at <path> headlessly: no browser, no server. Progress is")
 		fmt.Fprintln(errOut, "written to stderr and a summary to stdout. Missing managed tools are")
-		fmt.Fprintln(errOut, "installed automatically unless offline mode is enabled. Exit code is 0 for a")
-		fmt.Fprintln(errOut, "completed scan (warnings included), 1 for failed/cancelled/interrupted scans")
-		fmt.Fprintln(errOut, "and for a tripped CI gate (--fail-on/--max-findings), 130 when stopped")
-		fmt.Fprintln(errOut, "with Ctrl+C, and 2 for usage errors. With --baseline, the gate counts")
+		fmt.Fprintln(errOut, "installed automatically unless offline mode is enabled. Exit codes: 0 for a")
+		fmt.Fprintln(errOut, "completed scan, 1 when the CI gate trips (--fail-on/--max-findings), 2 for")
+		fmt.Fprintln(errOut, "usage errors, 3 for operational failure or incomplete coverage (failed,")
+		fmt.Fprintln(errOut, "interrupted, timed out, or analyzers that failed or ran degraded), 4 when")
+		fmt.Fprintln(errOut, "cancelled, and 130 on a double Ctrl+C. With --baseline, the gate counts")
 		fmt.Fprintln(errOut, "only findings that are new since the baseline (a previous scan ID or a")
 		fmt.Fprintln(errOut, "SARIF file exported by Blunt Code). With --watch the command keeps")
 		fmt.Fprintln(errOut, "running and rescans whenever workspace files change (poll every 2s,")
@@ -422,17 +423,17 @@ func runScanCommand(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		if errors.Is(err, instance.ErrAlreadyRunning) {
 			fmt.Fprintln(stderr, "bluntcode scan: another Blunt Code process (app or scan) is already using the data directory; close it and retry")
-			return 1
+			return 3
 		}
 		fmt.Fprintf(stderr, "bluntcode scan: %v\n", err)
-		return 1
+		return 3
 	}
 	defer release()
 	ctx := context.Background()
 	work, err := ensureWorkspace(ctx, app.db, cfg.path)
 	if err != nil {
 		fmt.Fprintf(stderr, "bluntcode scan: %v\n", err)
-		return 1
+		return 3
 	}
 	// The baseline resolves before the scan starts: an unknown scan ID or an
 	// unreadable/invalid SARIF file is a usage error (exit 2), not a failed
@@ -505,7 +506,7 @@ func runSingleScan(app *appCore, cfg scanConfig, work core.Workspace, baseline s
 	scan, err := app.scans.DiscoverAndStartWithOptions(ctx, work, cfg.profile, userExcludePatterns(ctx, app.db, work.ID), scans.ScanOptions{Jobs: cfg.jobs, Incremental: cfg.incremental})
 	if err != nil {
 		fmt.Fprintf(stderr, "bluntcode scan: could not start scan: %v\n", err)
-		return scanRunResult{code: 1}
+		return scanRunResult{code: 3}
 	}
 	if !cfg.quiet {
 		fmt.Fprintf(stderr, "scanning %s (profile %s, timeout %s)\n", work.RootPath, cfg.profile, cfg.timeout)
@@ -542,7 +543,7 @@ func runSingleScan(app *appCore, cfg scanConfig, work core.Workspace, baseline s
 	summary, err := buildScanSummary(ctx, app.db, work, scan.ID, outcome.timedOut)
 	if err != nil {
 		fmt.Fprintf(stderr, "bluntcode scan: could not load scan result: %v\n", err)
-		return scanRunResult{code: 1}
+		return scanRunResult{code: 3}
 	}
 	summary.state = outcome.finalState
 	// Document formats share one report model; --save-baseline needs the same
@@ -553,7 +554,7 @@ func runSingleScan(app *appCore, cfg scanConfig, work core.Workspace, baseline s
 		built, err := buildScanReportModel(ctx, app.db, work, summary)
 		if err != nil {
 			fmt.Fprintf(stderr, "bluntcode scan: could not load report: %v\n", err)
-			return scanRunResult{code: 1}
+			return scanRunResult{code: 3}
 		}
 		model = built
 	}
@@ -588,18 +589,18 @@ func runSingleScan(app *appCore, cfg scanConfig, work core.Workspace, baseline s
 		if cfg.output != "" {
 			if err := os.WriteFile(cfg.output, document, 0o600); err != nil {
 				fmt.Fprintf(stderr, "bluntcode scan: could not write %s: %v\n", cfg.output, err)
-				return scanRunResult{code: 1}
+				return scanRunResult{code: 3}
 			}
 			fmt.Fprintf(stderr, "report written to %s\n", cfg.output)
 		} else if _, err := stdout.Write(document); err != nil {
 			fmt.Fprintf(stderr, "bluntcode scan: could not write report: %v\n", err)
-			return scanRunResult{code: 1}
+			return scanRunResult{code: 3}
 		}
 	}
 	if cfg.saveBaseline != "" && summary.state == "completed" {
 		if err := os.WriteFile(cfg.saveBaseline, reports.SARIFBytes(model), 0o600); err != nil {
 			fmt.Fprintf(stderr, "bluntcode scan: could not write baseline %s: %v\n", cfg.saveBaseline, err)
-			return scanRunResult{code: 1}
+			return scanRunResult{code: 3}
 		}
 		fmt.Fprintf(stderr, "baseline written to %s\n", cfg.saveBaseline)
 	}
@@ -607,7 +608,7 @@ func runSingleScan(app *appCore, cfg scanConfig, work core.Workspace, baseline s
 	case !documentFormats && cfg.json:
 		if err := writeScanJSON(stdout, summary); err != nil {
 			fmt.Fprintf(stderr, "bluntcode scan: could not write summary: %v\n", err)
-			return scanRunResult{code: 1}
+			return scanRunResult{code: 3}
 		}
 	default:
 		writeScanHuman(stdout, summary)
@@ -633,11 +634,12 @@ func runSingleScan(app *appCore, cfg scanConfig, work core.Workspace, baseline s
 		fmt.Fprintf(stderr, "gate scope: %d of %d finding(s) match --gate-analyzer/--gate-category\n", len(narrowed), len(gatedFindings))
 		gatedFindings = narrowed
 	}
-	// The CI gate applies only to scans that completed and would otherwise
-	// exit 0; failed, cancelled, and interrupted scans keep their own exit
-	// path regardless of gate flags. With a baseline, only findings whose
-	// fingerprints it does not know are counted. In watch mode the caller
-	// ignores this code and keeps watching.
+	// The CI gate applies only to scans that completed cleanly and would
+	// otherwise exit 0; incomplete coverage (completed_with_warnings, exit 3)
+	// takes precedence over the gate regardless of gate flags - the findings
+	// that would have tripped it may never have been produced. With a baseline,
+	// only findings whose fingerprints it does not know are counted. In watch
+	// mode the caller ignores this code and keeps watching.
 	if code == 0 && cfg.gate.Enabled() {
 		if gate := scans.EvaluateGate(gatedFindings, cfg.gate); gate.Failed {
 			fmt.Fprintln(stderr, gate.FailureMessage())
@@ -828,20 +830,29 @@ func awaitScanTerminal(in scanWaitInput) scanWaitOutcome {
 	return outcome
 }
 
-// scanExitCode maps a terminal scan state to the CLI exit code. completed and
-// completed_with_warnings both exit 0 (warnings do not fail a build); every
-// other terminal state and any timeout exit 1.
+// scanExitCode maps a terminal scan state to the CLI exit code. The contract
+// separates completeness from findings:
+//
+//	0 completed — full coverage, and any configured gate passed
+//	1 the findings gate tripped (--fail-on/--max-findings) on a completed scan
+//	2 usage or configuration error
+//	3 operational failure or incomplete coverage — failed/interrupted/timed-out
+//	  scans and completed_with_warnings scans (an analyzer failed or ran with
+//	  degraded output; zero findings from incomplete coverage is not a pass)
+//	4 cancelled by the user (single Ctrl+C resolves here; a double press is 130)
 func scanExitCode(state string, timedOut bool) int {
 	if timedOut {
-		return 1
+		return 3
 	}
 	switch state {
-	case "completed", "completed_with_warnings":
+	case "completed":
 		return 0
-	case "failed", "cancelled", "interrupted":
-		return 1
+	case "cancelled":
+		return 4
+	case "completed_with_warnings", "failed", "interrupted":
+		return 3
 	}
-	return 1
+	return 3
 }
 
 func terminalScanState(state string) bool {
@@ -1028,6 +1039,9 @@ func writeScanHuman(w io.Writer, s scanSummary) {
 		switch run.State {
 		case "succeeded":
 			line += fmt.Sprintf(": succeeded, %d findings (%s)", run.FindingCount, formatScanDuration(run.Duration))
+			if run.WarningCount > 0 {
+				line += fmt.Sprintf(" [coverage incomplete: %d warning(s)]", run.WarningCount)
+			}
 		default:
 			line += fmt.Sprintf(": FAILED (%s)", formatScanDuration(run.Duration))
 			if run.ErrorSummary != "" {
@@ -1038,17 +1052,20 @@ func writeScanHuman(w io.Writer, s scanSummary) {
 	}
 	if s.state == "completed_with_warnings" {
 		fmt.Fprintln(w, "Warnings:")
+		fmt.Fprintln(w, "  coverage was incomplete; exit code 3 (findings are reported, but not every engine finished cleanly)")
 		warned := false
 		for _, run := range s.runs {
-			if run.State == "succeeded" {
-				continue
+			if run.State != "succeeded" {
+				warned = true
+				line := fmt.Sprintf("  - %s did not complete", scanAnalyzerDisplayName(run.AnalyzerID))
+				if run.ErrorSummary != "" {
+					line += ": " + terminalSafe(run.ErrorSummary)
+				}
+				fmt.Fprintln(w, line)
+			} else if run.WarningCount > 0 {
+				warned = true
+				fmt.Fprintf(w, "  - %s completed with degraded coverage (%d unparseable output warning(s)); some of its findings may be missing\n", scanAnalyzerDisplayName(run.AnalyzerID), run.WarningCount)
 			}
-			warned = true
-			line := fmt.Sprintf("  - %s did not complete", scanAnalyzerDisplayName(run.AnalyzerID))
-			if run.ErrorSummary != "" {
-				line += ": " + terminalSafe(run.ErrorSummary)
-			}
-			fmt.Fprintln(w, line)
 		}
 		if !warned {
 			fmt.Fprintln(w, "  - analyzer warnings were reported")
@@ -1091,12 +1108,13 @@ type comparisonJSON struct {
 }
 
 type analyzerRunJSON struct {
-	ID         string `json:"id"`
-	Version    string `json:"version"`
-	State      string `json:"state"`
-	Findings   int    `json:"findings"`
-	DurationMS int64  `json:"duration_ms"`
-	Error      string `json:"error"`
+	ID           string `json:"id"`
+	Version      string `json:"version"`
+	State        string `json:"state"`
+	Findings     int    `json:"findings"`
+	WarningCount int    `json:"warning_count"`
+	DurationMS   int64  `json:"duration_ms"`
+	Error        string `json:"error"`
 }
 
 type scanResultJSON struct {
@@ -1156,12 +1174,13 @@ func writeScanJSON(w io.Writer, s scanSummary) error {
 	}
 	for _, run := range s.runs {
 		result.Analyzers = append(result.Analyzers, analyzerRunJSON{
-			ID:         run.AnalyzerID,
-			Version:    run.Version,
-			State:      run.State,
-			Findings:   run.FindingCount,
-			DurationMS: run.Duration.Milliseconds(),
-			Error:      run.ErrorSummary,
+			ID:           run.AnalyzerID,
+			Version:      run.Version,
+			State:        run.State,
+			Findings:     run.FindingCount,
+			WarningCount: run.WarningCount,
+			DurationMS:   run.Duration.Milliseconds(),
+			Error:        run.ErrorSummary,
 		})
 	}
 	encoder := json.NewEncoder(w)

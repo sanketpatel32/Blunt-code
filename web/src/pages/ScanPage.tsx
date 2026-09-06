@@ -94,18 +94,22 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
   const score = riskScore(counts);
   const graded = current.state === 'completed' || current.state === 'completed_with_warnings';
   const grade = graded && total > 0 ? riskGrade(score) : null;
+  // Zero findings only mean "all clear" when coverage was complete; a warned
+  // scan (failed or degraded analyzers) must never present a clean bill.
+  const incomplete = current.state === 'completed_with_warnings';
   /** One sentence the whole page hangs on: the verdict, in the same grade language as the dashboard. */
   const headline = live
     ? liveHeadline(events, current.state)
     : current.state === 'failed' ? 'Analysis failed'
       : current.state === 'cancelled' ? 'Analysis cancelled'
         : current.state === 'interrupted' ? 'Scan interrupted — partial results below'
-          : total === 0 ? 'All clear — no findings'
-            : `${bandFor(riskGrade(score)).label} — ${count(total)} ${total === 1 ? 'finding' : 'findings'}${critical > 0 ? `, ${count(critical)} critical` : ''}`;
+          : total === 0
+            ? incomplete ? 'No findings — but coverage was incomplete' : 'All clear — no findings'
+            : `${bandFor(riskGrade(score)).label} — ${count(total)} ${total === 1 ? 'finding' : 'findings'}${critical > 0 ? `, ${count(critical)} critical` : ''}${incomplete ? ' — coverage incomplete' : ''}`;
   const runs = current.analyzer_runs ?? [];
   const succeeded = runs.filter((run) => run.status === 'succeeded').length;
   /** Card accent follows the worst finding on the page: danger > warning > success > neutral. */
-  const heroTone = live ? 'live' : total === 0 ? 'success' : critical > 0 || (counts.high ?? 0) > 0 ? 'danger' : (counts.medium ?? 0) > 0 ? 'warning' : 'neutral';
+  const heroTone = live ? 'live' : critical > 0 || (counts.high ?? 0) > 0 ? 'danger' : (counts.medium ?? 0) > 0 || incomplete ? 'warning' : total === 0 ? 'success' : 'neutral';
   const startedText = date(current.started_at);
   const durationText = elapsed(current.started_at, current.finished_at);
   return <div className="page scan-page">
@@ -115,7 +119,9 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
         <div className="scan-hero-title-row">
           {graded && grade
             ? <span className="scan-grade" data-grade={grade} aria-hidden="true">{grade}</span>
-            : <span className={`scan-grade scan-grade-clear`} aria-hidden="true">✓</span>}
+            : incomplete
+              ? <span className="scan-grade scan-grade-clear" data-tone="warning" aria-hidden="true">!</span>
+              : <span className={`scan-grade scan-grade-clear`} aria-hidden="true">✓</span>}
           <div className="scan-hero-copy">
             <h1>{headline}</h1>
             <p className="scan-hero-meta">

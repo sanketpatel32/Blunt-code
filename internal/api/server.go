@@ -1187,13 +1187,19 @@ func (s *Server) getScan(w http.ResponseWriter, r *http.Request) {
 func analyzerRuns(runs []reports.Run) []map[string]any {
 	items := make([]map[string]any, 0, len(runs))
 	for _, run := range runs {
-		items = append(items, map[string]any{
+		item := map[string]any{
 			"analyzer_id": run.AnalyzerID,
 			"status":      run.State,
 			"version":     run.Version,
 			"message":     run.ErrorSummary,
 			"duration_ms": run.Duration.Milliseconds(),
-		})
+		}
+		if run.WarningCount > 0 {
+			// Degraded coverage (e.g. an unparseable output batch): surfaced so
+			// clients can explain why a succeeded run may under-report.
+			item["warning_count"] = run.WarningCount
+		}
+		items = append(items, item)
 	}
 	return items
 }

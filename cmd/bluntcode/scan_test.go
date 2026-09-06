@@ -101,13 +101,13 @@ func TestScanExitCode(t *testing.T) {
 		want     int
 	}{
 		{"completed", false, 0},
-		{"completed_with_warnings", false, 0},
-		{"failed", false, 1},
-		{"cancelled", false, 1},
-		{"interrupted", false, 1},
-		{"completed", true, 1},
-		{"cancelled", true, 1},
-		{"unknown-state", false, 1},
+		{"completed_with_warnings", false, 3},
+		{"failed", false, 3},
+		{"cancelled", false, 4},
+		{"interrupted", false, 3},
+		{"completed", true, 3},
+		{"cancelled", true, 3},
+		{"unknown-state", false, 3},
 	}
 	for _, item := range cases {
 		if got := scanExitCode(item.state, item.timedOut); got != item.want {

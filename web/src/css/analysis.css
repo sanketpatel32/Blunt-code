@@ -69,6 +69,7 @@
 .scan-grade[data-grade='C'] { background: var(--color-danger-soft); border-color: color-mix(in oklch, var(--color-danger) 40%, var(--color-rule)); color: var(--color-danger); }
 .scan-grade[data-grade='D'] { background: var(--color-danger-strong, var(--color-danger)); border-color: var(--color-danger-strong, var(--color-danger)); color: var(--color-danger-ink, var(--color-surface)); }
 .scan-grade-clear { background: var(--color-success-soft); border-color: color-mix(in oklch, var(--color-success) 40%, var(--color-rule)); color: var(--color-success); font-size: 1.5rem; }
+.scan-grade-clear[data-tone='warning'] { background: var(--color-warning-soft); border-color: color-mix(in oklch, var(--color-warning) 45%, var(--color-rule)); color: var(--color-warning-ink, var(--color-warning)); }
 
 .scan-hero-copy { min-width: 0; }
 
@@ -325,6 +326,9 @@
 .analysis-toolbar .chip .count { font-family: var(--font-mono); font-size: 10px; font-weight: 600; color: var(--color-ink-soft); }
 
 .analysis-toolbar .chip[aria-pressed='true'] .count { color: inherit; }
+
+/* A run that succeeded with degraded coverage flags its chip without hiding the count. */
+.analysis-toolbar .chip .chip-flag { font-family: var(--font-mono); font-size: 10px; font-weight: 700; color: var(--color-warning-ink, var(--color-warning)); }
 
 /* The Type rail scrolls horizontally when long. */
 .analysis-toolbar .chip-rail { flex: 1; min-width: 0; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: thin; padding-bottom: 2px; }

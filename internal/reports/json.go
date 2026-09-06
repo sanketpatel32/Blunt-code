@@ -60,12 +60,13 @@ type jsonSeverityCounts struct {
 	Total    int `json:"total"`
 }
 type jsonAnalyzerRun struct {
-	ID         string `json:"id"`
-	Version    string `json:"version,omitempty"`
-	State      string `json:"state"`
-	Findings   int    `json:"findings"`
-	DurationMS int64  `json:"duration_ms"`
-	Error      string `json:"error,omitempty"`
+	ID           string `json:"id"`
+	Version      string `json:"version,omitempty"`
+	State        string `json:"state"`
+	Findings     int    `json:"findings"`
+	WarningCount int    `json:"warning_count,omitempty"`
+	DurationMS   int64  `json:"duration_ms"`
+	Error        string `json:"error,omitempty"`
 }
 type jsonFinding struct {
 	Severity         string `json:"severity"`
@@ -133,7 +134,7 @@ func JSON(m Model) []byte {
 	for _, r := range m.Runs {
 		doc.Analyzers = append(doc.Analyzers, jsonAnalyzerRun{
 			ID: scrubControls(r.AnalyzerID), Version: scrubControls(r.Version), State: scrubControls(r.State),
-			Findings: r.FindingCount, DurationMS: r.Duration.Milliseconds(), Error: scrubControls(strings.TrimSpace(r.ErrorSummary)),
+			Findings: r.FindingCount, WarningCount: r.WarningCount, DurationMS: r.Duration.Milliseconds(), Error: scrubControls(strings.TrimSpace(r.ErrorSummary)),
 		})
 	}
 	persistent, appeared := comparisonFingerprints(m.Comparison)

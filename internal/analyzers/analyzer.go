@@ -189,6 +189,12 @@ type AnalyzerResult struct {
 	StartedAt       time.Time
 	FinishedAt      time.Time
 	OutputTruncated bool
+	// Warnings records degradations that do not fail the run but make its
+	// coverage incomplete — historically the silently-dropped unparseable
+	// output batch. A run with warnings completes, but the scan must surface
+	// it (analyzer_runs.warning_count, completed_with_warnings, CLI exit 3)
+	// instead of presenting a full-coverage result.
+	Warnings []string
 }
 
 // MaxCommandArgumentCharacters stays well below the Windows 32,767-character

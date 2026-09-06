@@ -65,7 +65,8 @@ func (a *Adapter) Run(ctx context.Context, p analyzers.AnalyzerPlan, emit analyz
 	}
 	started := time.Now()
 	merged := output{}
-	for _, command := range p.Commands {
+	warnings := make([]string, 0)
+	for index, command := range p.Commands {
 		partPlan := p
 		partPlan.Commands = []analyzers.ProcessSpec{command}
 		part, err := analyzers.RunDirect(ctx, partPlan, emit)
@@ -77,7 +78,11 @@ func (a *Adapter) Run(ctx context.Context, p analyzers.AnalyzerPlan, emit analyz
 		}
 		var parsed output
 		if err := json.Unmarshal(part.Stdout, &parsed); err != nil {
-			return part, nil
+			// Keep every other batch's findings and record the coverage hole;
+			// the scan surfaces it as a warning instead of presenting a
+			// full-coverage result (see AnalyzerResult.Warnings).
+			warnings = append(warnings, fmt.Sprintf("batch %d/%d produced unparseable biome output; its findings are not included", index+1, len(p.Commands)))
+			continue
 		}
 		merged.Diagnostics = append(merged.Diagnostics, parsed.Diagnostics...)
 	}
@@ -85,7 +90,7 @@ func (a *Adapter) Run(ctx context.Context, p analyzers.AnalyzerPlan, emit analyz
 	if err != nil {
 		return analyzers.AnalyzerResult{Plan: p}, err
 	}
-	return analyzers.AnalyzerResult{Plan: p, Stdout: stdout, StartedAt: started, FinishedAt: time.Now()}, nil
+	return analyzers.AnalyzerResult{Plan: p, Stdout: stdout, StartedAt: started, FinishedAt: time.Now(), Warnings: warnings}, nil
 }
 
 type output struct {

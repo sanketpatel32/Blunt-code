@@ -209,21 +209,21 @@ describe('hostile API fixtures', () => {
     expect(host.textContent).toContain('Low risk — 1 finding'); // the page renders from the scan endpoint; the empty report degrades to zeroed controls
   });
 
-  it('ToolsPage survives tools missing name/version/can_install', async () => {
+  it('ToolsPage survives inventory entries missing display fields', async () => {
     const fetchMock = routeMock([
-      ['/api/v1/tools', { tools: [{ id: 'ghost', name: null, version: null, detail: null, ready: false }, { id: 'ruff', ready: true }] }],
+      ['/api/v1/analyzers', { items: [{ id: 'ghost', managed_tool: 'ghost', ready: false }, { id: 'ruff', display_name: 'Ruff', execution: 'external', managed_tool: 'ruff', ready: true }] }],
     ]);
     const host = await renderAt('/tools', fetchMock);
     expectClean(host);
-    expect(host.textContent).toContain('ghost'); // name: null falls back to id
+    expect(host.textContent).toContain('ghost'); // missing display_name falls back to id
     expect(host.textContent).toContain('Managed version');
   });
 
-  it('ToolsPage treats a null tools response as an empty list', async () => {
-    const fetchMock = routeMock([['/api/v1/tools', null]]);
+  it('ToolsPage treats a null analyzers response as an empty list', async () => {
+    const fetchMock = routeMock([['/api/v1/analyzers', null]]);
     const host = await renderAt('/tools', fetchMock);
     expectClean(host);
-    expect(host.textContent).toContain('No managed tools');
+    expect(host.textContent).toContain('No analyzers');
   });
 
   it('SettingsPage survives meta/settings payloads with missing keys', async () => {

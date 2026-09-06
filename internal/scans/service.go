@@ -87,7 +87,13 @@ func (s *Service) snapshot(ctx context.Context, work core.Workspace, profile str
 	analyzerIDs := make([]string, 0)
 	analyzerVersions := map[string]string{}
 	for _, adapter := range s.registry.All() {
-		analyzerIDs = append(analyzerIDs, adapter.ID())
+		// The snapshot's enabled set is the expected coverage for THIS scan:
+		// profile-gated analyzers are recorded as expected only when the tier
+		// includes them, so a later audit can compare expected against
+		// succeeded analyzers instead of against the whole registry.
+		if analyzers.ProfileAllows(profile, adapter.ID()) {
+			analyzerIDs = append(analyzerIDs, adapter.ID())
+		}
 		analyzerVersions[adapter.ID()] = adapter.Check(ctx, analyzers.ToolEnvironment{ToolsDir: s.toolsDir}).Version
 	}
 	sort.Strings(analyzerIDs)
@@ -211,12 +217,16 @@ func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, 
 	if incremental != nil {
 		s.finishIncremental(scan, incremental, counters)
 	}
-	successful, failed := counters.snapshot()
+	successful, failed, warned := counters.snapshot()
 	state := "completed"
 	if successful == 0 {
 		state = "failed"
 	}
-	if successful > 0 && failed > 0 {
+	// A scan that lost analyzer coverage — a failed run, or a run that
+	// completed with degraded output — is never a clean "completed": zero
+	// findings from incomplete coverage must not read as a clean bill of
+	// health (the CLI maps this state to exit 3, and gates do not pass).
+	if successful > 0 && (failed > 0 || warned > 0) {
 		state = "completed_with_warnings"
 	}
 	// Cancellation that lands while the final analyzer normalizes or persists

@@ -103,7 +103,8 @@ func (a *Adapter) Run(ctx context.Context, p analyzers.AnalyzerPlan, e analyzers
 	}
 	started := time.Now()
 	merged := result{}
-	for _, command := range p.Commands {
+	warnings := make([]string, 0)
+	for index, command := range p.Commands {
 		partPlan := p
 		partPlan.Commands = []analyzers.ProcessSpec{command}
 		part, err := analyzers.RunDirect(ctx, partPlan, e)
@@ -115,7 +116,11 @@ func (a *Adapter) Run(ctx context.Context, p analyzers.AnalyzerPlan, e analyzers
 		}
 		var parsed result
 		if err := json.Unmarshal(part.Stdout, &parsed); err != nil {
-			return part, nil
+			// Keep every other batch's findings and record the coverage hole;
+			// the scan surfaces it as a warning instead of presenting a
+			// full-coverage result (see AnalyzerResult.Warnings).
+			warnings = append(warnings, fmt.Sprintf("batch %d/%d produced unparseable semgrep output; its findings are not included", index+1, len(p.Commands)))
+			continue
 		}
 		merged.Results = append(merged.Results, parsed.Results...)
 		merged.Errors = append(merged.Errors, parsed.Errors...)
@@ -124,7 +129,7 @@ func (a *Adapter) Run(ctx context.Context, p analyzers.AnalyzerPlan, e analyzers
 	if err != nil {
 		return analyzers.AnalyzerResult{Plan: p}, err
 	}
-	return analyzers.AnalyzerResult{Plan: p, Stdout: stdout, StartedAt: started, FinishedAt: time.Now()}, nil
+	return analyzers.AnalyzerResult{Plan: p, Stdout: stdout, StartedAt: started, FinishedAt: time.Now(), Warnings: warnings}, nil
 }
 
 type result struct {

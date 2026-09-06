@@ -642,7 +642,7 @@ func sampleWorkspace(t *testing.T) string {
 
 // TestRunScanCommandOfflineMissingToolsFailsHonestly covers the offline
 // no-tools matrix end to end: every analyzer fails cleanly with an offline
-// message, the scan state is failed, the exit code is 1 (never a silent 0),
+// message, the scan state is failed, the exit code is 3 (never a silent 0),
 // and the JSON summary reflects it. It also exercises flags-after-path
 // ordering and quiet stderr.
 func TestRunScanCommandOfflineMissingToolsFailsHonestly(t *testing.T) {
@@ -650,8 +650,8 @@ func TestRunScanCommandOfflineMissingToolsFailsHonestly(t *testing.T) {
 	ws := sampleWorkspace(t)
 	var out, errOut bytes.Buffer
 	code := runScanCommand([]string{ws, "--json", "--quiet"}, &out, &errOut)
-	if code != 1 {
-		t.Fatalf("exit code = %d, want 1 (offline scan must not exit 0)", code)
+	if code != 3 {
+		t.Fatalf("exit code = %d, want 3 (offline scan must not exit 0)", code)
 	}
 	if errOut.Len() != 0 {
 		t.Fatalf("quiet mode wrote to stderr: %q", errOut.String())
@@ -684,7 +684,7 @@ func TestRunScanCommandOfflineMissingToolsFailsHonestly(t *testing.T) {
 	// Re-scanning the same workspace (uppercased path) must reuse it.
 	var out2, errOut2 bytes.Buffer
 	code = runScanCommand([]string{"--quiet", "--json", strings.ToUpper(ws)}, &out2, &errOut2)
-	if code != 1 {
+	if code != 3 {
 		t.Fatalf("second scan exit code = %d", code)
 	}
 	db, err := database.Open(context.Background(), paths.DBPath)
@@ -702,12 +702,12 @@ func TestRunScanCommandOfflineMissingToolsFailsHonestly(t *testing.T) {
 }
 
 // TestRunScanCommandInvalidPathsAreClean covers non-existent and file paths:
-// exit 1 with a one-line message, no panic, no stack, nothing on stdout.
+// exit 3 with a one-line message, no panic, no stack, nothing on stdout.
 func TestRunScanCommandInvalidPathsAreClean(t *testing.T) {
 	isolateDataDir(t)
 	var out, errOut bytes.Buffer
 	code := runScanCommand([]string{filepath.Join(t.TempDir(), "missing")}, &out, &errOut)
-	if code != 1 {
+	if code != 3 {
 		t.Fatalf("non-existent path exit code = %d", code)
 	}
 	if out.Len() != 0 || !strings.Contains(errOut.String(), "bluntcode scan: workspace path") {
@@ -720,7 +720,7 @@ func TestRunScanCommandInvalidPathsAreClean(t *testing.T) {
 		t.Fatal(err)
 	}
 	code = runScanCommand([]string{file}, &out2, &errOut2)
-	if code != 1 {
+	if code != 3 {
 		t.Fatalf("file path exit code = %d", code)
 	}
 	if !strings.Contains(errOut2.String(), "workspace path must be a directory") {
@@ -730,7 +730,7 @@ func TestRunScanCommandInvalidPathsAreClean(t *testing.T) {
 
 // TestRunScanCommandInstanceLockContended pins the single-instance error path:
 // with the data-directory lock held by another process-ish holder, the scan
-// exits 1 with the dedicated message.
+// exits 3 with the dedicated message.
 func TestRunScanCommandInstanceLockContended(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("named-mutex lock is Windows-only")
@@ -743,7 +743,7 @@ func TestRunScanCommandInstanceLockContended(t *testing.T) {
 	defer guard.Close()
 	var out, errOut bytes.Buffer
 	code := runScanCommand([]string{sampleWorkspace(t), "--quiet"}, &out, &errOut)
-	if code != 1 {
+	if code != 3 {
 		t.Fatalf("contended lock exit code = %d", code)
 	}
 	if !strings.Contains(errOut.String(), "another Blunt Code process") {

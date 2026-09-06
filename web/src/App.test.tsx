@@ -94,11 +94,11 @@ describe('Blunt Code home', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/workspaces/ws-1/path-overrides', expect.objectContaining({ method: 'PUT', body: JSON.stringify({ overrides: [{ relative_path: 'src', mode: 'exclude' }] }) }));
   });
 
-  it('uses the tool id when an older API response has no display name', async () => {
+  it('falls back to the analyzer id when an inventory entry has no display name', async () => {
     window.history.replaceState({}, '', '/tools');
     const fetchMock = vi.fn((input: string) => {
-      if (input.endsWith('/tools/ruff/install')) return Promise.resolve(json({ id: 'ruff', ready: true, can_install: true }));
-      if (input.endsWith('/tools')) return Promise.resolve(json({ items: [{ id: 'ruff', ready: true, can_install: true }] }));
+      if (input.endsWith('/tools/ghost/install')) return Promise.resolve(json({ id: 'ghost', ready: true }));
+      if (input.endsWith('/analyzers')) return Promise.resolve(json({ items: [{ id: 'ghost', execution: 'external', profiles: [], managed_tool: 'ghost', network: 'none', ready: false, registered: true }] }));
       return Promise.resolve(json({ items: [] }));
     });
 
@@ -106,7 +106,7 @@ describe('Blunt Code home', () => {
     const install = [...host.querySelectorAll('button')].find((button) => button.textContent === 'Install');
     expect(install).toBeDefined();
     await act(async () => { install!.click(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
-    expect(host.textContent).toContain('ruff: installed.');
+    expect(host.textContent).toContain('ghost: installed.');
     expect(host.textContent).not.toContain('undefined');
   });
 
@@ -127,7 +127,10 @@ describe('Blunt Code home', () => {
     const pending = new Promise<Response>(() => {});
     const fetchMock = vi.fn((input: string) => {
       if (input.endsWith('/tools/ruff/install')) return pending;
-      if (input.endsWith('/tools')) return Promise.resolve(json({ items: [{ id: 'ruff', ready: false, can_install: true }, { id: 'semgrep', ready: true, can_install: true }] }));
+      if (input.endsWith('/analyzers')) return Promise.resolve(json({ items: [
+        { id: 'ruff', display_name: 'Ruff', execution: 'external', profiles: [], managed_tool: 'ruff', network: 'none', ready: false, registered: true },
+        { id: 'semgrep', display_name: 'Semgrep', execution: 'external', profiles: [], managed_tool: 'semgrep', network: 'none', ready: true, registered: true },
+      ] }));
       return Promise.resolve(json({ items: [] }));
     });
 

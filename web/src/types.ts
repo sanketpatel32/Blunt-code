@@ -41,6 +41,7 @@ export interface AnalyzerRun {
   version?: string;
   message?: string;
   duration_ms?: number;
+  warning_count?: number;
 }
 
 export interface RecentScanItem {

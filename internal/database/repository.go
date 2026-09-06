@@ -812,6 +812,10 @@ type AnalyzerRunInput struct {
 	FinishedAt time.Time
 	ExitCode   int
 	Error      string
+	// WarningCount records degradations that did not fail the run but left its
+	// coverage incomplete (unparseable output batches); the schema column
+	// existed from day one and is only now written.
+	WarningCount int
 }
 
 func (d *DB) SaveAnalyzerResult(ctx context.Context, scanID string, run AnalyzerRunInput, findings []analyzers.Finding, metrics []analyzers.Metric) (string, error) {
@@ -821,7 +825,7 @@ func (d *DB) SaveAnalyzerResult(ctx context.Context, scanID string, run Analyzer
 		return "", err
 	}
 	duration := run.FinishedAt.Sub(run.StartedAt).Milliseconds()
-	if _, err = tx.ExecContext(ctx, `INSERT INTO analyzer_runs(id,scan_id,analyzer_id,version,state,started_at,finished_at,duration_ms,exit_code,finding_count,error_summary) VALUES(?,?,?,?,?,?,?,?,?,?,?)`, runID, scanID, run.AnalyzerID, run.Version, run.State, dbTime(run.StartedAt), dbTime(run.FinishedAt), duration, run.ExitCode, len(findings), nullIfEmpty(run.Error)); err != nil {
+	if _, err = tx.ExecContext(ctx, `INSERT INTO analyzer_runs(id,scan_id,analyzer_id,version,state,started_at,finished_at,duration_ms,exit_code,finding_count,warning_count,error_summary) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, runID, scanID, run.AnalyzerID, run.Version, run.State, dbTime(run.StartedAt), dbTime(run.FinishedAt), duration, run.ExitCode, len(findings), run.WarningCount, nullIfEmpty(run.Error)); err != nil {
 		_ = tx.Rollback()
 		return "", err
 	}
@@ -1411,7 +1415,7 @@ func (d *DB) Metrics(ctx context.Context, scanID string) ([]analyzers.Metric, er
 	return output, rows.Err()
 }
 func (d *DB) AnalyzerRuns(ctx context.Context, scanID string) ([]reports.Run, error) {
-	rows, err := d.SQL.QueryContext(ctx, `SELECT analyzer_id,COALESCE(version,''),state,COALESCE(error_summary,''),finding_count,COALESCE(duration_ms,0) FROM analyzer_runs WHERE scan_id=? ORDER BY started_at`, scanID)
+	rows, err := d.SQL.QueryContext(ctx, `SELECT analyzer_id,COALESCE(version,''),state,COALESCE(error_summary,''),finding_count,COALESCE(warning_count,0),COALESCE(duration_ms,0) FROM analyzer_runs WHERE scan_id=? ORDER BY started_at`, scanID)
 	if err != nil {
 		return nil, err
 	}
@@ -1420,7 +1424,7 @@ func (d *DB) AnalyzerRuns(ctx context.Context, scanID string) ([]reports.Run, er
 	for rows.Next() {
 		var run reports.Run
 		var duration int64
-		if err := rows.Scan(&run.AnalyzerID, &run.Version, &run.State, &run.ErrorSummary, &run.FindingCount, &duration); err != nil {
+		if err := rows.Scan(&run.AnalyzerID, &run.Version, &run.State, &run.ErrorSummary, &run.FindingCount, &run.WarningCount, &duration); err != nil {
 			return nil, err
 		}
 		run.Duration = time.Duration(duration) * time.Millisecond
