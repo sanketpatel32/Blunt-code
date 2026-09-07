@@ -5,7 +5,7 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.23.0] - 2026-09-07
 
 ### Added
 - **Auditable scan provenance (IMP-07)**: scan snapshots record what was actually analyzed — content digests for selected inputs, effective configuration, analyzer/rule/parser versions, platform details, and dirty-tree state — so a stored result can be tied to the bytes that produced it; a drift test pins that editing a file mid-analysis cannot silently pass as reproducible for different bytes.
