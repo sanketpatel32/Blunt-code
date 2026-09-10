@@ -91,7 +91,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .hero p:not(.eyebrow) { max-width: var(--measure); margin-top: var(--space-xs); color: var(--color-ink-soft); font-size: var(--text-sm); line-height: var(--leading-relaxed); }
 .page-heading p:not(.eyebrow), .scan-header p:not(.eyebrow) { max-width: none; margin-top: 2px; color: var(--color-ink-soft); font-size: var(--text-xs); line-height: 1.4; }
 .page-heading, .scan-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-md); margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: var(--rule) solid var(--color-rule-faint); }
-.page-heading-actions { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; align-self: center; }
+.page-heading-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; flex-shrink: 0; align-self: center; }
 .narrow { max-width: none; width: 100%; }
 .hero { margin-bottom: var(--space-2xl); }
 .story-hero { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(17rem, .85fr); gap: var(--space-3xl); align-items: end; padding: var(--space-xl) 0 var(--space-2xl); border-bottom: var(--rule) solid var(--color-rule-faint); transition: background var(--dur-fast) var(--ease-out); }
@@ -148,7 +148,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .button.secondary:hover { border-color: var(--color-ink); background: var(--color-surface); box-shadow: var(--shadow-sm); }
 .button.ghost { border-color: transparent; background: transparent; color: var(--color-ink-soft); }
 .button.ghost:hover { background: var(--color-surface-muted); color: var(--color-ink); border-color: var(--color-rule); }
-.button.danger { border-color: var(--color-danger); background: var(--color-danger-soft); color: var(--color-danger); }
+.button.danger { border-color: var(--color-danger); background: var(--color-danger-soft); color: var(--color-danger-text); }
 .button.danger:hover { background: var(--color-danger); color: var(--color-danger-ink); border-color: var(--color-danger); }
 .text-button { padding: var(--space-xs) var(--space-xs); border: 0; background: transparent; color: var(--color-accent-strong); font-size: var(--text-sm); font-weight: 550; text-decoration: none; border-radius: var(--radius-xs); transition: all var(--dur-fast) var(--ease-out); }
 .text-button:hover { color: var(--color-accent); background: var(--color-accent-soft); text-decoration: none; }
@@ -205,7 +205,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .workspace-metric strong { color: var(--color-ink); font-family: var(--font-display); font-size: 28px; font-weight: 700; letter-spacing: -.03em; line-height: 1; font-variant-numeric: tabular-nums; }
 .workspace-metric span { color: var(--color-ink-soft); font-size: var(--text-sm); font-weight: 500; }
 .workspace-analysis p { margin: var(--space-2xs) 0 0; color: var(--color-ink-soft); font-size: var(--text-sm); }
-.workspace-card footer { display: flex; align-items: center; gap: var(--space-sm); margin-top: auto; padding-top: var(--space-md); border-top: var(--rule) solid var(--color-rule-faint); }
+.workspace-card footer { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); margin-top: auto; padding-top: var(--space-md); border-top: var(--rule) solid var(--color-rule-faint); }
 .workspace-card footer button { white-space: nowrap; }
 .muted { color: var(--color-ink-soft); font-size: var(--text-sm); line-height: 1.5; }
 
@@ -223,7 +223,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 /* Groups use <fieldset> (biome prefers the semantic element); reset its browser chrome. */
 fieldset.segmented, fieldset.chip-group, fieldset.chip-rail { margin: 0; min-inline-size: 0; }
 fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
-.chip { display: inline-flex; align-items: center; gap: var(--space-2xs); padding: var(--space-3xs) var(--space-sm); border: var(--rule) solid var(--color-rule); border-radius: var(--radius-pill); background: var(--color-surface); color: var(--color-ink-soft); font: inherit; font-size: var(--text-xs); font-weight: 600; cursor: pointer; transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out); }
+.chip { display: inline-flex; align-items: center; gap: var(--space-2xs); padding: var(--space-3xs) var(--space-sm); border: var(--rule) solid var(--color-rule); border-radius: var(--radius-pill); background: var(--color-surface); color: var(--color-ink-soft); font: inherit; font-size: var(--text-xs); font-weight: 600; white-space: nowrap; cursor: pointer; transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out); }
 .chip:hover { border-color: var(--color-rule-strong); color: var(--color-ink); }
 .chip[aria-pressed='true'] { border-color: var(--color-accent); background: var(--color-accent-soft); color: var(--color-accent-strong); }
 .chip:focus-visible { outline: var(--rule-focus) solid var(--color-focus); outline-offset: 1px; }
@@ -256,13 +256,13 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .severity-counts[data-pending='true'] { opacity: .5; }
 .severity-counts span { color: var(--color-ink); font-family: var(--font-display); font-variant-numeric: tabular-nums; font-size: var(--text-lg); font-weight: 700; }
 .severity-counts small { display: block; color: var(--color-ink-faint); font: 600 .62rem var(--font-mono); letter-spacing: .04em; text-transform: uppercase; }
-.severity-counts .critical, .severity-counts .high, .severity.critical, .severity.high { color: var(--color-danger); border-color: color-mix(in oklch, var(--color-danger) 30%, var(--color-rule)); background: var(--color-danger-soft); }
-.severity-counts .medium, .severity.medium { color: var(--color-warning); border-color: color-mix(in oklch, var(--color-warning) 30%, var(--color-rule)); background: var(--color-warning-soft); }
+.severity-counts .critical, .severity-counts .high, .severity.critical, .severity.high { color: var(--color-danger-text); border-color: color-mix(in oklch, var(--color-danger) 30%, var(--color-rule)); background: var(--color-danger-soft); }
+.severity-counts .medium, .severity.medium { color: var(--color-warning-text); border-color: color-mix(in oklch, var(--color-warning) 30%, var(--color-rule)); background: var(--color-warning-soft); }
 .severity.low, .severity.info { color: var(--color-accent-strong); border-color: color-mix(in oklch, var(--color-accent) 20%, var(--color-rule)); background: var(--color-accent-soft); }
 .state { text-transform: capitalize; }
-.state.completed, .state.success, .state.ready { border-color: color-mix(in oklch, var(--color-success) 40%, var(--color-rule)); color: var(--color-success); background: var(--color-success-soft); }
-.state.completed_with_warnings, .state.warning { border-color: color-mix(in oklch, var(--color-warning) 40%, var(--color-rule)); color: var(--color-warning); background: var(--color-warning-soft); }
-.state.failed, .state.error, .state.cancelled { border-color: color-mix(in oklch, var(--color-danger) 40%, var(--color-rule)); color: var(--color-danger); background: var(--color-danger-soft); }
+.state.completed, .state.success, .state.ready { border-color: color-mix(in oklch, var(--color-success) 40%, var(--color-rule)); color: var(--color-success-text); background: var(--color-success-soft); }
+.state.completed_with_warnings, .state.warning { border-color: color-mix(in oklch, var(--color-warning) 40%, var(--color-rule)); color: var(--color-warning-text); background: var(--color-warning-soft); }
+.state.failed, .state.error, .state.cancelled { border-color: color-mix(in oklch, var(--color-danger) 40%, var(--color-rule)); color: var(--color-danger-text); background: var(--color-danger-soft); }
 .state.running, .state.installing { border-color: color-mix(in oklch, var(--color-accent) 40%, var(--color-rule)); color: var(--color-accent-strong); background: var(--color-accent-soft); }
 .tool-summary { display: flex; flex-wrap: wrap; gap: var(--space-sm) var(--space-lg); padding: var(--space-md) 0; color: var(--color-ink-soft); font-size: var(--text-sm); }
 .dot { margin-right: var(--space-xs); width: .5rem; height: .5rem; border-radius: 50%; background: var(--color-success); display: inline-block; }
@@ -392,6 +392,22 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .table-wrap tbody tr { transition: background var(--dur-fast) var(--ease-out); }
 .table-wrap tbody tr:hover { background: color-mix(in oklch, var(--color-accent) 5%, transparent); }
 .table-actions { display: flex; gap: var(--space-sm); align-items: center; }
+/* Tool table (ToolsPage): the Actions column pins to the right edge while the
+   wrap scrolls, so Install/Repair/Update stay reachable at narrow widths.
+   `border-collapse: separate` keeps each cell's borders travelling with it —
+   under `collapse` the table owns the borders and the stuck cells render bare.
+   Backgrounds and the left-edge shadow use theme tokens so both themes read
+   the overlap as intentional. */
+.tool-table table { border-collapse: separate; border-spacing: 0; }
+.tool-table th:last-child,
+.tool-table td:last-child {
+  position: sticky;
+  right: 0;
+  background: var(--color-surface);
+  box-shadow: inset 1px 0 0 var(--color-rule), inset 10px 0 8px -8px color-mix(in oklch, var(--color-ink) 30%, transparent);
+}
+.tool-table th:last-child { background: var(--color-surface-muted); }
+.tool-table tbody tr:hover td:last-child { background: color-mix(in oklch, var(--color-accent) 5%, var(--color-surface)); }
 /* history-pagination bento — see css/history.css */
 
 /* ── Analyzer results tiles ────────────────────────────────────── */
@@ -498,7 +514,7 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .scan-header-actions { display: flex; align-items: center; gap: var(--space-md); align-self: start; }
 .stream-state { display: inline-flex; align-items: center; gap: var(--space-xs); padding: var(--space-2xs) var(--space-sm); border: var(--rule) solid var(--color-rule); border-radius: var(--radius-pill); background: var(--color-surface-muted); color: var(--color-ink-faint); font: 600 var(--text-xs) var(--font-mono); letter-spacing: .02em; white-space: nowrap; }
 .stream-state i { width: .45rem; height: .45rem; border-radius: 50%; background: var(--color-ink-faint); }
-.stream-state.live { color: var(--color-success); border-color: color-mix(in oklch, var(--color-success) 28%, var(--color-rule)); background: var(--color-success-soft); }
+.stream-state.live { color: var(--color-success-text); border-color: color-mix(in oklch, var(--color-success) 28%, var(--color-rule)); background: var(--color-success-soft); }
 .stream-state.live i { background: var(--color-success); box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-success) 18%, transparent); animation: scan-live-pulse 2.2s var(--ease-in-out) infinite; will-change: box-shadow; }
 .stream-state.reconnecting i, .stream-state.connecting i { background: var(--color-warning); }
 @keyframes scan-live-pulse { 0% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-success) 45%, transparent); } 70% { box-shadow: 0 0 0 6px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
@@ -796,8 +812,8 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 /* A real <fieldset> (biome: role="group" should be semantic); reset its browser chrome. */
 .workspace-sortbar { display: flex; align-items: center; gap: var(--space-md); margin: 0; padding: 0; border: 0; min-inline-size: 0; color: var(--color-ink-faint); font-size: var(--text-xs); }
 .workspace-sortbar .th-sort { font: 700 var(--text-xs) var(--font-mono); letter-spacing: .04em; text-transform: uppercase; }
-.workspace-filterbar { display: flex; flex-wrap: nowrap; align-items: center; gap: var(--space-xs); margin: 0; }
-.workspace-filterbar input[type='search'] { width: 14rem; max-width: 18rem; min-height: 2.25rem; padding: 0 var(--space-md); border: var(--rule) solid var(--color-rule-strong); border-radius: var(--radius-button); background: var(--color-surface); font-size: var(--text-sm); flex: 0 1 auto; }
+.workspace-filterbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); margin: 0; }
+.workspace-filterbar input[type='search'] { width: 14rem; max-width: 18rem; min-width: 0; min-height: 2.25rem; padding: 0 var(--space-md); border: var(--rule) solid var(--color-rule-strong); border-radius: var(--radius-button); background: var(--color-surface); font-size: var(--text-sm); flex: 1 1 12rem; }
 .workspace-filter-count { margin: 0; color: var(--color-ink-faint); font: 600 var(--text-xs) var(--font-mono); white-space: nowrap; }
 .workspace-tags { margin: 0 0 var(--space-2xs); }
 .badge[title] { cursor: help; }
@@ -1025,7 +1041,7 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .search-columns-caret { flex: none; width: .85rem; height: .85rem; opacity: .6; transition: transform var(--dur-fast) var(--ease-out); }
 .search-columns[open] > summary .search-columns-caret { transform: rotate(180deg); }
 .search-columns[open] { border-color: var(--color-rule); }
-.search-columns-panel { position: absolute; top: calc(100% + var(--space-2xs)); left: 0; z-index: 3; display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-xs); min-width: 13rem; padding: var(--space-sm); border: var(--rule) solid var(--color-rule); border-radius: var(--radius-button); background: var(--color-surface); box-shadow: var(--shadow-lg); }
+.search-columns-panel { position: absolute; top: calc(100% + var(--space-2xs)); right: 0; z-index: 3; display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-xs); min-width: 13rem; padding: var(--space-sm); border: var(--rule) solid var(--color-rule); border-radius: var(--radius-button); background: var(--color-surface); box-shadow: var(--shadow-lg); }
 .search-column-toggle {
   display: inline-flex; align-items: center; gap: var(--space-2xs);
   padding: var(--space-3xs) var(--space-xs);
@@ -1141,7 +1157,7 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
     --color-surface-muted: oklch(97.2% 0.005 260);
     --color-ink: oklch(17% 0.016 268);
     --color-ink-soft: oklch(42% 0.013 268);
-    --color-ink-faint: oklch(55% 0.011 268);
+    --color-ink-faint: oklch(52% 0.011 268);
     --color-ink-ghost: oklch(65% 0.01 268);
     --color-rule: oklch(92% 0.006 260);
     --color-rule-strong: oklch(86% 0.009 260);

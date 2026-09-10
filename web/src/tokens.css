@@ -19,9 +19,11 @@
   /* — Ink — near-black editorial, high contrast */
   --color-ink: oklch(17% 0.016 268);
   --color-ink-soft: oklch(42% 0.013 268);
-  /* Loop 141 · 56% measured 4.47:1 — three hundredths short of AA-normal, and
-     this token carries small metadata text. 55% measures 4.66:1. */
-  --color-ink-faint: oklch(55% 0.011 268);
+  /* Loop 141 · 56% measured 4.47:1 and 55% 4.66:1 on paper, but the oklch audit
+     caught 55% at 4.48:1 on --color-surface-muted — still short of AA-normal,
+     and this token carries small metadata text. 52% measures 5.08:1 on muted
+     and 5.29:1 on paper while staying visibly lighter than ink-soft (42%). */
+  --color-ink-faint: oklch(52% 0.011 268);
   /* Deliberately AA-large only (3.11:1). Raising it to 4.5:1 needs ~53%, which
      collapses it into --color-ink-faint and flattens the ramp. Decorative only. */
   --color-ink-ghost: oklch(65% 0.01 268);
@@ -68,6 +70,14 @@
   --color-success-ink: oklch(99% 0.004 152);
   --color-warning-ink: oklch(20% 0.02 75);
   --color-danger-ink: oklch(99% 0.004 26);
+
+  /* — Semantic text — semantic hue used AS TEXT on its own soft fill (loop 143).
+     The vivid fill tokens miss AA-normal as ink on the -soft tokens in light
+     mode; these darker text grades measure 5.51:1 on success-soft, 4.95:1 on
+     warning-soft and 5.25:1 on danger-soft. */
+  --color-success-text: oklch(47% 0.14 152);
+  --color-warning-text: oklch(52% 0.13 75);
+  --color-danger-text: oklch(52% 0.21 26);
 
   /* — Severity ramp — one ordered scale, dark-mode aware (loop 104) */
   --color-sev-critical: oklch(58% 0.22 26);
@@ -260,6 +270,12 @@
   --color-success-ink: oklch(14% 0.015 152);
   --color-warning-ink: oklch(18% 0.02 80);
   --color-danger-ink: oklch(14% 0.015 24);
+
+  /* The fill tokens already pass AA as text on the dark softs, so the text
+     grades alias them here and the pairs can never drift apart. */
+  --color-success-text: var(--color-success);
+  --color-warning-text: var(--color-warning);
+  --color-danger-text: var(--color-danger);
 
   --color-sev-critical: oklch(64% 0.20 24);
   --color-sev-high: oklch(70% 0.16 26);
