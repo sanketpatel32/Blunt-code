@@ -72,9 +72,15 @@ function readUrlState(): { filters: FindingFilter; sort: SortState; page: number
     const key = rawSort as SortKey;
     sort = { key, dir: rawOrder === 'asc' || rawOrder === 'desc' ? rawOrder : SORT_DEFAULT_DIR[key] };
   }
-  let page = 1;
-  const rawPage = Number(sp.get('page'));
-  if (Number.isFinite(rawPage) && rawPage >= 1) page = Math.floor(rawPage);
+  // A restored `page` above 1 is clamped to 1: the list is an append-only
+  // accumulation of fetched windows, so a deep link mounting mid-stream would
+  // strand windows 1..N-1 behind "Show more" (which only appends forward).
+  // Shared links start the reader at the top instead. (The alternative —
+  // backfilling the missing windows before first paint — costs up to N-1
+  // sequential fetches; revisit if shared-page links ever need to land mid-list.
+  // Over-range links like ?page=99 also land here; an empty page > 1 that slips
+  // through any other path gets a dedicated "Back to first page" state.)
+  const page = 1;
   let pageSize = DEFAULT_PAGE_SIZE;
   const rawPageSize = Number(sp.get('page_size'));
   if ((PAGE_SIZE_OPTIONS as readonly number[]).includes(rawPageSize)) pageSize = rawPageSize;
@@ -153,6 +159,14 @@ export function ReportView({ scanId, notify, runs: runsProp }: { scanId: string;
   const [sort, setSort] = useState<SortState>(initialUrlState.sort);
   const [selectedKey, setSelectedKey] = useState<string | undefined>();
   const [suppressing, setSuppressing] = useState<Finding>();
+  /** Findings queued for BULK suppression: the dialog confirms the reason once
+   *  (it renders a single finding), then every queued fingerprint is posted
+   *  sequentially with that reason. */
+  const [suppressQueue, setSuppressQueue] = useState<Finding[]>([]);
+  /** Bulk progress line ("Suppressing 3 of 5 findings…") plus the up-front note that one reason covers the whole queue. */
+  const [suppressStatus, setSuppressStatus] = useState('');
+  /** Bumped after a bulk suppression lands so FindingsTable drops its stale checkbox selection. */
+  const [selectionEpoch, setSelectionEpoch] = useState(0);
   /** Keeps the pane-following row in view when walking findings with the keyboard. */
   useEffect(() => {
     if (!selectedKey) return;
@@ -263,6 +277,44 @@ export function ReportView({ scanId, notify, runs: runsProp }: { scanId: string;
       notify?.({ kind: 'error', text: message(e) });
     }
   }
+  /** Drains the bulk suppression queue: the dialog already suppressed queue[0],
+   *  so the remaining fingerprints are posted sequentially with the same reason.
+   *  A failed post is counted and reported — never silently dropped. */
+  async function suppressQueued(reason: string) {
+    const queue = suppressQueue;
+    setSuppressing(undefined);
+    if (queue.length <= 1) {
+      setSuppressQueue([]);
+      setSuppressionVersion((version) => version + 1);
+      notify?.({ kind: 'success', text: `Finding suppressed${reason ? ` (${reason})` : ''}. It will not appear in future scans, reports, or the CI gate.` });
+      await reloadAllPages();
+      return;
+    }
+    let done = 1;
+    let failed = 0;
+    for (const finding of queue.slice(1)) {
+      if (!finding.fingerprint || !workspaceId) { failed += 1; continue; }
+      setSuppressStatus(`Suppressing ${done + 1} of ${queue.length} findings…`);
+      try {
+        await api.addSuppression(workspaceId, finding.fingerprint, reason || undefined);
+        done += 1;
+      } catch {
+        failed += 1;
+      }
+    }
+    setSuppressStatus('');
+    setSuppressQueue([]);
+    setSelectionEpoch((epoch) => epoch + 1);
+    setSuppressionVersion((version) => version + 1);
+    notify?.({ kind: failed ? 'error' : 'success', text: failed ? `Suppressed ${done} of ${queue.length} findings — ${failed} failed; retry the rest.` : `Suppressed ${done} findings${reason ? ` (${reason})` : ''}. They will not appear in future scans, reports, or the CI gate.` });
+    await reloadAllPages();
+  }
+  /** Bulk entry point from the selection toolbar: confirm the reason once in the dialog, then apply it to every selected finding. */
+  const queueBulkSuppress = (selected: Finding[]) => {
+    if (!selected.length) return;
+    setSuppressQueue(selected);
+    setSuppressing(selected[0]);
+  };
   const activeFilterCount = Object.values(filters).filter(Boolean).length;
   const clearFilters = () => updateFilters({ severity: '', category: '', analyzer: '', rule: '', path: '', status: '', q: '' });
   const counts = severityCounts(dataScan);
@@ -284,6 +336,10 @@ export function ReportView({ scanId, notify, runs: runsProp }: { scanId: string;
   const allClear = !activeFilterCount && dataScan.state === 'completed' && (dataScan.total_findings ?? 0) === 0;
   const total = envelope?.total ?? items.length;
   const hasNext = envelope?.has_next ?? envelope?.has_more ?? false;
+  /** An empty window above page one means the link landed past the end of the
+   *  list (data shrank, or a stale page param slipped through) — a listing
+   *  problem, not a filter problem, so it gets its own recovery action. */
+  const overRange = items.length === 0 && pages > 1 && total > 0;
   const loadingMore = findings.loading && items.length > 0;
   const selectedIndex = selectedKey ? items.findIndex((finding, index) => findingKey(finding, index) === selectedKey) : -1;
   const selected = selectedIndex >= 0 ? items[selectedIndex] : undefined;
@@ -291,7 +347,7 @@ export function ReportView({ scanId, notify, runs: runsProp }: { scanId: string;
     {data.warnings?.length ? <div className="inline-warning"><strong>Incomplete analysis</strong>{data.warnings.map((warning) => <span key={warning}>{warning}</span>)}</div> : null}
     <div className="analysis-toolbar" role="search">
       <div className="toolbar-top">
-        <label className="analysis-search"><MagnifierIcon aria-hidden="true" /><span className="sr-only">Search findings</span><input value={filters.q} onChange={(event) => setFilters((current) => ({ ...current, q: event.target.value }))} placeholder="Search message, rule, or file" /></label>
+        <label className="analysis-search"><MagnifierIcon aria-hidden="true" /><span className="sr-only">Search findings</span><input value={filters.q} onChange={(event) => updateFilters({ ...filters, q: event.target.value })} placeholder="Search message, rule, or file" /></label>
         <span className="toolbar-result-count" aria-live="polite"><strong>{total}</strong> {total === 1 ? 'finding' : 'findings'}</span>
         <button type="button" className="button secondary density-toggle" aria-pressed={dense} title={dense ? 'Switch to comfortable row spacing' : 'Switch to compact row spacing'} onClick={toggleDensity}>{dense ? 'Comfortable' : 'Compact'}</button>
         {activeFilterCount ? <button type="button" className="text-button toolbar-clear" onClick={clearFilters}>Clear</button> : null}
@@ -318,8 +374,9 @@ export function ReportView({ scanId, notify, runs: runsProp }: { scanId: string;
     <FilterChips filters={filters} onRemove={removeFilter} />
     <div className="analysis-split" data-pane={selected ? 'open' : 'closed'}>
       <div className="findings-col" data-scoped={selected ? 'true' : undefined}>
+        {suppressQueue.length > 1 && <p role="status" aria-live="polite">{suppressStatus || `Bulk suppression: the reason you enter applies to all ${suppressQueue.length} selected findings.`}</p>}
         <div className={`finding-list analysis-list${dense ? ' finding-dense' : ''}`}>
-          {findings.loading && !items.length ? <SkeletonTable rows={5} cols={5} className="findings-table" /> : findings.error && !items.length ? <ErrorPanel error={findings.error} retry={findings.reload} /> : items.length ? <FindingsTable findings={items} sort={sort} onSort={changeSort} activeKey={selectedKey} onSelect={(finding, index) => setSelectedKey(findingKey(finding, index))} canSuppress={canManageSuppressions} onSuppress={setSuppressing} onRestore={restoreFinding} suppressionReasons={suppressionReasons} /> : allClear ? <Empty title="All clear — no findings" tone="positive" icon={<><CheckShieldIcon /><span className="empty-sparkle one"><SparkleIcon /></span><span className="empty-sparkle two"><SparkleIcon /></span></>}>Every analyzer finished and found nothing to flag. Nice work.</Empty> : <Empty title={noFindingsTitle} icon={<MagnifierIcon />}>{noFindingsCopy}</Empty>}
+          {findings.loading && !items.length ? <SkeletonTable rows={5} cols={5} className="findings-table" /> : findings.error && !items.length ? <ErrorPanel error={findings.error} retry={findings.reload} /> : items.length ? <FindingsTable findings={items} sort={sort} onSort={changeSort} activeKey={selectedKey} onSelect={(finding, index) => setSelectedKey(findingKey(finding, index))} canSuppress={canManageSuppressions} onSuppress={setSuppressing} onBulkSuppress={queueBulkSuppress} selectionReset={selectionEpoch} onRestore={restoreFinding} suppressionReasons={suppressionReasons} /> : overRange ? <Empty title="This page is past the end of the list" icon={<MagnifierIcon />} action={<button type="button" className="button secondary" onClick={() => setPages(1)}>Back to first page</button>}>Nothing lives on this page — the report has {total} findings in total. Head back to the first page to read the list from the top.</Empty> : allClear ? <Empty title="All clear — no findings" tone="positive" icon={<><CheckShieldIcon /><span className="empty-sparkle one"><SparkleIcon /></span><span className="empty-sparkle two"><SparkleIcon /></span></>}>Every analyzer finished and found nothing to flag. Nice work.</Empty> : <Empty title={noFindingsTitle} icon={<MagnifierIcon />}>{noFindingsCopy}</Empty>}
         </div>
         {(items.length > 0 || loadingMore) && <div className="load-more">
           <span className="load-more-status">Showing {items.length} of {total}</span>
@@ -333,7 +390,7 @@ export function ReportView({ scanId, notify, runs: runsProp }: { scanId: string;
       <span className="report-foot-count">{total} {total === 1 ? 'finding' : 'findings'} · {tools.length || 0} {tools.length === 1 ? 'engine' : 'engines'} ran</span>
       <ExportMenu scanId={scanId} csvParams={csvParams} findings={items} />
     </footer>
-    {suppressing && <SuppressFindingDialog workspaceId={workspaceId} finding={suppressing} onClose={() => setSuppressing(undefined)} onSuppressed={(reason) => { setSuppressing(undefined); setSuppressionVersion((version) => version + 1); notify?.({ kind: 'success', text: `Finding suppressed${reason ? ` (${reason})` : ''}. It will not appear in future scans, reports, or the CI gate.` }); void reloadAllPages(); }} notify={notify ?? noopNotify} />}
+    {suppressing && <SuppressFindingDialog workspaceId={workspaceId} finding={suppressing} onClose={() => { setSuppressing(undefined); setSuppressQueue([]); }} onSuppressed={(reason) => { void suppressQueued(reason); }} notify={notify ?? noopNotify} />}
   </section>;
 }
 
@@ -386,7 +443,7 @@ function useColWidthsReport() {
  * Rows are keyboard-walkable (ArrowUp/ArrowDown move focus, Enter/Space select).
  * Bulk selection, per-row copy, suppress/restore, and resizable columns are preserved.
  */
-function FindingsTable({ findings, sort, onSort, activeKey, onSelect, canSuppress, onSuppress, onRestore, suppressionReasons }: { findings: Finding[]; sort: SortState; onSort: (key: SortKey) => void; activeKey?: string; onSelect: (finding: Finding, index: number) => void; canSuppress: boolean; onSuppress: (finding: Finding) => void; onRestore: (finding: Finding) => void; suppressionReasons?: Map<string, string> }) {
+function FindingsTable({ findings, sort, onSort, activeKey, onSelect, canSuppress, onSuppress, onBulkSuppress, selectionReset = 0, onRestore, suppressionReasons }: { findings: Finding[]; sort: SortState; onSort: (key: SortKey) => void; activeKey?: string; onSelect: (finding: Finding, index: number) => void; canSuppress: boolean; onSuppress: (finding: Finding) => void; /** Present when the parent supports bulk suppression: receives every selected, suppressible finding at once. */ onBulkSuppress?: (selected: Finding[]) => void; /** Bump to clear the checkbox selection (the parent does this after a bulk action lands). */ selectionReset?: number; onRestore: (finding: Finding) => void; suppressionReasons?: Map<string, string> }) {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const copyTimer = useRef<number | undefined>(undefined);
   useEffect(() => () => window.clearTimeout(copyTimer.current), []);
@@ -398,6 +455,9 @@ function FindingsTable({ findings, sort, onSort, activeKey, onSelect, canSuppres
   };
   // bulk selection (checkbox per row, additive header)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // The parent bumps selectionReset after a bulk action (e.g. suppression) so
+  // the checkboxes don't keep pointing at rows whose status just flipped.
+  useEffect(() => { if (selectionReset > 0) setSelectedIds(new Set()); }, [selectionReset]);
   const allIds = findings.map((finding, index) => findingKey(finding, index));
   const allSelected = allIds.length > 0 && allIds.every((id) => selectedIds.has(id));
   const someSelected = allIds.some((id) => selectedIds.has(id)) && !allSelected;
@@ -440,7 +500,11 @@ function FindingsTable({ findings, sort, onSort, activeKey, onSelect, canSuppres
   };
   const handleBulkSuppress = () => {
     const sel = findings.filter((finding, index) => selectedIds.has(findingKey(finding, index)) && finding.fingerprint && canSuppress);
-    sel.forEach((finding) => { onSuppress(finding); });
+    if (!sel.length) return;
+    // Hand the whole selection to the parent so ONE reason dialog covers every
+    // finding; calling onSuppress in a loop only ever kept the last row.
+    if (onBulkSuppress) onBulkSuppress(sel);
+    else sel.forEach((finding) => { onSuppress(finding); });
   };
   // column resizing
   const { widths, setWidth } = useColWidthsReport();

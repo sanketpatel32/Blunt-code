@@ -133,4 +133,63 @@ describe('SearchPage', () => {
     expect(calls.at(-1)).toContain('page=1');
     expect(calls.at(-1)).toContain('severity=critical');
   });
+
+  it('keeps a deep-linked page on mount and clamps an out-of-range page to the last served page', async () => {
+    const calls: string[] = [];
+    const fetchMock = vi.fn((input: string) => {
+      calls.push(String(input));
+      const page = Number(new URL(String(input), 'http://x').searchParams.get('page') ?? '1');
+      return Promise.resolve(json({
+        items: page === 2 ? [hit('f2', 'scan-2', 'high', 'r2')] : [hit('f1', 'scan-1', 'high', 'r1')],
+        total: 26, page, page_size: 25, has_next: page < 2,
+      }));
+    });
+    window.history.replaceState(null, '', '/search?q=error&page=999999');
+    const host = await renderPage(fetchMock);
+    const searchCalls = () => calls.filter((c) => c.includes('/findings/search'));
+    expect(searchCalls()[0]).toContain('page=999999'); // the deep link survives the mount (no reset to 1)
+    expect(searchCalls()[0]).toContain('q=error');
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(searchCalls().at(-1)).toContain('page=2'); // out-of-range page snapped to the last page
+    expect(window.location.search).toContain('page=2');
+    expect(host.querySelectorAll('tbody tr')).toHaveLength(1);
+  });
+
+  it('renders facet counts from API severity_counts and omits the badges on legacy payloads', async () => {
+    const host = await renderPage(searchMock([
+      ['/api/v1/findings/search', {
+        items: [hit('f1', 'scan-9', 'critical', 'py-eval')],
+        total: 1, page: 1, page_size: 25, has_next: false,
+        severity_counts: { critical: 77897, high: 12 },
+      }],
+    ]));
+    expect(host.querySelector('.severity-pill')?.textContent).toContain('77897'); // whole-result count, not the page's rows
+
+    await act(async () => { root.unmount(); });
+    document.body.replaceChildren();
+
+    const legacy = await renderPage(searchMock([
+      ['/api/v1/findings/search', {
+        items: [hit('f1', 'scan-9', 'critical', 'py-eval')],
+        total: 1, page: 1, page_size: 25, has_next: false,
+      }],
+    ]));
+    expect(legacy.querySelector('.severity-pill')?.textContent).toBe('critical'); // no wrong page-local counts
+  });
+
+  it('opens the quick-look drawer from a result row with the keyboard', async () => {
+    const host = await renderPage(searchMock([
+      ['/api/v1/findings/search', {
+        items: [hit('f1', 'scan-9', 'critical', 'py-eval')],
+        total: 1, page: 1, page_size: 25, has_next: false,
+      }],
+    ]));
+    const row = host.querySelector('tbody tr') as HTMLTableRowElement;
+    expect(row.tabIndex).toBe(0);
+    expect(row.getAttribute('aria-label')).toContain('app/run.py');
+    await act(async () => {
+      row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+    expect(document.body.textContent).toContain('Diagnostic Message'); // drawer is portaled to the body
+  });
 });

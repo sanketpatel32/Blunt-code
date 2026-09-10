@@ -23,6 +23,7 @@ class FakeEventSource {
 class DispatchingEventSource {
   static instances: DispatchingEventSource[] = [];
   private listeners = new Map<string, Array<(event: { data: string }) => void>>();
+  onerror: ((event: Event) => void) | null = null;
   constructor(public url: string) { DispatchingEventSource.instances.push(this); }
   addEventListener(type: string, handler: (event: { data: string }) => void) {
     this.listeners.set(type, [...(this.listeners.get(type) ?? []), handler]);
@@ -232,6 +233,30 @@ describe('ScanPage live results panel', () => {
 });
 
 describe('ScanPage terminal and action states (IMP-14)', () => {
+  it('stops streaming and reloading when the scan is gone for good (404)', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn((input: string) => {
+      if (input.endsWith('/scans/scan-gone')) return Promise.resolve(json({ error: { code: 'SCAN_NOT_FOUND', message: 'Scan was not found.' } }, 404));
+      return Promise.resolve(json({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('EventSource', DispatchingEventSource);
+    DispatchingEventSource.instances = [];
+    const host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+    await act(async () => { root.render(<ScanPage id="scan-gone" go={vi.fn<(route: Route) => void>()} notify={vi.fn<(notice: Notice) => void>()} />); });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    // The stream opens while the payload is still loading, but once the 404
+    // resolves the error panel shows and no reconnect may ever be scheduled.
+    expect(DispatchingEventSource.instances).toHaveLength(1);
+    expect(host.querySelector('.error-panel')).not.toBeNull();
+    const source = DispatchingEventSource.instances[0]!;
+    await act(async () => { source.onerror?.(new Event('error')); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+    expect(DispatchingEventSource.instances).toHaveLength(1); // no reconnect loop
+  });
+
   it('shows why a failed scan failed — no-eligible-inputs scans never fail silently', async () => {
     const { host } = await renderScanPage(scanFixture({ state: 'failed', total_findings: 0, error_summary: 'No supported source files were selected.' }));
     expect(host.querySelector('.scan-hero-reason')?.textContent).toContain('No supported source files were selected.');

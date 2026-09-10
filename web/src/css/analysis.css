@@ -394,7 +394,9 @@
 }
 
 /* ── Findings table ──────────────────────────────────────────────── */
-.analysis-list .findings-table { min-width: 46rem; }
+/* No min-width on the wrap: a hard 46rem here blew the page grid out to ~746px
+   at 320-640px. The inner <table> keeps its own min-width (48rem via
+   .findings-table table in styles.css) and scrolls inside .table-wrap instead. */
 
 /* Auto layout sized columns by content, letting the summary column swallow
    the width and push Tool/Status off-viewport. Fixed layout + explicit th

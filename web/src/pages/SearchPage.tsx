@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { api } from '../api';
 import type { SearchedFinding, Workspace } from '../types';
 import type { Route } from '../lib/router';
@@ -61,6 +61,12 @@ const SEARCH_COLUMNS = [
   ['location', 'Location'],
   ['actions', 'Actions'],
 ] as const;
+
+/** Accessible name for the clickable result rows/cards — mirrors ReportView's row labeling. */
+function findingActionLabel(finding: SearchedFinding) {
+  const name = finding.title ?? finding.rule_id ?? 'finding';
+  return `${finding.severity} ${name}${finding.relative_path ? ` in ${finding.relative_path}` : ''} — open quick look`;
+}
 
 function useSavedSearches() {
   const key = 'bluntcode.savedSearches';
@@ -136,7 +142,14 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
     return value;
   }, [debouncedQuery, severities, analyzer, workspace, page, pageSize]);
 
+  // Reset to page 1 whenever a filter changes — but skip the very first run so a
+  // deep link like /search?q=error&page=2 keeps its URL-initialized page.
+  const didMount = useRef(false);
   useEffect(() => {
+    if (!didMount.current) {
+      didMount.current = true;
+      return;
+    }
     setPage(1);
   }, [debouncedQuery, severities, analyzer, workspace]);
 
@@ -203,6 +216,15 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
   const first = (page - 1) * actualPageSize;
   const saved = useSavedSearches();
 
+  // Snap out-of-range pages (deep links like ?page=999999, or a result set that
+  // shrank since the page was picked) back to the last page instead of issuing a
+  // huge wasted OFFSET query. An empty result set (total 0) snaps to page 1.
+  useEffect(() => {
+    if (!state.data) return;
+    const pageCount = Math.max(1, Math.ceil(state.data.total / (state.data.page_size || pageSize)));
+    if (page > pageCount) setPage(pageCount);
+  }, [state.data, page, pageSize]);
+
   const toggleSeverity = (severity: string) =>
     setSeverities((current) => {
       const next = new Set(current);
@@ -211,12 +233,18 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
       return next;
     });
 
-  // Severity counts from current result set
-  const severityCounts = useMemo(() => {
-    const c: Record<string, number> = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
-    for (const f of items) c[f.severity] = (c[f.severity] ?? 0) + 1;
-    return c;
-  }, [items]);
+  /** Result rows and cards open the quick-look drawer on click; Enter/Space get the same behavior. */
+  const openFromKeyboard = (event: ReactKeyboardEvent, finding: SearchedFinding) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    setSelectedFinding(finding);
+  };
+
+  // Severity facet counts: the API's `severity_counts` totals every matched
+  // finding across the whole result set. Legacy payloads omit the field —
+  // counting only this page's rows would read as authoritative ("High 0" against
+  // 77k matches), so the badges are omitted instead.
+  const severityCounts = state.data?.severity_counts as Record<string, number> | undefined;
 
   const activeFiltersCount = useMemo(() => {
     let count = 0;
@@ -295,9 +323,11 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                   />
                   <span className="capitalize">{sev}</span>
                 </div>
-                <Badge variant={isSelected ? 'outline' : 'secondary'} className="text-[10px] tabular-nums px-1.5 py-0">
-                  {severityCounts[sev] ?? 0}
-                </Badge>
+                {severityCounts && (
+                  <Badge variant={isSelected ? 'outline' : 'secondary'} className="text-[10px] tabular-nums px-1.5 py-0">
+                    {severityCounts[sev] ?? 0}
+                  </Badge>
+                )}
               </button>
             );
           })}
@@ -489,7 +519,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
           <button
             type="button"
             onClick={() => applyPreset('critical_high')}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-[var(--color-rule-faint)] bg-[var(--color-surface-muted)] text-[var(--color-danger)] hover:bg-[var(--color-danger-soft)] transition-colors font-medium"
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-[var(--color-rule-faint)] bg-[var(--color-surface-muted)] text-[var(--color-danger-text)] hover:bg-[var(--color-danger-soft)] transition-colors font-medium"
           >
             <ShieldAlert className="h-3 w-3" /> Critical &amp; High
           </button>
@@ -503,7 +533,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
           <button
             type="button"
             onClick={() => applyPreset('secrets')}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-[var(--color-rule-faint)] bg-[var(--color-surface-muted)] text-[var(--color-warning)] hover:bg-[var(--color-warning-soft)] transition-colors font-medium"
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-[var(--color-rule-faint)] bg-[var(--color-surface-muted)] text-[var(--color-warning-text)] hover:bg-[var(--color-warning-soft)] transition-colors font-medium"
           >
             <KeyRound className="h-3 w-3" /> Secrets &amp; Keys
           </button>
@@ -528,7 +558,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                 setWorkspace(f.path);
                 setAdvancedOpen(false);
               }}
-              facetCounts={{ severity: severityCounts as Record<string, number> }}
+              facetCounts={severityCounts ? { severity: severityCounts } : undefined}
               analyzers={[...ANALYZERS]}
             />
           </div>
@@ -569,7 +599,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
           <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-[var(--color-rule-faint)]">
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold text-[var(--color-ink)] tabular-nums">
-                {total} {total === 1 ? 'finding match' : 'findings matched'}
+                {state.loading ? 'Searching…' : `${total.toLocaleString()} ${total === 1 ? 'finding match' : 'findings matched'}`}
               </span>
               {total > 0 && (
                 <span className="text-xs text-[var(--color-ink-faint)]">
@@ -659,7 +689,11 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                   <Card
                     key={`${finding.scan_id}:${finding.id}`}
                     className="p-3.5 hover:border-[var(--color-rule)] transition-all cursor-pointer group"
+                    role="button"
+                    tabIndex={0}
+                    aria-label={findingActionLabel(finding)}
                     onClick={() => setSelectedFinding(finding)}
+                    onKeyDown={(event) => openFromKeyboard(event, finding)}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="space-y-1.5 min-w-0 flex-1">
@@ -731,7 +765,10 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                     <tr
                       key={`${finding.scan_id}:${finding.id}`}
                       className="hover:bg-[var(--color-surface-muted)] transition-colors cursor-pointer"
+                      tabIndex={0}
+                      aria-label={findingActionLabel(finding)}
                       onClick={() => setSelectedFinding(finding)}
+                      onKeyDown={(event) => openFromKeyboard(event, finding)}
                     >
                       {visibleCols.severity && (
                         <td className="py-2.5 px-3 align-top">

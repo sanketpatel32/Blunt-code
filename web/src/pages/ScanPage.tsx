@@ -30,12 +30,21 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
   const [cancelling, setCancelling] = useState(false);
   const scanState = scan.data?.state;
   const scanReload = scan.reload;
+  // A scan that answers NOT_FOUND is gone for good (pruned, or a stale deep link);
+  // the live stream and its scanReload loop must stop instead of retrying forever.
+  // useLoad errors are strings like "SCAN_NOT_FOUND: Scan was not found."
+  const scanMissing = !!scan.error && scan.error.includes('NOT_FOUND');
   useEffect(() => {
+    if (scanMissing) return;
     if (scanState && isTerminalScanState(scanState)) {
       setStreamState('live');
       return;
     }
     let source: EventSource | undefined; let retry: number | undefined;
+    // Set once the effect is torn down: a closed EventSource fires no further
+    // events in a real browser, but the guard makes cleanup authoritative so a
+    // straggler error can never schedule one more reconnect (or reload).
+    let disposed = false;
     // Set on `connected`: the very next event starts the server's history
     // replay, so it replaces the list instead of appending to it. Without
     // this, every reconnect (including the undefined -> actual scan state
@@ -54,6 +63,7 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
     };
     let attempt = 0;
     const connect = () => {
+      if (disposed) return;
       setStreamState((state) => state === 'live' ? 'reconnecting' : state);
       source = new EventSource(`/api/v1/scans/${encodeURIComponent(id)}/events`);
       ['scan.started', 'scan.stage', 'analyzer.started', 'analyzer.completed', 'analyzer.failed', 'analyzer.skipped', 'scan.warning', 'scan.completed', 'scan.cancelled'].forEach((type) => { source?.addEventListener(type, receive); });
@@ -64,6 +74,7 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
         replaceNext = true;
       });
       source.onerror = () => {
+        if (disposed) return;
         source?.close();
         setStreamState('reconnecting');
         attempt += 1;
@@ -73,8 +84,8 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
       };
     };
     connect();
-    return () => { source?.close(); if (retry) window.clearTimeout(retry); };
-  }, [id, scanState, scanReload]);
+    return () => { disposed = true; source?.close(); if (retry) window.clearTimeout(retry); };
+  }, [id, scanState, scanReload, scanMissing]);
   const current = scan.data;
   const terminal = current && isTerminalScanState(current.state);
   useTicker(!terminal);
@@ -193,7 +204,7 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
             const pct = total > 0 ? Math.max(value > 0 ? 2 : 0, Math.round((value / total) * 100)) : 0;
             return <li key={sev} className={`verdict-bar-row ${value === 0 ? 'is-zero' : ''}`}>
               <span className="verdict-bar-label"><i className={`sev-dot sev-${sev}`} aria-hidden="true" />{sev}</span>
-              <span className="verdict-bar-track" role="img" aria-label={`${value} ${sev} findings`}>
+              <span className="verdict-bar-track" role="img" aria-label={`${value} ${sev} ${value === 1 ? 'finding' : 'findings'}`}>
                 <i className={`verdict-bar-fill sev-${sev}`} style={{ width: `${pct}%` }} />
               </span>
               <span className="verdict-bar-count">{count(value)}</span>

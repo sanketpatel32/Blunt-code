@@ -212,7 +212,7 @@ tr.is-expanded .history-date::before { border-color: var(--color-accent); backgr
 }
 .history-pagination-count { font-variant-numeric: tabular-nums; color: var(--color-ink-soft); }
 .history-pagination-count strong { color: var(--color-ink); font-weight: 700; }
-.history-pagination > div { display: flex; align-items: center; gap: var(--space-sm); }
+.history-pagination > div { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); }
 .history-pagination output {
   min-width: 6.8rem; color: var(--color-ink-faint);
   font: 600 var(--text-xs) var(--font-mono); text-align: center; white-space: nowrap;

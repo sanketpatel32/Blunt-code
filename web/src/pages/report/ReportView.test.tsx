@@ -376,6 +376,21 @@ describe('ReportView load-more pagination', () => {
     });
   });
 
+  it('searching after Show more restarts on window one instead of hiding matches in stale rows', async () => {
+    await pageMock(async (host) => {
+      await click([...host.querySelectorAll('button')].find((button) => button.textContent === 'Show more')!);
+      await settle();
+      expect(rows(host)).toHaveLength(200);
+
+      await type(host.querySelector<HTMLInputElement>('[placeholder="Search message, rule, or file"]')!, 'eval');
+      await advance(300);
+      expect(findingUrls().at(-1)).toContain('q=eval');
+      expect(findingUrls().at(-1)).toContain('page=1'); // the search resets paging like every other filter
+      await settle();
+      expect(rows(host)).toHaveLength(100); // replaced, not merged on top of the 200 stale rows
+    });
+  }, 20000);
+
   it('the rows-per-fetch selector offers API-legal windows and restarts on window one', async () => {
     await pageMock(async (host) => {
       const sizeButtons = [...host.querySelectorAll<HTMLButtonElement>('.load-more .page-size button')];
@@ -464,6 +479,27 @@ describe('ReportView split pane', () => {
       await press(rows(host)[1], 'Enter');
       expect(host.querySelector('.analysis-split')!.getAttribute('data-pane')).toBe('open');
       expect(rows(host)[1].className).toContain('active');
+    });
+  });
+
+  it('Escape inside an open dialog leaves the pane open; the next Escape closes it', async () => {
+    await twoFindings(async (host) => {
+      await click(rows(host)[0]);
+      expect(host.querySelector('.source-pane')).not.toBeNull();
+      const dialog = document.createElement('dialog');
+      dialog.setAttribute('open', '');
+      const inside = document.createElement('button');
+      dialog.append(inside);
+      document.body.append(dialog);
+      try {
+        await act(async () => { inside.focus(); });
+        await press(inside, 'Escape'); // the dialog layer owns Escape
+        expect(host.querySelector('.source-pane')).not.toBeNull();
+      } finally {
+        dialog.remove();
+      }
+      await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
+      expect(host.querySelector('.source-pane')).toBeNull();
     });
   });
 
@@ -577,6 +613,43 @@ describe('ReportView bulk actions', () => {
 
       await click(host.querySelector<HTMLInputElement>('[aria-label="Select all"]')!);
       expect(toolbar.querySelector('[aria-live="polite"]')!.textContent).toBe('2 selected');
+    });
+  });
+});
+
+describe('ReportView bulk suppression', () => {
+  const FP1 = 'a'.repeat(64);
+  const FP2 = 'b'.repeat(64);
+
+  it('suppresses every selected finding with one confirmed reason, then clears the selection', async () => {
+    const first = { ...finding, fingerprint: FP1 };
+    const second = { ...finding, id: 'finding-2', title: 'Second finding', fingerprint: FP2 };
+    await fetchMock.withImplementation((input: string) => {
+      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, warnings: [], findings: [first, second] }));
+      if (input.includes('/preview')) return Promise.resolve(json(previewBody));
+      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: [first, second], total: 2, limit: 100, offset: 0, has_more: false, has_next: false }));
+      return Promise.resolve(json({ fingerprint: 'ok', created_at: '2026-09-11T00:00:00Z' }, 201));
+    }, async () => {
+      const host = await render();
+      const checkboxes = [...host.querySelectorAll<HTMLInputElement>('tbody input[type="checkbox"]')];
+      await click(checkboxes[0]!);
+      await click(checkboxes[1]!);
+      expect(host.querySelector('[role="toolbar"][aria-label="Bulk actions"]')?.textContent).toContain('2 selected');
+
+      await click([...host.querySelectorAll('button')].find((button) => button.textContent === 'Suppress selected')!);
+      expect(host.querySelector('dialog')).not.toBeNull();
+      expect(host.textContent).toContain('applies to all 2 selected findings'); // queue context line
+
+      await click([...host.querySelectorAll('button')].find((button) => button.textContent === 'Suppress finding')!);
+      await settle();
+      await settle();
+      const posts = fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST');
+      expect(posts).toHaveLength(2); // both findings, not just the last one selected
+      expect(JSON.parse(String(posts[0][1]!.body))).toEqual({ fingerprint: FP1, reason: '' });
+      expect(JSON.parse(String(posts[1][1]!.body))).toEqual({ fingerprint: FP2, reason: '' });
+      expect(host.querySelector('dialog')).toBeNull(); // closes on success
+      expect(host.querySelector('[role="toolbar"][aria-label="Bulk actions"]')).toBeNull(); // selection cleared
+      expect(findingUrls()).toHaveLength(2); // list refetched so the statuses flip
     });
   });
 });

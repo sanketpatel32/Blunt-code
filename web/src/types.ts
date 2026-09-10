@@ -115,6 +115,8 @@ export interface SearchFindingsPage {
   page: number;
   page_size: number;
   has_next: boolean;
+  /** Severity → total across the whole filtered result set (not just the served page); omitted by older backends. */
+  severity_counts?: Partial<Record<Severity, number>>;
 }
 
 /** Weighted risk score from `GET /workspaces/{id}/risk`. Weights: critical 10, high 5, medium 2, low 1. Grade A<5, B<20, C<50, D otherwise. */

@@ -16,6 +16,8 @@ function previewErrorText(error: unknown): string {
   if (text.startsWith('SOURCE_FILE_TOO_LARGE')) return 'This source file is larger than 1 MB, so Blunt Code will not load it into the preview. Open it in your editor instead.';
   if (text.startsWith('SOURCE_FILE_NOT_FOUND')) return 'The file moved or was deleted after this scan ran, so there is nothing to preview yet.';
   if (text.startsWith('SOURCE_PATH_UNAVAILABLE')) return 'This finding has no file location — it was reported at the project level.';
+  if (text.startsWith('SOURCE_NOT_A_FILE')) return 'Only source files can be previewed.';
+  if (text.startsWith('FINDING_NOT_FOUND')) return 'This finding is no longer in the report, so there is nothing to preview.';
   return text;
 }
 
@@ -57,10 +59,18 @@ export function SourcePane({
     const timer = window.setTimeout(() => setCopied(false), 2000);
     return () => window.clearTimeout(timer);
   }, [copied]);
-  /** Esc closes the pane wherever focus sits; arrows walk findings while focus is inside the pane. */
+  /** Esc closes the pane wherever focus sits; arrows walk findings while focus is inside the pane.
+   *  An open dialog (suppress, notes…) owns Escape though — closing the pane underneath it would
+   *  dismiss the wrong layer, so skip and let the dialog's handler (which ignores events a pane
+   *  has already handled) win instead. */
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { event.preventDefault(); onClose(); }
+      if (event.key !== 'Escape') return;
+      const target = event.target instanceof Element ? event.target : null;
+      const active = document.activeElement instanceof Element ? document.activeElement : null;
+      if (target?.closest('dialog') || active?.closest('dialog')) return;
+      event.preventDefault();
+      onClose();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);

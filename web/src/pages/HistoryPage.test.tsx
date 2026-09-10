@@ -194,7 +194,8 @@ describe('HistoryTable scan rows', () => {
     ]);
     const badges = [...host.querySelectorAll('.profile-badge')];
     expect(badges.map((badge) => badge.textContent)).toEqual(['deep']);
-    expect(badges[0].closest('td')?.querySelector('.state.completed')?.textContent).toBe('completed');
+    // The state pill uses the shared scanStateDisplay label (sentence case), not raw snake_case
+    expect(badges[0].closest('td')?.textContent).toContain('Completed');
   });
 
   it('stacks the severity mini-bar with widths proportional to each severity count', async () => {
@@ -205,6 +206,15 @@ describe('HistoryTable scan rows', () => {
     const segments = [...bar.querySelectorAll<HTMLElement>('i')];
     expect(segments.map((segment) => segment.className)).toEqual(['bar-critical', 'bar-high', 'bar-medium', 'bar-low']);
     expect(segments.map((segment) => segment.style.width)).toEqual(['10%', '25%', '50%', '15%']);
+    expect(segments.map((segment) => segment.style.minWidth)).toEqual(['2px', '2px', '2px', '2px']); // nonzero segments stay visible at small counts
+  });
+
+  it('gives tiny severity segments a 2px floor so they never round to invisible', async () => {
+    const { host } = await renderTable([scan({ id: 'scan-1', state: 'completed', total_findings: 11228, critical_count: 4, high_count: 11224 })]);
+    const bar = host.querySelector<HTMLElement>('.severity-bar')!;
+    const segments = [...bar.querySelectorAll<HTMLElement>('i')];
+    expect(segments.map((segment) => segment.style.width)).toEqual(['0%', '100%']); // 4 in 11228 rounds to 0%
+    expect(segments[0].style.minWidth).toBe('2px'); // …but the critical sliver stays on screen
   });
 
   it('renders a muted zero instead of a bar when a scan found nothing', async () => {
@@ -245,6 +255,42 @@ describe('HistoryTable scan rows', () => {
     const open = [...host.querySelectorAll('button')].find((button) => button.textContent === 'Open report')!;
     await act(async () => { open.click(); });
     expect(go).toHaveBeenCalledWith({ page: 'scan', id: 'scan-1' });
+  });
+});
+
+describe('HistoryTable date filters', () => {
+  // Built from LOCAL Date parts, then serialized — the assertions hold in every timezone.
+  const midnight = new Date(2026, 2, 15, 0, 0, 0, 0); // local midnight of Mar 15
+  const justBefore = new Date(midnight.getTime() - 60_000); // 23:59 local Mar 14
+
+  async function renderFiltered(scans: Scan[], dateFrom?: string, dateTo?: string) {
+    const host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+    await act(async () => { root.render(<HistoryTable scans={scans} go={vi.fn()} dateFrom={dateFrom} dateTo={dateTo} />); });
+    return host;
+  }
+
+  it('parses From/To as local day bounds, not UTC midnights', async () => {
+    const atMidnight = scan({ id: 'midnight', state: 'completed', total_findings: 1, finished_at: midnight.toISOString() });
+    const beforeMidnight = scan({ id: 'late', state: 'completed', total_findings: 2, finished_at: justBefore.toISOString() });
+
+    const fromHost = await renderFiltered([atMidnight, beforeMidnight], '2026-03-15');
+    expect(fromHost.querySelector('.findings-total')?.textContent).toBe('1'); // local 00:00 belongs to From-day
+
+    const toHost = await renderFiltered([atMidnight, beforeMidnight], undefined, '2026-03-14');
+    expect(toHost.querySelector('.findings-total')?.textContent).toBe('2'); // 23:59 belongs to To-day
+  });
+
+  it('shows a filter empty state instead of a bare table when no scan matches the dates', async () => {
+    const host = await renderFiltered([scan({ id: 's1', state: 'completed', finished_at: midnight.toISOString() })], '2027-01-01');
+    expect(host.textContent).toContain('No scans match these dates');
+    expect(host.querySelector('table')).toBeNull();
+  });
+
+  it('keeps the table when no date filters are set', async () => {
+    const host = await renderFiltered([scan({ id: 's1', state: 'completed', finished_at: midnight.toISOString() })]);
+    expect(host.querySelector('table')).not.toBeNull();
   });
 });
 
