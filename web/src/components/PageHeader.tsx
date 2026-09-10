@@ -33,7 +33,9 @@ export function PageHeader({
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--color-ink)] m-0 leading-tight font-[var(--font-display)]">
             {title}
           </h1>
-          {badge && <div className="page-heading-badge shrink-0 flex items-center">{badge}</div>}
+          {/* min-w-0 (not shrink-0) lets the badge shrink so wrapping content —
+              e.g. the workspace language dots — never pushes the page wide. */}
+          {badge && <div className="page-heading-badge min-w-0 flex items-center">{badge}</div>}
         </div>
         {description && (
           <div className="page-heading-description text-xs sm:text-sm text-[var(--color-ink-soft)] leading-relaxed max-w-3xl">

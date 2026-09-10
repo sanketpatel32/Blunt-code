@@ -8,7 +8,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function requestWithStatus<T>(path: string, init?: RequestInit): Promise<{ data: T; status: number }> {
   const response = await fetch(`${PREFIX}${path}`, {
     ...init,
     headers: { Accept: 'application/json', ...(init?.body ? { 'Content-Type': 'application/json' } : {}), ...init?.headers },
@@ -17,8 +17,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const body = await response.json().catch(() => null) as { error?: { code?: string; message?: string; details?: Record<string, unknown> } } | null;
     throw new ApiError(body?.error?.code ?? 'REQUEST_FAILED', body?.error?.message ?? `Request failed (${response.status})`, response.status, body?.error?.details);
   }
-  if (response.status === 204) return undefined as T;
-  return response.json() as Promise<T>;
+  const data = response.status === 204 ? undefined as T : ((await response.json()) as T);
+  return { data, status: response.status };
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  return (await requestWithStatus<T>(path, init)).data;
 }
 
 /** List endpoints wrap their array in an envelope; a null body (or null envelope field) reads as "nothing yet". */
@@ -28,6 +32,11 @@ function list<T>(value: T[] | { items?: T[]; workspaces?: T[]; scans?: T[]; find
   return value.items ?? value.workspaces ?? value.scans ?? value.findings ?? value.tools ?? [];
 }
 
+/** A workspace result from a create call plus `existing`: the backend answers 201
+ *  for a freshly registered folder and 200 when it was already registered, so
+ *  callers can greet a duplicate with "opening it" instead of "added". */
+export type CreatedWorkspace = Workspace & { existing: boolean };
+
 export const api = {
   health: () => request<{ status?: string }>('/health'),
   meta: () => request<Record<string, string>>('/meta'),
@@ -36,7 +45,10 @@ export const api = {
   workspaces: async () => list<Workspace>(await request<Workspace[] | { workspaces?: Workspace[] }>('/workspaces')),
   workspace: (id: string) => request<Workspace>(`/workspaces/${encodeURIComponent(id)}`),
   selectFolder: () => request<{ cancelled: boolean; path?: string }>('/system/select-folder', { method: 'POST' }),
-  createWorkspace: (input: { root_path: string; name?: string }) => request<Workspace>('/workspaces', { method: 'POST', body: JSON.stringify(input) }),
+  createWorkspace: async (input: { root_path: string; name?: string }): Promise<CreatedWorkspace> => {
+    const { data, status } = await requestWithStatus<Workspace>('/workspaces', { method: 'POST', body: JSON.stringify(input) });
+    return { ...data, existing: status === 200 };
+  },
   deleteWorkspace: (id: string) => request<void>(`/workspaces/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   /** Rename a workspace and/or change its default scan profile (PATCH). */
   updateWorkspace: (id: string, patch: { name?: string; default_profile?: string }) => request<Workspace>(`/workspaces/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) }),

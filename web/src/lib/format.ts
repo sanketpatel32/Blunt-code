@@ -124,7 +124,7 @@ export function scanStateDisplay(state?: string | null): { label: string; varian
   const label = state.charAt(0).toUpperCase() + state.slice(1).replaceAll('_', ' ');
   if (state === 'completed') return { label, variant: 'success' };
   if (state === 'completed_with_warnings') return { label, variant: 'warning' };
-  if (state === 'failed' || state === 'cancelled') return { label, variant: 'danger' };
+  if (state === 'failed' || state === 'cancelled' || state === 'interrupted') return { label, variant: 'danger' };
   if (state === 'running' || state === 'queued' || state === 'pending') return { label, variant: 'accent' };
   return { label, variant: 'outline' };
 }

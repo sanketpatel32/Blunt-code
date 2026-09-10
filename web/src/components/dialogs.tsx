@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { api } from '../api';
-import type { Finding, SourcePreview, Workspace } from '../types';
+import { api, type CreatedWorkspace } from '../api';
+import type { Finding, SourcePreview } from '../types';
 import type { Notice } from '../lib/notice';
 import { message } from '../lib/notice';
 import { findingLocation } from '../lib/format';
@@ -10,18 +10,33 @@ import { useDialogA11y } from '../hooks/useDialogA11y';
 import { ErrorPanel, Loading } from './ui';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
+import { TEMPLATE_STORAGE_KEY } from './WorkspaceTemplates';
 
-export function AddWorkspaceDialog({ onClose, onCreated, notify }: { onClose: () => void; onCreated: (workspace: Workspace) => void; notify: (n: Notice) => void }) {
+export function AddWorkspaceDialog({ onClose, onCreated, notify }: { onClose: () => void; onCreated: (workspace: CreatedWorkspace) => void; notify: (n: Notice) => void }) {
   const [path, setPath] = useState('');
   const [name, setName] = useState(() => {
-    try { const raw = localStorage.getItem('bluntcode.templatePrefill'); if (raw) { const p = JSON.parse(raw) as { name?: string }; if (p.name) return p.name; } } catch { /* ignore */ }
+    // One-shot prefill: a template's suggested name seeds the dialog exactly
+    // once, then the stored key is consumed so a stale suggestion never
+    // resurfaces (or suppresses folder-derived naming) in a later session.
+    try {
+      const raw = localStorage.getItem(TEMPLATE_STORAGE_KEY);
+      if (raw) {
+        localStorage.removeItem(TEMPLATE_STORAGE_KEY);
+        const p = JSON.parse(raw) as { name?: string };
+        if (p.name) return p.name;
+      }
+    } catch { /* ignore */ }
     return '';
   });
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     const onTemplate = (e: Event) => {
       const ce = e as CustomEvent<{ name?: string }>;
-      if (ce.detail?.name) setName((cur) => cur || ce.detail.name!);
+      if (ce.detail?.name) {
+        setName((cur) => cur || ce.detail.name!);
+        // The event consumed the suggestion; drop the stored copy so it stays one-shot.
+        try { localStorage.removeItem(TEMPLATE_STORAGE_KEY); } catch { /* ignore */ }
+      }
     };
     window.addEventListener('bluntcode:use-template', onTemplate as EventListener);
     return () => window.removeEventListener('bluntcode:use-template', onTemplate as EventListener);
@@ -32,7 +47,7 @@ export function AddWorkspaceDialog({ onClose, onCreated, notify }: { onClose: ()
   const submit = async (event: FormEvent) => { event.preventDefault(); if (!path.trim()) return; setBusy(true); try { onCreated(await api.createWorkspace({ root_path: path.trim(), name: name.trim() || undefined })); } catch (e) { notify({ kind: 'error', text: message(e) }); } finally { setBusy(false); } };
   return (
   // biome-ignore lint/a11y/noStaticElementInteractions: backdrop-only dismissal is pointer convenience; keyboard users close via Escape and the dialog's own Cancel/close button.
-    <div className="dialog-backdrop" role="presentation" onMouseDown={onBackdropMouseDown}><dialog ref={dialogRef} open aria-modal="true" aria-labelledby="add-workspace-title"><form onSubmit={(event) => void submit(event)}><header><h2 id="add-workspace-title">Add workspace</h2><Button variant="ghost" size="icon" type="button" onClick={onClose} aria-label="Close">×</Button></header><p>Choose a project folder. Blunt Code keeps a reference and never changes your source files.</p><label>Folder path<div className="picker-row flex gap-2"><Input ref={pathInputRef} value={path} onChange={(event) => setPath(event.target.value)} placeholder="C:\Projects\my-app" required className="flex-1" /><Button type="button" variant="outline" onClick={() => void pick()} disabled={busy}>Browse…</Button></div></label><label>Workspace name <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Optional" /></label><footer className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button type="submit" disabled={busy || !path.trim()}>{busy ? 'Adding…' : 'Add workspace'}</Button></footer></form></dialog></div>);
+    <div className="dialog-backdrop" role="presentation" onMouseDown={onBackdropMouseDown}><dialog ref={dialogRef} open aria-modal="true" aria-labelledby="add-workspace-title"><form onSubmit={(event) => void submit(event)}><header><h2 id="add-workspace-title">Add workspace</h2><Button variant="ghost" size="icon" type="button" onClick={onClose} disabled={busy} aria-label="Close">×</Button></header><p>Choose a project folder. Blunt Code keeps a reference and never changes your source files.</p><label>Folder path<div className="picker-row flex gap-2"><Input ref={pathInputRef} value={path} onChange={(event) => setPath(event.target.value)} placeholder="C:\Projects\my-app" required className="flex-1" /><Button type="button" variant="outline" onClick={() => void pick()} disabled={busy}>Browse…</Button></div></label><label>Workspace name <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Optional" /></label><footer className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={onClose} disabled={busy}>Cancel</Button><Button type="submit" disabled={busy || !path.trim()}>{busy ? 'Adding…' : 'Add workspace'}</Button></footer></form></dialog></div>);
 }
 
 export function ConfirmationDialog({ title, description, confirmLabel, busy, onCancel, onConfirm }: { title: string; description: string; confirmLabel: string; busy: boolean; onCancel: () => void; onConfirm: () => void }) {

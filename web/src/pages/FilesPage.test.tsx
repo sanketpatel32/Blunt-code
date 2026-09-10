@@ -73,6 +73,7 @@ beforeEach(() => { childResponses.clear(); vi.useFakeTimers(); });
 afterEach(async () => {
   await act(async () => { root?.unmount(); });
   document.body.replaceChildren();
+  window.history.replaceState(null, '', '/'); // language-filter tests push ?lang= URLs around
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
@@ -124,7 +125,7 @@ describe('FilesPage tree search', () => {
     const marks = [...host.querySelectorAll('.tree-name mark')];
     expect(marks).toHaveLength(1);
     expect(marks[0]!.textContent).toBe('ain');
-    expect(marks[0]!.parentElement?.textContent).toBe('main.py');
+    expect(marks[0]!.parentElement?.textContent).toBe('main.pyPython'); // name plus its resolved language badge
   });
 
   it('marks failed child loads inline and retries them', async () => {
@@ -293,5 +294,98 @@ describe('FilesPage tree helpers', () => {
     expect(visiblePaths(host)).toContain('Include src/a.py');
     const callsAfter = fetchMock.mock.calls.filter(([input]) => String(input) === '/api/v1/workspaces/ws-1/tree?path=src').length;
     expect(callsAfter).toBe(callsBefore);
+  });
+});
+
+describe('FilesPage language filter', () => {
+  const py = { path: 'src/main.py', name: 'main.py', type: 'file', included: true };
+  const tsx = { path: 'src/app.tsx', name: 'app.tsx', type: 'file', included: true };
+
+  function chips(host: HTMLElement) {
+    return [...host.querySelectorAll<HTMLButtonElement>('.chip-rail .chip')].map((chip) => chip.textContent);
+  }
+
+  it('builds the rail from file extensions when the API omits language, with per-language counts', async () => {
+    enqueueChild('src', { items: [py, tsx, { path: 'src/util.ts', name: 'util.ts', type: 'file', included: true }] });
+    const host = await render();
+    expect(chips(host)).toEqual(['All languages']); // nothing loaded yet, nothing offered
+    await act(async () => { toggle(host, 'Expand src')!.click(); await flush(); });
+    expect(chips(host)).toEqual(['All languages', 'TypeScript2', 'Python1']); // count-sorted
+  });
+
+  it('filters by a resolved language and rewrites the URL so a reload keeps it', async () => {
+    enqueueChild('src', { items: [py, tsx] });
+    const host = await render();
+    await act(async () => { toggle(host, 'Expand src')!.click(); await flush(); });
+    await act(async () => { [...host.querySelectorAll<HTMLButtonElement>('.chip-rail .chip')].find((chip) => chip.textContent === 'Python1')!.click(); await flush(); });
+    expect(window.location.search).toBe('?lang=python');
+    expect(visiblePaths(host)).toEqual(['Include src', 'Include src/main.py']); // app.tsx pruned, docs fanned out and emptied away
+
+    await act(async () => { [...host.querySelectorAll('button')].find((b) => b.textContent === 'Clear filter')!.click(); await flush(); });
+    expect(window.location.search).toBe(''); // cleared state owns the URL too — a reload cannot re-apply it
+    expect(visiblePaths(host)).toEqual(['Include src', 'Include src/main.py', 'Include src/app.tsx', 'Include docs']);
+  });
+
+  it('lands a ?lang= deep link on a filtered tree instead of "No matching paths"', async () => {
+    window.history.pushState({}, '', '/workspaces/ws-1/files?lang=typescript');
+    enqueueChild('src', { items: [py, tsx] });
+    const host = await render();
+    await act(async () => { await flush(); }); // one-level fan-out loads both top folders
+    expect(visiblePaths(host)).toEqual(['Include src', 'Include src/app.tsx']); // empty docs pruned, main.py pruned
+  });
+
+  it('re-applies the filter when the URL changes under a mounted page (Back/Forward)', async () => {
+    enqueueChild('src', { items: [py, tsx] });
+    const host = await render();
+    await act(async () => { toggle(host, 'Expand src')!.click(); await flush(); });
+    // App re-renders the mounted page on popstate; the filter must follow the URL.
+    window.history.pushState({}, '', '/workspaces/ws-1/files?lang=typescript');
+    await act(async () => { root.render(<FilesPage id="ws-1" notify={(_notice: Notice) => {}} />); });
+    await act(async () => { await flush(); });
+    expect(visiblePaths(host)).toEqual(['Include src', 'Include src/app.tsx']);
+  });
+
+  it('caps the row stagger so wide folders do not trail in late', async () => {
+    enqueueChild('src', { items: Array.from({ length: 30 }, (_, i) => ({ path: `src/f${i}.py`, name: `f${i}.py`, type: 'file', included: true })) });
+    const host = await render();
+    await act(async () => { toggle(host, 'Expand src')!.click(); await flush(); });
+    // The last DOM row is the top-level docs sibling, so assert on the ceiling:
+    // 30 children must cap at 10 × 20ms, not trail to 29 × 20ms.
+    const delays = [...host.querySelectorAll<HTMLElement>('li.tree-item')].map((li) => Number.parseInt(li.style.animationDelay, 10));
+    expect(delays).toHaveLength(32);
+    expect(Math.max(...delays)).toBe(200);
+  });
+
+  it('labels the summary count as top-level and pluralizes a single selection', async () => {
+    enqueueChild('src', { items: [py] });
+    const host = await render();
+    expect(host.querySelector('.tree-summary-bar')!.textContent).toContain('2 top-level paths');
+    await act(async () => { toggle(host, 'Include docs')!.click(); await flush(); }); // exclude docs
+    await act(async () => { toggle(host, 'Include docs')!.click(); await flush(); }); // back to include — one include override
+    expect(host.querySelector('.tree-summary-bar')!.textContent).toContain('1 path selected');
+  });
+});
+
+describe('FilesPage broken workspace', () => {
+  it('fails once, surfaces a single error, and keeps Save/Reset unactionable', async () => {
+    const seen: Notice[] = [];
+    const urls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn((input: string) => {
+      urls.push(String(input));
+      if (input.endsWith('/workspaces/ws-1')) return Promise.resolve(json({ error: { code: 'NOT_FOUND', message: 'No such workspace.' } }, 404));
+      return Promise.resolve(json({ items: [] }));
+    }));
+    const host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+    await act(async () => { root.render(<FilesPage id="ws-1" notify={(notice) => { seen.push(notice); }} />); });
+    await act(async () => { for (let i = 0; i < 6; i += 1) await Promise.resolve(); });
+    expect(urls.filter((url) => url.includes('/rules') || url.includes('/path-overrides'))).toEqual([]); // gated behind the workspace probe
+    expect(urls.filter((url) => url.endsWith('/workspaces/ws-1'))).toHaveLength(1);
+    expect(host.querySelectorAll('[role="alert"]')).toHaveLength(1); // one error surface, no duplicate
+    expect(seen).toEqual([]); // no redundant toast
+    const buttons = [...host.querySelectorAll<HTMLButtonElement>('button')];
+    expect(buttons.find((button) => button.textContent?.includes('Save selection'))!.disabled).toBe(true);
+    expect(buttons.find((button) => button.textContent?.includes('Reset'))!.disabled).toBe(true);
   });
 });

@@ -336,6 +336,74 @@ describe('HomePage risk board — activity feed', () => {
   });
 });
 
+describe('HomePage risk board — feed regressions', () => {
+  async function clickFilter(host: HTMLElement, label: string) {
+    const tab = [...host.querySelectorAll<HTMLButtonElement>('.feed-filter-btn')].find((b) => b.textContent === label);
+    expect(tab).toBeDefined();
+    await act(async () => { tab!.click(); });
+  }
+
+  it('counts interrupted scans under Warnings and tones them as danger', async () => {
+    const scans = [
+      scanItem({ id: 'scan-1', state: 'interrupted', finished_at: null, total_findings: undefined, critical_count: 0, high_count: 0, medium_count: 0, low_count: 0 }),
+      scanItem({ id: 'scan-2', state: 'completed' }),
+    ];
+    const host = await render(homeFetchMock({ scans, total: 2, summary }));
+    await clickFilter(host, 'Warnings');
+
+    const rows = host.querySelectorAll('.feed-list .feed-row');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].querySelector('.feed-state.danger')?.textContent).toBe('Interrupted');
+  });
+
+  it('shows an em dash instead of a zero count for scans that never finished', async () => {
+    const unfinished = scanItem({ id: 'scan-1', state: 'cancelled', total_findings: undefined, critical_count: 0, high_count: 0, medium_count: 0, low_count: 0 });
+    const clean = scanItem({ id: 'scan-2', total_findings: 0, critical_count: 0, high_count: 0, medium_count: 0, low_count: 0 });
+    const host = await render(homeFetchMock({ scans: [unfinished, clean], total: 2, summary }));
+
+    const rows = host.querySelectorAll('.feed-list .feed-row');
+    expect(rows[0].querySelector('.feed-findings-text')?.textContent).toBe('—');
+    expect(rows[1].querySelector('.feed-findings-text')?.textContent).toBe('0 findings'); // a completed 0 stays 0
+  });
+
+  it('quotes the tab label, not the raw filter key, when a filter has no matches', async () => {
+    const host = await render(homeFetchMock({ scans: [scanItem({ state: 'running', finished_at: null })], total: 1, summary }));
+    await clickFilter(host, 'Warnings');
+
+    expect(host.querySelector('.board-empty-filter')?.textContent).toContain('No scans matching the “Warnings” filter.');
+  });
+
+  it('charts the scans on the selected feed tab so chart and list agree', async () => {
+    const scans = [
+      scanItem({ id: 'a', total_findings: 10 }),
+      scanItem({ id: 'b', state: 'completed_with_warnings', total_findings: 5 }),
+      scanItem({ id: 'c', state: 'completed_with_warnings', total_findings: 20 }),
+      scanItem({ id: 'd', total_findings: 30 }),
+    ];
+    const host = await render(homeFetchMock({ scans, total: 4, summary }));
+    expect(host.querySelectorAll('.trend-bars i')).toHaveLength(4); // All
+
+    await clickFilter(host, 'Warnings');
+    expect(host.querySelectorAll('.trend-bars i')).toHaveLength(2);
+
+    await clickFilter(host, 'Completed');
+    expect(host.querySelectorAll('.trend-bars i')).toHaveLength(2);
+  });
+
+  it('sqrt-scales bar heights so one outlier cannot flatten the rest onto the floor', async () => {
+    const scans = [
+      scanItem({ id: 'big', total_findings: 9000 }),
+      scanItem({ id: 'small', total_findings: 100 }),
+    ];
+    const host = await render(homeFetchMock({ scans, total: 2, summary }));
+
+    // Points render oldest → newest, so the small scan is the first bar.
+    const bars = [...host.querySelectorAll<HTMLElement>('.trend-bars i')];
+    expect(bars[0].style.height).toBe('11%'); // sqrt(100/9000) ≈ 10.5%; linear would floor this at 6%
+    expect(bars[1].style.height).toBe('100%');
+  });
+});
+
 describe('HomePage quick actions', () => {
   it('starts a scan on the most recently scanned workspace and follows it', async () => {
     const fetchMock = vi.fn((input: string, init?: RequestInit) => {

@@ -5,7 +5,7 @@ import type { AnalyzerRun, RiskProfile } from '../types';
 import type { Route } from '../lib/router';
 import type { Notice } from '../lib/notice';
 import { message } from '../lib/notice';
-import { date } from '../lib/format';
+import { date, languageColor } from '../lib/format';
 import { useLoad } from '../hooks/useLoad';
 import { Empty, ErrorPanel, LanguageBadges, Loading } from '../components/ui';
 import { ScanIcon } from '../components/icons';
@@ -17,24 +17,12 @@ import { ConfirmationDialog } from '../components/dialogs';
 import { WorkspaceContextSidebar } from '../components/WorkspaceContext';
 import { HistoryTable } from './HistoryPage';
 import { analyzerMeta, categoryColor, CATEGORY_LABELS } from '../lib/analyzerCatalog';
-import { languageCoverageFromLanguages, severityCountsFromSummary, trendPointsFromScans } from '../lib/chartData';
+import { languageCoverageFromSnapshot, severityCountsFromSummary, sparkSeries, trendPointsFromScans, type LanguageCoverage } from '../lib/chartData';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { Sparkles, Copy, Check, ShieldAlert, BarChart3, AlertTriangle, Layers, FileSearch, ShieldCheck, Bug } from 'lucide-react';
 import { ScanActionDropdown } from '../components/ScanActionDropdown';
 import { PreScanSummary } from '../components/PreScanSummary';
 import { PageHeader } from '../components/PageHeader';
-
-/**
- * Loop 142 · this used to inline `oklch(62% 0.18 285)` as the fourth entry, which
- * is the *light* value of --color-cat-5 — so that dot kept its light-mode hue in
- * dark mode while the other three inverted. Categorical tokens invert correctly.
- */
-const LANGUAGE_DOTS = [
-  'var(--color-accent)',
-  'var(--color-success)',
-  'var(--color-warning)',
-  'var(--color-cat-5)',
-];
 
 const AnalyticsCharts = lazy(() => import('../components/AnalyticsCharts').then((m) => ({ default: m.AnalyticsCharts })));
 const DependencyGraph = lazy(() => import('../components/DependencyGraph').then((m) => ({ default: m.DependencyGraph })) );
@@ -63,6 +51,9 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
   const reduced = useReducedMotion();
   const latest = workspace.data?.latest_scan ?? scans.data?.[0];
   const isCompleted = latest?.state === 'completed' || latest?.state === 'completed_with_warnings';
+  // Real per-language file counts live on the latest scan's discovery snapshot; when it is absent the language list renders without counts rather than inventing them.
+  const coverage = languageCoverageFromSnapshot(latest?.snapshot);
+  const scanHistory = scans.data ?? [];
   async function start() { try { const scan = await api.startScan(id, profile); go({ page: 'scan', id: scan.id }); } catch (e) { notify({ kind: 'error', text: message(e) }); } }
   function copyPath() {
     const p = workspace.data?.root_path ?? '';
@@ -74,10 +65,10 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
   async function prune() { setPruning(true); try { const result = await api.pruneScans(id, pruneKeep); setPruneOpen(false); await Promise.all([workspace.reload(), scans.reload()]); notify({ kind: 'success', text: `Deleted ${result.deleted} old scan${result.deleted === 1 ? '' : 's'}; kept the newest ${result.kept}.` }); } catch (e) { notify({ kind: 'error', text: message(e) }); } finally { setPruning(false); } }
   async function remove() { setDeleting(true); try { await api.deleteWorkspace(id); go({ page: 'workspaces' }); notify({ kind: 'info', text: 'Workspace removed from Blunt Code.' }); } catch (e) { notify({ kind: 'error', text: message(e) }); setDeleting(false); } }
   if (workspace.loading) return <div className="page"><Loading /></div>;
-  if (workspace.error) return <div className="page"><ErrorPanel error={workspace.error} retry={workspace.reload} /></div>;
+  // A NOT_FOUND workspace never loads, so "Try again" alone is a dead end — offer the way back.
+  if (workspace.error) return <div className="page"><ErrorPanel error={workspace.error} retry={workspace.reload} />{workspace.error.includes('NOT_FOUND') && <div className="mt-4 flex justify-center"><button type="button" className="button secondary" onClick={() => go({ page: 'workspaces' })}>Back to Workspaces</button></div>}</div>;
   const item = workspace.data;
   if (!item) return <div className="page"><Loading /></div>;
-  const sparkVals = (v:number)=>[Math.max(0,v-2),Math.max(0,v-1),v,Math.max(0,v-1),Math.max(0,v)];
   const criticalHigh = (latest?.critical_count ?? 0) + (latest?.high_count ?? 0);
   return <div className="page workspace-page"><WorkspaceContextSidebar id={id} current={{ page: 'workspace', id }} onNavigate={go} /><div className="workspace-page-body">
     {/* 1 · Identify — who this is. Clean unified PageHeader. */}
@@ -87,9 +78,9 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
       badge={
         item.languages?.length ? (
           <div className="workspace-lang-dots flex items-center gap-1.5 flex-wrap" aria-label="Detected languages">
-            {item.languages.map((lang, i) => (
+            {item.languages.map((lang) => (
               <span key={lang} className="ws-lang-dot text-xs flex items-center gap-1 px-2 py-0.5 rounded-[var(--radius-xs)] bg-[var(--color-surface-muted)] border border-[var(--color-rule-faint)] text-[var(--color-ink-soft)] font-mono">
-                <i className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: LANGUAGE_DOTS[i % LANGUAGE_DOTS.length] }} />
+                <i className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: languageColor(lang) }} />
                 {lang}
               </span>
             ))}
@@ -154,15 +145,15 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
     {!latest && scans.loading ? <SkeletonCards count={6} /> : <section className={`workspace-verdict ${reduced ? '' : 'is-animated'}`} aria-label="Latest scan summary">
       <div className="summary-grid premium">
         <RiskCard risk={risk.data} />
-        <PremiumSummaryCard label="Critical + high" value={criticalHigh} tone="high" icon={<ShieldAlert className="h-4 w-4" />} spark={sparkVals(criticalHigh)} delay={1} />
-        <PremiumSummaryCard label="Total findings" value={latest?.total_findings ?? 0} icon={<BarChart3 className="h-4 w-4" />} spark={sparkVals(latest?.total_findings ?? 0)} delay={2} />
+        <PremiumSummaryCard label="Critical + high" value={criticalHigh} tone="high" icon={<ShieldAlert className="h-4 w-4" />} spark={sparkSeries(scanHistory, (s) => s.critical_count != null && s.high_count != null ? s.critical_count + s.high_count : undefined)} delay={1} />
+        <PremiumSummaryCard label="Total findings" value={latest?.total_findings ?? 0} icon={<BarChart3 className="h-4 w-4" />} spark={sparkSeries(scanHistory, (s) => s.total_findings)} delay={2} />
       </div>
       <Disclosure label="All severity counts" hint={`${latest?.total_findings ?? 0} findings`}>
         <div className="summary-grid premium">
-          <PremiumSummaryCard label="Medium" value={latest?.medium_count ?? 0} tone="medium" icon={<AlertTriangle className="h-4 w-4" />} spark={sparkVals(latest?.medium_count ?? 0)} delay={1} />
-          <PremiumSummaryCard label="Low + info" value={(latest?.low_count ?? 0) + (latest?.info_count ?? 0)} icon={<Layers className="h-4 w-4" />} spark={sparkVals((latest?.low_count ?? 0)+(latest?.info_count ?? 0))} delay={2} />
-          <PremiumSummaryCard label="New" value={latest?.new_count ?? 0} icon={<FileSearch className="h-4 w-4" />} spark={sparkVals(latest?.new_count ?? 0)} delay={3} />
-          <PremiumSummaryCard label="Fixed" value={latest?.fixed_count ?? 0} icon={<ShieldCheck className="h-4 w-4" />} spark={sparkVals(latest?.fixed_count ?? 0)} delay={4} />
+          <PremiumSummaryCard label="Medium" value={latest?.medium_count ?? 0} tone="medium" icon={<AlertTriangle className="h-4 w-4" />} spark={sparkSeries(scanHistory, (s) => s.medium_count)} delay={1} />
+          <PremiumSummaryCard label="Low + info" value={(latest?.low_count ?? 0) + (latest?.info_count ?? 0)} icon={<Layers className="h-4 w-4" />} spark={sparkSeries(scanHistory, (s) => s.low_count != null && s.info_count != null ? s.low_count + s.info_count : undefined)} delay={2} />
+          <PremiumSummaryCard label="New" value={latest?.new_count ?? 0} icon={<FileSearch className="h-4 w-4" />} spark={sparkSeries(scanHistory, (s) => s.new_count)} delay={3} />
+          <PremiumSummaryCard label="Fixed" value={latest?.fixed_count ?? 0} icon={<ShieldCheck className="h-4 w-4" />} spark={sparkSeries(scanHistory, (s) => s.fixed_count)} delay={4} />
         </div>
       </Disclosure>
     </section>}
@@ -185,9 +176,9 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
       <TabsContent value="trends">
         <Suspense fallback={<div className="skeleton-chart" aria-busy="true" />}>
           <AnalyticsCharts
-            trends={trendPointsFromScans(scans.data ?? [])}
+            trends={trendPointsFromScans(scanHistory)}
             severityCounts={severityCountsFromSummary({ critical_count: latest?.critical_count, high_count: latest?.high_count, medium_count: latest?.medium_count, low_count: latest?.low_count, info_count: latest?.info_count })}
-            languages={languageCoverageFromLanguages(item.languages)}
+            languages={coverage}
           />
         </Suspense>
       </TabsContent>
@@ -195,7 +186,7 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
       <TabsContent value="severity"><SeverityTrendSection workspaceId={id} /></TabsContent>
       <TabsContent value="languages">
         {item.languages?.length
-          ? <LanguageDistributionDonut languages={languageCoverageFromLanguages(item.languages)} workspaceId={id} go={go} />
+          ? <LanguageDistributionDonut names={item.languages} coverage={coverage} workspaceId={id} go={go} />
           : <Empty title="No languages detected" icon={<FileSearch />}>Run a scan to see how this project is split across languages.</Empty>}
       </TabsContent>
       <TabsContent value="dependencies">
@@ -239,12 +230,13 @@ function MiniSparkline({ values }: { values: number[] }) {
   return <svg viewBox={`0 0 ${w} ${h}`} width={64} height={20} aria-hidden="true" className="premium-sparkline"><polyline fill="none" stroke="var(--color-accent)" strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round" points={pts.join(' ')} /></svg>;
 }
 
-function PremiumSummaryCard({ label, value, tone, icon, spark, delay }: { label: string; value: number; tone?: string; icon: ReactNode; spark: number[]; delay: number }) {
+function PremiumSummaryCard({ label, value, tone, icon, spark, delay }: { label: string; value: number; tone?: string; icon: ReactNode; spark?: number[] | null; delay: number }) {
   return <div className={`summary-card premium-card ${tone ?? ''}`} style={{ animationDelay: `${delay*40}ms` }}>
     <span className="premium-card-icon">{icon}</span>
     <strong>{value}</strong>
     <span>{label}</span>
-    <MiniSparkline values={spark} />
+    {/* Only a real multi-scan trend draws a line (sparkSeries returns null below two points). */}
+    {spark && spark.length > 1 && <MiniSparkline values={spark} />}
   </div>;
 }
 
@@ -263,14 +255,41 @@ export function AnalyzerStatuses({ runs }: { runs?: AnalyzerRun[] }) {
   })}</div>)}</div>;
 }
 
-function LanguageDistributionDonut({ languages, workspaceId, go }: { languages: ReturnType<typeof languageCoverageFromLanguages>; workspaceId: string; go: (r: Route) => void }) {
-  if (!languages.length) return null;
-  const total = languages.reduce((s, l) => s + l.files, 0);
+function LanguageDistributionDonut({ names, coverage, workspaceId, go }: { names: string[]; coverage: LanguageCoverage[]; workspaceId: string; go: (r: Route) => void }) {
+  function drill(lang: string) {
+    // One navigation that carries the filter (Route.q) — a single history entry, and the files page opens pre-filtered.
+    go({ page: 'files', id: workspaceId, q: `lang=${encodeURIComponent(lang)}` });
+  }
+  // Names-only mode: the scan snapshot recorded no per-language counts, so the
+  // list renders without counts, percentages, or a total rather than inventing them.
+  if (!coverage.length) {
+    return (
+      <section aria-label="Language distribution" className="workspace-section-card lang-donut-card">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="font-display text-sm font-semibold tracking-tight">Language distribution</h3>
+          <span className="rounded-full border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-2 py-0.5 font-mono text-[0.65rem] font-semibold uppercase tracking-widest text-[var(--color-ink-faint)]">click to filter files</span>
+        </div>
+        <ul className="lang-pill-legend" aria-label="Languages, select to filter files">
+          {names.map((language) => (
+            <li key={language}>
+              <button type="button" onClick={() => drill(language)} className="lang-pill" aria-label={`Show only ${language} files`}>
+                <i aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: languageColor(language) }} />
+                <span>{language}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+        <p className="muted mt-3 text-xs">Per-language file counts appear once a scan records a discovery snapshot.</p>
+      </section>
+    );
+  }
+  const total = coverage.reduce((s, l) => s + l.files, 0);
   const colors = ['var(--color-accent)', 'var(--color-success)', 'var(--color-warning)', 'var(--color-danger)', 'var(--color-ink)', 'var(--color-accent-strong)', 'var(--color-ink-soft)', 'var(--color-ink-faint)'];
   const cx = 60; const cy = 60; const r = 46; const inner = 30;
   let angle = -90;
-  const segs = languages.map((row, i) => {
-    const sweep = total ? (row.files / total) * 360 : 0;
+  const segs = coverage.map((row, i) => {
+    // Clamp so a single-language project still draws its (near-)full ring: an arc from a point to itself renders nothing.
+    const sweep = Math.min(total ? (row.files / total) * 360 : 0, 359.9);
     const start = angle; const end = angle + sweep; angle = end;
     const large = sweep > 180 ? 1 : 0;
     const rad = (d: number) => (d * Math.PI) / 180;
@@ -279,13 +298,8 @@ function LanguageDistributionDonut({ languages, workspaceId, go }: { languages: 
     const ix1 = cx + inner * Math.cos(rad(end)); const iy1 = cy + inner * Math.sin(rad(end));
     const ix2 = cx + inner * Math.cos(rad(start)); const iy2 = cy + inner * Math.sin(rad(start));
     const d = `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} L ${ix1} ${iy1} A ${inner} ${inner} 0 ${large} 0 ${ix2} ${iy2} Z`;
-    return { ...row, d, color: colors[i % colors.length] };
+    return { ...row, d, color: row.aggregate ? 'var(--color-ink-faint)' : colors[i % colors.length] };
   });
-  function drill(lang: string) {
-    const url = `/workspaces/${workspaceId}/files?lang=${encodeURIComponent(lang)}`;
-    window.history.pushState(null, '', url);
-    go({ page: 'files', id: workspaceId });
-  }
   return (
     <section aria-label="Language distribution" className="workspace-section-card lang-donut-card">
       <div className="mb-3 flex items-center justify-between">
@@ -293,23 +307,36 @@ function LanguageDistributionDonut({ languages, workspaceId, go }: { languages: 
         <span className="rounded-full border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-2 py-0.5 font-mono text-[0.65rem] font-semibold uppercase tracking-widest text-[var(--color-ink-faint)]">click to filter files</span>
       </div>
       <div className="flex flex-wrap items-center gap-6">
-        <svg viewBox="0 0 120 120" width={180} height={180} role="img" aria-label={`Language distribution: ${languages.map((l) => `${l.language} ${l.files}`).join(', ')}`} className="shrink-0">
-          {segs.map((s) => (
+        <svg viewBox="0 0 120 120" width={180} height={180} role="img" aria-label={`Language distribution: ${coverage.map((l) => `${l.language} ${l.files}`).join(', ')}`} className="shrink-0">
+          {segs.map((s) => s.aggregate ? (
+            // The "N more" slice stands for several languages, so it cannot drill into one.
+            <path key={s.language} d={s.d} fill={s.color} stroke="var(--color-surface)" strokeWidth={1.2} />
+          ) : (
             <path key={s.language} d={s.d} fill={s.color} stroke="var(--color-surface)" strokeWidth={1.2} className="cursor-pointer hover:opacity-80 focus:opacity-80" tabIndex={0} role="button" aria-label={`Filter files by ${s.language}`} onClick={() => drill(s.language)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); drill(s.language); } }} />
           ))}
-          <circle cx={cx} cy={cy} r={inner - 0.5} fill="var(--color-surface)" />
+          {/* The hole paints after the segments but must never intercept their clicks. */}
+          <circle cx={cx} cy={cy} r={inner - 0.5} fill="var(--color-surface)" style={{ pointerEvents: 'none' }} />
           <text x={cx} y={cy - 2} textAnchor="middle" fontSize={14} fontWeight={800} fill="var(--color-ink)" className="tabular-nums">{total}</text>
           <text x={cx} y={cy + 12} textAnchor="middle" fontSize={7} fontWeight={600} fill="var(--color-ink-faint)" style={{ letterSpacing: '0.06em', textTransform: 'uppercase' as const }}>files</text>
         </svg>
         <ul className="lang-pill-legend" aria-label="Language legend, select to filter">
           {segs.map((s) => (
             <li key={s.language}>
-              <button type="button" onClick={() => drill(s.language)} className="lang-pill" aria-label={`Show only ${s.language} files`}>
-                <i aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: s.color }} />
-                <span>{s.language}</span>
-                <span className="font-mono font-semibold">{s.files}</span>
-                <span className="lang-pill-pct">{total ? `${Math.round((s.files * 1000) / total) / 10}%` : '0%'}</span>
-              </button>
+              {s.aggregate ? (
+                <span className="lang-pill">
+                  <i aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: s.color }} />
+                  <span>{s.language}</span>
+                  <span className="font-mono font-semibold">{s.files}</span>
+                  <span className="lang-pill-pct">{total ? `${Math.round((s.files * 1000) / total) / 10}%` : '0%'}</span>
+                </span>
+              ) : (
+                <button type="button" onClick={() => drill(s.language)} className="lang-pill" aria-label={`Show only ${s.language} files`}>
+                  <i aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: s.color }} />
+                  <span>{s.language}</span>
+                  <span className="font-mono font-semibold">{s.files}</span>
+                  <span className="lang-pill-pct">{total ? `${Math.round((s.files * 1000) / total) / 10}%` : '0%'}</span>
+                </button>
+              )}
             </li>
           ))}
         </ul>

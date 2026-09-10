@@ -95,10 +95,11 @@
 .verdict-score strong { color: var(--color-ink); font-size: var(--text-sm); }
 
 /* Grade families reuse the badge combos the rest of the app already
-   audits for contrast: soft fill + vivid ink. D is the only solid
+   audits for contrast: soft fill + text-grade ink (the *-text tokens
+   pass AA on the softs in light mode). D is the only solid
    fill (danger-strong + danger-ink, per the filled-surface tokens). */
-[data-grade='A'] { --grade-bg: var(--color-success-soft); --grade-ink: var(--color-success); --grade-edge: color-mix(in oklch, var(--color-success) 40%, var(--color-rule)); }
-[data-grade='B'] { --grade-bg: var(--color-warning-soft); --grade-ink: var(--color-warning); --grade-edge: color-mix(in oklch, var(--color-warning) 40%, var(--color-rule)); }
+[data-grade='A'] { --grade-bg: var(--color-success-soft); --grade-ink: var(--color-success-text); --grade-edge: color-mix(in oklch, var(--color-success) 40%, var(--color-rule)); }
+[data-grade='B'] { --grade-bg: var(--color-warning-soft); --grade-ink: var(--color-warning-text); --grade-edge: color-mix(in oklch, var(--color-warning) 40%, var(--color-rule)); }
 [data-grade='C'] { --grade-bg: var(--color-danger-soft); --grade-ink: var(--color-danger); --grade-edge: color-mix(in oklch, var(--color-danger) 40%, var(--color-rule)); }
 [data-grade='D'] { --grade-bg: var(--color-danger-strong); --grade-ink: var(--color-danger-ink); --grade-edge: transparent; }
 [data-grade='none'] { --grade-bg: var(--color-surface-muted); --grade-ink: var(--color-ink-ghost); --grade-edge: var(--color-rule); }
@@ -122,7 +123,7 @@
 .verdict-caveat {
   margin: 2px 0 0;
   font-size: var(--text-xs);
-  color: var(--color-warning-ink, var(--color-ink-soft));
+  color: var(--color-warning-text, var(--color-ink-soft));
 }
 
 .ledger-partial-badge {
@@ -499,8 +500,8 @@
 
 .feed-state { font: 600 var(--text-2xs) var(--font-mono); letter-spacing: .02em; white-space: nowrap; max-width: 11rem; overflow: hidden; text-overflow: ellipsis; }
 
-.feed-state.success { color: var(--color-success); }
-.feed-state.warning { color: var(--color-warning); }
+.feed-state.success { color: var(--color-success-text); }
+.feed-state.warning { color: var(--color-warning-text); }
 .feed-state.danger { color: var(--color-danger); }
 .feed-state.accent { color: var(--color-accent-strong); }
 .feed-state.outline { color: var(--color-ink-faint); }
@@ -560,7 +561,7 @@
   letter-spacing: .02em;
 }
 
-.board-foot-chip.ready { border-color: color-mix(in oklch, var(--color-success) 35%, var(--color-rule)); background: var(--color-success-soft); color: var(--color-success); }
+.board-foot-chip.ready { border-color: color-mix(in oklch, var(--color-success) 35%, var(--color-rule)); background: var(--color-success-soft); color: var(--color-success-text); }
 
 .board-foot-chip.pending { background: var(--color-surface-muted); color: var(--color-ink-faint); }
 

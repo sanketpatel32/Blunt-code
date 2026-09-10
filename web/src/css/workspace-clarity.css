@@ -304,6 +304,9 @@
   .workspace-action-rail .action-rail-secondary { width: 100%; }
   .workspace-verdict > .summary-grid.premium { grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
   .workspace-insights-head { padding: var(--space-sm) var(--space-md) 0; }
+  /* Six tabs overflow a narrow card, whose `overflow: clip` would cut them
+     off: let the strip scroll in place instead of disappearing. */
+  .workspace-insights-head [role='tablist'] { min-width: 0; overflow-x: auto; }
   .workspace-insights [role='tabpanel'] { padding: var(--space-md); }
   .settings-editor .editor-actions { margin-left: 0; }
 }

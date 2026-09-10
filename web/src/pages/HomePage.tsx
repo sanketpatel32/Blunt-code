@@ -31,6 +31,18 @@ function currentScan(workspace: Workspace) {
   return scan && (scan.state === 'completed' || scan.state === 'completed_with_warnings') ? scan : undefined;
 }
 
+/** States whose totals are final; anything else never finished counting, so no number is honest yet. */
+function findingsAreFinal(state?: string): boolean {
+  return state === 'completed' || state === 'completed_with_warnings';
+}
+
+/** Tab label for a feed filter; the empty state reuses it so its quote matches the buttons. */
+function feedFilterLabel(filter: FeedFilter): string {
+  if (filter === 'all') return 'All';
+  if (filter === 'warnings') return 'Warnings';
+  return filter.charAt(0).toUpperCase() + filter.slice(1);
+}
+
 export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd: () => void; notify: (n: Notice) => void }) {
   const workspaces = useLoad(api.workspaces, []);
   const tools = useLoad(api.tools, []);
@@ -108,7 +120,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
     return scans.filter((scan) => {
       if (feedFilter === 'running') return scan.state === 'running' || scan.state === 'queued';
       if (feedFilter === 'completed') return scan.state === 'completed';
-      if (feedFilter === 'warnings') return scan.state === 'completed_with_warnings' || scan.state === 'failed' || scan.state === 'cancelled';
+      if (feedFilter === 'warnings') return scan.state === 'completed_with_warnings' || scan.state === 'failed' || scan.state === 'cancelled' || scan.state === 'interrupted';
       return true;
     });
   }, [scans, feedFilter]);
@@ -382,7 +394,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
                     aria-pressed={feedFilter === filter}
                     onClick={() => setFeedFilter(filter)}
                   >
-                    {filter === 'all' ? 'All' : filter === 'warnings' ? 'Warnings' : filter.charAt(0).toUpperCase() + filter.slice(1)}
+                    {feedFilterLabel(filter)}
                   </button>
                 ))}
               </div>
@@ -401,12 +413,12 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
             </Empty>
           ) : !feedRows.length ? (
             <div className="board-empty-filter">
-              <p>No scans matching the “{feedFilter}” filter.</p>
+              <p>No scans matching the “{feedFilterLabel(feedFilter)}” filter.</p>
               <Button variant="ghost" size="sm" onClick={() => setFeedFilter('all')}>Show all activity</Button>
             </div>
           ) : (
             <>
-              <TrendBars scans={scans} />
+              <TrendBars scans={feedRows} />
               <ol className="feed-list">
                 {feedRows.slice(0, FEED_LIMIT).map((scan) => (
                   <FeedRow key={scan.id} scan={scan} go={go} />
@@ -460,9 +472,12 @@ function SeverityTally({ counts, total, onExplore }: { counts: Record<Severity, 
   );
 }
 
-/** Honest micro-chart: findings per recent scan, oldest → newest. Real totals only. */
+/** Honest micro-chart: findings per recent scan, oldest → newest. Follows the feed
+ *  tab (unfinished scans have no total to chart — a bar for them would repeat the
+ *  feed's "0 findings" lie), and heights use a sqrt scale so one outlier scan
+ *  cannot flatten the rest onto the floor; titles keep the real totals. */
 function TrendBars({ scans }: { scans: RecentScanItem[] }) {
-  const points = trendPointsFromScans(scans);
+  const points = trendPointsFromScans(scans.filter((scan) => findingsAreFinal(scan.state)));
   if (points.length < 2) return null;
   const max = Math.max(...points.map((point) => point.total), 1);
   const label = `Findings per recent scan, oldest to newest: ${points.map((point) => point.total).join(', ')}`;
@@ -474,7 +489,7 @@ function TrendBars({ scans }: { scans: RecentScanItem[] }) {
         {points.map((point, index) => (
           <i
             key={index}
-            style={{ height: `${Math.max(6, Math.round((point.total / max) * 100))}%` }}
+            style={{ height: `${Math.max(6, Math.round(Math.sqrt(point.total / max) * 100))}%` }}
             title={`${point.label}: ${point.total}`}
           />
         ))}
@@ -485,7 +500,9 @@ function TrendBars({ scans }: { scans: RecentScanItem[] }) {
 
 function FeedRow({ scan, go }: { scan: RecentScanItem; go: (r: Route) => void }) {
   const timestamp = scan.finished_at ?? scan.started_at;
-  const findings = scan.total_findings ?? 0;
+  // Scans that never finished have no real total — "0 findings" would read as
+  // scanned-and-clean, so only final states show a number and the rest an em dash.
+  const findings = findingsAreFinal(scan.state) ? scan.total_findings ?? 0 : null;
   const state = scanStateDisplay(scan.state);
 
   return (
@@ -509,7 +526,7 @@ function FeedRow({ scan, go }: { scan: RecentScanItem; go: (r: Route) => void })
         <span className="feed-findings">
           <SeverityDots scan={scan} />
           <span className="feed-findings-text">
-            {findings} {findings === 1 ? 'finding' : 'findings'}
+            {findings === null ? '—' : `${findings} ${findings === 1 ? 'finding' : 'findings'}`}
           </span>
         </span>
         <span className="feed-time" title={timestamp ? date(timestamp) : undefined}>
