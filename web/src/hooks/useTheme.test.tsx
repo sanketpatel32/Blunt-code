@@ -106,7 +106,7 @@ describe('theme toggle in the header', () => {
     const { host, onToggleTheme } = await renderShell('light');
     const toggle = host.querySelector<HTMLButtonElement>('.theme-toggle');
     expect(toggle).not.toBeNull();
-    expect(toggle!.textContent).toContain('Dark');
+    expect(toggle!.textContent).toContain('Switch to dark theme');
     expect(toggle!.getAttribute('aria-pressed')).toBe('false');
     expect(toggle!.querySelector('path')).not.toBeNull();
     await act(async () => { toggle!.click(); });
@@ -117,7 +117,7 @@ describe('theme toggle in the header', () => {
     const { host } = await renderShell('dark');
     const toggle = host.querySelector<HTMLButtonElement>('.theme-toggle');
     expect(toggle).not.toBeNull();
-    expect(toggle!.textContent).toContain('Light');
+    expect(toggle!.textContent).toContain('Switch to light theme');
     expect(toggle!.getAttribute('aria-pressed')).toBe('true');
     expect(toggle!.querySelector('circle')).not.toBeNull();
     expect(toggle!.title).toBe('Switch to light theme');

@@ -30,8 +30,20 @@ describe('parseRoute', () => {
   it('sends unknown prefixes to the 404 page and keeps any segment as an inert id', () => {
     expect(parseRoute('/definitely/not/a/page')).toEqual({ page: 'not-found' });
     // An id is opaque: hostile characters ride along as data for the page's
-    // own error handling, never as markup.
-    expect(parseRoute('/scans/zzz%3Cscript%3E')).toEqual({ page: 'scan', id: 'zzz%3Cscript%3E' });
+    // own error handling, never as markup. Segments arrive percent-ENCODED
+    // from the browser and are decoded exactly once (the old raw passthrough
+    // double-encoded them into every API call); a malformed escape falls back
+    // to the raw segment.
+    expect(parseRoute('/scans/zzz%3Cscript%3E')).toEqual({ page: 'scan', id: 'zzz<script>' });
+    expect(parseRoute('/scans/%E4%B8%AD%E6%96%87')).toEqual({ page: 'scan', id: '中文' });
+    expect(parseRoute('/scans/%E4%A9')).toEqual({ page: 'scan', id: '%E4%A9' });
+  });
+
+  it('carries the raw query string (no leading ?) and omits it when absent', () => {
+    expect(parseRoute('/workspaces/ws-1/files')).toEqual({ page: 'files', id: 'ws-1' });
+    expect(parseRoute('/workspaces/ws-1/files', '?lang=typescript')).toEqual({ page: 'files', id: 'ws-1', q: 'lang=typescript' });
+    expect(parseRoute('/search', '?query=eval')).toEqual({ page: 'search', q: 'query=eval' });
+    expect(parseRoute('/', '?query=x')).toEqual({ page: 'home', q: 'query=x' });
   });
 });
 
@@ -45,5 +57,11 @@ describe('href', () => {
     expect(href({ page: 'pentest', id: 'ws-1' })).toBe('/workspaces/ws-1/pentest');
     expect(href({ page: 'scan', id: 's-9' })).toBe('/scans/s-9');
     expect(href({ page: 'about' })).toBe('/about');
+  });
+
+  it('appends the raw query for deep links only when present', () => {
+    expect(href({ page: 'files', id: 'ws-1', q: 'lang=typescript' })).toBe('/workspaces/ws-1/files?lang=typescript');
+    expect(href({ page: 'search', q: 'query=eval' })).toBe('/search?query=eval');
+    expect(href({ page: 'search' })).toBe('/search');
   });
 });

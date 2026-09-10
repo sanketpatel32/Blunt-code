@@ -234,7 +234,7 @@ describe('hostile API fixtures', () => {
     const host = await renderAt('/settings', fetchMock);
     expectClean(host);
     expect(host.textContent).toContain('Available from local metadata');
-    expect(host.querySelector('button[role="switch"][aria-label="Open browser automatically"]')!.getAttribute('aria-checked')).toBe('true'); // open_browser default
+    expect(host.querySelector('button[role="switch"][aria-label="Open browser automatically"]')!.getAttribute('aria-checked')).toBe('false'); // no default painting: a payload without open_browser never shows an assumed-on switch
   });
 
   it('AboutPage survives empty meta and health payloads', async () => {

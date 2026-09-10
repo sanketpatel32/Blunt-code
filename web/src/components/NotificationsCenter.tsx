@@ -36,10 +36,16 @@ function groupByDay(items: AppNotification[]): Map<string, AppNotification[]> {
 
 type Tab = 'all' | 'unread' | 'scans';
 
-export function NotificationsCenter() {
+export function NotificationsCenter({ routeKey = '' }: { routeKey?: string }) {
   const [items, setItems] = useState<AppNotification[]>(() => getNotifications());
   const [tab, setTab] = useState<Tab>('all');
   const [soundOn, setSoundOn] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  // A g-sequence (or any shortcut navigation) changes the route with no pointer
+  // event near this button, so the dropdown's outside-dismiss never fires and
+  // the popover would stay mounted over the new page. Close it on route change.
+  useEffect(() => { setOpen(false); }, [routeKey]);
 
   useEffect(() => {
     const refresh = () => setItems(getNotifications());
@@ -81,7 +87,7 @@ export function NotificationsCenter() {
   const toggleSound = () => setSoundOn((v) => !v);
 
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
         {/* Lives inside the nav's utility cluster (see AppShell): the cluster CSS
             in nav-clarity.css strips per-control chrome, so the bell reads as one

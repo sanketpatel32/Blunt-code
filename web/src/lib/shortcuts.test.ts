@@ -8,6 +8,7 @@ describe('parseShortcut', () => {
     expect(parseShortcut({ key: 'w' })).toBe('w');
     expect(parseShortcut({ key: 't' })).toBe('t');
     expect(parseShortcut({ key: 's' })).toBe('s');
+    expect(parseShortcut({ key: 'c' })).toBe('c'); // g c -> CLI docs
     expect(parseShortcut({ key: 'a' })).toBe('a');
     expect(parseShortcut({ key: 'n' })).toBe('n');
     expect(parseShortcut({ key: 'H' })).toBe('h'); // CapsLock or Shift still normalizes

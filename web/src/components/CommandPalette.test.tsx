@@ -54,6 +54,20 @@ describe('filterCommands', () => {
     ], 'scan');
     expect(ranked.map((c) => c.id)).toEqual(['prefix', 'infix']);
   });
+
+  it('subsequence-matches as a fuzzy fallback so "wrkspc" finds Workspaces', () => {
+    const hits = filterCommands([{ id: 'ws', label: 'Go to Workspaces', keywords: 'projects', run: () => {} }], 'wrkspc');
+    expect(hits.map((c) => c.id)).toEqual(['ws']);
+  });
+
+  it('ranks exact and substring matches above fuzzy subsequence matches', () => {
+    const ranked = filterCommands([
+      { id: 'fuzzy', label: 'Go to Workspaces', keywords: 'projects', run: () => {} },
+      { id: 'substring', label: 'My wrkspc tools', run: () => {} },
+      { id: 'prefix', label: 'wrkspc finder', run: () => {} },
+    ], 'wrkspc');
+    expect(ranked.map((c) => c.id)).toEqual(['prefix', 'substring', 'fuzzy']);
+  });
 });
 
 describe('CommandPalette interactions', () => {
@@ -66,8 +80,11 @@ describe('CommandPalette interactions', () => {
       input.dispatchEvent(new Event('input', { bubbles: true }));
     });
     const options = [...dom.querySelectorAll('[role="option"]')];
-    expect(options).toHaveLength(1);
+    // "go to tools" contains "too" (substring tier); the fuzzy fallback also
+    // subsequence-matches "go to home", which ranks below.
+    expect(options).toHaveLength(2);
     expect(options[0].textContent).toContain('Go to Tools');
+    expect(options[1].textContent).toContain('Go to Home');
     press(input, 'Enter');
     expect((commands[1].run as ReturnType<typeof vi.fn>)).toHaveBeenCalledTimes(1);
   });

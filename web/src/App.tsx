@@ -27,10 +27,12 @@ import { SkeletonCards } from './components/skeletons';
 const PentestPage = lazy(() => import('./pages/PentestPage').then((m) => ({ default: m.PentestPage })));
 const RuleStudioPage = lazy(() => import('./pages/RuleStudioPage').then((m) => ({ default: m.RuleStudioPage })));
 
-// Preload heavy chunks in parallel (no waterfall): hints only, safe if fail
-void import('./pages/PentestPage');
-void import('./pages/RuleStudioPage');
-void import('./components/DependencyGraph');
+// Preload heavy chunks in parallel (no waterfall): hints only. A failed chunk
+// (offline, stale deploy) must not log an unhandled rejection from every page
+// before it is ever visited; the ErrorBoundary handles a real navigation miss.
+void import('./pages/PentestPage').catch(() => {});
+void import('./pages/RuleStudioPage').catch(() => {});
+void import('./components/DependencyGraph').catch(() => {});
 import { AboutPage } from './pages/AboutPage';
 import { CLIPage } from './pages/CLIPage';
 import { NotFoundPage } from './pages/NotFoundPage';
@@ -39,6 +41,25 @@ import { NotFoundPage } from './pages/NotFoundPage';
 const SEQUENCE_TARGETS: Partial<Record<string, Route['page']>> = { h: 'home', w: 'workspaces', t: 'tools', s: 'settings', c: 'cli', a: 'about' };
 /** How long "g" stays armed waiting for its second key. */
 const SEQUENCE_ARM_MS = 800;
+
+/** Per-page document.title. Route-level only: ids are opaque UUIDs and are
+ *  never fetched into titles. */
+const PAGE_TITLES: Record<Route['page'], string> = {
+  home: 'Home',
+  workspaces: 'Workspaces',
+  workspace: 'Workspace',
+  files: 'Files',
+  history: 'Scan history',
+  scan: 'Scan',
+  search: 'Search',
+  tools: 'Tools',
+  pentest: 'Pentest',
+  rules: 'Rules',
+  settings: 'Settings',
+  about: 'About',
+  cli: 'CLI docs',
+  'not-found': 'Page not found',
+};
 
 /** What the tab shows once the backend has stopped itself: plain close, or the update handoff. */
 type Farewell = { mode: 'stopped' } | { mode: 'updating'; version: string };
@@ -108,6 +129,8 @@ export function App() {
     return () => { cancelled = true; };
   }, [go, notify]);
   useEffect(() => { const handler = () => setRoute(parseRoute()); window.addEventListener('popstate', handler); return () => window.removeEventListener('popstate', handler); }, []);
+  // Name the tab after the page; ids never appear (see PAGE_TITLES).
+  useEffect(() => { document.title = `${PAGE_TITLES[route.page]} · Blunt Code`; }, [route.page]);
   const disarmSequence = useCallback(() => { if (seqTimer.current) { window.clearTimeout(seqTimer.current); seqTimer.current = 0; } setSeqArmed(false); }, []);
   const armSequence = useCallback(() => { if (seqTimer.current) window.clearTimeout(seqTimer.current); seqTimer.current = window.setTimeout(() => { seqTimer.current = 0; setSeqArmed(false); }, SEQUENCE_ARM_MS); setSeqArmed(true); }, []);
   useEffect(() => () => { if (seqTimer.current) window.clearTimeout(seqTimer.current); }, []);
@@ -139,10 +162,13 @@ export function App() {
       if (!key) return;
       if (key === 'g') { event.preventDefault(); armSequence(); return; }
       const target = wasArmed ? SEQUENCE_TARGETS[key] : undefined;
-      if (target) { event.preventDefault(); go({ page: target }); return; }
+      // A g-sequence that lands somewhere must also clear the overlays the
+      // keyboard could have left open: the shortcuts help (exempt from the
+      // dialog check above) would otherwise ride on top of the new page.
+      if (target) { event.preventDefault(); setShortcutsOpen(false); go({ page: target }); return; }
       if (key === 'n') { event.preventDefault(); setAddOpen(true); return; }
       if (key === '/') {
-        const search = document.querySelector<HTMLInputElement>('.filter-search input') ?? document.querySelector<HTMLInputElement>('.tree-panel .search input');
+        const search = document.querySelector<HTMLInputElement>('.filter-search input') ?? document.querySelector<HTMLInputElement>('.tree-panel .search input') ?? document.querySelector<HTMLInputElement>('.search-input');
         if (search) { event.preventDefault(); search.focus(); }
         return;
       }
@@ -195,7 +221,7 @@ export function App() {
         <Page route={route} go={go} notify={notify} onAdd={() => setAddOpen(true)} onUpdateHandoff={updateHandoff} />
       </ErrorBoundary>
     </main>
-    {addOpen && <AddWorkspaceDialog onClose={() => setAddOpen(false)} onCreated={(workspace) => { setAddOpen(false); go({ page: 'workspace', id: workspace.id }); }} notify={notify} />}
+    {addOpen && <AddWorkspaceDialog onClose={() => setAddOpen(false)} onCreated={(workspace) => { setAddOpen(false); if (workspace.existing) notify({ kind: 'info', text: 'Workspace already registered — opening it' }); go({ page: 'workspace', id: workspace.id }); }} notify={notify} />}
     {closeOpen && <ConfirmationDialog title="Close Blunt Code?" description={activeScanWorkspaces.length ? `A scan is still running on ${activeScanWorkspaces.join(', ')} — closing now cancels it. Your workspaces and reports stay saved on this computer.` : 'This ends the local app. Any active scan will be cancelled; your workspaces and reports stay saved on this computer.'} confirmLabel="Close app" busy={closing} onCancel={() => setCloseOpen(false)} onConfirm={() => void closeApp()} />}
     {shortcutsOpen && <ShortcutsDialog onClose={() => setShortcutsOpen(false)} />}
     {/* Mounted only while open so useDialogA11y's mount-time focus move/restore actually runs — an always-mounted palette never receives keyboard focus. */}
@@ -219,7 +245,9 @@ function Page({ route, go, notify, onAdd, onUpdateHandoff }: { route: Route; go:
     case 'search': return <SearchPage go={go} />;
     case 'tools': return <ToolsPage notify={notify} go={go} />;
     case 'cli': return <CLIPage />;
-    case 'pentest': return <Suspense fallback={<SkeletonCards count={3} variant="chart" />}><PentestPage workspaceId={id} go={go} notify={notify} /></Suspense>;
+    // The key remounts the page when the workspace id in the URL changes, so
+    // per-workspace state never survives into another workspace's view.
+    case 'pentest': return <Suspense fallback={<SkeletonCards count={3} variant="chart" />}><PentestPage key={id ?? 'pentest'} workspaceId={id} go={go} notify={notify} /></Suspense>;
     case 'rules': return <Suspense fallback={<SkeletonCards count={2} />}><RuleStudioPage /></Suspense>;
     case 'settings': return <SettingsPage notify={notify} />;
     case 'about': return <AboutPage onUpdateHandoff={onUpdateHandoff} />;

@@ -51,6 +51,7 @@ describe('navigation resilience', () => {
     expect(about?.textContent).toBe('About');
     await act(async () => { about!.click(); await Promise.resolve(); await Promise.resolve(); });
     expect(window.location.pathname).toBe('/about');
+    expect(document.title).toBe('About · Blunt Code'); // per-page tab title, no ids
     expect(host.textContent).toContain('Local by default');
   });
 

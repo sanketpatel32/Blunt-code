@@ -78,6 +78,15 @@ describe('global keyboard shortcuts', () => {
     expect(host.querySelector('.seq-hint')).toBeNull(); // Escape also ended the armed sequence
   });
 
+  it('navigates with g c and closes the help dialog so no overlay rides the new page', async () => {
+    const host = await renderApp();
+    await act(async () => { key('?', true); });
+    expect(host.querySelector('dialog[data-shortcuts-dialog]')).not.toBeNull();
+    await act(async () => { key('g'); key('c'); });
+    expect(window.location.pathname).toBe('/cli');
+    expect(host.querySelector('dialog[data-shortcuts-dialog]')).toBeNull();
+  });
+
   it('ignores shortcut keys typed into a field', async () => {
     const host = await renderApp();
     const field = document.createElement('input');

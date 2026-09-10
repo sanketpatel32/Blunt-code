@@ -10,17 +10,33 @@ export type Command = {
   run: () => void;
 };
 
+/** True when every character of query appears in haystack in order, gaps
+ *  allowed: the fuzzy fallback that lets "wrkspc" find "Go to Workspaces". */
+function isSubsequence(query: string, haystack: string): boolean {
+  let at = 0;
+  for (const char of query) {
+    at = haystack.indexOf(char, at);
+    if (at === -1) return false;
+    at += 1;
+  }
+  return true;
+}
+
+/** Exact/substring matches first, subsequence (fuzzy) matches after; all
+ *  case-insensitive and ranked within their tier by input order. */
 export function filterCommands(commands: Command[], query: string): Command[] {
   const q = query.trim().toLowerCase();
   if (!q) return commands;
   const starts: Command[] = [];
   const includes: Command[] = [];
+  const fuzzy: Command[] = [];
   for (const command of commands) {
     const haystack = `${command.label} ${command.keywords ?? ''}`.toLowerCase();
     if (command.label.toLowerCase().startsWith(q)) starts.push(command);
     else if (haystack.includes(q)) includes.push(command);
+    else if (isSubsequence(q, haystack)) fuzzy.push(command);
   }
-  return [...starts, ...includes];
+  return [...starts, ...includes, ...fuzzy];
 }
 
 export function CommandPalette({ open, onClose, commands, note }: { open: boolean; onClose: () => void; commands: Command[]; note?: string }) {
@@ -61,7 +77,8 @@ export function CommandPalette({ open, onClose, commands, note }: { open: boolea
     <div role="presentation" className="dialog-backdrop palette-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <dialog ref={dialogRef} open aria-label="Command palette" className="command-palette">
       <input ref={inputRef} value={query} onChange={(event) => { setQuery(event.target.value); setActiveIndex(0); }} onKeyDown={onKeyDown} placeholder="Type a command…" role="combobox" aria-expanded="true" aria-controls="command-palette-list" aria-activedescendant={results[activeIndex] ? `command-option-${results[activeIndex].id}` : undefined} aria-label="Search commands" spellCheck={false} autoComplete="off" />
-      {recent.length>0 && !query && <div className="palette-recent"><span className="muted">Recent searches</span>{recent.map((r:string)=><span key={r} className="badge">{r}</span>)}</div>}
+      {/* The recents store only ever holds the commands that were run. */}
+      {recent.length>0 && !query && <div className="palette-recent"><span className="muted">Recent commands</span>{recent.map((r:string)=><span key={r} className="badge">{r}</span>)}</div>}
       <div id="command-palette-list" ref={listRef} role="listbox" aria-label="Commands">
         {grouped.map(([group, cmds])=>(
           <div key={group} className="palette-group">
@@ -77,7 +94,7 @@ export function CommandPalette({ open, onClose, commands, note }: { open: boolea
         ))}
         {!results.length && <p className="palette-empty" aria-live="polite">No matching command.</p>}
       </div>
-      <footer><span><kbd>↑</kbd><kbd>↓</kbd> navigate</span><span><kbd>Enter</kbd> run</span><span><kbd>Esc</kbd> close</span>{note && <span className="palette-note">{note}</span>}<span className="palette-demo">8-state demo: navigation, filters, workspaces</span></footer>
+      <footer><span><kbd>↑</kbd><kbd>↓</kbd> navigate</span><span><kbd>Enter</kbd> run</span><span><kbd>Esc</kbd> close</span>{note && <span className="palette-note">{note}</span>}</footer>
     </dialog>
   </div>);
 }

@@ -148,6 +148,19 @@
   color: var(--color-ink);
 }
 
+/* The chrome-stripping rule above also flattened the controls' focus ring
+   (box-shadow: none), leaving the bell, language, shortcuts and theme buttons
+   with no visible keyboard focus (WCAG 2.4.7). Restore a ring on keyboard
+   focus only, using the same outline pattern as the More toggle and the
+   language select above. */
+.nav-utils .nav-util:focus-visible,
+.nav-utils .nav-shortcuts:focus-visible,
+.nav-utils .nav-bell:focus-visible,
+.nav-utils .theme-toggle:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
 .nav-utils .nav-shortcuts, .nav-utils .nav-bell { width: 2rem; justify-content: center; padding: 0; }
 
 .nav-lang-select {
@@ -166,7 +179,12 @@
 }
 @media (max-width: 48rem) {
   .app-nav .nav-primary { justify-content: flex-start; }
-  .app-nav .nav-more-panel { right: auto; left: 0; }
+  /* The panel stays RIGHT-anchored at every width: anchoring it to the More
+     button's left edge clipped its 184px off-screen at 320-480px viewports
+     (panel spanning 237..421 at 320px, "Close app" unreachable). Right
+     anchoring keeps it inside (124..308 @320); the max-width is
+     belt-and-braces so it can never exceed the page gutters either. */
+  .app-nav .nav-more-panel { max-width: calc(100vw - 2 * var(--page-gutter)); }
   .app-nav .nav-actions { gap: var(--space-sm); }
 }
 

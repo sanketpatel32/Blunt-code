@@ -32,8 +32,8 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
     [{ page: 'workspaces' }, t('nav.workspaces')],
     [{ page: 'search' }, t('nav.search')],
     [{ page: 'tools' }, t('nav.tools')],
-    [{ page: 'rules' }, 'Rules'],
-    [{ page: 'cli' }, 'CLI'],
+    [{ page: 'rules' }, t('nav.rules')],
+    [{ page: 'cli' }, t('nav.cli')],
     [{ page: 'settings' }, t('nav.settings')],
     [{ page: 'about' }, t('nav.about')],
   ];
@@ -59,9 +59,15 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
   }, []);
 
   // Dynamic overflow: an off-screen copy of the full link row measures its
-  // natural width; the nav goes flat while that fits and collapses into "More"
-  // only when space runs out. The reserve is applied on the flat side only, so
-  // the toggle's own width cannot push it back and forth at the boundary.
+  // natural width; the nav stays flat exactly while that width fits inside
+  // the nav minus the "More" reserve. BOTH directions use the same threshold,
+  // which is what makes the toggle stable — the mode is a pure function of
+  // (needed, clientWidth):
+  //     flat  ⇔  needed <= clientWidth - MORE_RESERVE_PX
+  // so the collapse and restore conditions can never both be true. (The
+  // previous restore check used `needed <= clientWidth`, so across the ~96px
+  // band clientWidth-96 < needed <= clientWidth every `flat` flip re-ran this
+  // effect, flipped the state back, and looped — thousands of DOM toggles.)
   useEffect(() => {
     const nav = navRef.current;
     const measure = measureRef.current;
@@ -71,11 +77,10 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
       // mode — deciding on zero widths would oscillate forever.
       if (nav.clientWidth === 0) return;
       const needed = measure.scrollWidth;
-      if (flat) {
-        if (needed > nav.clientWidth - MORE_RESERVE_PX) setFlat(false);
-      } else if (needed <= nav.clientWidth) {
-        setFlat(true);
-      }
+      const fits = needed <= nav.clientWidth - MORE_RESERVE_PX;
+      // No-op unless the measurement contradicts the current mode, so re-runs
+      // on unrelated renders can never toggle the nav by themselves.
+      if (fits !== flat) setFlat(fits);
     };
     check();
     if (typeof ResizeObserver === 'undefined') {
@@ -86,6 +91,13 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
     observer.observe(nav);
     return () => observer.disconnect();
   }, [flat, locale, route.page]);
+
+  // Same stuck-overlay class as the bell popover: a g-sequence changes the
+  // route without any pointer event near this header, so the "More" panel's
+  // outside-click dismissal never fires. Close it whenever the route changes.
+  useEffect(() => {
+    if (moreRef.current) moreRef.current.open = false;
+  }, [route]);
 
   const link = ([next, label]: [Route, string]) => (
     <a
@@ -155,7 +167,7 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
             Notifications live here too: it is a utility, and styling it apart
             made it the loudest thing in the row for the wrong reason. */}
         <div className="nav-utils">
-          <NotificationsCenter />
+          <NotificationsCenter routeKey={href(route)} />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -196,8 +208,10 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
           <Button variant="ghost" size="sm" className="theme-toggle" onClick={onToggleTheme} aria-pressed={theme === 'dark'} title={theme === 'dark' ? t('common.switchToLight') : t('common.switchToDark')}>
             {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             {/* Icon-only in the cluster, but the name has to stay in the DOM:
-                it is the button's accessible label, not just decoration. */}
-            <span className="theme-toggle-label sr-only">{theme === 'dark' ? t('common.themeLight') : t('common.themeDark')}</span>
+                it is the button's accessible label — phrased as the ACTION the
+                button performs, not the state it is already in, so screen
+                readers announce "Switch to light theme", never a no-op. */}
+            <span className="theme-toggle-label sr-only">{theme === 'dark' ? t('common.switchToLight') : t('common.switchToDark')}</span>
           </Button>
         </div>
         <Button onClick={onAdd} size="sm" className="add shadow-[var(--shadow-accent)] active:shadow-sm">
@@ -213,10 +227,14 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
 const APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'dev';
 
 export function AppFooter() {
+  const { t } = useT();
   return (
     <footer className="app-footer">
-      <span><span className="font-medium">Blunt Code</span><span className="hidden md:inline text-[var(--color-ink-faint)]"> · local code analysis for Windows</span></span>
-      <span className="hidden sm:inline">No account. No telemetry. · v{APP_VERSION}</span>
+      <span><span className="font-medium">Blunt Code</span><span className="hidden md:inline text-[var(--color-ink-soft)]"> · local code analysis for Windows</span></span>
+      {/* Real legal/version content, not decoration: the footer's inherited
+          ghost token fails contrast, so this span carries the readable
+          ink-soft color instead. */}
+      <span className="hidden sm:inline text-[var(--color-ink-soft)]">{t('common.noAccount')} · v{APP_VERSION}</span>
     </footer>
   );
 }

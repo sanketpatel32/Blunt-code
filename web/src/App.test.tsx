@@ -105,7 +105,9 @@ describe('Blunt Code home', () => {
     const host = await render(fetchMock);
     const install = [...host.querySelectorAll('button')].find((button) => button.textContent === 'Install');
     expect(install).toBeDefined();
-    await act(async () => { install!.click(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => { install!.click(); });
+    // Install arms the confirmation dialog; the POST fires on confirm.
+    await act(async () => { [...host.querySelectorAll<HTMLButtonElement>('dialog button')].find((button) => button.textContent === 'Install')!.click(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
     expect(host.textContent).toContain('ghost: installed.');
     expect(host.textContent).not.toContain('undefined');
   });
@@ -141,6 +143,8 @@ describe('Blunt Code home', () => {
     const semgrepButtons = [...rows[1].querySelectorAll('button')];
     expect(ruffButtons.map((button) => button.textContent)).toEqual(['Install', 'Repair', 'Update']);
     await act(async () => { ruffButtons[0].click(); });
+    // The row button arms the confirmation dialog; confirming starts the in-flight POST.
+    await act(async () => { [...host.querySelectorAll<HTMLButtonElement>('dialog button')].find((button) => button.textContent === 'Install')!.click(); });
     expect(ruffButtons[0].textContent).toContain('Installing…');
     expect(rows[0].querySelector('.table-actions')?.getAttribute('aria-busy')).toBe('true');
     for (const button of ruffButtons) expect(button.disabled).toBe(true);
