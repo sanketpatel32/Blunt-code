@@ -110,10 +110,15 @@
   gap: var(--space-xs);
   border-bottom: var(--rule) solid var(--color-rule-faint);
   padding-bottom: var(--space-xs);
+  /* Narrow widths: scroll the rail instead of clipping the last tab
+     (the page-level overflow-x: clip hides anything that spills). */
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 
 .cli-tab {
   display: inline-flex;
+  flex: none;
   align-items: center;
   gap: var(--space-xs);
   padding: var(--space-xs) var(--space-md);
@@ -123,6 +128,7 @@
   color: var(--color-ink-soft);
   font-size: var(--text-sm);
   font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
   transition: all var(--dur-fast) var(--ease-out);
 }

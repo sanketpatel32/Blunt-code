@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import '../css/tools.css';
 import { api } from '../api';
 import type { AnalyzerStatus } from '../types';
@@ -8,19 +8,42 @@ import { useLoad } from '../hooks/useLoad';
 import { Empty, ErrorPanel } from '../components/ui';
 import { WrenchIcon } from '../components/icons';
 import { SkeletonTable } from '../components/skeletons';
-import { analyzerMeta, categoryColor, CATEGORY_LABELS, type AnalyzerCategory } from '../lib/analyzerCatalog';
+import { analyzerMeta, categoryColor, ANALYZER_CATALOG, type AnalyzerCategory } from '../lib/analyzerCatalog';
 import { LanguageCoverage } from '../components/LanguageCoverage';
+import { ConfirmationDialog } from '../components/dialogs';
 import type { Route } from '../lib/router';
 import { PageHeader } from '../components/PageHeader';
 import { Badge } from '../components/ui/badge';
-import { Wrench, Shield, Bug, KeyRound, Boxes, Container, FileCog, Scale, Palette, Zap, Crosshair, Radar, Package, ListTodo, Gauge, Download, WrenchIcon as RepairIcon, RefreshCw, MoreHorizontal } from 'lucide-react';
+import { Wrench, Shield, Bug, KeyRound, Boxes, Container, FileCog, Scale, Palette, Zap, Crosshair, Radar, Package, ListTodo, Gauge } from 'lucide-react';
 
 type ToolOperation = 'install' | 'repair' | 'update';
 type BusyAction = { tool: string; operation: ToolOperation };
+type PendingAction = { analyzer: AnalyzerStatus; operation: ToolOperation };
 
 const operationLabels: Record<ToolOperation, string> = { install: 'Install', repair: 'Repair', update: 'Update' };
 const operationBusyLabels: Record<ToolOperation, string> = { install: 'Installing…', repair: 'Repairing…', update: 'Updating…' };
 const operationVerbs: Record<ToolOperation, string> = { install: 'installed', repair: 'repaired', update: 'updated' };
+
+/** Confirm-dialog copy naming the tool + operation, so a long re-download
+ *  never starts from a single mis-click. */
+const operationConfirmCopy: Record<ToolOperation, (name: string) => string> = {
+  install: (name) => `Install downloads and sets up ${name} on this machine.`,
+  repair: (name) => `Repair re-runs setup for ${name}, re-downloading the managed tool if needed.`,
+  update: (name) => `Update fetches and applies the latest managed ${name} release.`,
+};
+
+/** The backend capability inventory's category vocabulary (internal/analyzers)
+ *  with human labels; unknown values fall back to the raw string. The icon and
+ *  hue stay purely visual, from the frontend catalog below. */
+const API_CATEGORY_LABELS: Record<string, string> = {
+  'code-quality': 'Code quality',
+  compliance: 'Compliance',
+  dependencies: 'Dependencies',
+  infrastructure: 'Infrastructure',
+  maintainability: 'Maintainability',
+  secrets: 'Secrets',
+  security: 'Security',
+};
 
 const categoryIcons: Record<string, React.ElementType> = {
   lint: Wrench, style: Palette, security: Shield, pentest: Zap, secrets: KeyRound, maintainability: Gauge,
@@ -35,6 +58,8 @@ const NETWORK_LABELS: Record<AnalyzerStatus['network'], string> = {
 
 const PROFILE_LABELS: Record<string, string> = { quick: 'Quick', standard: 'Standard', deep: 'Deep', pentest: 'Pentest' };
 
+/** Visual accent (icon + hue) for a row, looked up in the frontend catalog.
+ *  The rendered label is the API's analyzer.category — see API_CATEGORY_LABELS. */
 function visualCategory(analyzer: AnalyzerStatus): AnalyzerCategory {
   return analyzerMeta(analyzer.id)?.category ?? ('security' as AnalyzerCategory);
 }
@@ -57,23 +82,10 @@ function ReadinessStrip({ analyzers, busy }: { analyzers: AnalyzerStatus[]; busy
   })}</div>;
 }
 
-function ToolActions({ analyzer, activeOperation, onAction }: { analyzer: AnalyzerStatus; activeOperation?: ToolOperation; onAction: (a: AnalyzerStatus, op: ToolOperation)=>void }) {
-  const [open,setOpen]=useState(false);
-  const ref=useRef<HTMLDivElement>(null);
-  const ops: Array<{op: ToolOperation; icon: React.ElementType; label:string}> = [{op:'install', icon: Download, label:'Install'},{op:'repair', icon: RepairIcon, label:'Repair'},{op:'update', icon: RefreshCw, label:'Update'}];
-
-  // close on outside
-  const handleOpen=()=> setOpen(v=>!v);
-  return <div ref={ref} className="relative inline-block">
-    <button type="button" aria-haspopup="menu" aria-expanded={open} onClick={handleOpen} disabled={activeOperation!==undefined} className="inline-flex h-8 items-center gap-1 rounded-[var(--radius-button)] border border-[var(--color-rule)] bg-[var(--color-surface)] px-3 text-xs font-semibold shadow-[var(--shadow-card)] disabled:opacity-50"><MoreHorizontal className="h-3.5 w-3.5" />Actions</button>
-    {activeOperation && <span className="ml-1 inline-flex items-center gap-1 text-xs"><span className="spinner" aria-hidden="true" />{operationBusyLabels[activeOperation]}</span>}
-    {open && <div role="menu" className="absolute right-0 z-10 mt-1 grid min-w-[10rem] gap-0.5 rounded-[var(--radius-lg)] border border-[var(--color-rule)] bg-[var(--color-surface)] p-1 shadow-[var(--shadow-lg)]">{ops.map(({op,icon:Icon,label})=> <button key={op} role="menuitem" type="button" disabled={!analyzer.managed_tool} onClick={()=>{ setOpen(false); void onAction(analyzer,op); }} className="flex items-center gap-2 rounded-[var(--radius-button)] px-2 py-1.5 text-left text-sm hover:bg-[var(--color-surface-muted)] disabled:opacity-50"><Icon className="h-3.5 w-3.5" />{label}</button>)}</div>}
-  </div>;
-}
-
 export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r: Route) => void }) {
   const analyzers = useLoad(api.analyzers, []);
   const [busy, setBusy] = useState<BusyAction>();
+  const [pending, setPending] = useState<PendingAction>();
   async function action(analyzer: AnalyzerStatus, operation: ToolOperation) {
     if (!analyzer.managed_tool) return;
     setBusy({ tool: analyzer.managed_tool, operation });
@@ -81,16 +93,17 @@ export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r
   }
 
   const rows = analyzers.data ?? [];
+  const pendingName = pending ? pending.analyzer.display_name || pending.analyzer.id : '';
 
   return (
     <div className="page">
       <PageHeader
         eyebrow="Analyzers"
         title="Analysis tools"
-        badge={<Badge variant="secondary" className="text-xs font-mono tabular-nums">{rows.length} engines</Badge>}
+        badge={analyzers.error ? undefined : <Badge variant="secondary" className="text-xs font-mono tabular-nums">{analyzers.loading ? '… engines' : `${rows.length} engines`}</Badge>}
         description="Every analyzer registered on this machine — category, scan tiers, network use, and readiness — straight from the backend capability inventory."
       />
-      {analyzers.loading ? <SkeletonTable rows={4} cols={7} className="tool-table" /> : analyzers.error ? <ErrorPanel error={analyzers.error} retry={analyzers.reload} /> : !rows.length ? <Empty title="No analyzers" icon={<WrenchIcon />}>Analyzer capabilities appear here after the backend registers its inventory.</Empty> : <><ReadinessStrip analyzers={rows} busy={busy} />
+      {analyzers.loading ? <SkeletonTable rows={ANALYZER_CATALOG.length} cols={8} className="tool-table" /> : analyzers.error ? <ErrorPanel error={analyzers.error} retry={analyzers.reload} /> : !rows.length ? <Empty title="No analyzers" icon={<WrenchIcon />}>Analyzer capabilities appear here after the backend registers its inventory.</Empty> : <><ReadinessStrip analyzers={rows} busy={busy} />
       <div className="tool-table table-wrap border rounded-lg bg-[var(--color-surface)] overflow-hidden">
         <table>
           <thead>
@@ -118,14 +131,14 @@ export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r
               return (
                 <tr key={analyzer.id}>
                   <td><strong className="flex items-center gap-1.5">{name}</strong></td>
-                  <td><span className="badge inline-flex items-center gap-1 text-[10px]" style={{ borderColor: `color-mix(in oklch, ${categoryColor(cat)} 34%, var(--color-rule))`, color: categoryColor(cat), background: `color-mix(in oklch, ${categoryColor(cat)} 12%, var(--color-surface))` }}><Icon className="h-3 w-3" />{CATEGORY_LABELS[cat] ?? cat}</span></td>
+                  <td><span className="badge inline-flex items-center gap-1 text-[10px]" style={{ borderColor: `color-mix(in oklch, ${categoryColor(cat)} 34%, var(--color-rule))`, color: categoryColor(cat), background: `color-mix(in oklch, ${categoryColor(cat)} 12%, var(--color-surface))` }}><Icon className="h-3 w-3" />{API_CATEGORY_LABELS[analyzer.category] ?? analyzer.category}</span></td>
                   <td className="text-xs">{(analyzer.profiles ?? []).map((p) => PROFILE_LABELS[p] ?? p).join(', ')}</td>
                   <td><span className="badge text-[10px]" title={analyzer.network_note || undefined}>{NETWORK_LABELS[analyzer.network] ?? analyzer.network}</span></td>
                   <td><span className="badge tool-version">{analyzer.version ? `v${analyzer.version}` : analyzer.execution === 'in-process' ? 'Built-in' : 'Managed version'}</span></td>
                   <td><span className={`state ${status.state === 'not-ready' ? 'not-ready' : 'ready'}`}>{status.text}</span></td>
-                  <td className="text-xs max-w-[18rem] truncate" title={detail}>{detail}</td>
+                  <td className="text-xs"><div className="max-w-[12rem] truncate" title={detail}>{detail}</div></td>
                   <td className="table-actions" aria-busy={activeOperation ? true : undefined}>
-                    {analyzer.managed_tool ? <span className="flex gap-1">{(['install', 'repair', 'update'] as const).map((operation) => <button type="button" key={operation} className="text-button" disabled={activeOperation !== undefined} onClick={() => void action(analyzer, operation)}>{activeOperation === operation ? <><span className="spinner" aria-hidden="true" />{operationBusyLabels[operation]}</> : operationLabels[operation]}</button>)}</span> : <span className="text-xs text-[var(--color-ink-soft)]">—</span>}
+                    {analyzer.managed_tool ? <span className="flex gap-1">{(['install', 'repair', 'update'] as const).map((operation) => <button type="button" key={operation} className="text-button" disabled={activeOperation !== undefined} onClick={() => setPending({ analyzer, operation })}>{activeOperation === operation ? <><span className="spinner" aria-hidden="true" />{operationBusyLabels[operation]}</> : operationLabels[operation]}</button>)}</span> : <span className="text-xs text-[var(--color-ink-soft)]">—</span>}
                   </td>
                 </tr>
               );
@@ -134,6 +147,14 @@ export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r
         </table>
       </div>
       <LanguageCoverage />
+      {pending && <ConfirmationDialog
+        title={`${operationLabels[pending.operation]} ${pendingName}`}
+        description={operationConfirmCopy[pending.operation](pendingName)}
+        confirmLabel={operationLabels[pending.operation]}
+        busy={false}
+        onCancel={() => setPending(undefined)}
+        onConfirm={() => { const { analyzer, operation } = pending; setPending(undefined); void action(analyzer, operation); }}
+      />}
     </>}
   </div>
   );

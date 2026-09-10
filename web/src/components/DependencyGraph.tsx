@@ -261,7 +261,7 @@ export function DependencyGraph({
                     key={n.id}
                     tabIndex={0}
                     role="button"
-                    aria-label={`${n.label} ${n.kind}${n.findingCount !== undefined ? `, ${n.findingCount} findings` : ""}`}
+                    aria-label={`${n.label} ${n.kind}${n.findingCount !== undefined ? `, ${n.findingCount} ${n.findingCount === 1 ? "finding" : "findings"}` : ""}`}
                     onPointerDown={(e) => { e.stopPropagation(); onNodePointerDown(n.id, e); }}
                     onPointerEnter={() => setHovered(n.id)}
                     onPointerLeave={() => setHovered((cur) => (cur === n.id ? null : cur))}

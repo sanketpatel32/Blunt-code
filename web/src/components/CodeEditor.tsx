@@ -233,8 +233,9 @@ export function CodeEditor({
   }, [monacoReady, language, readOnly]);
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    // Tab -> 2 spaces
-    if (e.key === 'Tab') {
+    // plain Tab inserts 2 spaces; Shift+Tab (and other modifier combos) fall through
+    // so the browser moves focus natively instead of trapping it in the editor
+    if (e.key === 'Tab' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
       e.preventDefault();
       const ta = textareaRef.current;
       if (!ta) return;
@@ -249,6 +250,11 @@ export function CodeEditor({
         if (!textareaRef.current) return;
         textareaRef.current.selectionStart = textareaRef.current.selectionEnd = start + 2;
       });
+      return;
+    }
+    // Escape blurs the textarea (standard editor convention) so keyboard users can leave
+    if (e.key === 'Escape') {
+      e.currentTarget.blur();
       return;
     }
     // Ctrl/Cmd+S -> save
@@ -318,7 +324,7 @@ export function CodeEditor({
           <pre
             ref={highlightRef}
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words px-3 py-3 font-mono text-xs leading-5"
+            className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre px-3 py-3 font-mono text-xs leading-5"
             style={{
               color: 'var(--color-ink)',
               background: 'transparent',
@@ -363,6 +369,7 @@ export function CodeEditor({
             aria-describedby={describedBy}
             placeholder={placeholder}
             readOnly={readOnly}
+            wrap="off"
             rows={10}
             className="relative min-h-0 w-full resize-y bg-transparent px-3 py-3 font-mono text-xs leading-5 text-transparent caret-[var(--color-ink)] placeholder:text-transparent focus:outline-none"
             style={{

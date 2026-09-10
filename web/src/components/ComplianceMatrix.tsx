@@ -81,7 +81,7 @@ export function ComplianceMatrix({ findings, scanId, onFilterOwasp }: { findings
     <section aria-label="Compliance matrix" className="rounded-[var(--radius-card)] border border-[var(--color-rule)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] overflow-hidden">
       <div className="p-4 pb-2 flex items-center justify-between">
         <h3 className="font-display text-sm font-semibold tracking-tight">Compliance — OWASP Top 10 (2021) + CWE Top 25</h3>
-        <span className="text-xs text-[var(--color-ink-faint)]">{findings.length} findings mapped</span>
+        <span className="text-xs text-[var(--color-ink-faint)]">{findings.length} {findings.length === 1 ? 'finding' : 'findings'} mapped</span>
       </div>
       <Table>
         <TableHeader>

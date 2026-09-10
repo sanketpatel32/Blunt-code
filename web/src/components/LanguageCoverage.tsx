@@ -4,7 +4,7 @@ import { ANALYZER_CATALOG, LANGUAGE_FAMILIES, ALL_LANGUAGES, type AnalyzerCatego
 const FAMILY_ORDER = ['Systems', 'Web', 'Mobile', 'Script', 'Data', 'Functional'] as const;
 
 const LANG_LABELS: Record<string, string> = {
-  python: 'Python', javascript: 'JS', typescript: 'TS', go: 'Go', java: 'Java', kotlin: 'Kotlin', csharp: 'C#', c: 'C', cpp: 'C++', ruby: 'Ruby', php: 'PHP', rust: 'Rust', swift: 'Swift', scala: 'Scala', dart: 'Dart', elixir: 'Elixir', haskell: 'Haskell', clojure: 'Clojure', erlang: 'Erlang', fsharp: 'F#', lua: 'Lua', zig: 'Zig', ocaml: 'OCaml', perl: 'Perl', 'objective-c': 'ObjC', vue: 'Vue', svelte: 'Svelte', html: 'HTML', css: 'CSS', scss: 'SCSS', json: 'JSON', yaml: 'YAML', toml: 'TOML', xml: 'XML', sql: 'SQL', graphql: 'GQL', shell: 'Shell', powershell: 'PS', batch: 'Batch', markdown: 'MD', dockerfile: 'Docker', env: 'Env',
+  python: 'Python', javascript: 'JS', typescript: 'TS', go: 'Go', java: 'Java', kotlin: 'Kotlin', csharp: 'C#', c: 'C', cpp: 'C++', ruby: 'Ruby', php: 'PHP', rust: 'Rust', swift: 'Swift', scala: 'Scala', dart: 'Dart', elixir: 'Elixir', haskell: 'Haskell', clojure: 'Clojure', erlang: 'Erlang', fsharp: 'F#', lua: 'Lua', zig: 'Zig', ocaml: 'OCaml', perl: 'Perl', 'objective-c': 'ObjC', vue: 'Vue', svelte: 'Svelte', html: 'HTML', css: 'CSS', scss: 'SCSS', json: 'JSON', yaml: 'YAML', toml: 'TOML', xml: 'XML', sql: 'SQL', graphql: 'GQL', shell: 'Shell', powershell: 'PS', batch: 'Batch', markdown: 'MD', dockerfile: 'Docker', env: 'Env', terraform: 'Terraform', certificate: 'Certificate',
 };
 
 function analyzerCountFor(lang: string): number {
@@ -72,7 +72,7 @@ export function LanguageCoverage({ compact }: { compact?: boolean }) {
             aria-label="Search languages"
           />
         </label>
-        <div className="flex items-center gap-1" role="group" aria-label="Filter by family">
+        <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Filter by family">
           <button type="button" onClick={() => setFamilyFilter('all')} aria-pressed={familyFilter === 'all'} className={`rounded-full px-2 py-0.5 text-xs border ${familyFilter === 'all' ? 'bg-[var(--color-accent)] text-[var(--color-accent-ink)] border-[var(--color-accent)]' : 'bg-[var(--color-surface)] border-[var(--color-rule)]'}`}>All</button>
           {FAMILY_ORDER.map((fam) => (
             <button key={fam} type="button" onClick={() => setFamilyFilter(fam)} aria-pressed={familyFilter === fam} className={`rounded-full px-2 py-0.5 text-xs border ${familyFilter === fam ? 'bg-[var(--color-accent)] text-[var(--color-accent-ink)] border-[var(--color-accent)]' : 'bg-[var(--color-surface)] border-[var(--color-rule)]'}`}>{fam}</button>

@@ -5,7 +5,7 @@ import { cn } from '../../lib/utils';
 const Tabs = TabsPrimitive.Root;
 
 const TabsList = React.forwardRef<React.ElementRef<typeof TabsPrimitive.List>, React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>>(({ className, ...props }, ref) => (
-  <TabsPrimitive.List ref={ref} className={cn('inline-flex items-center gap-6 border-b border-[var(--color-rule-faint)] bg-transparent', className)} {...props} />
+  <TabsPrimitive.List ref={ref} className={cn('inline-flex max-w-full items-center gap-6 overflow-x-auto border-b border-[var(--color-rule-faint)] bg-transparent', className)} {...props} />
 ));
 TabsList.displayName = TabsPrimitive.List.displayName;
 
@@ -13,7 +13,7 @@ const TabsTrigger = React.forwardRef<React.ElementRef<typeof TabsPrimitive.Trigg
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      'inline-flex items-center justify-center whitespace-nowrap border-b-2 border-transparent px-1 py-3 text-sm font-medium text-[var(--color-ink-soft)] ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus)] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:border-[var(--color-accent)] data-[state=active]:text-[var(--color-ink)] data-[state=active]:font-semibold hover:text-[var(--color-ink)]',
+      'inline-flex shrink-0 items-center justify-center whitespace-nowrap border-b-2 border-transparent px-1 py-3 text-sm font-medium text-[var(--color-ink-soft)] ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus)] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:border-[var(--color-accent)] data-[state=active]:text-[var(--color-ink)] data-[state=active]:font-semibold hover:text-[var(--color-ink)]',
       className,
     )}
     {...props}

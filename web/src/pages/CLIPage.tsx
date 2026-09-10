@@ -36,17 +36,17 @@ const COMMANDS: CLICommand[] = [
     category: 'Scans & CI Gates',
     synopsis: 'bluntcode scan <path> [options]',
     description:
-      'Runs an automated, headless quality and security scan on any folder. Tripping CI exit codes (0 = clean, 1 = gate tripped, 2 = flag error).',
+      'Runs an automated, headless quality and security scan on any folder. CI exit codes: 0 = clean, 1 = gate tripped, 2 = flag error, 3 = operational failure or incomplete coverage, 4 = cancelled, 130 = double Ctrl+C.',
     badge: 'Core / CI Gate',
     flags: [
-      { flag: '--profile', type: 'string', desc: 'Scan depth: quick, standard, or deep', def: 'standard' },
+      { flag: '--profile', type: 'string', desc: 'Scan depth: quick, standard, deep, or pentest', def: 'standard' },
       { flag: '--fail-on', type: 'severity+', desc: 'Exit 1 if findings remain at or above severity (e.g. high+, critical, medium+)' },
       { flag: '--max-findings', type: 'int', desc: 'Exit 1 if total findings exceed N' },
       { flag: '--baseline', type: 'id|sarif', desc: 'Baseline scan ID or SARIF file; only trip gate on NEW findings' },
       { flag: '--format', type: 'string', desc: 'Output format: text, json, github, sarif, csv, jsonl, markdown', def: 'text' },
       { flag: '--output', type: 'file', desc: 'Write document format to file instead of stdout' },
       { flag: '--incremental', type: 'bool', desc: 'Only scan files changed since previous completed scan' },
-      { flag: '--jobs', type: 'int', desc: 'Run up to N analyzers concurrently', def: '4' },
+      { flag: '--jobs', type: 'int', desc: 'Run up to N analyzers concurrently', def: '1 (serial)' },
       { flag: '--watch', type: 'bool', desc: 'Watch folder and automatically rescan when files change' },
       { flag: '--quiet', type: 'bool', desc: 'Suppress analyzer progress lines on stderr' },
       { flag: '--json', type: 'bool', desc: 'Print compact JSON summary block' },
@@ -68,7 +68,7 @@ const COMMANDS: CLICommand[] = [
     badge: 'Management',
     subcommands: [
       { name: 'list', desc: 'List all registered workspaces with scan metrics', syntax: 'bluntcode workspace list [--json]' },
-      { name: 'add', desc: 'Register a new workspace directory', syntax: 'bluntcode workspace add <path> [--name <name>] [--profile quick|standard|deep] [--json]' },
+      { name: 'add', desc: 'Register a new workspace directory', syntax: 'bluntcode workspace add <path> [--name <name>] [--profile quick|standard|deep|pentest] [--json]' },
       { name: 'show', desc: 'Display workspace metadata, last scan, and tags', syntax: 'bluntcode workspace show <id|path> [--json]' },
       { name: 'tree', desc: 'View file structure, sizes, and excluded paths', syntax: 'bluntcode workspace tree <id|path> [--path <subpath>] [--json]' },
       { name: 'tags', desc: 'View or set workspace tags', syntax: 'bluntcode workspace tags <id|path> [--set "tag1,tag2"] [--json]' },
@@ -77,7 +77,7 @@ const COMMANDS: CLICommand[] = [
     flags: [
       { flag: '--json', type: 'bool', desc: 'Output structured JSON payload' },
       { flag: '--name', type: 'string', desc: 'Custom display name for workspace' },
-      { flag: '--profile', type: 'string', desc: 'Default scan profile (quick, standard, deep)' },
+      { flag: '--profile', type: 'string', desc: 'Default scan profile (quick, standard, deep, pentest)' },
       { flag: '--set', type: 'string', desc: 'Comma-separated tags to assign' },
       { flag: '--path', type: 'string', desc: 'Subpath within workspace for tree inspection' },
     ],
@@ -155,6 +155,21 @@ const COMMANDS: CLICommand[] = [
       { title: 'List recent scans in workspace', cmd: 'bluntcode history . --limit 10' },
       { title: 'Compare baseline and current scan', cmd: 'bluntcode history compare b71d4a... 99479b...' },
       { title: 'Delete an obsolete scan', cmd: 'bluntcode history delete 0c5cc632...' },
+    ],
+  },
+  {
+    id: 'prune',
+    name: 'bluntcode prune',
+    category: 'Audit & History',
+    synopsis: 'bluntcode prune <path> [--keep N]',
+    description: 'Prune old scans for a workspace, keeping only the N most recent terminal scans. Running scans are never deleted.',
+    badge: 'Maintenance',
+    flags: [
+      { flag: '--keep', type: 'int', desc: 'Number of recent terminal scans to keep (1-100)', def: '20' },
+    ],
+    examples: [
+      { title: 'Prune old scans for current directory', cmd: 'bluntcode prune .' },
+      { title: 'Keep the 50 most recent scans', cmd: 'bluntcode prune . --keep 50' },
     ],
   },
   {
@@ -303,17 +318,19 @@ const COMMANDS: CLICommand[] = [
     subcommands: [
       { name: 'agent docs', desc: 'Print llm.txt developer guidance to stdout', syntax: 'bluntcode agent docs' },
       { name: 'agent scan', desc: 'Run scan with automatic --json and --quiet defaults', syntax: 'bluntcode agent scan <path> [scan flags]' },
-      { name: 'llm', desc: 'Print llms.txt standard index', syntax: 'bluntcode llm' },
+      { name: 'llm', desc: "Alias for 'agent docs': print the llm.txt agent guide to stdout", syntax: 'bluntcode llm' },
     ],
     examples: [
       { title: 'Print agent instructions (llm.txt)', cmd: 'bluntcode agent docs' },
       { title: 'Agent scan with machine-readable defaults', cmd: 'bluntcode agent scan .' },
-      { title: 'Print llms.txt standard index', cmd: 'bluntcode llm' },
+      { title: 'Print agent guide (llm.txt)', cmd: 'bluntcode llm' },
     ],
   },
 ];
 
-const CI_WORKFLOW_GITHUB = `name: Blunt Code Security & Quality Gate
+// String.raw keeps PowerShell paths (.\install.ps1, ...\Programs\BluntCode) and
+// the `\` shell line-continuations intact; a plain template literal would eat them.
+const CI_WORKFLOW_GITHUB = String.raw`name: Blunt Code Security & Quality Gate
 
 on:
   push:
@@ -488,7 +505,7 @@ export function CLIPage() {
           <div className="cli-fact-tile">
             <div className="cli-fact-title">Standard Exit Codes</div>
             <div className="cli-fact-desc">
-              <code>0</code> = Clean / success, <code>1</code> = Gate tripped or issues found, <code>2</code> = Flag syntax or usage error.
+              <code>0</code> = Clean / success, <code>1</code> = Gate tripped or issues found, <code>2</code> = Flag syntax or usage error, <code>3</code> = Operational failure or incomplete coverage, <code>4</code> = Cancelled, <code>130</code> = Double Ctrl+C.
             </div>
           </div>
           <div className="cli-fact-tile">
@@ -756,8 +773,9 @@ export function CLIPage() {
 
           <div className="cli-builder-grid">
             <div className="cli-builder-field">
-              <label className="cli-builder-label">Target Path</label>
+              <label className="cli-builder-label" htmlFor="builder-target">Target Path</label>
               <input
+                id="builder-target"
                 type="text"
                 value={builderTarget}
                 onChange={(e) => setBuilderTarget(e.target.value)}
@@ -766,8 +784,9 @@ export function CLIPage() {
             </div>
 
             <div className="cli-builder-field">
-              <label className="cli-builder-label">Profile</label>
+              <label className="cli-builder-label" htmlFor="builder-profile">Profile</label>
               <select
+                id="builder-profile"
                 value={builderProfile}
                 onChange={(e) => setBuilderProfile(e.target.value)}
                 className="cli-builder-select"
@@ -775,12 +794,14 @@ export function CLIPage() {
                 <option value="quick">Quick (fastest, lightweight lints)</option>
                 <option value="standard">Standard (recommended, full analyzers)</option>
                 <option value="deep">Deep (exhaustive static rules)</option>
+                <option value="pentest">Pentest (adds active DAST probing)</option>
               </select>
             </div>
 
             <div className="cli-builder-field">
-              <label className="cli-builder-label">CI Gate (--fail-on)</label>
+              <label className="cli-builder-label" htmlFor="builder-fail-on">CI Gate (--fail-on)</label>
               <select
+                id="builder-fail-on"
                 value={builderFailOn}
                 onChange={(e) => setBuilderFailOn(e.target.value)}
                 className="cli-builder-select"
@@ -794,8 +815,9 @@ export function CLIPage() {
             </div>
 
             <div className="cli-builder-field">
-              <label className="cli-builder-label">Format (--format)</label>
+              <label className="cli-builder-label" htmlFor="builder-format">Format (--format)</label>
               <select
+                id="builder-format"
                 value={builderFormat}
                 onChange={(e) => setBuilderFormat(e.target.value)}
                 className="cli-builder-select"
@@ -805,13 +827,15 @@ export function CLIPage() {
                 <option value="github">github (GitHub Actions ::warning/::error)</option>
                 <option value="json">json (complete report model)</option>
                 <option value="csv">csv (spreadsheet)</option>
+                <option value="jsonl">jsonl (newline-delimited JSON)</option>
                 <option value="markdown">markdown (SonarQube-style document)</option>
               </select>
             </div>
 
             <div className="cli-builder-field">
-              <label className="cli-builder-label">Output File (--output)</label>
+              <label className="cli-builder-label" htmlFor="builder-output">Output File (--output)</label>
               <input
+                id="builder-output"
                 type="text"
                 placeholder="leave empty for stdout"
                 value={builderOutput}

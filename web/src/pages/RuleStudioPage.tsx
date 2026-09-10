@@ -65,7 +65,10 @@ message: Avoid eval in JS — use JSON.parse instead.
 `,
 };
 
-function parseYamlLike(text: string): Partial<CustomRule> & { rawLanguages?: string } {
+const KNOWN_SEVERITIES: readonly string[] = ['critical', 'high', 'medium', 'low', 'info'];
+const BLOCK_SCALAR_RE = /^[|>][+-]?$/;
+
+function parseYamlLike(text: string): Partial<CustomRule> & { rawLanguages?: string; severityRaw?: string } {
   const out: Record<string, string> = {};
   for (const line of text.split('\n')) {
     const trimmed = line.trim();
@@ -81,56 +84,134 @@ function parseYamlLike(text: string): Partial<CustomRule> & { rawLanguages?: str
     const inner = out.languages.replace(/^\[/, '').replace(/\]$/, '');
     languages = inner.split(',').map((s) => s.trim().replace(/^["']|["']$/g, '')).filter(Boolean);
   }
-  const severity = (out.severity?.toLowerCase().replace(/^["']|["']$/g, '') as CustomRule['severity']) ?? 'medium';
+  const severityRaw = out.severity?.replace(/^["']|["']$/g, '');
+  const severity = (severityRaw?.toLowerCase() as CustomRule['severity']) ?? undefined;
   return {
     id: out.id?.replace(/^["']|["']$/g, ''),
     languages,
     pattern: out.pattern?.replace(/^["']|["']$/g, ''),
-    severity: ['critical', 'high', 'medium', 'low', 'info'].includes(severity) ? severity : 'medium',
+    severity: severity && KNOWN_SEVERITIES.includes(severity) ? severity : 'medium',
     message: out.message?.replace(/^["']|["']$/g, ''),
+    severityRaw,
   };
 }
 
+// Tolerant validator for the single-rule YAML this page edits.
+// Plain scalars may contain quotes/colons freely; quotes are only delimiters when
+// a value STARTS with one (then it must close). Block scalars (| / > variants) put
+// following deeper-indented lines in block mode, and "- item" sequence lines are
+// exempt from the bare "key: value" requirement.
 function validateYaml(text: string): string | null {
   const lines = text.split('\n');
+  const foundKeys = new Set<string>();
+  let blockMode = false;
+  let blockParentIndent = 0;
+
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const trimmed = line.trim();
+    const raw = lines[i];
+    const trimmed = raw.trim();
     if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('//')) continue;
-    // allow bracket-wrapped lines like languages: [python] — handled, but bare lines without colon are invalid YAML
-    if (!trimmed.includes(':')) {
-      // heuristic: if line looks like a YAML key without colon -> invalid
-      // also catch stray tokens
+    const indent = raw.length - raw.trimStart().length;
+
+    // inside a block scalar — skip ':' / quote checks until we dedent
+    if (blockMode) {
+      if (indent > blockParentIndent) continue;
+      blockMode = false;
+    }
+
+    // sequence item ("- python" or "- key: value") — exempt from the ':' requirement
+    let work = trimmed;
+    let isListItem = false;
+    if (work === '-' || work.startsWith('- ')) {
+      isListItem = true;
+      work = work === '-' ? '' : work.slice(2).trim();
+    }
+
+    const colonIdx = work.indexOf(':');
+    if (colonIdx === -1) {
+      if (isListItem) continue;
       return `Invalid YAML on line ${i + 1}: missing ':' — each rule field needs "key: value"`;
     }
-    // check for unclosed quotes/brackets in that line value part
-    const colonIdx = trimmed.indexOf(':');
-    const valuePart = trimmed.slice(colonIdx + 1).trim();
-    if (valuePart) {
-      const single = (valuePart.match(/'/g) ?? []).length;
-      const dbl = (valuePart.match(/"/g) ?? []).length;
-      if (single % 2 !== 0 || dbl % 2 !== 0) {
-        return `Invalid YAML on line ${i + 1}: unclosed quote`;
-      }
-      const openB = (valuePart.match(/\[/g) ?? []).length;
-      const closeB = (valuePart.match(/\]/g) ?? []).length;
+
+    const key = work.slice(0, colonIdx).trim();
+    const value = work.slice(colonIdx + 1).trim();
+    // only top-level keys count — a pasted "- id: ..." list-style rule must not count as "found"
+    if (!isListItem && indent === 0 && key) foundKeys.add(key);
+
+    if (!value) continue;
+
+    // block scalar opener — following deeper-indented lines are block content
+    if (BLOCK_SCALAR_RE.test(value)) {
+      blockMode = true;
+      blockParentIndent = indent;
+      continue;
+    }
+
+    // quotes are delimiters only when the value starts with one; then it must close
+    const first = value[0];
+    if ((first === '"' || first === "'") && (value.length < 2 || value[value.length - 1] !== first)) {
+      return `Invalid YAML on line ${i + 1}: unclosed quote`;
+    }
+    // flow collections are only balance-checked when the value starts with '['
+    if (first === '[') {
+      const openB = (value.match(/\[/g) ?? []).length;
+      const closeB = (value.match(/\]/g) ?? []).length;
       if (openB !== closeB) {
         return `Invalid YAML on line ${i + 1}: unclosed bracket`;
       }
     }
+  }
+
+  // Parses clean but none of the rule fields are present (e.g. pasted "- id: ..." list-style rules) —
+  // say so instead of silently disabling Save.
+  const hasContent = lines.some((l) => {
+    const t = l.trim();
+    return t !== '' && !t.startsWith('#') && !t.startsWith('//');
+  });
+  if (hasContent && !foundKeys.has('id') && !foundKeys.has('pattern') && !foundKeys.has('message')) {
+    return `Couldn't find id/pattern/message keys in this YAML`;
   }
   return null;
 }
 
 type MockFinding = { file: string; line: number; message: string; severity: CustomRule['severity'] };
 
+const LANG_EXTENSIONS: Record<string, string> = {
+  python: 'py',
+  javascript: 'js',
+  typescript: 'ts',
+  go: 'go',
+  rust: 'rs',
+  java: 'java',
+  ruby: 'rb',
+  c: 'c',
+  cpp: 'cpp',
+  csharp: 'cs',
+  php: 'php',
+  swift: 'swift',
+  kotlin: 'kt',
+  bash: 'sh',
+  yaml: 'yml',
+  json: 'json',
+  html: 'html',
+  css: 'css',
+  dockerfile: 'Dockerfile',
+  terraform: 'tf',
+};
+
+function extensionFor(language: string | undefined): string {
+  if (!language) return 'txt';
+  return LANG_EXTENSIONS[language.toLowerCase()] ?? 'txt';
+}
+
 function mockFindings(rule: Partial<CustomRule>): MockFinding[] {
   if (!rule.pattern || !rule.id) return [];
   const sev = (rule.severity ?? 'medium') as CustomRule['severity'];
   const msg = rule.message ?? `Matched ${rule.id}`;
+  const ext = extensionFor(rule.languages?.[0]);
   return [
-    { file: `src/example.${(rule.languages?.[0] ?? 'py')}`, line: 12, message: msg, severity: sev },
-    { file: `src/utils.${(rule.languages?.[0] ?? 'py')}`, line: 34, message: msg, severity: sev },
+    { file: `src/example.${ext}`, line: 12, message: msg, severity: sev },
+    { file: `src/utils.${ext}`, line: 34, message: msg, severity: sev },
   ];
 }
 
@@ -176,22 +257,39 @@ export function RuleStudioPage() {
 
   function handleInsertSnippet() {
     const snippet = SNIPPETS[language] ?? SNIPPETS.yaml;
-    setYaml(snippet);
+    // replace only when the editor is empty or untouched — otherwise append so typed content survives
+    setYaml((prev) => (prev === '' || prev === DEFAULT_YAML ? snippet : `${prev}\n\n${snippet}`));
+    setError(null);
+  }
+
+  function handleReset() {
+    setYaml(DEFAULT_YAML);
     setError(null);
   }
 
   const editorError = yamlValidationError ?? error;
+  const enabledCount = rules.filter((r) => r.enabled).length;
+  const severityNotice = useMemo(() => {
+    const raw = parsed.severityRaw;
+    if (!raw || KNOWN_SEVERITIES.includes(raw.toLowerCase())) return null;
+    return `severity '${raw}' not recognized — previewing as medium`;
+  }, [parsed]);
 
   return (
     <div className="page">
       <PageHeader
         eyebrow="Rules"
         title="Custom rules"
-        badge={<Badge variant="secondary" className="text-xs font-mono tabular-nums">{rules.length} active</Badge>}
+        badge={
+          <span className="inline-flex flex-wrap items-center gap-2">
+            <Badge variant="secondary" className="text-xs font-mono tabular-nums">{enabledCount} saved locally</Badge>
+            <span className="text-[11px] text-[var(--color-ink-soft)]">Local scratchpad — not sent to the backend.</span>
+          </span>
+        }
         description="Create YAML rules, preview matched findings, and save locally."
         actions={
           <span className="text-[11px] text-[var(--color-ink-soft)] font-mono hidden sm:inline-flex items-center gap-1">
-            <kbd className="px-1.5 py-0.5 bg-[var(--color-surface-muted)] border border-[var(--color-rule)] rounded-[var(--radius-xs)] text-[10px]">Ctrl+S</kbd> to save
+            <kbd className="px-1.5 py-0.5 bg-[var(--color-surface-muted)] border border-[var(--color-rule)] rounded-[var(--radius-xs)] text-[10px]">Ctrl+S</kbd> inside the editor saves
           </span>
         }
       />
@@ -231,14 +329,13 @@ export function RuleStudioPage() {
               onSave={handleSave}
               minHeight="14rem"
             />
-            {editorError && <p role="alert" className="sr-only">{editorError}</p>}
             {!canSave && !yamlValidationError && <p className="text-xs text-[var(--color-ink-faint)]">Add at least <code>id</code>, <code>pattern</code>, and <code>message</code> to enable save.</p>}
             <div className="flex flex-wrap gap-2">
               <Button onClick={handleSave} disabled={!canSave} aria-label="Save rule">Save rule</Button>
-              <Button variant="outline" onClick={() => setYaml(DEFAULT_YAML)} aria-label="Reset editor">Reset</Button>
+              <Button variant="outline" onClick={handleReset} aria-label="Reset editor">Reset</Button>
               <Button variant="secondary" onClick={handleInsertSnippet} aria-label="Insert test snippet">Test snippet</Button>
             </div>
-            <p className="text-xs text-[var(--color-ink-faint)]">Tip: Tab inserts 2 spaces · <kbd className="rounded border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-1 py-0.5 font-mono text-xs">Ctrl</kbd> + <kbd className="rounded border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-1 py-0.5 font-mono text-xs">S</kbd> saves. Monaco loads automatically if installed.</p>
+            <p className="text-xs text-[var(--color-ink-faint)]">Tip: Tab inserts 2 spaces · Shift+Tab moves focus out · <kbd className="rounded border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-1 py-0.5 font-mono text-xs">Ctrl</kbd> + <kbd className="rounded border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-1 py-0.5 font-mono text-xs">S</kbd> inside the editor saves. Monaco loads automatically if installed.</p>
           </CardContent>
         </Card>
 
@@ -263,6 +360,7 @@ export function RuleStudioPage() {
               </ul>
             ) : <p className="text-sm text-[var(--color-ink-faint)]">No matches for the current rule.</p>}
             {parsed.id && <div className="mt-4 flex flex-wrap gap-1.5"><Badge variant="outline">{parsed.id}</Badge>{(parsed.languages ?? []).map((l) => <Badge key={l} variant="secondary">{l}</Badge>)}{parsed.severity && <Badge variant="outline">{parsed.severity}</Badge>}</div>}
+            {severityNotice && <p className="mt-2 text-xs text-[var(--color-warning)]">{severityNotice}</p>}
           </CardContent>
         </Card>
       </div>

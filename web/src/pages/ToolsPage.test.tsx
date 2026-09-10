@@ -52,6 +52,18 @@ function row(host: HTMLElement, id: string) {
   return [...host.querySelectorAll('.tool-table tbody tr')].find((candidate) => candidate.textContent?.includes(id))!;
 }
 
+/** The Install/Repair/Update buttons inside the open ConfirmationDialog. */
+function dialogButton(host: HTMLElement, label: string): HTMLElement | undefined {
+  return [...host.querySelectorAll<HTMLElement>('dialog button')].find((button) => button.textContent === label);
+}
+
+/** Opens the confirm dialog for `operation` on `id`, then confirms it —
+ *  the row buttons only arm the dialog; the POST fires on confirm. */
+async function confirmAction(host: HTMLElement, id: string, operation: string) {
+  await act(async () => { [...row(host, id).querySelectorAll('button')].find((button) => button.textContent === operation)!.click(); });
+  await act(async () => { dialogButton(host, operation)!.click(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
+}
+
 afterEach(async () => {
   await act(async () => { root?.unmount(); });
   document.body.replaceChildren();
@@ -83,7 +95,7 @@ describe('ToolsPage readiness strip', () => {
   it('turns the non-ready chip into a spinner while that install is in flight', async () => {
     const pending = new Promise<Response>(() => {});
     const { host } = await renderPage(analyzersMock(() => pending));
-    await act(async () => { [...row(host, 'Semgrep').querySelectorAll('button')].find((button) => button.textContent === 'Install')!.click(); });
+    await confirmAction(host, 'Semgrep', 'Install');
     const chip = [...host.querySelectorAll('.tools-readiness .badge')].find((badge) => badge.textContent!.includes('Semgrep'))!;
     expect(chip.querySelector('.spinner')).not.toBeNull();
     expect(chip.textContent).toContain('Semgrep installing…');
@@ -118,24 +130,53 @@ describe('ToolsPage inventory table', () => {
     expect(row(host, 'Ruff').textContent).toContain('Quick, Standard, Deep, Pentest');
     expect(row(host, 'Ruff').textContent).toContain('No network');
   });
+
+  it('labels the category with the API inventory vocabulary, not frontend catalog labels', async () => {
+    const { host } = await renderPage(analyzersMock());
+    expect(row(host, 'Ruff').textContent).toContain('Code quality');
+    expect(row(host, 'License Scanner').textContent).toContain('Compliance');
+    expect(row(host, 'Ruff').textContent).not.toContain('Lint');
+  });
+});
+
+describe('ToolsPage header badge', () => {
+  it('shows an ellipsis count while the inventory loads instead of "0 engines"', async () => {
+    const fetchMock = vi.fn((input: string) => (input.endsWith('/analyzers') ? new Promise<Response>(() => {}) : Promise.resolve(json({}))));
+    const { host } = await renderPage(fetchMock);
+    expect(host.querySelector('.page-heading-badge')!.textContent).toBe('… engines');
+  });
 });
 
 describe('ToolsPage actions', () => {
   it('keeps install firing the same POST endpoint with a success notice naming the analyzer', async () => {
     const fetchMock = analyzersMock((input) => (input.endsWith('/tools/semgrep/install') ? json({ id: 'semgrep', ready: true, can_install: false }) : json({})));
     const { host, notify } = await renderPage(fetchMock);
-    await act(async () => { [...row(host, 'Semgrep').querySelectorAll('button')].find((button) => button.textContent === 'Install')!.click(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
+    await confirmAction(host, 'Semgrep', 'Install');
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/tools/semgrep/install', expect.objectContaining({ method: 'POST' }));
     expect(notify).toHaveBeenCalledWith({ kind: 'info', text: 'Semgrep: installed.' });
     expect(notify).not.toHaveBeenCalledWith(expect.objectContaining({ kind: 'error' }));
   });
 
+  it('arms a confirmation dialog naming the tool + operation, and cancel fires no POST', async () => {
+    const fetchMock = analyzersMock();
+    const { host } = await renderPage(fetchMock);
+    await act(async () => { [...row(host, 'Semgrep').querySelectorAll('button')].find((button) => button.textContent === 'Repair')!.click(); });
+    const dialog = host.querySelector('dialog[open]')!;
+    expect(dialog).not.toBeNull();
+    expect(dialog.textContent).toContain('Repair Semgrep');
+    expect(dialog.textContent).toContain('Repair re-runs setup for Semgrep');
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/v1/tools/semgrep/repair', expect.anything());
+    await act(async () => { dialogButton(host, 'Cancel')!.click(); });
+    expect(host.querySelector('dialog')).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/v1/tools/semgrep/repair', expect.anything());
+  });
+
   it('fires repair and update against their own endpoints', async () => {
     const fetchMock = analyzersMock((input) => (input.endsWith('/tools/ruff/update') || input.endsWith('/tools/ruff/repair') ? json({ id: 'ruff', ready: true }) : json({})));
     const { host } = await renderPage(fetchMock);
-    await act(async () => { [...row(host, 'Ruff').querySelectorAll('button')].find((button) => button.textContent === 'Update')!.click(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
+    await confirmAction(host, 'Ruff', 'Update');
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/tools/ruff/update', expect.objectContaining({ method: 'POST' }));
-    await act(async () => { [...row(host, 'Ruff').querySelectorAll('button')].find((button) => button.textContent === 'Repair')!.click(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
+    await confirmAction(host, 'Ruff', 'Repair');
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/tools/ruff/repair', expect.objectContaining({ method: 'POST' }));
   });
 
@@ -148,6 +189,7 @@ describe('ToolsPage actions', () => {
     const { host } = await renderPage(fetchMock);
     expect(host.querySelector('.error-panel')).not.toBeNull();
     expect(host.querySelector('.tools-readiness')).toBeNull();
+    expect(host.querySelector('.page-heading-badge')).toBeNull();
     failing = false;
     await act(async () => { [...host.querySelectorAll('button')].find((button) => button.textContent === 'Try again')!.click(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
     expect(host.querySelector('.error-panel')).toBeNull();

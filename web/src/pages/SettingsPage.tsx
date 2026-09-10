@@ -7,6 +7,7 @@ import { ConfirmationDialog } from '../components/dialogs';
 import { FolderIcon } from '../components/icons';
 import { LOCALES, useT } from '../lib/i18n';
 import { PageHeader } from '../components/PageHeader';
+import { ErrorPanel } from '../components/ui';
 
 /** Local folders the backend can reveal in the OS file browser, each with the notice for "not created yet". */
 const DATA_FOLDERS = [
@@ -74,6 +75,9 @@ export function SettingsPage({ notify }: { notify: (n: Notice) => void }) {
         title="Settings"
         description="Local runtime, offline mode, and privacy configuration."
       />
+      {/* A failed GET must not pass hardcoded defaults off as the stored config. */}
+      {settings.error && <ErrorPanel error={settings.error} retry={settings.reload} />}
+      {meta.error && <ErrorPanel error={meta.error} retry={meta.reload} />}
       <div className="settings-list">
         <section>
           <h2>General</h2>
@@ -82,24 +86,32 @@ export function SettingsPage({ notify }: { notify: (n: Notice) => void }) {
               <h3>Open browser automatically</h3>
               <p>Open the local interface when Blunt Code starts.</p>
             </div>
-            <Toggle
-              on={settings.data?.open_browser ?? true}
-              disabled={settings.loading || saving}
-              label="Open browser automatically"
-              onToggle={() => void save({ open_browser: !(settings.data?.open_browser ?? true) })}
-            />
+            {settings.data ? (
+              <Toggle
+                on={Boolean(settings.data.open_browser)}
+                disabled={saving}
+                label="Open browser automatically"
+                onToggle={() => void save({ open_browser: !(settings.data?.open_browser ?? false) })}
+              />
+            ) : (
+              <span className="muted" role="status">{settings.loading ? 'Loading…' : 'Unavailable'}</span>
+            )}
           </div>
           <div className="setting">
             <div>
               <h3>Offline mode</h3>
               <p>Do not download tools or check for updates. Installed tools can still scan local workspaces.</p>
             </div>
-            <Toggle
-              on={settings.data?.offline ?? false}
-              disabled={settings.loading || saving}
-              label="Offline mode"
-              onToggle={() => void save({ offline: !(settings.data?.offline ?? false) })}
-            />
+            {settings.data ? (
+              <Toggle
+                on={Boolean(settings.data.offline)}
+                disabled={saving}
+                label="Offline mode"
+                onToggle={() => void save({ offline: !(settings.data?.offline ?? false) })}
+              />
+            ) : (
+              <span className="muted" role="status">{settings.loading ? 'Loading…' : 'Unavailable'}</span>
+            )}
           </div>
           <div className="setting">
             <div>

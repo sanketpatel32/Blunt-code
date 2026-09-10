@@ -13,7 +13,7 @@ export type AnalyzerMeta = {
 };
 
 /** Languages discovery currently classifies — must stay in sync with internal/discovery/discovery.go and internal/analyzers/analyzer.go. */
-export const ALL_LANGUAGES = ['python', 'javascript', 'typescript', 'go', 'java', 'kotlin', 'csharp', 'c', 'cpp', 'ruby', 'php', 'rust', 'swift', 'scala', 'dart', 'elixir', 'haskell', 'clojure', 'erlang', 'fsharp', 'lua', 'zig', 'ocaml', 'perl', 'objective-c', 'vue', 'svelte', 'html', 'css', 'scss', 'json', 'yaml', 'toml', 'xml', 'sql', 'graphql', 'shell', 'powershell', 'batch', 'markdown', 'dockerfile', 'env', 'terraform'] as const;
+export const ALL_LANGUAGES = ['python', 'javascript', 'typescript', 'go', 'java', 'kotlin', 'csharp', 'c', 'cpp', 'ruby', 'php', 'rust', 'swift', 'scala', 'dart', 'elixir', 'haskell', 'clojure', 'erlang', 'fsharp', 'lua', 'zig', 'ocaml', 'perl', 'objective-c', 'vue', 'svelte', 'html', 'css', 'scss', 'json', 'yaml', 'toml', 'xml', 'sql', 'graphql', 'shell', 'powershell', 'batch', 'markdown', 'dockerfile', 'env', 'terraform', 'certificate'] as const;
 
 export type SupportedLanguage = typeof ALL_LANGUAGES[number];
 

@@ -62,7 +62,7 @@ function FindingsLineArea({ data }: { data: TrendPoint[]; reduced: boolean }) {
       </svg>
       <div className="flex justify-between tabular-nums text-[0.68rem] font-mono text-[var(--color-ink-faint)]" aria-hidden="true">
         <span>{min}</span>
-        <span>{max} findings</span>
+        <span>{max} {max === 1 ? 'finding' : 'findings'}</span>
       </div>
     </div>
   );

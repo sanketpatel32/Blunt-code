@@ -86,6 +86,62 @@ describe('CLIPage', () => {
     expect(host.textContent).toContain('upload-sarif');
   });
 
+  it('renders the GitHub Actions recipe with PowerShell paths and line continuations intact', async () => {
+    const host = await renderPage();
+    const tabs = Array.from(host.querySelectorAll('button.tab')) as HTMLButtonElement[];
+    const ciTab = tabs.find((b) => b.textContent?.includes('CI/CD & Automation'));
+
+    await act(async () => {
+      ciTab!.click();
+    });
+
+    // First pre block in the CI tab is the GitHub Actions workflow.
+    const code = host.querySelector('pre.cli-code-pre code')?.textContent ?? '';
+    // Template-literal escapes previously swallowed these backslashes.
+    expect(code).toContain('.\\install.ps1 -SkipBrowser');
+    expect(code).toContain('$env:LOCALAPPDATA\\Programs\\BluntCode');
+    expect(code).toMatch(
+      /run: \|\s+bluntcode scan \. \\[\s\S]+--profile standard \\[\s\S]+--fail-on high\+ \\[\s\S]+--format sarif \\[\s\S]+--output bluntcode-results\.sarif/,
+    );
+    // The four `\` shell line-continuations must survive with their newlines.
+    expect(code.match(/\\\n/g)?.length).toBe(4);
+  });
+
+  it('documents the prune command with its --keep flag', async () => {
+    const host = await renderPage();
+    const input = host.querySelector('input[placeholder*="Search commands"]') as HTMLInputElement;
+
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+      setter?.call(input, 'prune');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    expect(host.textContent).toContain('bluntcode prune');
+    expect(host.textContent).toContain('--keep');
+    expect(host.textContent).toContain('Running scans are never deleted');
+  });
+
+  it('associates Command Builder labels with their controls', async () => {
+    const host = await renderPage();
+    const tabs = Array.from(host.querySelectorAll('button.tab')) as HTMLButtonElement[];
+    const builderTab = tabs.find((b) => b.textContent?.includes('Command Builder'));
+
+    await act(async () => {
+      builderTab!.click();
+    });
+
+    const labeledControls = ['builder-target', 'builder-profile', 'builder-fail-on', 'builder-format', 'builder-output'];
+    for (const id of labeledControls) {
+      const control = host.querySelector(`#${id}`) as (HTMLInputElement | HTMLSelectElement) | null;
+      expect(control, `missing #${id}`).not.toBeNull();
+      const label = [...host.querySelectorAll('label')].find((l) => l.htmlFor === id);
+      expect(label, `label for #${id} not associated`).toBeDefined();
+      expect(control!.labels).toContain(label!);
+    }
+  });
+
   it('switches to Command Builder and generates custom command', async () => {
     const host = await renderPage();
     const tabs = Array.from(host.querySelectorAll('button.tab')) as HTMLButtonElement[];
