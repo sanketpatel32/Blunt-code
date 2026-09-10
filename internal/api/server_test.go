@@ -1718,7 +1718,12 @@ func TestPathOverridesDriveTreeSelection(t *testing.T) {
 	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/workspaces/"+work.ID+"/tree?path=src", nil)
 	response = httptest.NewRecorder()
 	s.Handler().ServeHTTP(response, request)
-	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"path":"src/drop.py","name":"drop.py","type":"file","included":false`) || !strings.Contains(response.Body.String(), `"path":"src/keep.py","name":"keep.py","type":"file","included":true`) {
+	// The tree rows carry the discovery language and mark selection-excluded
+	// nodes with the snapshot skip-count vocabulary, which the Files page
+	// renders as a chip and an "Excluded" note.
+	if response.Code != http.StatusOK ||
+		!strings.Contains(response.Body.String(), `"path":"src/drop.py","name":"drop.py","type":"file","language":"python","included":false,"excluded_reason":"excluded_user"`) ||
+		!strings.Contains(response.Body.String(), `"path":"src/keep.py","name":"keep.py","type":"file","language":"python","included":true`) {
 		t.Fatalf("tree selections: %d %s", response.Code, response.Body.String())
 	}
 }

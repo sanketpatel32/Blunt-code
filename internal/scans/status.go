@@ -2,6 +2,8 @@ package scans
 
 import (
 	"context"
+	"sync"
+	"time"
 
 	"bluntcode/internal/analyzers"
 )
@@ -20,29 +22,66 @@ type AnalyzerStatus struct {
 	Registered bool     `json:"registered"`
 }
 
+// analyzerStatusCacheTTL bounds how long one status snapshot is reused.
+// Probing every tool binary costs seconds (each Check may exec --version) and
+// the Tools page polls this endpoint, so a short cache keeps it cheap while
+// staying fresh enough for install feedback.
+const analyzerStatusCacheTTL = 30 * time.Second
+
 // AnalyzerStatuses projects the capability inventory through the live
 // registry. It is the single backend source behind GET /api/v1/analyzers and
 // the Tools page: count, categories, profiles, network use, and readiness all
-// read from here instead of hand-maintained UI lists.
+// read from here instead of hand-maintained UI lists. Results are probed
+// concurrently and memoized for analyzerStatusCacheTTL (guarded by a mutex;
+// each probe writes only its own row).
 func (s *Service) AnalyzerStatuses(ctx context.Context) []AnalyzerStatus {
+	s.statusMu.Lock()
+	if s.statusCache != nil && time.Since(s.statusCachedAt) < analyzerStatusCacheTTL {
+		cached := s.statusCache
+		s.statusMu.Unlock()
+		return cached
+	}
+	s.statusMu.Unlock()
+	items := s.probeAnalyzerStatuses(ctx)
+	s.statusMu.Lock()
+	s.statusCache = items
+	s.statusCachedAt = time.Now()
+	s.statusMu.Unlock()
+	return items
+}
+
+// probeAnalyzerStatuses builds one snapshot: every capability row is pre-
+// placed in order, and registered adapters are probed in parallel goroutines,
+// each writing only its own row, so the returned order is the capability
+// inventory's order regardless of probe timing.
+func (s *Service) probeAnalyzerStatuses(ctx context.Context) []AnalyzerStatus {
 	byID := map[string]analyzers.Analyzer{}
 	for _, adapter := range s.registry.All() {
 		byID[adapter.ID()] = adapter
 	}
-	out := make([]AnalyzerStatus, 0, len(analyzers.Capabilities()))
-	for _, cap := range analyzers.Capabilities() {
-		status := AnalyzerStatus{Capability: cap, Languages: []string{}}
-		if adapter, ok := byID[cap.ID]; ok {
-			status.Registered = true
-			for _, lang := range adapter.SupportedLanguages() {
-				status.Languages = append(status.Languages, string(lang))
-			}
+	capabilities := analyzers.Capabilities()
+	out := make([]AnalyzerStatus, len(capabilities))
+	var wg sync.WaitGroup
+	for i, capability := range capabilities {
+		out[i] = AnalyzerStatus{Capability: capability, Languages: []string{}}
+		adapter, ok := byID[capability.ID]
+		if !ok {
+			continue
+		}
+		out[i].Registered = true
+		for _, lang := range adapter.SupportedLanguages() {
+			out[i].Languages = append(out[i].Languages, string(lang))
+		}
+		status := &out[i]
+		wg.Add(1)
+		go func(status *AnalyzerStatus, adapter analyzers.Analyzer) {
+			defer wg.Done()
 			tool := adapter.Check(ctx, analyzers.ToolEnvironment{ToolsDir: s.toolsDir})
 			status.Version = tool.Version
 			status.Ready = tool.Ready
 			status.Detail = tool.Detail
-		}
-		out = append(out, status)
+		}(status, adapter)
 	}
+	wg.Wait()
 	return out
 }

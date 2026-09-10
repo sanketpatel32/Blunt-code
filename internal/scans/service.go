@@ -35,6 +35,12 @@ type Service struct {
 	// active counts started-but-not-finished scans (a reserved slot counts
 	// from start until run's cleanup), bounding total load on the machine.
 	active int
+	// statusCache memoizes AnalyzerStatuses for analyzerStatusCacheTTL: the
+	// snapshot probes every tool binary (seconds of wall time) and the Tools
+	// page polls it, so requests within the window reuse the last result.
+	statusMu       sync.Mutex
+	statusCache    []AnalyzerStatus
+	statusCachedAt time.Time
 }
 
 // MaxConcurrentScans bounds how many scans may run at once. Per-scan worker

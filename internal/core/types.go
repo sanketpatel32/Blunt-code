@@ -58,14 +58,17 @@ type Scan struct {
 	// Severity split persisted once by CompleteScan; zero until the scan
 	// finishes. Suppressed findings are excluded, so the split can disagree
 	// with a raw findings query on the same scan.
-	CriticalCount int           `json:"critical_count"`
-	HighCount     int           `json:"high_count"`
-	MediumCount   int           `json:"medium_count"`
-	LowCount      int           `json:"low_count"`
-	InfoCount     int           `json:"info_count"`
-	ErrorSummary  string        `json:"error_summary,omitempty"`
-	Snapshot      *ScanSnapshot `json:"snapshot,omitempty"`
-	SnapshotJSON  string        `json:"-"`
+	CriticalCount int    `json:"critical_count"`
+	HighCount     int    `json:"high_count"`
+	MediumCount   int    `json:"medium_count"`
+	LowCount      int    `json:"low_count"`
+	InfoCount     int    `json:"info_count"`
+	ErrorSummary  string `json:"error_summary,omitempty"`
+	// DurationMS is finished_at - started_at in whole milliseconds, computed
+	// when the scan row is read; nil (omitted) until the scan finishes.
+	DurationMS   *int64        `json:"duration_ms,omitempty"`
+	Snapshot     *ScanSnapshot `json:"snapshot,omitempty"`
+	SnapshotJSON string        `json:"-"`
 }
 
 // ScanSnapshot is captured once, before any analyzer is started. It is kept

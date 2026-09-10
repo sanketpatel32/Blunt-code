@@ -55,6 +55,17 @@ type Server struct {
 	openFolder func(dir string) error
 }
 
+// scanDetail is a scan payload enriched for single-scan views: the analyzer
+// run rows GET /scans/{id} serves, plus the new/fixed comparison counts the
+// report model computes. The workspace view's latest_scan shares it so the
+// workspace page's "Latest analysis" card renders the same detail.
+type scanDetail struct {
+	core.Scan
+	AnalyzerRuns []map[string]any `json:"analyzer_runs"`
+	NewCount     int              `json:"new_count"`
+	FixedCount   int              `json:"fixed_count"`
+}
+
 // workspaceView keeps the dashboard payload small while including the two
 // pieces of context people need before opening a workspace: source languages
 // and the most recent analysis. latest_scan_coverage pairs that analysis
@@ -63,7 +74,7 @@ type Server struct {
 type workspaceView struct {
 	core.Workspace
 	Languages     []string               `json:"languages,omitempty"`
-	LatestScan    *core.Scan             `json:"latest_scan,omitempty"`
+	LatestScan    *scanDetail            `json:"latest_scan,omitempty"`
 	LatestScanCov *database.ScanCoverage `json:"latest_scan_coverage,omitempty"`
 }
 
@@ -107,6 +118,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/workspaces/{id}/tree", s.tree)
 	s.mux.HandleFunc("GET /api/v1/workspaces/{id}/path-overrides", s.getPathOverrides)
 	s.mux.HandleFunc("PUT /api/v1/workspaces/{id}/path-overrides", s.putPathOverrides)
+	s.mux.HandleFunc("GET /api/v1/workspaces/{id}/tags", s.getWorkspaceTags)
+	s.mux.HandleFunc("PUT /api/v1/workspaces/{id}/tags", s.putWorkspaceTags)
 	s.mux.HandleFunc("GET /api/v1/workspaces/{id}/rules", s.getRules)
 	s.mux.HandleFunc("PUT /api/v1/workspaces/{id}/rules", s.putRules)
 	s.mux.HandleFunc("GET /api/v1/workspaces/{id}/suppressions", s.getSuppressions)
@@ -158,6 +171,11 @@ func decode(r *http.Request, into any) error {
 	d.DisallowUnknownFields()
 	return d.Decode(into)
 }
+
+// validID accepts the canonical lowercase UUID shape ID storage uses, plus
+// its uppercase spelling: IDs are normalized with pathID before validation
+// and lookup so /workspaces/2538AA38-… resolves the same row as its
+// lowercase form.
 func validID(id string) bool {
 	if len(id) != 36 {
 		return false
@@ -169,14 +187,21 @@ func validID(id string) bool {
 			}
 			continue
 		}
-		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F') {
 			return false
 		}
 	}
 	return true
 }
+
+// pathID returns the {id} path value lowercased: UUIDs are stored lowercase
+// and SQLite lookups are byte-exact, so an uppercase spelling must be
+// normalized before it reaches the database.
+func pathID(r *http.Request) string {
+	return strings.ToLower(r.PathValue("id"))
+}
 func (s *Server) workspace(r *http.Request) (core.Workspace, bool) {
-	id := r.PathValue("id")
+	id := pathID(r)
 	if !validID(id) {
 		return core.Workspace{}, false
 	}
@@ -327,7 +352,11 @@ func (s *Server) getWorkspace(w http.ResponseWriter, r *http.Request) {
 		fail(w, 404, "WORKSPACE_NOT_FOUND", "Workspace was not found.")
 		return
 	}
-	_ = s.db.TouchWorkspace(r.Context(), workspace.ID)
+	// Go 1.22 routes HEAD to the GET handler; a HEAD probe must stay
+	// side-effect free, so only real GETs reorder the workspace list.
+	if r.Method != http.MethodHead {
+		_ = s.db.TouchWorkspace(r.Context(), workspace.ID)
+	}
 	latestByWorkspace, err := s.db.LatestScans(r.Context())
 	if err != nil {
 		fail(w, 500, "DATABASE_ERROR", "Could not load workspace analysis.")
@@ -351,10 +380,21 @@ func (s *Server) workspaceView(ctx context.Context, workspace core.Workspace, la
 		if latest.Snapshot != nil {
 			view.Languages = languageNames(latest.Snapshot.Languages)
 		}
-		// The dashboard does not need every selected path from the immutable
-		// snapshot; returning it would make the workspace list unnecessarily big.
+		// The card pairs the scan with its analyzer runs and its new/fixed
+		// comparison (the same attach and comparison logic GET /scans/{id}
+		// serves), so both are loaded while the immutable snapshot is still
+		// at hand; the snapshot itself is then dropped because the dashboard
+		// does not need every selected path from it.
+		runs, err := s.db.AnalyzerRuns(ctx, latest.ID)
+		if err != nil {
+			return workspaceView{}, err
+		}
+		newCount, fixedCount, err := s.scanComparisonCounts(ctx, *latest)
+		if err != nil {
+			return workspaceView{}, err
+		}
 		latest.Snapshot = nil
-		view.LatestScan = latest
+		view.LatestScan = &scanDetail{Scan: *latest, AnalyzerRuns: analyzerRuns(runs), NewCount: newCount, FixedCount: fixedCount}
 	}
 	if len(view.Languages) == 0 {
 		patterns, err := s.userExcludes(ctx, workspace.ID)
@@ -365,6 +405,45 @@ func (s *Server) workspaceView(ctx context.Context, workspace core.Workspace, la
 		}
 	}
 	return view, nil
+}
+
+// scanComparisonCounts computes the new/fixed pair for one scan exactly the
+// way the report model does (server.go reportModel): suppressed fingerprints
+// are filtered from both sides, and scans.Compare's coverage rule counts a
+// previous finding as fixed only when its analyzer succeeded in the current
+// scan. Without a previous completed scan the pair is 0/0 — the same
+// "no comparison" outcome the report shows.
+func (s *Server) scanComparisonCounts(ctx context.Context, scan core.Scan) (int, int, error) {
+	findings, err := s.db.Findings(ctx, scan.ID)
+	if err != nil {
+		return 0, 0, err
+	}
+	suppressed, err := s.db.SuppressedFingerprints(ctx, scan.WorkspaceID)
+	if err != nil {
+		return 0, 0, err
+	}
+	findings = scans.FilterSuppressed(findings, suppressed)
+	previousID, err := s.db.PreviousCompletedScanID(ctx, scan.WorkspaceID, scan.ID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, 0, nil
+	}
+	if err != nil {
+		return 0, 0, err
+	}
+	previous, err := s.db.Findings(ctx, previousID)
+	if err != nil {
+		return 0, 0, err
+	}
+	succeeded, err := s.db.SuccessfulAnalyzerIDs(ctx, scan.ID)
+	if err != nil {
+		return 0, 0, err
+	}
+	var selectedPaths []string
+	if scan.Snapshot != nil {
+		selectedPaths = scan.Snapshot.SelectedFiles
+	}
+	comparison := scans.Compare(findings, scans.FilterSuppressed(previous, suppressed), scans.NewComparisonCoverage(succeeded, selectedPaths))
+	return len(comparison.New), len(comparison.Fixed), nil
 }
 
 func languageNames(counts map[string]int) []string {
@@ -543,6 +622,13 @@ func (s *Server) tree(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	relative := r.URL.Query().Get("path")
+	// A workspace whose root directory was deleted (or moved) would otherwise
+	// surface as a 500 DISCOVERY_FAILED on the empty path while subpaths 400
+	// through path validation; report the real condition instead.
+	if info, err := os.Stat(work.RootPath); err != nil || !info.IsDir() {
+		fail(w, http.StatusUnprocessableEntity, "WORKSPACE_ROOT_MISSING", "workspace root no longer exists on disk")
+		return
+	}
 	if _, err := workspace.ValidateRelativePath(work.RootPath, relative); err != nil {
 		fail(w, 400, "INVALID_PATH", err.Error())
 		return
@@ -562,25 +648,34 @@ func (s *Server) tree(w http.ResponseWriter, r *http.Request) {
 }
 
 type treeItem struct {
-	Path        string `json:"path"`
-	Name        string `json:"name"`
-	Type        string `json:"type"`
-	Included    bool   `json:"included"`
-	Partial     bool   `json:"partial,omitempty"`
-	HasChildren bool   `json:"has_children,omitempty"`
+	Path string `json:"path"`
+	Name string `json:"name"`
+	Type string `json:"type"`
+	// Language classifies files (the discovery table, mirrored by Tree) and is
+	// empty for directories; the Files page renders it as a chip and filters
+	// on it. ExcludedReason explains a selection-excluded node using the same
+	// vocabulary as the snapshot's skip_counts.
+	Language       string `json:"language,omitempty"`
+	Included       bool   `json:"included"`
+	ExcludedReason string `json:"excluded_reason,omitempty"`
+	Partial        bool   `json:"partial,omitempty"`
+	HasChildren    bool   `json:"has_children,omitempty"`
 }
 
 func treeItems(files []core.FileEntry, overrides []core.PathOverride) []treeItem {
 	result := make([]treeItem, 0, len(files))
 	for _, file := range files {
 		path := filepath.ToSlash(file.RelativePath)
-		item := treeItem{Path: path, Name: filepath.Base(filepath.FromSlash(path)), Included: pathIncluded(path, overrides)}
+		item := treeItem{Path: path, Name: filepath.Base(filepath.FromSlash(path)), Included: pathIncluded(path, overrides), Language: file.Language}
 		if file.IsDir {
 			item.Type = "directory"
 			item.HasChildren = true
 			item.Partial = pathPartiallyIncluded(path, item.Included, overrides)
 		} else {
 			item.Type = "file"
+		}
+		if !item.Included {
+			item.ExcludedReason = discovery.SkipUserExcluded
 		}
 		result = append(result, item)
 	}
@@ -959,18 +1054,51 @@ func (s *Server) workspaceTrends(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"items": points})
 }
 
+// listScans serves the workspace's scan history as one server-paged slice.
+// The envelope matches the findings list's page contract —
+// {items,total,page,page_size,has_next} — with page 1-based and page_size
+// capped at MaxScanPageSize, which is what the web client already expects.
 func (s *Server) listScans(w http.ResponseWriter, r *http.Request) {
 	work, ok := s.workspace(r)
 	if !ok {
 		fail(w, 404, "WORKSPACE_NOT_FOUND", "Workspace was not found.")
 		return
 	}
-	items, err := s.db.Scans(r.Context(), work.ID)
+	page, pageSize, err := scanPageFilter(r)
+	if err != nil {
+		fail(w, 400, "INVALID_SCAN_QUERY", err.Error())
+		return
+	}
+	items, total, err := s.db.ScansPage(r.Context(), work.ID, page, pageSize)
 	if err != nil {
 		fail(w, 500, "DATABASE_ERROR", "Could not list scans.")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"items": items})
+	writeJSON(w, 200, map[string]any{"items": items, "total": total, "page": page, "page_size": pageSize, "has_next": (page-1)*pageSize+len(items) < total})
+}
+
+// scanPageFilter parses the scan history's paging controls the way
+// findingFilter does: page is 1-based and defaults to 1, page_size defaults
+// to DefaultScanPageSize and is rejected outside 1..MaxScanPageSize.
+func scanPageFilter(r *http.Request) (int, int, error) {
+	query := r.URL.Query()
+	page := 1
+	if raw := strings.TrimSpace(query.Get("page")); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 1 {
+			return 0, 0, fmt.Errorf("page must be a positive integer")
+		}
+		page = value
+	}
+	pageSize := database.DefaultScanPageSize
+	if raw := strings.TrimSpace(query.Get("page_size")); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 1 || value > database.MaxScanPageSize {
+			return 0, 0, fmt.Errorf("page_size must be between 1 and %d", database.MaxScanPageSize)
+		}
+		pageSize = value
+	}
+	return page, pageSize, nil
 }
 
 // recentScans serves the dashboard's cross-workspace activity feed: the most
@@ -1199,7 +1327,7 @@ func terminalScanState(state string) bool {
 	return state == "completed" || state == "completed_with_warnings" || state == "failed" || state == "cancelled" || state == "interrupted"
 }
 func (s *Server) getScan(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := pathID(r)
 	if !validID(id) {
 		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
 		return
@@ -1218,10 +1346,12 @@ func (s *Server) getScan(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, "DATABASE_ERROR", "Could not load analyzer progress.")
 		return
 	}
-	writeJSON(w, 200, struct {
-		core.Scan
-		AnalyzerRuns []map[string]any `json:"analyzer_runs"`
-	}{Scan: scan, AnalyzerRuns: analyzerRuns(runs)})
+	newCount, fixedCount, err := s.scanComparisonCounts(r.Context(), scan)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load scan comparison.")
+		return
+	}
+	writeJSON(w, 200, scanDetail{Scan: scan, AnalyzerRuns: analyzerRuns(runs), NewCount: newCount, FixedCount: fixedCount})
 }
 
 func analyzerRuns(runs []reports.Run) []map[string]any {
@@ -1245,14 +1375,24 @@ func analyzerRuns(runs []reports.Run) []map[string]any {
 }
 
 // searchFindings serves the cross-workspace findings search. Every control is
-// optional; empty values mean "no filter". Pagination always applies
-// (page/page_size), matching the web UI's global search page contract.
+// optional; absent values fall back to their defaults (page 1, page_size
+// DefaultSearchPageSize), and the response echoes the applied values plus a
+// severity_counts facet map computed over the same filtered population.
 func (s *Server) searchFindings(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	filter := database.GlobalFindingsFilter{
+		Page:        1,
+		PageSize:    database.DefaultSearchPageSize,
 		Query:       strings.TrimSpace(query.Get("q")),
 		Analyzer:    strings.TrimSpace(query.Get("analyzer")),
 		WorkspaceID: strings.TrimSpace(query.Get("workspace_id")),
+	}
+	// A q carrying NUL or other hostile control bytes would silently disable
+	// the text filter downstream (SQLite drops the bytes); reject it instead
+	// so callers never mistake a broken filter for an empty result.
+	if strings.ContainsFunc(filter.Query, isHostileControl) {
+		fail(w, 400, "INVALID_SEARCH_QUERY", "q must not contain control characters.")
+		return
 	}
 	if raw := strings.TrimSpace(query.Get("severity")); raw != "" {
 		for _, part := range strings.Split(raw, ",") {
@@ -1283,7 +1423,12 @@ func (s *Server) searchFindings(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "INVALID_SEARCH_QUERY", err.Error())
 		return
 	}
-	writeJSON(w, 200, map[string]any{"items": items, "total": total, "page": filter.Page, "page_size": filter.PageSize, "has_next": (filter.Page-1)*filter.PageSize+len(items) < total})
+	severityCounts, err := s.db.SearchFindingsSeverityCounts(r.Context(), filter)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not count findings by severity.")
+		return
+	}
+	writeJSON(w, 200, map[string]any{"items": items, "total": total, "page": filter.Page, "page_size": filter.PageSize, "has_next": (filter.Page-1)*filter.PageSize+len(items) < total, "severity_counts": severityCounts})
 }
 
 // deleteScan removes one terminal scan and everything stored under it
@@ -1291,7 +1436,7 @@ func (s *Server) searchFindings(w http.ResponseWriter, r *http.Request) {
 // cancelled first; they are rejected with 409 so a delete can never race the
 // analyzer pipeline mid-write.
 func (s *Server) deleteScan(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := pathID(r)
 	if !validID(id) {
 		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
 		return
@@ -1366,7 +1511,7 @@ func (s *Server) putWorkspaceTags(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"items": tags})
 }
 func (s *Server) cancelScan(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := pathID(r)
 	if !validID(id) {
 		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
 		return
@@ -1392,7 +1537,7 @@ func (s *Server) cancelScan(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) findings(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := pathID(r)
 	if !validID(id) {
 		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
 		return
@@ -1502,7 +1647,7 @@ func csvScrubControls(value string) string {
 // stay verbatim in the file with LF terminators, and every CSV consumer
 // (encoding/csv, Excel, LibreOffice, Python) accepts LF-terminated records.
 func (s *Server) findingsCSV(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := pathID(r)
 	if !validID(id) {
 		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
 		return
@@ -1565,7 +1710,7 @@ func csvNumber(value int) string {
 // runs, metrics, and every finding field the other exports surface. Query
 // filters do not apply; the document is always the whole scan.
 func (s *Server) findingsJSON(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := pathID(r)
 	if !validID(id) {
 		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
 		return
@@ -1600,7 +1745,7 @@ func (s *Server) findingsJSON(w http.ResponseWriter, r *http.Request) {
 // apply, and suppressed fingerprints never enter the report model — so the
 // download always covers the whole scan.
 func (s *Server) findingsJSONL(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := pathID(r)
 	if !validID(id) {
 		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
 		return
@@ -1639,7 +1784,7 @@ func (s *Server) findingsJSONL(w http.ResponseWriter, r *http.Request) {
 // that produced it succeeded in the current scan, and suppressed fingerprints
 // are filtered from both sides before diffing.
 func (s *Server) scanCompare(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := pathID(r)
 	if !validID(id) {
 		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
 		return
@@ -1653,7 +1798,7 @@ func (s *Server) scanCompare(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, "DATABASE_ERROR", "Could not load scan.")
 		return
 	}
-	otherID := strings.TrimSpace(r.URL.Query().Get("with"))
+	otherID := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("with")))
 	if otherID == "" {
 		resolved, resolveErr := s.db.PreviousCompletedScanID(r.Context(), scan.WorkspaceID, scan.ID)
 		if errors.Is(resolveErr, sql.ErrNoRows) {
@@ -1720,7 +1865,7 @@ func (s *Server) scanCompare(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) fixedFindings(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := pathID(r)
 	if !validID(id) {
 		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
 		return
@@ -1773,7 +1918,7 @@ const maxPreviewFileBytes = 1 << 20
 // findingPreview returns a small, current-source excerpt. The stored path is
 // validated again so a finding can never be used to read outside its workspace.
 func (s *Server) findingPreview(w http.ResponseWriter, r *http.Request) {
-	scanID, findingID := r.PathValue("id"), r.PathValue("findingID")
+	scanID, findingID := pathID(r), strings.ToLower(r.PathValue("findingID"))
 	if !validID(scanID) || !validID(findingID) {
 		fail(w, 404, "FINDING_NOT_FOUND", "Finding was not found.")
 		return
@@ -2072,7 +2217,7 @@ func finishedAtValue(value *time.Time) time.Time {
 }
 
 func (s *Server) report(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := pathID(r)
 	if !validID(id) {
 		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
 		return
@@ -2111,7 +2256,7 @@ func (s *Server) report(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) reportMarkdown(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := pathID(r)
 	if !validID(id) {
 		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
 		return
@@ -2154,7 +2299,7 @@ func (s *Server) reportMarkdown(w http.ResponseWriter, r *http.Request) {
 // tooling. Like the JSON report it is regenerated from stored scan data, not
 // from a persisted artifact.
 func (s *Server) reportSARIF(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := pathID(r)
 	if !validID(id) {
 		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
 		return
@@ -2188,7 +2333,7 @@ func (s *Server) reportSARIF(w http.ResponseWriter, r *http.Request) {
 // archived, or printed as-is. Like the other exporters it is regenerated from
 // stored scan data, not from a persisted artifact.
 func (s *Server) reportHTML(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := pathID(r)
 	if !validID(id) {
 		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
 		return
@@ -2262,7 +2407,7 @@ func (s *Server) installTool(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, s.tools.Status(id))
 }
 func (s *Server) scanEvents(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := pathID(r)
 	if !validID(id) {
 		fail(w, 404, "SCAN_NOT_FOUND", "Scan was not found.")
 		return
@@ -2314,6 +2459,10 @@ func securityMiddleware(next http.Handler) http.Handler {
 			fail(w, 403, "CROSS_ORIGIN_FORBIDDEN", "State-changing requests must come from the local Blunt Code origin.")
 			return
 		}
+		// Every response — including mux-generated 404/405 text bodies that
+		// bypass writeJSON — carries no-store, so the embedded UI never serves
+		// a stale API or asset response from cache.
+		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "no-referrer")

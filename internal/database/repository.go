@@ -410,8 +410,21 @@ func hydrateScanRow(row interface{ Scan(dest ...any) error }, s *core.Scan) erro
 	}
 	s.StartedAt, _ = parseNullableTime(started)
 	s.FinishedAt, _ = parseNullableTime(finished)
+	s.DurationMS = durationMS(s.StartedAt, s.FinishedAt)
 	hydrateScanSnapshot(s)
 	return nil
+}
+
+// durationMS reports finished-started in whole milliseconds; nil until the
+// scan has both a start and a finish (or when the finish precedes its start),
+// which keeps the JSON field off unfinished scans. A real zero-millisecond
+// scan still reports the field, as 0.
+func durationMS(started, finished *time.Time) *int64 {
+	if started == nil || finished == nil || finished.Before(*started) {
+		return nil
+	}
+	ms := finished.Sub(*started).Milliseconds()
+	return &ms
 }
 
 func (d *DB) Scans(ctx context.Context, workspaceID string) ([]core.Scan, error) {
@@ -429,6 +442,51 @@ func (d *DB) Scans(ctx context.Context, workspaceID string) ([]core.Scan, error)
 		result = append(result, s)
 	}
 	return result, rows.Err()
+}
+
+// DefaultScanPageSize and MaxScanPageSize bound the workspace scan history
+// endpoint (GET /workspaces/{id}/scans). They mirror the findings page bounds
+// the web client already speaks: page is 1-based and page_size caps at 100.
+const (
+	DefaultScanPageSize = 25
+	MaxScanPageSize     = 100
+)
+
+// ScansPage returns one page of the workspace's scan history (newest first,
+// the same order Scans uses) plus the total history size so clients can
+// compute has_next. Page and size are clamped here; an absurd page window
+// that would overflow the offset is rejected instead of wrapped.
+func (d *DB) ScansPage(ctx context.Context, workspaceID string, page, pageSize int) ([]core.Scan, int, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = DefaultScanPageSize
+	}
+	if pageSize > MaxScanPageSize {
+		pageSize = MaxScanPageSize
+	}
+	if page > 1 && page-1 > (math.MaxInt-pageSize)/pageSize {
+		return nil, 0, fmt.Errorf("page is out of range")
+	}
+	var total int
+	if err := d.SQL.QueryRowContext(ctx, `SELECT COUNT(*) FROM scans WHERE workspace_id=?`, workspaceID).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	rows, err := d.SQL.QueryContext(ctx, `SELECT `+scanSelectColumns("")+` FROM scans WHERE workspace_id=? ORDER BY started_at DESC, id DESC LIMIT ? OFFSET ?`, workspaceID, pageSize, (page-1)*pageSize)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	result := make([]core.Scan, 0, pageSize)
+	for rows.Next() {
+		var s core.Scan
+		if err := hydrateScanRow(rows, &s); err != nil {
+			return nil, 0, err
+		}
+		result = append(result, s)
+	}
+	return result, total, rows.Err()
 }
 
 // LatestScans resolves each workspace's single most recent scan (same recency
@@ -547,6 +605,7 @@ func (d *DB) RecentScans(ctx context.Context, filter RecentScansFilter) ([]Recen
 		}
 		item.StartedAt, _ = parseNullableTime(started)
 		item.FinishedAt, _ = parseNullableTime(finished)
+		item.DurationMS = durationMS(item.StartedAt, item.FinishedAt)
 		// The snapshot manifest stays deliberately unhydrated here (see
 		// RecentScan); the scan detail endpoint serves it in full.
 		result = append(result, item)
@@ -625,11 +684,11 @@ func (d *DB) RecentCompletedSeverityCounts(ctx context.Context, workspaceID stri
 // degraded output (warning_count > 0). Risk grades pair with it so a
 // low-finding partial scan cannot read as the assurance of a complete scan.
 type ScanCoverage struct {
-	ScanID    string
-	Total     int
-	Succeeded int
-	Failed    int
-	Warned    int
+	ScanID    string `json:"scan_id"`
+	Total     int    `json:"total"`
+	Succeeded int    `json:"succeeded"`
+	Failed    int    `json:"failed"`
+	Warned    int    `json:"warned"`
 }
 
 // Complete reports whether the scan ran its full analyzer set cleanly — the
@@ -1162,16 +1221,20 @@ func (d *DB) buildFindingQuery(ctx context.Context, scan core.Scan, filter Findi
 	addEquals("findings.analyzer_id", filter.Analyzer)
 	addEquals("COALESCE(findings.rule_id,'')", filter.Rule)
 	if filter.Path != "" {
-		where = append(where, "LOWER(COALESCE(findings.relative_path,'')) LIKE '%' || LOWER(?) || '%'")
-		args = append(args, filter.Path)
+		// pathPrefixEscaper + the ESCAPE clause keep % and _ literal here, the
+		// same contract the prefix filter below honors; a substring path
+		// search is a text match, never a wildcard expression.
+		where = append(where, `LOWER(COALESCE(findings.relative_path,'')) LIKE '%' || LOWER(?) || '%' ESCAPE '\'`)
+		args = append(args, pathPrefixEscaper.Replace(filter.Path))
 	}
 	if prefix := normalizePathPrefix(filter.PathPrefix); prefix != "" {
 		where = append(where, "LOWER(COALESCE(findings.relative_path,'')) LIKE ? ESCAPE '\\'")
 		args = append(args, likePatternPrefix(prefix))
 	}
 	if filter.Query != "" {
-		where = append(where, "(LOWER(findings.message) LIKE '%' || LOWER(?) || '%' OR LOWER(COALESCE(findings.rule_id,'')) LIKE '%' || LOWER(?) || '%' OR LOWER(COALESCE(findings.relative_path,'')) LIKE '%' || LOWER(?) || '%')")
-		args = append(args, filter.Query, filter.Query, filter.Query)
+		escaped := pathPrefixEscaper.Replace(filter.Query)
+		where = append(where, `(LOWER(findings.message) LIKE '%' || LOWER(?) || '%' ESCAPE '\' OR LOWER(COALESCE(findings.rule_id,'')) LIKE '%' || LOWER(?) || '%' ESCAPE '\' OR LOWER(COALESCE(findings.relative_path,'')) LIKE '%' || LOWER(?) || '%' ESCAPE '\')`)
+		args = append(args, escaped, escaped, escaped)
 	}
 	if len(statuses) == 1 {
 		where = append(where, statusExpr+"=?")
@@ -1827,30 +1890,12 @@ type SearchedFinding struct {
 	WorkspaceID string `json:"workspace_id"`
 }
 
-// SearchFindings runs the cross-workspace findings search: one COUNT plus one
-// paged SELECT joining findings to scans, ordered by severity rank then path
-// and line so the most serious hits surface first regardless of which
-// workspace or analyzer produced them.
-func (d *DB) SearchFindings(ctx context.Context, filter GlobalFindingsFilter) ([]SearchedFinding, int, error) {
-	if filter.Page < 1 {
-		filter.Page = 1
-	}
-	if filter.PageSize <= 0 {
-		filter.PageSize = DefaultSearchPageSize
-	}
-	if filter.PageSize > MaxSearchPageSize {
-		return nil, 0, fmt.Errorf("page_size must be between 1 and %d", MaxSearchPageSize)
-	}
-	if filter.Page > 1 && filter.Page-1 > (math.MaxInt-filter.PageSize)/filter.PageSize {
-		return nil, 0, fmt.Errorf("page is out of range")
-	}
-	for _, severity := range filter.Severities {
-		switch analyzers.Severity(severity) {
-		case analyzers.SeverityCritical, analyzers.SeverityHigh, analyzers.SeverityMedium, analyzers.SeverityLow, analyzers.SeverityInfo:
-		default:
-			return nil, 0, fmt.Errorf("severity must be critical, high, medium, low, or info")
-		}
-	}
+// searchFindingsWhere assembles the WHERE clause shared by SearchFindings and
+// SearchFindingsSeverityCounts so facet totals always describe exactly the
+// population the paged list draws from. All values are bound as parameters;
+// the text filter escapes LIKE wildcards so q is a substring match, never a
+// wildcard expression.
+func searchFindingsWhere(filter GlobalFindingsFilter) (string, []any) {
 	where := []string{}
 	args := []any{}
 	if filter.WorkspaceID != "" {
@@ -1876,13 +1921,65 @@ func (d *DB) SearchFindings(ctx context.Context, filter GlobalFindingsFilter) ([
 		args = append(args, filter.Analyzer)
 	}
 	if filter.Query != "" {
-		where = append(where, "(LOWER(findings.message) LIKE '%' || LOWER(?) || '%' OR LOWER(COALESCE(findings.rule_id,'')) LIKE '%' || LOWER(?) || '%' OR LOWER(COALESCE(findings.relative_path,'')) LIKE '%' || LOWER(?) || '%')")
-		args = append(args, filter.Query, filter.Query, filter.Query)
+		escaped := pathPrefixEscaper.Replace(filter.Query)
+		where = append(where, `(LOWER(findings.message) LIKE '%' || LOWER(?) || '%' ESCAPE '\' OR LOWER(COALESCE(findings.rule_id,'')) LIKE '%' || LOWER(?) || '%' ESCAPE '\' OR LOWER(COALESCE(findings.relative_path,'')) LIKE '%' || LOWER(?) || '%' ESCAPE '\')`)
+		args = append(args, escaped, escaped, escaped)
 	}
 	whereSQL := ""
 	if len(where) > 0 {
 		whereSQL = " WHERE " + strings.Join(where, " AND ")
 	}
+	return whereSQL, args
+}
+
+// SearchFindingsSeverityCounts returns severity→count over the same filtered
+// population SearchFindings pages (same WHERE, no pagination, one GROUP BY),
+// so the UI can render real facet totals next to the result list. Severities
+// absent from the result set are absent from the map.
+func (d *DB) SearchFindingsSeverityCounts(ctx context.Context, filter GlobalFindingsFilter) (map[string]int, error) {
+	whereSQL, args := searchFindingsWhere(filter)
+	rows, err := d.SQL.QueryContext(ctx, "SELECT LOWER(findings.severity),COUNT(*) FROM findings JOIN scans ON scans.id=findings.scan_id"+whereSQL+" GROUP BY LOWER(findings.severity)", args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	counts := map[string]int{}
+	for rows.Next() {
+		var severity string
+		var count int
+		if err := rows.Scan(&severity, &count); err != nil {
+			return nil, err
+		}
+		counts[severity] = count
+	}
+	return counts, rows.Err()
+}
+
+// SearchFindings runs the cross-workspace findings search: one COUNT plus one
+// paged SELECT joining findings to scans, ordered by severity rank then path
+// and line so the most serious hits surface first regardless of which
+// workspace or analyzer produced them.
+func (d *DB) SearchFindings(ctx context.Context, filter GlobalFindingsFilter) ([]SearchedFinding, int, error) {
+	if filter.Page < 1 {
+		filter.Page = 1
+	}
+	if filter.PageSize <= 0 {
+		filter.PageSize = DefaultSearchPageSize
+	}
+	if filter.PageSize > MaxSearchPageSize {
+		return nil, 0, fmt.Errorf("page_size must be between 1 and %d", MaxSearchPageSize)
+	}
+	if filter.Page > 1 && filter.Page-1 > (math.MaxInt-filter.PageSize)/filter.PageSize {
+		return nil, 0, fmt.Errorf("page is out of range")
+	}
+	for _, severity := range filter.Severities {
+		switch analyzers.Severity(severity) {
+		case analyzers.SeverityCritical, analyzers.SeverityHigh, analyzers.SeverityMedium, analyzers.SeverityLow, analyzers.SeverityInfo:
+		default:
+			return nil, 0, fmt.Errorf("severity must be critical, high, medium, low, or info")
+		}
+	}
+	whereSQL, args := searchFindingsWhere(filter)
 	var total int
 	if err := d.SQL.QueryRowContext(ctx, "SELECT COUNT(*) FROM findings JOIN scans ON scans.id=findings.scan_id"+whereSQL, args...).Scan(&total); err != nil {
 		return nil, 0, err
