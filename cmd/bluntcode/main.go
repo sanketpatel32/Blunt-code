@@ -267,6 +267,29 @@ func runDoctor(args []string) {
 		os.Exit(code)
 	}
 }
+
+// staticCSP replaces the baseline Content-Security-Policy that the security
+// middleware in internal/api sets via api.StaticGuard. Only the UI needs the
+// extras; API responses keep the strict baseline. The baseline guarantees are
+// preserved (default-src 'self', frame-ancestors 'none'); script-src pins the
+// SHA-256 of the inline theme-bootstrap script in web/index.html (the built
+// cmd/bluntcode/static/index.html carries the identical bytes), so the theme
+// applies at first paint without re-opening scripts to 'unsafe-inline'.
+// style-src needs 'unsafe-inline' because Radix UI positions dropdowns with
+// inline style attributes. If the bootstrap script changes, recompute the
+// hash over the exact bytes between <script> and </script>.
+const staticCSP = "default-src 'self'; script-src 'self' 'sha256-mOPhT864bFfna/DIOUP/k3m5V3MsQvJPSfsIB3Tt+UQ='; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'"
+
+// Cache policy for the embedded UI. Bundle names under /assets/ carry a Vite
+// content hash, so their bytes never change for a given URL and browsers may
+// cache them forever. Everything else — above all index.html, which references
+// the current bundle names — must be revalidated on every use so a stale shell
+// never requests bundles the running binary no longer embeds.
+const (
+	assetCacheControl = "public, max-age=31536000, immutable"
+	shellCacheControl = "no-cache"
+)
+
 func staticHandler() http.Handler {
 	content, err := fs.Sub(staticFiles, "static")
 	if err != nil {
@@ -274,17 +297,58 @@ func staticHandler() http.Handler {
 	}
 	files := http.FileServer(http.FS(content))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/" {
-			name := strings.TrimPrefix(filepath.ToSlash(filepath.Clean(r.URL.Path)), "/")
-			if _, err := fs.Stat(content, name); err != nil {
-				clone := r.Clone(r.Context())
-				clone.URL.Path = "/"
-				files.ServeHTTP(w, clone)
+		// StaticGuard already applied its baseline security headers; replace
+		// the CSP before anything is written (headers stay mutable until the
+		// first write).
+		w.Header().Set("Content-Security-Policy", staticCSP)
+		if r.URL.Path == "/" {
+			w.Header().Set("Cache-Control", shellCacheControl)
+			files.ServeHTTP(w, r)
+			return
+		}
+		name := strings.TrimPrefix(filepath.ToSlash(filepath.Clean(r.URL.Path)), "/")
+		info, err := fs.Stat(content, name)
+		if err != nil {
+			// A miss for a file-like path (hashed bundle, font, image) must
+			// 404 instead of falling back to the app shell: serving
+			// index.html under a .js URL hides broken bundle references
+			// behind a 200 text/html that browsers then cache.
+			if assetLike(name) {
+				http.NotFound(w, r)
 				return
 			}
+			// Extension-less misses are client-side navigations; they get
+			// the shell.
+			clone := r.Clone(r.Context())
+			clone.URL.Path = "/"
+			w.Header().Set("Cache-Control", shellCacheControl)
+			files.ServeHTTP(w, clone)
+			return
+		}
+		if strings.HasPrefix(name, "assets/") && !info.IsDir() {
+			w.Header().Set("Cache-Control", assetCacheControl)
+		} else {
+			w.Header().Set("Cache-Control", shellCacheControl)
 		}
 		files.ServeHTTP(w, r)
 	})
+}
+
+// assetLike reports whether a static-handler miss path refers to a concrete
+// file rather than a client-side route. Paths under /assets/ always do; at
+// the root the file's extension decides, so llms.txt and logo-showcase.html
+// (which exist in the embed FS and never reach the fallback) keep working
+// while a missing favicon.ico or stale bundle 404s.
+func assetLike(name string) bool {
+	if strings.HasPrefix(name, "assets/") {
+		return true
+	}
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".js", ".css", ".map", ".svg", ".png", ".jpg", ".jpeg", ".gif",
+		".webp", ".ico", ".woff", ".woff2", ".txt", ".json", ".webmanifest":
+		return true
+	}
+	return false
 }
 func openBrowser(url string, logger *slog.Logger) {
 	if runtime.GOOS != "windows" {
