@@ -5,6 +5,35 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Workspace tags API wired up**: the finished GET/PUT `/api/v1/workspaces/{id}/tags` handlers are now routed, so the workspaces tag filter can finally see real data.
+- **Richer scan payloads**: the per-workspace scan list honors `page`/`page_size` and returns the `{items,total,page,page_size,has_next}` envelope; all scans serialize `duration_ms`; single-scan and workspace latest-scan responses carry `new_count`/`fixed_count` and `analyzer_runs`; global search returns whole-result `severity_counts`; file-tree nodes carry `language` and `excluded_reason`.
+- **API resilience**: a workspace whose root folder vanished returns 422 `WORKSPACE_ROOT_MISSING` instead of a 500; uppercase UUIDs are accepted; LIKE wildcards in `path`/`q` filters are escaped; control bytes in search queries are rejected with 400; every response carries `Cache-Control: no-store`.
+- **Analyzer inventory speed**: `/api/v1/analyzers` probes tools concurrently with a 30s TTL cache instead of ~4s of sequential process spawns per request.
+- **Deliberate tool actions**: Tools-page Install/Repair/Update now confirm through a dialog before starting the long POST; the dead, never-wired dropdown component is gone.
+- **Per-page document titles** and fuzzy (subsequence) matching in the Ctrl+K command palette.
+
+### Fixed
+- **Partial-coverage honesty feature lit up**: `latest_scan_coverage` serialized PascalCase while the UI read lowercase, so the "N of M workspaces ran with partial analyzer coverage" caveat and per-row partial badges never rendered for any workspace.
+- **Scan history page**: "undefined scans"/bare badge and dead pager (missing paging envelope), Title-Case state badges, 0%-width severity bar segments, UTC day-boundary date filters, and missing empty states for filtered-to-zero ranges.
+- **Scan report**: searching after "Show more" showed 200 stale unfiltered rows; deep links to `?page=N` started mid-stream; out-of-range pages showed a misleading filter empty state; bulk "Suppress selected" only suppressed the last finding; Esc closed the source pane underneath an open dialog; scan-not-found pages reconnected forever; raw `SOURCE_NOT_A_FILE`/`FINDING_NOT_FOUND` codes leaked into the pane.
+- **Fabricated data removed**: the workspace language donut invented file counts/percentages from name weights (and silently dropped the largest language); summary-card sparklines drew fake trends from single numbers; both now use real scan snapshot/trend data or nothing.
+- **Donut drill-through**: clicking a language segment lost the `?lang=` filter (double pushState) and polluted history; the Files page now honors, clears, and restores the param, builds its language rail from real node/extension data (it was permanently empty), pluralizes its summary bar, and stops stacking error surfaces for bad workspace ids.
+- **App shell**: the nav collapsed/expanded in an infinite loop at ~950-1110px and ~430-530px (thousands of DOM toggles per second); `g c` (Go to CLI) was dead; `/` didn't focus the Search page input; the palette showed commands under "Recent searches" plus leftover demo text and had no fuzzy fallback; theme/language/bell controls had no visible keyboard focus ring; overlays stayed open after shortcut navigation; theme toggle announced its state instead of its action; nav "More" panel clipped off-screen below 480px.
+- **Search page**: `?page=` reset to 1 on every load (deep links/reload lost pagination) with unbounded OFFSET queries; facet counts showed page-local numbers against whole-result totals; rows/drawer were mouse-only; loading claimed "0 findings matched"; inconsistent number formatting.
+- **Rule Studio**: the YAML validator rejected valid YAML (apostrophes reported as unclosed quotes; block scalars and sequences failed with "missing ':'"); Tab/Shift+Tab trapped focus in the editor; stale errors survived Reset; line numbers desynced on wrapped lines; the "N active" badge over-counted and overstated where rules apply; `severity: ERROR` coerced silently; Test snippet destroyed typed content.
+- **Tools page**: action buttons clipped off-table at common widths (sticky Actions column, trimmed Details); "0 engines" badge during load; category column and coverage matrix drifted from the backend inventory (`certificate`, `terraform` label); loading skeleton had the wrong shape.
+- **Settings/Pentest**: failed settings/meta loads silently presented hardcoded defaults as stored config (switches now render no assumed state, errors surface); the pentest page showed — and would scan — the wrong workspace after in-page switch + Back, and unknown workspace ids silently rendered the first workspace; tabs no longer force page-wide horizontal overflow; misleading DAST/config copy corrected.
+- **Routing**: percent-encoded path segments were double-encoded into API calls; routes gained a `q` query channel for deep-linkable filters; every page sets a real document title.
+- **Static server**: missing `/assets/*` returned 200 + index.html (now 404); no cache headers anywhere (hashed assets now `immutable`, shell `no-cache`); the CSP blocked the app's own inline theme bootstrap (console error + light-theme flash on every load) and Radix inline styles — script is hash-pinned and `style-src 'self' 'unsafe-inline'` added.
+- **Responsive overflow** (hidden by `overflow-x: clip`, so clipped = unreachable): findings-table wrap, search columns panel (opened off-screen at every width ≥900px), workspace card footers/filter bar, home hero CTA row, history pagination, CLI tab strip, About family chips, mid-label chip wraps.
+- **Light-theme contrast**: warning/success/danger text on soft fills measured 2.4-4.1:1 (now dedicated text-grade tokens ≥4.9:1), `--color-ink-faint` dipped to 4.48:1 on muted surfaces, and the footer legal line used a decorative 3.1:1 token.
+- **Docs that shipped wrong**: the served `llms.txt`/`llm.txt` and the embedded `bluntcode llm` guide (stuck at 0.16.21) documented a pre-0.22 exit-code contract; the CLI page's GitHub Actions recipe lost its backslashes (unrunnable as copied) and omitted `prune`, exit codes 3/4/130, the `pentest` profile and `jsonl` format; README version refs, test count, and mermaid duplicate node id refreshed.
+- **Interrupted scans** now appear in the dashboard Warnings feed with a danger badge and show "—" instead of a fake "0 findings"; the feed's trend chart uses sqrt scaling, follows the selected tab, and never charts unfinished scans.
+- Shell i18n dead keys wired (nav CLI/Rules, footer), and singular/plural "1 findings" fixes across compliance, charts, dependency graph, and scan aria labels.
+
 ## [0.23.0] - 2026-09-07
 
 ### Added

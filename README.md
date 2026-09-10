@@ -51,7 +51,7 @@ flowchart LR
     C --> D8["Trivy"]
     C --> D9["Checkov"]
     C --> D10["License"]
-    C --> D6["TODO"]
+    C --> D11["TODO"]
     D1 --> E["Dedup + fingerprint"]
     D2 --> E
     D3 --> E
@@ -62,10 +62,10 @@ flowchart LR
     D8 --> E
     D9 --> E
     D10 --> E
-    D6 --> E
+    D11 --> E
     E --> F[("SQLite<br>local db")]
     F --> G["Reports<br>MD · HTML · SARIF · CSV · JSON"]
-    F --> H["CI gate<br>exit 0 · 1 · 2"]
+    F --> H["CI gate<br>exit 0 · 1 · 2 · 3 · 4 · 130"]
 ```
 
 ---
@@ -84,14 +84,14 @@ curl -fsSL -o "%TEMP%\install-bluntcode.cmd" https://github.com/sanketpatel32/Bl
 ```
 Installs to `%LOCALAPPDATA%\Programs\BluntCode`, verifies SHA-256, creates Start Menu shortcut, launches app. No admin.
 
-**Options** `install-latest.ps1 -Version 0.21.0 -Silent -DesktopShortcut -WhatIf -WaitForCloseSeconds 30`
+**Options** `install-latest.ps1 -Version 0.23.0 -Silent -DesktopShortcut -WhatIf -WaitForCloseSeconds 30`
 
 **Portable ZIP**
 
-1. Download `BluntCode-0.21.0-windows-amd64.zip` + `.sha256` from [Releases](https://github.com/sanketpatel32/Blunt-code/releases/latest)
+1. Download `BluntCode-0.23.0-windows-amd64.zip` + `.sha256` from [Releases](https://github.com/sanketpatel32/Blunt-code/releases/latest)
 2. Verify & run:
 ```powershell
-$pkg='.\BluntCode-0.21.0-windows-amd64.zip'
+$pkg='.\BluntCode-0.23.0-windows-amd64.zip'
 if((Get-FileHash $pkg -Algorithm SHA256).Hash -ne (Get-Content "$pkg.sha256").Split()[0]){throw 'checksum mismatch'}
 Expand-Archive $pkg -DestinationPath .\BluntCode -Force; .\BluntCode\BluntCode*\bluntcode.exe
 ```
@@ -128,17 +128,16 @@ Keyboard: `g h/w/t/s/a` navigate · `n` add workspace · `/` search · `?` help 
 | **Workspaces that scale** | Tag chips with `+N` overflow, debounced tag filter, sort by Name / Last scan / Findings, 51→2 queries at 50 workspaces |
 | **Reports you can use** | Sticky filter toolbar, severity-tinted row edges, removable chips, `page`/`page_size` toggles (25/50/100/200 rows), hostile-corpus HTML-escaped |
 | **CI-grade CLI** | Profiles, gates, baselines, watch mode — see [CLI](#-cli) |
-| **Tested** | 700+ automated tests (Go + web) |
+| **Tested** | 1,600+ automated tests (Go + web) |
 
-<details><summary><strong>What's new in 0.21.x</strong> — quieter scans, live progress, readable findings</summary>
+<details><summary><strong>What's new in 0.23.x</strong> — provenance, coverage-aware baselines, hardened exports</summary>
 
-- **Smart skip for generated files** — discovery no longer reads build output, dependency dirs, minified bundles, lockfiles, or files over 10 MiB; artifact findings are filtered before persistence (secret detectors still surface credentials baked into shipped bundles).
-- **Live scan progress with real severity totals** — per-analyzer findings counts and critical/high/medium/low chips update while the scan runs, with no double-counting on reconnect.
-- **Readable findings table** — path tail + line number in FILE (full path on hover, click opens source pane), one tool badge per row, human Type labels, no duplicate filter chips.
-- **Full headless CLI + `/cli` docs page** — every UI capability (workspaces, findings, reports, history compare, suppressions, rules, tools, `pentest probe`, stats/trends/risk, doctor, update) scriptable from terminal or CI; see [CLI](#-cli) and [docs/CLI.md](docs/CLI.md).
-- **Analysis workbench** — docked source viewer beside the list, verdict-led header with risk grade, one always-visible filter toolbar, load-more pagination.
+- **Auditable scan provenance (IMP-07..16 hardening theme)** — scan snapshots record content digests, effective configuration, analyzer/rule/parser versions, and dirty-tree state, so a stored result can be tied to the exact bytes that produced it.
+- **Coverage-aware baselines** — versioned fingerprints separate logical-issue from occurrence identity, and prior-scan comparisons mark findings `not_evaluated` instead of `Fixed` when the analyzer that would have caught them was disabled, failed, or excluded; incremental cache reuse keys on input digests and tool versions, never mtime alone.
+- **Hardened exports & updates** — every exported artifact (HTML, CSV, SARIF, JSON, markdown, baselines) is written atomically with CSV formula-injection neutralization and escaped GitHub workflow commands; managed-tool installs extract to a staged directory, reject zip-slip paths, and swap atomically with rollback.
+- **Evidence-grade risk & accessibility** — risk grades pair with scan coverage and a `complete` flag so partial scans can't present an unqualified grade; `docs/release-evidence.md` and `docs/accessibility.md` state exactly what is verified, narrowing the WCAG claim to tested evidence.
 
-> Earlier releases shipped the shadcn/Tailwind UI, global search, risk scores, scan pruning, workspace tags, CSV/SARIF/JSONL exports, and gated CI. See [CHANGELOG.md](CHANGELOG.md).
+> Earlier releases shipped coverage-aware gates, the headless CLI, live scan progress, workspace tags, suppression workflows, CSV/SARIF/JSONL exports, and the shadcn/Tailwind UI. See [CHANGELOG.md](CHANGELOG.md).
 </details>
 
 ---
@@ -332,7 +331,7 @@ Installer auto-cleans Start Menu shortcut and refuses while app is running.
 ```powershell
 go test ./...                # Go vet/build/tests
 cd web; npm test; npm run build
-.\scripts\package.ps1 -Version 0.21.0
+.\scripts\package.ps1 -Version 0.23.0
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) · [docs/architecture.md](docs/architecture.md) — shadcn tokens live in `web/src/tokens.css` (`--color-paper/ink/accent`, `--radius-*`, `--shadow-*`), components in `web/src/components/ui/*`.
