@@ -20,6 +20,20 @@ if (-not $SkipBuild) {
 }
 
 $output = [IO.Path]::GetFullPath($OutputDir)
+
+# The zip must never ship a binary whose reported version disagrees with the
+# release label: v0.23.0 was packaged with -SkipBuild over a stale root exe and
+# shipped a 0.21.2 binary, so every in-app update "succeeded" while the app
+# kept offering 0.23.0. Refuse to package on mismatch.
+$packagedExe = Join-Path $root 'bluntcode.exe'
+if (-not (Test-Path -LiteralPath $packagedExe)) {
+  throw "bluntcode.exe not found at $packagedExe - build first (drop -SkipBuild, or build in the worktree)."
+}
+$versionLine = (& $packagedExe '--version' 2>$null | Select-Object -First 1)
+if ("$versionLine" -notmatch "(\d+\.\d+\.\d+)" -or $Matches[1] -ne $Version) {
+  throw "Version mismatch: bluntcode.exe reports '$versionLine' but packaging $Version. The exe is stale - rebuild from the exact tagged commit."
+}
+
 $releaseName = "BluntCode-$Version-windows-amd64"
 $payload = Join-Path $output $releaseName
 $archive = Join-Path $output "$releaseName.zip"

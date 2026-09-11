@@ -124,3 +124,9 @@ These are tracked as not-yet-automated; none is claimed as done:
 4. **Git-history input class** (IMP-02): no analyzer currently consumes history as a distinct input; nothing to test until one does.
 5. **Whole-scan outbound-denied assertion, vuln-data age staleness, pentest cancellation** (IMP-04) and **per-endpoint origin tests** (IMP-05): per-component coverage as listed above; the aggregate assertions are not scripted.
 6. **CI**: the repository has no CI (GitHub Actions removed deliberately); every automated item above runs locally via `go test ./...` and `npm test` in `web/`.
+
+## Post-release correction: v0.23.0 binary (2026-09-12)
+
+The v0.23.0 zip originally published on the release (sha256 `8ac86247…`) contained a stale binary compiled 2026-09-06 19:30 IST, before the tag existed; it reported `--version 0.21.2`. Every in-app update to 0.23.0 therefore "succeeded" while the app kept advertising 0.23.0 as available — the update could never converge. Cause: `scripts/package.ps1 -SkipBuild` copies the repo-root `bluntcode.exe` without checking it matches the version being packaged.
+
+Repair (2026-09-12): rebuilt the zip from the exact tag commit `ae2f69c` in a clean worktree (exe reports 0.23.0), clobber-refreshed the release assets (zip sha256 now `807b14f8…`, verified by fresh CDN download), and added a version-match guard to `scripts/package.ps1` that refuses to package when `bluntcode.exe --version` disagrees with `-Version`. v0.22.0's zip was checked and is correct.
