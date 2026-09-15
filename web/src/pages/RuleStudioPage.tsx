@@ -4,6 +4,7 @@ import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { CodeEditor, type CodeEditorLanguage } from '../components/CodeEditor';
+import { ConfirmationDialog } from '../components/dialogs';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { PageHeader } from '../components/PageHeader';
 
@@ -174,6 +175,37 @@ function validateYaml(text: string): string | null {
   return null;
 }
 
+// Client-side sanity lint for the rule's pattern value. The rules list is a
+// localStorage scratchpad (never sent to the backend), so this is intentionally
+// local-only. validateYaml accepts any balanced "key: value" line, which let an
+// obviously malformed pattern like "(" save cleanly and render mock findings.
+// Backslash-escaped characters (e.g. `\(` matching a literal paren) are skipped.
+export function lintPattern(pattern: string | undefined): string | null {
+  if (!pattern) return null;
+  let parenDepth = 0;
+  let inBracket = false;
+  let quote: '"' | "'" | null = null;
+  let escaped = false;
+  for (const ch of pattern) {
+    if (escaped) { escaped = false; continue; }
+    if (ch === '\\') { escaped = true; continue; }
+    if (quote) {
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") { quote = ch; continue; }
+    if (ch === '(') parenDepth += 1;
+    else if (ch === ')') parenDepth -= 1;
+    else if (ch === '[') inBracket = true;
+    else if (ch === ']') inBracket = false;
+  }
+  if (quote) return 'Pattern looks malformed: unclosed quote';
+  if (parenDepth > 0) return "Pattern looks malformed: unbalanced '('";
+  if (parenDepth < 0) return "Pattern looks malformed: unbalanced ')'";
+  if (inBracket) return "Pattern looks malformed: unbalanced '['";
+  return null;
+}
+
 type MockFinding = { file: string; line: number; message: string; severity: CustomRule['severity'] };
 
 const LANG_EXTENSIONS: Record<string, string> = {
@@ -220,17 +252,20 @@ export function RuleStudioPage() {
   const [language, setLanguage] = useState<CodeEditorLanguage>('yaml');
   const [rules, setRules] = useState<CustomRule[]>(() => loadRules());
   const [error, setError] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<CustomRule | null>(null);
   const reduced = useReducedMotion();
 
   const parsed = useMemo(() => parseYamlLike(yaml), [yaml]);
   const yamlValidationError = useMemo(() => validateYaml(yaml), [yaml]);
+  const patternLint = useMemo(() => lintPattern(parsed.pattern), [parsed]);
   const findings = useMemo(() => mockFindings(parsed), [parsed]);
-  const canSave = Boolean(parsed.id && parsed.pattern && parsed.message) && !yamlValidationError;
+  const canSave = Boolean(parsed.id && parsed.pattern && parsed.message) && !yamlValidationError && !patternLint;
 
   useEffect(() => { saveRules(rules); }, [rules]);
 
   function handleSave() {
     if (yamlValidationError) { setError(yamlValidationError); return; }
+    if (patternLint) { setError(patternLint); return; }
     if (!canSave || !parsed.id) { setError('Fill id, pattern, and message.'); return; }
     setError(null);
     const rule: CustomRule = {
@@ -253,6 +288,7 @@ export function RuleStudioPage() {
   }
   function remove(id: string) {
     setRules((prev) => prev.filter((r) => r.id !== id));
+    setPendingDelete(null);
   }
 
   function handleInsertSnippet() {
@@ -329,13 +365,14 @@ export function RuleStudioPage() {
               onSave={handleSave}
               minHeight="14rem"
             />
-            {!canSave && !yamlValidationError && <p className="text-xs text-[var(--color-ink-faint)]">Add at least <code>id</code>, <code>pattern</code>, and <code>message</code> to enable save.</p>}
+            {patternLint && <p role="status" className="text-xs text-[var(--color-warning)]">{patternLint} — fix the pattern to enable save and preview.</p>}
+            {(!parsed.id || !parsed.pattern || !parsed.message) && <p className="text-xs text-[var(--color-ink-faint)]">Add at least <code>id</code>, <code>pattern</code>, and <code>message</code> to enable save.</p>}
             <div className="flex flex-wrap gap-2">
               <Button onClick={handleSave} disabled={!canSave} aria-label="Save rule">Save rule</Button>
               <Button variant="outline" onClick={handleReset} aria-label="Reset editor">Reset</Button>
               <Button variant="secondary" onClick={handleInsertSnippet} aria-label="Insert test snippet">Test snippet</Button>
             </div>
-            <p className="text-xs text-[var(--color-ink-faint)]">Tip: Tab inserts 2 spaces · Shift+Tab moves focus out · <kbd className="rounded border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-1 py-0.5 font-mono text-xs">Ctrl</kbd> + <kbd className="rounded border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-1 py-0.5 font-mono text-xs">S</kbd> inside the editor saves. Monaco loads automatically if installed.</p>
+            <p className="text-xs text-[var(--color-ink-faint)]">Tip: Tab inserts 2 spaces · Press <kbd className="rounded border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-1 py-0.5 font-mono text-xs">Esc</kbd>, then <kbd className="rounded border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-1 py-0.5 font-mono text-xs">Tab</kbd> to move focus out of the editor · <kbd className="rounded border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-1 py-0.5 font-mono text-xs">Ctrl</kbd> + <kbd className="rounded border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-1 py-0.5 font-mono text-xs">S</kbd> inside the editor saves. Monaco loads automatically if installed.</p>
           </CardContent>
         </Card>
 
@@ -345,7 +382,11 @@ export function RuleStudioPage() {
             <CardDescription>Mock findings generated from the current pattern.</CardDescription>
           </CardHeader>
           <CardContent>
-            {!parsed.pattern ? <p className="text-sm text-[var(--color-ink-faint)]">Enter a pattern to see preview findings.</p> : findings.length ? (
+            {yamlValidationError ? (
+              <p className="text-sm text-[var(--color-ink-faint)]">Preview suppressed — fix the YAML errors shown in the editor to see mock findings.</p>
+            ) : patternLint ? (
+              <p className="text-sm text-[var(--color-warning)]">{patternLint} — preview suppressed until the pattern is fixed.</p>
+            ) : !parsed.pattern ? <p className="text-sm text-[var(--color-ink-faint)]">Enter a pattern to see preview findings.</p> : findings.length ? (
               <ul className="space-y-2" aria-label="Preview findings">
                 {findings.map((f, i) => (
                   <li key={i} className="flex items-start justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--color-rule-faint)] bg-[var(--color-surface)] p-3">
@@ -392,7 +433,7 @@ export function RuleStudioPage() {
                       </span>
                       <span className="text-xs font-medium text-[var(--color-ink-soft)]">{r.enabled ? 'Enabled' : 'Disabled'}</span>
                     </label>
-                    <Button variant="ghost" size="sm" onClick={() => remove(r.id)} aria-label={`Delete ${r.id}`} className="text-[var(--color-danger)] hover:text-[var(--color-danger)] hover:bg-[var(--color-danger-soft)]">Delete</Button>
+                    <Button variant="ghost" size="sm" onClick={() => setPendingDelete(r)} aria-label={`Delete ${r.id}`} className="text-[var(--color-danger)] hover:text-[var(--color-danger)] hover:bg-[var(--color-danger-soft)]">Delete</Button>
                   </div>
                 </CardContent>
               </Card>
@@ -400,6 +441,17 @@ export function RuleStudioPage() {
           </div>
         )}
       </section>
+
+      {pendingDelete && (
+        <ConfirmationDialog
+          title="Delete this rule?"
+          description={`Rule "${pendingDelete.id}" will be removed from the local scratchpad (bluntcode.customRules). This cannot be undone.`}
+          confirmLabel="Delete rule"
+          busy={false}
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={() => remove(pendingDelete.id)}
+        />
+      )}
     </div>
   );
 }

@@ -127,6 +127,7 @@ export function CodeEditor({
 }: CodeEditorProps) {
   const reduced = useReducedMotion();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const highlightRef = useRef<HTMLPreElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
   const [monacoReady, setMonacoReady] = useState(false);
@@ -252,9 +253,12 @@ export function CodeEditor({
       });
       return;
     }
-    // Escape blurs the textarea (standard editor convention) so keyboard users can leave
+    // Escape moves focus to the editor's container wrapper (standard editor
+    // convention) instead of blurring to <body>, which stranded keyboard users:
+    // from the wrapper (tabIndex={-1}) the next Tab continues forward through
+    // the page toward Save/Reset.
     if (e.key === 'Escape') {
-      e.currentTarget.blur();
+      containerRef.current?.focus();
       return;
     }
     // Ctrl/Cmd+S -> save
@@ -274,6 +278,8 @@ export function CodeEditor({
           ref={monacoContainerRef}
           role="region"
           aria-label={ariaLabel}
+          tabIndex={-1}
+          onKeyDown={(e) => { if (e.key === 'Escape') e.currentTarget.focus(); }}
           className="overflow-hidden rounded-[var(--radius-md)] border bg-[var(--color-surface)]"
           style={{
             minHeight,
@@ -293,6 +299,8 @@ export function CodeEditor({
   return (
     <div className="space-y-2">
       <div
+        ref={containerRef}
+        tabIndex={-1}
         className="flex overflow-hidden rounded-[var(--radius-md)] border bg-[var(--color-surface-muted)] focus-within:ring-2 focus-within:ring-[var(--color-focus)] focus-within:ring-offset-2"
         style={{
           borderColor: hasError ? 'var(--color-danger)' : 'var(--color-rule)',
