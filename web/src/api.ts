@@ -1,4 +1,4 @@
-import type { AnalyzerStatus, FindingPage, FindingsQuery, FixedFindingsResponse, GlobalStats, PathOverride, PentestProbeResult, RecentScansResponse, Report, RiskProfile, Scan, ScanPage, SearchFindingsPage, SeverityTrendPoint, SourcePreview, Suppression, Tool, TreeNode, Workspace } from './types';
+import type { AnalyzerStatus, CompareResult, FindingPage, FindingsQuery, FixedFindingsResponse, GlobalStats, PathOverride, PentestProbeResult, RecentScansResponse, Report, RiskProfile, Scan, ScanPage, SearchFindingsPage, SeverityTrendPoint, SourcePreview, Suppression, Tool, TreeNode, Workspace } from './types';
 
 const PREFIX = '/api/v1';
 
@@ -103,6 +103,8 @@ export const api = {
   findingPreview: (scanId: string, findingId: string) => request<SourcePreview>(`/scans/${encodeURIComponent(scanId)}/findings/${encodeURIComponent(findingId)}/preview`),
   report: (id: string) => request<Report>(`/scans/${encodeURIComponent(id)}/report`),
   fixedFindings: (scanId: string) => request<FixedFindingsResponse>(`/scans/${encodeURIComponent(scanId)}/fixed`),
+  /** Diff one scan against another; pass (newer, older) so "new"/"fixed" read correctly. `available:false` means no diff could be computed. */
+  compareScans: (id: string, withId: string) => request<CompareResult>(`/scans/${encodeURIComponent(id)}/compare?with=${encodeURIComponent(withId)}`),
   tools: async () => list<Tool>(await request<Tool[] | { tools?: Tool[] }>('/tools')),
   /** Backend capability inventory: every analyzer with category, profiles, network use, and readiness. */
   analyzers: async () => list<AnalyzerStatus>(await request<AnalyzerStatus[] | { items?: AnalyzerStatus[] }>('/analyzers')),

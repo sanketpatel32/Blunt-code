@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import '../css/history.css';
 import type { Scan } from '../types';
@@ -9,6 +9,7 @@ import { useLoad } from '../hooks/useLoad';
 import { Empty, ErrorPanel } from '../components/ui';
 import { ScanIcon } from '../components/icons';
 import { SkeletonTable } from '../components/skeletons';
+import { ComparePanel } from '../components/ComparePanel';
 import { WorkspaceContextSidebar } from '../components/WorkspaceContext';
 import { PageHeader } from '../components/PageHeader';
 import { Badge } from '../components/ui/badge';
@@ -37,11 +38,39 @@ function syncPageParam(next: number) {
   window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}`);
 }
 
+/** Reads an in-progress or completed comparison from `?compare={a}&with={b}` so a deep link or reload restores it. Comparing a scan with itself is treated as a plain selection. */
+function initialCompareFromUrl(): { a?: string; b?: string } {
+  const params = new URLSearchParams(window.location.search);
+  const a = params.get('compare') ?? undefined;
+  const b = params.get('with') ?? undefined;
+  if (!a) return {};
+  return { a, b: b && b !== a ? b : undefined };
+}
+
+/** Mirrors the compare selection into `?compare=&with=` (keeping other params) without adding a history entry; a full cancel removes both. */
+function syncCompareParams(a?: string, b?: string) {
+  const params = new URLSearchParams(window.location.search);
+  if (a) params.set('compare', a); else params.delete('compare');
+  if (b) params.set('with', b); else params.delete('with');
+  const query = params.toString();
+  window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}`);
+}
+
+/** Scans that can take part in a comparison: finished cleanly or with warnings, plus cancelled scans — those are partial, so picking one asks for an explicit "compare anyway". */
+export function isComparableScan(scan: Scan): boolean {
+  return scan.state === 'completed' || scan.state === 'completed_with_warnings' || scan.state === 'cancelled';
+}
+
 interface AllScansPages { items: Scan[]; total: number; }
 
 export function HistoryPage({ workspaceId, go }: { workspaceId: string; go: (r: Route) => void }) {
   const [page, setPage] = useState(initialPageFromUrl);
   const dateFilter = useDateFilter();
+  // Two-phase compare selection: `a` is the scan the user started from, `b` the
+  // "with this" pick. Both set → the panel above the table shows the diff. A
+  // cancelled (partial) scan waits in `pendingPartial` for an explicit accept.
+  const [pair, setPair] = useState(initialCompareFromUrl);
+  const [pendingPartial, setPendingPartial] = useState<Scan>();
   const workspace = useLoad(() => api.workspace(workspaceId), [workspaceId]);
   const state = useLoad(() => api.scansPage(workspaceId, page, historyPageSize), [workspaceId, page]);
   // A date filter must see the WHOLE history, not just the six rows of the
@@ -75,6 +104,52 @@ export function HistoryPage({ workspaceId, go }: { workspaceId: string; go: (r: 
   useEffect(() => {
     if (state.data && state.data.items.length === 0 && state.data.total > 0 && page > 1) { setPage(1); syncPageParam(1); }
   }, [state.data, page]);
+
+  // Compare selection flow. The diff itself is requested by ComparePanel as
+  // (newer, older) — the page only tracks the picked ids in click order.
+  const cancelCompare = useCallback(() => {
+    setPair({});
+    setPendingPartial(undefined);
+    syncCompareParams();
+  }, []);
+  const startCompare = (scan: Scan) => {
+    if (scan.state === 'cancelled') { setPendingPartial(scan); return; }
+    setPendingPartial(undefined);
+    setPair({ a: scan.id });
+    syncCompareParams(scan.id);
+  };
+  const chooseSecond = (scan: Scan) => {
+    if (!pair.a || scan.id === pair.a) return;
+    if (scan.state === 'cancelled') { setPendingPartial(scan); return; }
+    setPendingPartial(undefined);
+    setPair({ a: pair.a, b: scan.id });
+    syncCompareParams(pair.a, scan.id);
+  };
+  const acceptPartial = () => {
+    const scan = pendingPartial;
+    if (!scan) return;
+    setPendingPartial(undefined);
+    if (pair.a && scan.id !== pair.a) { setPair({ a: pair.a, b: scan.id }); syncCompareParams(pair.a, scan.id); }
+    else { setPair({ a: scan.id }); syncCompareParams(scan.id); }
+  };
+  const onComparePick = (scan: Scan) => (pair.a ? chooseSecond(scan) : startCompare(scan));
+  // Escape is the keyboard way out of any compare state — mid-selection or a shown panel.
+  useEffect(() => {
+    if (!pair.a && !pendingPartial) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') cancelCompare(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [pair.a, pendingPartial, cancelCompare]);
+  // Scans already in hand (either table source) feed the strip's copy; the strip
+  // fetches on its own only when the base scan lives on another server page.
+  const knownScans = new Map<string, Scan>();
+  for (const scan of [...(state.data?.items ?? []), ...(allPages.data?.items ?? [])]) knownScans.set(scan.id, scan);
+  const compareSelecting = !!pair.a && !pair.b;
+  const stripBaseId = pendingPartial?.id ?? pair.a;
+  const stripBaseScan = pendingPartial ?? (pair.a ? knownScans.get(pair.a) : undefined);
+  // Rows always offer "Compare"; once a base is picked they swap to "with this".
+  // With the pair complete the panel is up, so the rows drop compare controls.
+  const tableCompareProps = pair.b ? {} : pair.a ? { compareBaseId: pair.a, onComparePick } : { onComparePick };
   return (
     <div className="page workspace-page">
       <WorkspaceContextSidebar id={workspaceId} current={{ page: 'history', id: workspaceId }} onNavigate={go} />
@@ -83,7 +158,7 @@ export function HistoryPage({ workspaceId, go }: { workspaceId: string; go: (r: 
           eyebrow="History"
           title={workspace.data?.name ? `${workspace.data.name} — History` : 'Previous analyses'}
           badge={view.data ? <Badge variant="secondary" className="text-xs font-mono tabular-nums">{totalScans} {totalScans === 1 ? 'scan' : 'scans'}</Badge> : undefined}
-          description="Past analysis reports, severity trends, and findings stored locally on this computer."
+          description="Every scan of this workspace — open a report or compare two scans to see what changed."
         />
         <div className="history-filter-bar">
           <label className="history-filter-field"><span className="history-filter-label">From</span><span className="history-filter-input-wrap"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 9h18"/></svg><input type="date" value={dateFilter.from} onChange={(e)=>{dateFilter.setFrom(e.target.value); setPage(1); syncPageParam(1);}} className="history-filter-input" aria-label="Filter from date" /></span></label>
@@ -91,9 +166,31 @@ export function HistoryPage({ workspaceId, go }: { workspaceId: string; go: (r: 
           {dateFilter.hasFilter && <button type="button" className="history-filter-clear" onClick={()=>{dateFilter.setFrom(''); dateFilter.setTo(''); setPage(1); syncPageParam(1);}} aria-label="Clear date filters">✕ Clear</button>}
           <span className="history-filter-count tabular-nums" aria-live="polite">{view.data ? `${totalScans} scan${totalScans === 1 ? '' : 's'}` : ''}</span>
         </div>
+        {(pendingPartial || compareSelecting) && stripBaseId && <CompareStrip baseId={stripBaseId} baseScan={stripBaseScan} pendingScan={pendingPartial} onCancel={cancelCompare} onAccept={acceptPartial} />}
+        {pair.a && pair.b && <ComparePanel aId={pair.a} bId={pair.b} />}
         {view.loading ? <SkeletonTable rows={6} cols={6} /> : view.error ? <ErrorPanel error={view.error} retry={view.reload} /> : filtering
-          ? <HistoryTable scans={allPages.data?.items ?? []} go={go} paging={{ page: 1, pageSize: historyPageSize, total: allPages.data?.total ?? 0, hasNext: false, onPage: () => {}, filtered: true }} dateFrom={dateFilter.from} dateTo={dateFilter.to} />
-          : <HistoryTable scans={state.data?.items ?? []} go={go} paging={{ page, pageSize: historyPageSize, total: state.data?.total ?? 0, hasNext: state.data?.has_next ?? false, onPage: gotoPage }} dateFrom={dateFilter.from} dateTo={dateFilter.to} />}
+          ? <HistoryTable scans={allPages.data?.items ?? []} go={go} paging={{ page: 1, pageSize: historyPageSize, total: allPages.data?.total ?? 0, hasNext: false, onPage: () => {}, filtered: true }} dateFrom={dateFilter.from} dateTo={dateFilter.to} {...tableCompareProps} />
+          : <HistoryTable scans={state.data?.items ?? []} go={go} paging={{ page, pageSize: historyPageSize, total: state.data?.total ?? 0, hasNext: state.data?.has_next ?? false, onPage: gotoPage }} dateFrom={dateFilter.from} dateTo={dateFilter.to} {...tableCompareProps} />}
+      </div>
+    </div>
+  );
+}
+
+/** Sticky instruction strip for compare selection mode. Names the base scan and points at the "with this" buttons; when a cancelled (partial) scan was picked, it swaps to an explicit "compare anyway" acceptance. The base scan is usually already in the table rows; if the selection came from a deep link pointing at another server page, it is fetched here. */
+function CompareStrip({ baseId, baseScan, pendingScan, onCancel, onAccept }: { baseId: string; baseScan?: Scan; pendingScan?: Scan; onCancel: () => void; onAccept: () => void }) {
+  const loaded = useLoad(async (): Promise<Scan | undefined> => baseScan ?? ((await api.scan(baseId)) ?? undefined), [baseId, baseScan?.id]);
+  const accepting = !!pendingScan;
+  const subject = pendingScan ?? loaded.data;
+  return (
+    <div className={accepting ? 'compare-strip compare-strip--warning' : 'compare-strip'} role="region" aria-label="Scan comparison selection" aria-busy={!subject}>
+      {accepting
+        ? <p>The <strong>{date(pendingScan!.finished_at ?? pendingScan!.started_at)}</strong> scan is a partial scan (cancelled before every analyzer finished). Compare anyway?</p>
+        : subject
+          ? <p>Comparing the <strong>{date(subject.finished_at ?? subject.started_at)}</strong> scan (<strong className="tabular-nums">{subject.total_findings ?? 0}</strong> findings) with… — pick a second scan below</p>
+          : <p>Loading scan details…</p>}
+      <div className="compare-strip-actions">
+        {accepting && <button type="button" className="button secondary" onClick={onAccept}>Compare anyway</button>}
+        <button type="button" className="text-button" onClick={onCancel}>{accepting ? 'Cancel' : 'Cancel compare'}</button>
       </div>
     </div>
   );
@@ -201,7 +298,7 @@ function skipCoverageSummary(skip?: Record<string, number>): string {
     .join(', ');
 }
 
-export function HistoryTable({ scans, go, paging, dateFrom, dateTo }: { scans: Scan[]; go: (r: Route) => void; paging?: HistoryPaging; dateFrom?: string; dateTo?: string }) {
+export function HistoryTable({ scans, go, paging, dateFrom, dateTo, compareBaseId, onComparePick }: { scans: Scan[]; go: (r: Route) => void; paging?: HistoryPaging; dateFrom?: string; dateTo?: string; compareBaseId?: string; onComparePick?: (scan: Scan) => void }) {
   const [clientPage, setClientPage] = useState(0);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const toggleExpanded = (id: string) => setExpanded((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
@@ -249,6 +346,6 @@ export function HistoryTable({ scans, go, paging, dateFrom, dateTo }: { scans: S
     const tone = scan.id === scans[0].id ? scan.state === 'failed' ? 'row-danger' : scan.state === 'completed_with_warnings' ? 'row-warning' : '' : '';
     const isOpen = expanded.has(scan.id);
     const runs = scan.analyzer_runs ?? [];
-    return <Fragment key={scan.id}><tr className={[tone, isOpen ? 'is-expanded' : ''].filter(Boolean).join(' ') || undefined}><td title={date(scan.finished_at ?? scan.started_at)}><span className="history-date"><button type="button" className="history-disclose" aria-expanded={isOpen} aria-controls={`history-detail-${scan.id}`} aria-label={`${isOpen ? 'Hide' : 'Show'} details for the scan from ${relativeTime(scan.finished_at ?? scan.started_at)}`} onClick={() => toggleExpanded(scan.id)}><span className="disclose-arrow" aria-hidden="true">▸</span></button>{relativeTime(scan.finished_at ?? scan.started_at)}</span></td><td><div className="history-status"><Badge variant={stateDisplay.variant} className="whitespace-nowrap">{stateDisplay.label}</Badge>{scan.profile && <span className="badge profile-badge">{scan.profile}</span>}</div></td><td><FindingsCell scan={scan} /></td><td>{compactDuration(scan.duration_ms)}</td><td><div className="table-actions"><button type="button" className="text-button" onClick={() => go({ page: 'scan', id: scan.id })}>Open report</button>{hasMarkdownExport(scan) && <><a className="text-button" href={api.markdownUrl(scan.id)}>Export .md</a><a className="text-button" href={api.exportUrl(scan.id, 'sarif')}>SARIF</a><a className="text-button" href={api.exportUrl(scan.id, 'html')}>HTML</a><a className="text-button" href={api.exportUrl(scan.id, 'json')}>JSON</a></>}</div></td></tr>{isOpen && <tr className="history-detail-row"><td colSpan={6}><div className="history-detail" id={`history-detail-${scan.id}`}><dl className="history-detail-meta"><div><dt>Started</dt><dd>{date(scan.started_at)}</dd></div><div><dt>Finished</dt><dd>{date(scan.finished_at)}</dd></div>{scan.profile && <div><dt>Profile</dt><dd>{scan.profile}</dd></div>}</dl>{scan.snapshot && <p className="history-coverage">Selected {scan.snapshot.selected_file_count ?? 0} of {scan.snapshot.candidate_file_count ?? 0} candidate files{skipCoverageSummary(scan.snapshot.skip_counts) && <> — skipped {skipCoverageSummary(scan.snapshot.skip_counts)}</>}{(scan.snapshot.exclusions?.length ?? 0) > 0 && <> · {scan.snapshot.exclusions!.length} exclusion{scan.snapshot.exclusions!.length === 1 ? '' : 's'} in effect</>}</p>}{scan.error_summary && <div className="inline-warning">Warning: {scan.error_summary}</div>}{runs.length > 0 && <ul className="history-analyzers">{runs.map((run) => <li key={run.analyzer_id}><span>{analyzerName(run.analyzer_id)}</span><span className={`state ${run.status}`}>{run.status.replaceAll('_', ' ')}</span></li>)}</ul>}</div></td></tr>}</Fragment>;
+    return <Fragment key={scan.id}><tr className={[tone, isOpen ? 'is-expanded' : ''].filter(Boolean).join(' ') || undefined}><td title={date(scan.finished_at ?? scan.started_at)}><span className="history-date"><button type="button" className="history-disclose" aria-expanded={isOpen} aria-controls={`history-detail-${scan.id}`} aria-label={`${isOpen ? 'Hide' : 'Show'} details for the scan from ${relativeTime(scan.finished_at ?? scan.started_at)}`} onClick={() => toggleExpanded(scan.id)}><span className="disclose-arrow" aria-hidden="true">▸</span></button>{relativeTime(scan.finished_at ?? scan.started_at)}</span></td><td><div className="history-status"><Badge variant={stateDisplay.variant} className="whitespace-nowrap">{stateDisplay.label}</Badge>{scan.profile && <span className="badge profile-badge">{scan.profile}</span>}</div></td><td><FindingsCell scan={scan} /></td><td>{compactDuration(scan.duration_ms)}</td><td><div className="table-actions"><button type="button" className="text-button" onClick={() => go({ page: 'scan', id: scan.id })}>Open report</button>{onComparePick && !compareBaseId && isComparableScan(scan) && <button type="button" className="text-button" onClick={() => onComparePick(scan)}>Compare</button>}{onComparePick && compareBaseId && (scan.id === compareBaseId ? <span className="compare-base-tag">Base scan</span> : isComparableScan(scan) && <button type="button" className="text-button compare-pick" onClick={() => onComparePick(scan)}>with this</button>)}{hasMarkdownExport(scan) && <><a className="text-button" href={api.markdownUrl(scan.id)}>Export .md</a><a className="text-button" href={api.exportUrl(scan.id, 'sarif')}>SARIF</a><a className="text-button" href={api.exportUrl(scan.id, 'html')}>HTML</a><a className="text-button" href={api.exportUrl(scan.id, 'json')}>JSON</a></>}</div></td></tr>{isOpen && <tr className="history-detail-row"><td colSpan={6}><div className="history-detail" id={`history-detail-${scan.id}`}><dl className="history-detail-meta"><div><dt>Started</dt><dd>{date(scan.started_at)}</dd></div><div><dt>Finished</dt><dd>{date(scan.finished_at)}</dd></div>{scan.profile && <div><dt>Profile</dt><dd>{scan.profile}</dd></div>}</dl>{scan.snapshot && <p className="history-coverage">Selected {scan.snapshot.selected_file_count ?? 0} of {scan.snapshot.candidate_file_count ?? 0} candidate files{skipCoverageSummary(scan.snapshot.skip_counts) && <> — skipped {skipCoverageSummary(scan.snapshot.skip_counts)}</>}{(scan.snapshot.exclusions?.length ?? 0) > 0 && <> · {scan.snapshot.exclusions!.length} exclusion{scan.snapshot.exclusions!.length === 1 ? '' : 's'} in effect</>}</p>}{scan.error_summary && <div className="inline-warning">Warning: {scan.error_summary}</div>}{runs.length > 0 && <ul className="history-analyzers">{runs.map((run) => <li key={run.analyzer_id}><span>{analyzerName(run.analyzer_id)}</span><span className={`state ${run.status}`}>{run.status.replaceAll('_', ' ')}</span></li>)}</ul>}</div></td></tr>}</Fragment>;
   })}</Fragment>)}</tbody></table></div>{scrollCue && <div aria-hidden="true" style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: '2.25rem', pointerEvents: 'none', borderRadius: '0 var(--radius-card) var(--radius-card) 0', background: 'linear-gradient(to right, transparent, var(--color-surface))' }} />}</div><nav className="history-pagination" aria-label="Scan history pagination"><span className="history-pagination-count tabular-nums">Showing <strong>{shownFrom}–{shownTo}</strong> of <strong>{windowTotal}</strong> scans</span>{!filteredMode && <div><button type="button" className="button secondary" onClick={() => serverMode ? paging!.onPage(paging!.page - 1) : setClientPage(currentPage - 1)} disabled={serverMode ? paging!.page <= 1 : currentPage === 0}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="14" height="14"><path d="M15 18 9 12l6-6" strokeLinecap="round" strokeLinejoin="round"/></svg>Previous</button><output aria-live="polite" className="tabular-nums">Page {serverMode ? paging!.page : currentPage + 1} of {pageCount}</output><button type="button" className="button secondary" onClick={() => serverMode ? paging!.onPage(paging!.page + 1) : setClientPage(currentPage + 1)} disabled={serverMode ? !paging!.hasNext : currentPage >= pageCount - 1}>Next<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="14" height="14"><path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round"/></svg></button></div>}</nav></>;
 }

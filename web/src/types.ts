@@ -13,6 +13,8 @@ export interface Workspace {
   last_scan_at?: string | null;
   last_opened_at?: string | null;
   latest_scan?: Scan;
+  /** Newest scan that actually finished; present only when latest_scan is cancelled/interrupted, so boards can grade on real data instead of dropping to "—". */
+  last_completed_scan?: Scan;
   /** Analyzer outcome counts for `latest_scan` (absent when it recorded no runs) — pairs every dashboard grade with its coverage. */
   latest_scan_coverage?: ScanCoverage;
 }
@@ -229,6 +231,24 @@ export interface FixedFindingsResponse {
   total_fixed: number;
   comparison_available: boolean;
   previous_scan_id: string | null;
+}
+
+/** Diff of one scan against another (GET /scans/{id}/compare?with={id}).
+ *  When `available` is false the rest of the envelope is absent except
+ *  `reason` ("no previous completed scan"). Finding arrays are null (not
+ *  missing) when a side has none, and `not_evaluated` lists analyzer IDs that
+ *  did not finish in the newer scan, so their findings are excluded from the
+ *  diff. `summary` repeats the exact array lengths for cheap headline counts. */
+export interface CompareResult {
+  available: boolean;
+  reason?: string;
+  current_scan_id?: string;
+  previous_scan_id?: string | null;
+  summary?: { new: number; fixed: number; persistent: number };
+  new?: Finding[] | null;
+  fixed?: Finding[] | null;
+  persistent?: Finding[] | null;
+  not_evaluated?: string[] | null;
 }
 
 export interface SourcePreview {

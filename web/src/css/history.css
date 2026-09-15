@@ -221,10 +221,87 @@ tr.is-expanded .history-date::before { border-color: var(--color-accent); backgr
 .history-pagination .button.secondary { display: inline-flex; align-items: center; gap: var(--space-2xs); }
 .history-pagination .button.secondary svg { flex: none; }
 
+/* Compare selection strip — sticky accent-tinted card above the table */
+.compare-strip {
+  position: sticky; top: var(--space-sm); z-index: 2;
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); flex-wrap: wrap;
+  margin-bottom: var(--space-sm); padding: var(--space-sm) var(--space-md);
+  border: var(--rule) solid color-mix(in oklch, var(--color-accent) 35%, var(--color-rule));
+  border-left: 3px solid var(--color-accent);
+  border-radius: var(--radius-card);
+  background: var(--color-accent-soft, var(--color-surface-muted));
+  box-shadow: var(--shadow-card);
+}
+.compare-strip p { margin: 0; color: var(--color-ink-soft); font-size: var(--text-sm); }
+.compare-strip p strong { color: var(--color-ink); }
+.compare-strip--warning {
+  border-color: color-mix(in oklch, var(--color-warning) 40%, var(--color-rule));
+  border-left-color: var(--color-warning);
+  background: var(--color-warning-soft);
+}
+.compare-strip-actions { display: inline-flex; align-items: center; gap: var(--space-sm); flex: none; }
+
+/* Muted tag marking the scan a comparison starts from */
+.compare-base-tag {
+  display: inline-flex; align-items: center;
+  padding: 0 var(--space-xs);
+  border: var(--rule) solid var(--color-rule);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-muted);
+  color: var(--color-ink-faint);
+  font: 700 var(--text-2xs) var(--font-mono);
+  letter-spacing: .04em; text-transform: uppercase;
+}
+
+/* Comparison panel — bento card above the table, sections reusing what-changed rows */
+.compare-panel {
+  margin-bottom: var(--space-sm); padding: var(--space-lg);
+  border: var(--rule) solid var(--color-rule-faint);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+.compare-panel-header { display: grid; gap: var(--space-2xs); padding-bottom: var(--space-md); border-bottom: var(--rule) solid var(--color-rule-faint); }
+.compare-panel-header h2 { margin: 0; font-family: var(--font-display); font-size: var(--text-xl); font-weight: 700; }
+.compare-headline { margin: 0; color: var(--color-ink-soft); font-size: var(--text-sm); }
+.compare-headline strong { color: var(--color-ink); }
+.compare-headline .compare-count { font-family: var(--font-display); font-size: var(--text-lg); }
+.compare-sub { margin: 0; color: var(--color-ink-faint); font-size: var(--text-xs); }
+.compare-note { margin: var(--space-2xs) 0 0; color: var(--color-warning-text, var(--color-ink-soft)); font-size: var(--text-xs); }
+
+.compare-section { margin-top: var(--space-md); }
+.compare-section-heading { margin: 0; font-size: var(--text-sm); }
+.compare-section-toggle {
+  display: inline-flex; align-items: center; gap: var(--space-2xs);
+  padding: var(--space-3xs) var(--space-2xs);
+  border: none; background: transparent; cursor: pointer;
+  color: var(--color-ink); font: 700 var(--text-sm) var(--font-display);
+  border-radius: var(--radius-button);
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.compare-section-toggle:hover { background: var(--color-surface-muted); }
+.compare-section-toggle:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.compare-section-toggle .disclose-arrow {
+  font-size: .62rem; line-height: 1; color: var(--color-ink-faint);
+  transition: transform var(--dur-base) var(--ease-spring);
+  will-change: transform; display: inline-block;
+}
+.compare-section-toggle[aria-expanded='true'] .disclose-arrow { transform: rotate(90deg); }
+.compare-section-count {
+  min-width: 1.35rem; padding: 0 var(--space-2xs);
+  display: inline-flex; align-items: center; justify-content: center;
+  border: var(--rule) solid var(--color-rule); border-radius: var(--radius-pill);
+  background: var(--color-surface-muted); color: var(--color-ink-faint);
+  font: 700 var(--text-2xs) var(--font-mono); font-variant-numeric: tabular-nums;
+}
+.compare-section .what-changed-list { margin-top: var(--space-xs); }
+
 @media (prefers-reduced-motion: reduce) {
   .history-detail { animation: none; }
   .history-disclose .disclose-arrow { transition: none; }
   .history-table-wrap tbody tr { transition: none; }
   .history-pagination { will-change: auto; }
   .history-table-wrap { will-change: auto; }
+  .compare-section-toggle { transition: none; }
+  .compare-section-toggle .disclose-arrow { transition: none; will-change: auto; }
 }

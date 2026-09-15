@@ -3,12 +3,16 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import type { Route } from '../lib/router';
-import type { Scan } from '../types';
+import type { Finding, Scan } from '../types';
 import { HistoryPage, historyDateBands, HistoryTable } from './HistoryPage';
+
+function compareFinding(id: string): Finding {
+  return { id, analyzer_id: 'biome', severity: 'medium', category: 'maintainability', title: `Finding ${id}`, message: 'Something to fix.', relative_path: 'src/a.ts', start_line: 3 };
+}
 
 vi.mock('../api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api')>();
-  return { ...actual, api: { ...actual.api, workspace: vi.fn(), scansPage: vi.fn() } };
+  return { ...actual, api: { ...actual.api, workspace: vi.fn(), scansPage: vi.fn(), scan: vi.fn(), compareScans: vi.fn() } };
 });
 
 declare global {
@@ -387,6 +391,8 @@ describe('HistoryPage', () => {
   beforeEach(() => {
     vi.mocked(api.workspace).mockReset();
     vi.mocked(api.scansPage).mockReset();
+    vi.mocked(api.scan).mockReset();
+    vi.mocked(api.compareScans).mockReset();
     window.history.replaceState(null, '', '/');
   });
 
@@ -446,5 +452,102 @@ describe('HistoryPage', () => {
     await act(async () => {});
     expect(host.querySelector('.history-pagination button')).not.toBeNull(); // controls return
     expect(host.querySelector('.history-pagination-count')!.textContent).toBe('Showing 1–2 of 2 scans'); // normal server paging again
+  });
+
+  describe('compare workflow', () => {
+    const olderScan = scan({ id: 'older', state: 'completed', finished_at: localIso(2026, 8, 20), total_findings: 40 });
+    const newerScan = scan({ id: 'newer', state: 'completed', finished_at: localIso(2026, 8, 29), total_findings: 35 });
+
+    function mockComparePages(pages: Scan[][]) {
+      mockPages(pages, pages.flat().length);
+      vi.mocked(api.scan).mockImplementation(async (id: string) => pages.flat().find((entry) => entry.id === id) ?? null);
+      vi.mocked(api.compareScans).mockResolvedValue({
+        available: true,
+        current_scan_id: 'newer',
+        previous_scan_id: 'older',
+        summary: { new: 1, fixed: 2, persistent: 3 },
+        new: [compareFinding('n1')],
+        fixed: [compareFinding('f1'), compareFinding('f2')],
+        persistent: [compareFinding('p1')],
+        not_evaluated: [],
+      });
+    }
+
+    async function clickButton(host: HTMLElement, label: string) {
+      const button = [...host.querySelectorAll('button')].find((candidate) => candidate.textContent === label);
+      expect(button, `no "${label}" button`).toBeDefined();
+      await act(async () => { button!.click(); });
+      await act(async () => {});
+    }
+
+    it('walks selection: strip appears on Compare, other rows offer "with this", picking completes the pair', async () => {
+      mockComparePages([[newerScan, olderScan]]);
+      const host = await renderPage();
+      expect([...host.querySelectorAll('button')].filter((button) => button.textContent === 'Compare')).toHaveLength(2);
+
+      await clickButton(host, 'Compare'); // first row = newer
+      const strip = host.querySelector('.compare-strip')!;
+      expect(strip.getAttribute('role')).toBe('region');
+      expect(strip.getAttribute('aria-label')).toBe('Scan comparison selection');
+      expect(strip.textContent).toContain('Comparing the');
+      expect(strip.textContent).toContain('35'); // the base scan's finding count
+      expect(strip.textContent).toContain('pick a second scan below');
+      expect(window.location.search).toBe('?compare=newer');
+      expect(host.querySelector('.compare-base-tag')?.textContent).toBe('Base scan');
+      expect([...host.querySelectorAll('button')].filter((button) => button.textContent === 'with this')).toHaveLength(1);
+
+      await clickButton(host, 'with this'); // second row = older
+      expect(api.compareScans).toHaveBeenCalledWith('newer', 'older'); // ordered (newer, older)
+      expect(window.location.search).toBe('?compare=newer&with=older');
+      expect(host.querySelector('.compare-panel')).not.toBeNull();
+      expect(host.querySelector('.compare-headline')!.textContent).toContain('1 new');
+      expect(host.querySelector('.compare-strip')).toBeNull();
+    });
+
+    it('exits via Cancel compare and via Escape', async () => {
+      mockComparePages([[newerScan, olderScan]]);
+      const host = await renderPage();
+      await clickButton(host, 'Compare');
+      expect(host.querySelector('.compare-strip')).not.toBeNull();
+      await clickButton(host, 'Cancel compare');
+      expect(host.querySelector('.compare-strip')).toBeNull();
+      expect(window.location.search).toBe('');
+      expect([...host.querySelectorAll('button')].filter((button) => button.textContent === 'Compare')).toHaveLength(2);
+
+      await clickButton(host, 'Compare'); // selection again…
+      await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); }); // …Esc is the keyboard way out
+      await act(async () => {});
+      expect(host.querySelector('.compare-strip')).toBeNull();
+      expect(window.location.search).toBe('');
+    });
+
+    it('restores a completed comparison from a ?compare=&with= deep link, ordering the request newest-first', async () => {
+      mockComparePages([[newerScan, olderScan]]);
+      window.history.replaceState(null, '', '/?compare=older&with=newer'); // deliberately reversed
+      const host = await renderPage();
+      expect(api.compareScans).toHaveBeenCalledWith('newer', 'older');
+      expect(host.querySelector('.compare-panel')).not.toBeNull();
+      expect(host.querySelector('.compare-headline')!.textContent).toContain('2 fixed');
+      expect(host.querySelector('.compare-strip')).toBeNull();
+    });
+
+    it('gates cancelled scans behind a partial-scan acceptance and skips non-comparable states', async () => {
+      const cancelled = scan({ id: 'part', state: 'cancelled', finished_at: localIso(2026, 8, 28), total_findings: 9 });
+      const failed = scan({ id: 'bad', state: 'failed', finished_at: localIso(2026, 8, 27), total_findings: 2 });
+      mockComparePages([[newerScan, cancelled, failed]]);
+      const host = await renderPage();
+      // failed is terminal but never comparable — only completed + cancelled offer Compare
+      const compareButtons = [...host.querySelectorAll('button')].filter((button) => button.textContent === 'Compare');
+      expect(compareButtons).toHaveLength(2);
+      await act(async () => { compareButtons[1]!.click(); }); // the cancelled row's button (rows sort newest-first)
+      await act(async () => {});
+      const strip = host.querySelector('.compare-strip--warning')!;
+      expect(strip.textContent).toContain('partial scan');
+      expect(window.location.search).toBe(''); // nothing committed yet
+      await clickButton(host, 'Compare anyway');
+      expect(window.location.search).toBe('?compare=part');
+      await clickButton(host, 'with this');
+      expect(api.compareScans).toHaveBeenCalledWith('newer', 'part'); // newer scan is still "current"
+    });
   });
 });
