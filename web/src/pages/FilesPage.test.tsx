@@ -128,6 +128,20 @@ describe('FilesPage tree search', () => {
     expect(marks[0]!.parentElement?.textContent).toBe('main.pyPython'); // name plus its resolved language badge
   });
 
+  it('echoes the path tail around a hit that lives outside the row name', async () => {
+    enqueueChild('src', { items: [{ path: 'src/workflow/engine.py', name: 'engine.py', type: 'file', included: true }] });
+    const host = await render();
+    const search = host.querySelector<HTMLInputElement>('[placeholder="src or package.json"]')!;
+    await act(async () => { toggle(host, 'Expand src')!.click(); await flush(); });
+    await type(search, 'workflow');
+    await act(async () => { vi.advanceTimersByTime(200); });
+    expect(visiblePaths(host)).toEqual(['Include src', 'Include src/workflow/engine.py']);
+    expect(host.querySelectorAll('.tree-name mark')).toHaveLength(0); // the name itself has no hit to mark
+    const hint = host.querySelector('small[title="src/workflow/engine.py"]')!;
+    expect(hint.textContent).toBe('src/workflow/engine.py'); // short path: shown whole, match marked inside
+    expect(hint.querySelector('mark')!.textContent).toBe('workflow');
+  });
+
   it('marks failed child loads inline and retries them', async () => {
     enqueueChild('src', { error: { code: 'TREE_READ_FAILED', message: 'Folder could not be read.' } }, 500);
     const host = await render();
@@ -179,12 +193,12 @@ describe('FilesPage bulk selection', () => {
 
   it('selects, excludes, and inverts every shown path in one click', async () => {
     const host = await render();
-    expect(host.querySelector('.tree-bulkbar-count')!.textContent).toContain('2 of 2 shown selected');
+    expect(host.querySelector('.tree-bulkbar-count')!.textContent).toContain('2 of 2 shown included');
     expect(checkedCount(host)).toBe(2); // both top-level dirs start included
 
     await act(async () => { bulkButton(host, 'Exclude all').click(); await flush(); });
     expect(checkedCount(host)).toBe(0);
-    expect(host.querySelector('.tree-bulkbar-count')!.textContent).toContain('0 of 2 shown selected');
+    expect(host.querySelector('.tree-bulkbar-count')!.textContent).toContain('0 of 2 shown included');
 
     await act(async () => { bulkButton(host, 'Select all').click(); await flush(); });
     expect(checkedCount(host)).toBe(2);
@@ -242,14 +256,18 @@ describe('FilesPage save', () => {
   it('sends the {rules} envelope the backend requires and reports success', async () => {
     fetchMock.mockClear();
     const { host, seen } = await renderWithNotify();
+    expect(saveButton(host).disabled).toBe(true); // nothing changed yet — Save stays disabled
+    await act(async () => { [...host.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.includes('Add rule'))!.click(); await flush(); }); // a draft marks the selection dirty
+    expect(saveButton(host).disabled).toBe(false);
     await act(async () => { saveButton(host).click(); await flush(); await flush(); });
     const puts = putBodies();
     expect(puts).toHaveLength(2);
     expect(puts[0]!.url).toContain('/rules');
-    expect(puts[0]!.body).toEqual({ rules: [] }); // bare arrays used to earn a 400 INVALID_JSON here
+    expect(puts[0]!.body).toEqual({ rules: [] }); // bare arrays used to earn a 400 INVALID_JSON here; the empty draft never leaves the client
     expect(puts[1]!.url).toContain('/path-overrides');
     expect(puts[1]!.body).toEqual({ overrides: [] });
     expect(seen.at(-1)).toMatchObject({ kind: 'info' });
+    expect(saveButton(host).disabled).toBe(true); // success clears the dirty flag
   });
 
   it('saves checkbox overrides and drops unfinished empty-pattern rule drafts', async () => {
@@ -356,13 +374,65 @@ describe('FilesPage language filter', () => {
     expect(Math.max(...delays)).toBe(200);
   });
 
-  it('labels the summary count as top-level and pluralizes a single selection', async () => {
+  it('labels the summary count as saved rules, distinct from the bulk bar’s shown-included count', async () => {
     enqueueChild('src', { items: [py] });
     const host = await render();
-    expect(host.querySelector('.tree-summary-bar')!.textContent).toContain('2 top-level paths');
+    expect(host.querySelector('.tree-summary-bar')!.textContent).toContain('0 saved rules');
     await act(async () => { toggle(host, 'Include docs')!.click(); await flush(); }); // exclude docs
     await act(async () => { toggle(host, 'Include docs')!.click(); await flush(); }); // back to include — one include override
-    expect(host.querySelector('.tree-summary-bar')!.textContent).toContain('1 path selected');
+    expect(host.querySelector('.tree-summary-bar')!.textContent).toContain('1 saved rule');
+  });
+});
+
+describe('FilesPage reset and dirty state', () => {
+  function actionButton(host: HTMLElement, label: string) {
+    return [...host.querySelectorAll<HTMLButtonElement>('.files-toolbar button')].find((button) => button.textContent?.includes(label))!;
+  }
+
+  function unsaved(host: HTMLElement) {
+    return [...host.querySelectorAll('.files-toolbar [role="status"]')].some((span) => span.textContent === 'Unsaved changes');
+  }
+
+  it('Reset re-fetches the saved overrides and Save stays disabled until the working copy changes', async () => {
+    const seen: Notice[] = [];
+    const saved = [{ relative_path: 'docs', mode: 'exclude' }];
+    const localFetch = vi.fn((input: string) => {
+      if (input.endsWith('/workspaces/ws-1')) return Promise.resolve(json({ id: 'ws-1', name: 'Example', root_path: 'C:\\code\\example' }));
+      const child = input.match(/\/tree\?path=([^&]+)$/);
+      if (child) return Promise.resolve(json({ items: [] }));
+      if (input.endsWith('/tree')) return Promise.resolve(json({ items: [
+        { path: 'src', name: 'src', type: 'directory', included: true },
+        { path: 'docs', name: 'docs', type: 'directory', included: true },
+      ] }));
+      if (input.endsWith('/rules')) return Promise.resolve(json({ rules: [] }));
+      if (input.endsWith('/path-overrides')) return Promise.resolve(json({ items: saved }));
+      return Promise.resolve(json({ items: [] }));
+    });
+    vi.stubGlobal('fetch', localFetch);
+    const calls = (suffix: string) => (localFetch.mock.calls as unknown as Array<[string]>).filter(([input]) => input.endsWith(suffix)).length;
+    const host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+    await act(async () => { root.render(<FilesPage id="ws-1" notify={(notice) => { seen.push(notice); }} />); });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    const docs = () => host.querySelector<HTMLInputElement>('[aria-label="Include docs"]')!;
+    expect(docs().checked).toBe(false); // the saved exclude is live on load
+    expect(actionButton(host, 'Save selection').disabled).toBe(true); // clean working copy
+    expect(unsaved(host)).toBe(false);
+
+    await act(async () => { docs().click(); await flush(); }); // a user edit marks the selection dirty
+    expect(docs().checked).toBe(true);
+    expect(actionButton(host, 'Save selection').disabled).toBe(false);
+    expect(unsaved(host)).toBe(true);
+
+    const getsBefore = calls('/path-overrides');
+    await act(async () => { actionButton(host, 'Reset').click(); await flush(); await flush(); });
+    expect(docs().checked).toBe(false); // saved state restored, not wiped to empty
+    expect(actionButton(host, 'Save selection').disabled).toBe(true); // Reset clears the dirty flag too
+    expect(unsaved(host)).toBe(false);
+    expect(calls('/path-overrides')).toBe(getsBefore + 1); // Reset re-fetched rather than clearing
+    expect(seen.at(-1)).toMatchObject({ kind: 'info' });
   });
 });
 

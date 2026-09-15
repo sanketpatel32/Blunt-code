@@ -143,6 +143,8 @@ export function FilesPage({ id, go, notify }: { id: string; go?: (r: Route) => v
   const [loadingTree, setLoadingTree] = useState(true);
   const [rules, setRules] = useState<{ rules: RuleDraft[] }>({ rules: [] });
   const [overrides, setOverrides] = useState<PathOverride[]>([]);
+  /** True while the working copy (rules + overrides) differs from the saved one: gates Save and the "Unsaved changes" hint. */
+  const [dirty, setDirty] = useState(false);
   const [treeKey, setTreeKey] = useState(0);
   /** Bumped by Collapse all; FileTree watches it and folds every open folder without dropping loaded children. */
   const [collapseSignal, setCollapseSignal] = useState(0);
@@ -154,15 +156,27 @@ export function FilesPage({ id, go, notify }: { id: string; go?: (r: Route) => v
    *  of fanning out into tree/rules/overrides 404s with stacked error surfaces.
    *  The ref pins this to one boot round per workspace id — an identity change
    *  in a callback prop must never re-run it and drop the FileTree's cache. */
+  /** One fetch of the saved selection (rules + path overrides). Boot and Reset
+   *  share it, so Reset restores the saved state instead of wiping the working
+   *  copy to empty — Reset-then-Save can no longer erase a saved selection. */
+  const loadSavedSelection = useCallback(async () => {
+    const [savedRules, savedOverrides] = await Promise.all([api.rules(id), api.pathOverrides(id)]);
+    setRules({ rules: (savedRules as { rules: Array<Omit<RuleDraft, 'uid'>> }).rules.map((rule) => ({ ...rule, uid: nextRuleUid() })) });
+    setOverrides(savedOverrides);
+    setDirty(false);
+  }, [id]);
+  /** Working-copy setters mark the selection dirty; only a successful save or a Reset back to the saved state clears it. */
+  const setWorkingOverrides = useCallback((items: PathOverride[]) => { setOverrides(items); setDirty(true); }, []);
+  const setWorkingRules = useCallback((items: RuleDraft[]) => { setRules({ rules: items }); setDirty(true); }, []);
   const bootedFor = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (workspace.loading || workspace.error || bootedFor.current === id) return;
     bootedFor.current = id;
     void loadTree();
-    void Promise.all([api.rules(id), api.pathOverrides(id)]).then(([savedRules, savedOverrides]) => { setRules({ rules: (savedRules as { rules: Array<Omit<RuleDraft, 'uid'>> }).rules.map((rule) => ({ ...rule, uid: nextRuleUid() })) }); setOverrides(savedOverrides); }).catch((e) => notify({ kind: 'error', text: message(e) }));
-  }, [id, loadTree, notify, workspace.loading, workspace.error]);
+    void loadSavedSelection().catch((e) => notify({ kind: 'error', text: message(e) }));
+  }, [id, loadTree, loadSavedSelection, notify, workspace.loading, workspace.error]);
   /** Empty pattern rows are unfinished drafts, not rules — the server rightly rejects them, so they never leave the client. */
-  const save = async () => { try { await api.saveRules(id, rules.rules.filter((rule) => rule.pattern.trim() !== '').map(({ uid: _uid, pattern, ...rule }) => ({ ...rule, pattern: pattern.trim() }))); await api.savePathOverrides(id, overrides); await loadTree(); setTreeKey((value) => value + 1); notify({ kind: 'info', text: 'File selection saved for this workspace.' }); } catch (e) { notify({ kind: 'error', text: message(e) }); } };
+  const save = async () => { try { await api.saveRules(id, rules.rules.filter((rule) => rule.pattern.trim() !== '').map(({ uid: _uid, pattern, ...rule }) => ({ ...rule, pattern: pattern.trim() }))); await api.savePathOverrides(id, overrides); await loadTree(); setTreeKey((value) => value + 1); setDirty(false); notify({ kind: 'info', text: 'File selection saved for this workspace.' }); } catch (e) { notify({ kind: 'error', text: message(e) }); } };
   /** "/" jumps to the search box from anywhere on this page — unless the user is already typing in a field. */
   useEffect(() => {
     function jumpToSearch(event: KeyboardEvent) {
@@ -199,10 +213,11 @@ export function FilesPage({ id, go, notify }: { id: string; go?: (r: Route) => v
           }
           actions={
             <div className="files-toolbar flex items-center gap-2">
-              <Button variant="ghost" size="sm" disabled={!selectionReady} onClick={() => { setRules({ rules: [] }); setOverrides([]); }} className="gap-1.5 text-xs">
+              {dirty && <span role="status" className="text-xs text-[var(--color-ink-faint)]">Unsaved changes</span>}
+              <Button variant="ghost" size="sm" disabled={!selectionReady} onClick={() => { void loadSavedSelection().then(() => notify({ kind: 'info', text: 'Restored the saved selection.' })).catch((e) => notify({ kind: 'error', text: message(e) })); }} className="gap-1.5 text-xs">
                 <RotateCcw size={14} aria-hidden />Reset
               </Button>
-              <Button variant="default" size="sm" disabled={!selectionReady} onClick={save} className="gap-1.5 text-xs">
+              <Button variant="default" size="sm" disabled={!selectionReady || !dirty} onClick={save} className="gap-1.5 text-xs">
                 <Save size={14} aria-hidden />Save selection
               </Button>
             </div>
@@ -214,7 +229,7 @@ export function FilesPage({ id, go, notify }: { id: string; go?: (r: Route) => v
             const label = LANG_LABELS[l] ?? l;
             return <button key={l} type="button" className="chip" aria-pressed={lang === l} onClick={() => setLangFilter(l)}>{label}<small className="chip-count">{count}</small></button>;
           })}
-        {lang && <button type="button" className="text-button" onClick={() => setLangFilter('')}>Clear filter</button>}{!loadingTree && !treeError && <button type="button" className="button ghost tree-collapse-btn" onClick={() => setCollapseSignal((value) => value + 1)}>Collapse all</button>}</fieldset><div className="tree-scroll">{workspace.error ? <ErrorPanel error={workspace.error} retry={workspace.reload} /> : loadingTree ? <SkeletonLines lines={6} /> : treeError ? <ErrorPanel error={treeError} retry={loadTree} /> : <FileTree key={treeKey} nodes={nodes} query={debouncedQuery} lang={debouncedLang} workspaceId={id} overrides={overrides} onOverrides={setOverrides} collapseSignal={collapseSignal} onLoadedMeta={setLoadedMeta} />}</div><div className="tree-summary-bar"><span className="tabular-nums">{selectedCount ? `${selectedCount} ${selectedCount === 1 ? 'path' : 'paths'} selected` : `${nodes.length} top-level paths`}</span><span aria-hidden>·</span><span className="tabular-nums">{langDistinct} languages</span></div></div></div><RuleEditor rules={rules.rules} setRules={(items) => setRules({ rules: items })} /></section>
+        {lang && <button type="button" className="text-button" onClick={() => setLangFilter('')}>Clear filter</button>}{!loadingTree && !treeError && <button type="button" className="button ghost tree-collapse-btn" onClick={() => setCollapseSignal((value) => value + 1)}>Collapse all</button>}</fieldset><div className="tree-scroll">{workspace.error ? <ErrorPanel error={workspace.error} retry={workspace.reload} /> : loadingTree ? <SkeletonLines lines={6} /> : treeError ? <ErrorPanel error={treeError} retry={loadTree} /> : <FileTree key={treeKey} nodes={nodes} query={debouncedQuery} lang={debouncedLang} workspaceId={id} overrides={overrides} onOverrides={setWorkingOverrides} collapseSignal={collapseSignal} onLoadedMeta={setLoadedMeta} />}</div><div className="tree-summary-bar"><span className="tabular-nums" title="Saved include rules for this workspace">{selectedCount} saved {selectedCount === 1 ? 'rule' : 'rules'}</span><span aria-hidden>·</span><span className="tabular-nums">{langDistinct} languages</span></div></div></div><RuleEditor rules={rules.rules} setRules={setWorkingRules} /></section>
       </div>
     </div>
   );
@@ -346,7 +361,7 @@ function TreeLevel({ nodes, state, root = false }: { nodes: TreeNode[]; state: T
     const open = state.expanded.has(node.path) || (state.needle !== '' && state.ancestors.has(node.path));
     const nodeLang = node.type === 'file' ? resolveLanguage(node) : '';
     // Stagger is capped so a 30-child folder doesn't hold its tail invisible for ~0.6s on every expand.
-    return <li key={node.path} className="tree-item" style={{ animationDelay: `${Math.min(index, 10) * 20}ms` }}><div className="tree-row"><button type="button" className="tree-toggle" aria-label={open ? `Collapse ${node.name}` : `Expand ${node.name}`} disabled={node.type !== 'directory'} onClick={() => state.toggle(node)}>{state.loading.has(node.path) ? <span className="spinner" aria-hidden="true" /> : node.type === 'directory' ? (open ? '−' : '+') : '·'}</button><input type="checkbox" checked={nodeIncluded(node, state.overrides)} ref={(input) => { if (input) input.indeterminate = isPartial(node, state); }} onChange={() => toggleNode(node, state.overrides, state.onOverrides)} aria-label={`Include ${node.path}`} /><span className="flex items-center gap-1.5 min-w-0"><span aria-hidden="true">{nodeLang ? languageIcon(nodeLang) : null}</span><span className="tree-name"><HighlightedName name={node.name} needle={state.needle} />{nodeLang && <small className="tree-lang-badge">{LANG_LABELS[nodeLang] ?? nodeLang}</small>}</span></span>{node.excluded_reason && <small className="tree-excluded">Excluded: {node.excluded_reason}</small>}{state.failed.has(node.path) && <span className="tree-load-error">Could not load<button type="button" className="text-button" onClick={() => state.retry(node)}>Retry</button></span>}</div>{open && <div className="tree-children"><TreeLevel nodes={state.children[node.path] ?? []} state={state} /></div>}</li>;
+    return <li key={node.path} className="tree-item" style={{ animationDelay: `${Math.min(index, 10) * 20}ms` }}><div className="tree-row"><button type="button" className="tree-toggle" aria-label={open ? `Collapse ${node.name}` : `Expand ${node.name}`} disabled={node.type !== 'directory'} onClick={() => state.toggle(node)}>{state.loading.has(node.path) ? <span className="spinner" aria-hidden="true" /> : node.type === 'directory' ? (open ? '−' : '+') : '·'}</button><input type="checkbox" checked={nodeIncluded(node, state.overrides)} ref={(input) => { if (input) input.indeterminate = isPartial(node, state); }} onChange={() => toggleNode(node, state.overrides, state.onOverrides)} aria-label={`Include ${node.path}`} /><span className="flex items-center gap-1.5 min-w-0"><span aria-hidden="true">{nodeLang ? languageIcon(nodeLang) : null}</span><span className="tree-name"><HighlightedName name={node.name} needle={state.needle} />{nodeLang && <small className="tree-lang-badge">{LANG_LABELS[nodeLang] ?? nodeLang}</small>}</span>{state.needle && !node.name.toLowerCase().includes(state.needle) && <PathMatchHint path={node.path} needle={state.needle} />}</span>{node.excluded_reason && <small className="tree-excluded">Excluded: {node.excluded_reason}</small>}{state.failed.has(node.path) && <span className="tree-load-error">Could not load<button type="button" className="text-button" onClick={() => state.retry(node)}>Retry</button></span>}</div>{open && <div className="tree-children"><TreeLevel nodes={state.children[node.path] ?? []} state={state} /></div>}</li>;
   })}</ul>;
 }
 
@@ -374,6 +389,22 @@ function HighlightedName({ name, needle }: { name: string; needle: string }) {
   const index = name.toLowerCase().indexOf(needle);
   if (index < 0) return <>{name}</>;
   return <>{name.slice(0, index)}<mark className="tree-hit">{name.slice(index, index + needle.length)}</mark>{name.slice(index + needle.length)}</>;
+}
+
+/** Search matches the whole path while names highlight alone; when the hit lives
+ *  outside the name, echo the path tail around it (capped window, full path on
+ *  hover) so the reason for the match is visible on the row itself. */
+function PathMatchHint({ path, needle }: { path: string; needle: string }) {
+  const index = path.toLowerCase().indexOf(needle);
+  if (index < 0) return null;
+  const end = index + needle.length;
+  const start = Math.max(0, index - 12);
+  const stop = Math.max(end, Math.min(path.length, start + 48));
+  return (
+    <small className="shrink-0 font-mono text-xs text-[var(--color-ink-faint)]" title={path}>
+      {start > 0 ? '…' : ''}{path.slice(start, index)}<mark className="tree-hit">{path.slice(index, end)}</mark>{path.slice(end, stop)}{stop < path.length ? '…' : ''}
+    </small>
+  );
 }
 
 function nodeIncluded(node: TreeNode, overrides: PathOverride[]) { return pathEffective(node.path, overrides, node.included ?? !node.excluded_reason); }
@@ -412,7 +443,7 @@ function BulkBar({ targets, selected, overrides, onOverrides, filtered }: { targ
     onOverrides(pruneOverrides([...kept, ...targets.map((relative_path) => ({ relative_path, mode: pathEffective(relative_path, overrides, true) ? 'exclude' : 'include' } as PathOverride))]));
   };
   return <div className="tree-bulkbar" role="toolbar" aria-label="Bulk selection">
-    <span className="tree-bulkbar-count tabular-nums" aria-live="polite">{selected} of {targets.length} shown selected{filtered ? '' : ' — folders cover their whole subtree'}</span>
+    <span className="tree-bulkbar-count tabular-nums" aria-live="polite">{selected} of {targets.length} shown included{filtered ? '' : ' — folders cover their whole subtree'}</span>
     <span className="tree-bulkbar-actions">
       <button type="button" className="button secondary tree-bulkbar-btn" disabled={allSelected} onClick={() => apply('include')}>Select all</button>
       <button type="button" className="button secondary tree-bulkbar-btn" disabled={selected === 0} onClick={() => apply('exclude')}>Exclude all</button>
