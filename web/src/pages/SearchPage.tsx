@@ -131,6 +131,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
 
   const debouncedQuery = useDebouncedValue(query, query ? SEARCH_DEBOUNCE_MS : 0);
   const workspacesList = useLoad(api.workspaces, []);
+  const workspaceOptions = workspacesList.data ?? [];
 
   const params = useMemo(() => {
     const value: Record<string, string> = { page: String(page), page_size: String(pageSize) };
@@ -338,29 +339,25 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
       <div className="facet-section">
         <p className="facet-title text-xs font-semibold uppercase tracking-wider text-[var(--color-ink-faint)]">Workspace Scope</p>
         <div className="mt-2 space-y-2">
-          {workspacesList.data && workspacesList.data.length > 0 ? (
-            <Select value={workspace} onValueChange={(val) => setWorkspace(val === 'all' ? '' : val)}>
-              <SelectTrigger className="w-full text-xs h-8">
-                <SelectValue placeholder="All Workspaces" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Workspaces</SelectItem>
-                {workspacesList.data.map((w: Workspace) => (
-                  <SelectItem key={w.id} value={w.id}>
-                    {w.name || w.id}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : (
-            <input
-              value={workspace}
-              onChange={(e) => setWorkspace(e.target.value)}
-              placeholder="Filter by workspace ID…"
-              aria-label="Filter by workspace"
-              className="w-full rounded-[var(--radius-button)] border border-[var(--color-rule-faint)] bg-[var(--color-surface)] px-2.5 py-1.5 text-xs text-[var(--color-ink)] placeholder:text-[var(--color-ink-faint)] focus:border-[var(--color-accent)] focus:outline-none"
-            />
-          )}
+          {/* Names, not raw ids: the URL keeps persisting the workspace id, the
+              select displays the human name for it. A deep-linked id stays an
+              honest option until (and unless) the list can resolve its name. */}
+          <Select value={workspace || 'all'} onValueChange={(val) => setWorkspace(val === 'all' ? '' : val)}>
+            <SelectTrigger className="w-full text-xs h-8" aria-label="Filter by workspace">
+              <SelectValue placeholder="All workspaces" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All workspaces</SelectItem>
+              {workspaceOptions.map((w: Workspace) => (
+                <SelectItem key={w.id} value={w.id}>
+                  {w.name || w.id}
+                </SelectItem>
+              ))}
+              {workspace && !workspaceOptions.some((w) => w.id === workspace) && (
+                <SelectItem value={workspace}>{workspace}</SelectItem>
+              )}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -672,14 +669,32 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
           ) : state.error ? (
             <ErrorPanel error={state.error} retry={state.reload} />
           ) : total === 0 ? (
-            <Empty title="No matching findings" icon={<MagnifierIcon />}>
-              No findings match your current query or filters. Try clearing some filters or running a fresh scan across your workspaces.
-              {activeFiltersCount > 0 && (
-                <Button variant="outline" size="sm" onClick={clearAll} className="mt-4 gap-1.5">
-                  <RotateCcw className="h-3.5 w-3.5" /> Reset all filters
-                </Button>
-              )}
-            </Empty>
+            workspacesList.data && workspacesList.data.length === 0 && activeFiltersCount === 0 ? (
+              // Cold-start dead end: zero workspaces means zero scans, so the
+              // "no matches" copy would mislead. The add-workspace dialog is
+              // owned by App (no onAdd callback reaches this page), so route
+              // to Workspaces where that flow lives.
+              <Empty
+                title="Nothing to search yet"
+                icon={<MagnifierIcon />}
+                action={
+                  <Button variant="outline" size="sm" onClick={() => go({ page: 'workspaces' })} className="gap-1.5">
+                    Add workspace
+                  </Button>
+                }
+              >
+                Add a workspace and run your first scan — findings from every scan land here.
+              </Empty>
+            ) : (
+              <Empty title="No matching findings" icon={<MagnifierIcon />}>
+                No findings match your current query or filters. Try clearing some filters or running a fresh scan across your workspaces.
+                {activeFiltersCount > 0 && (
+                  <Button variant="outline" size="sm" onClick={clearAll} className="mt-4 gap-1.5">
+                    <RotateCcw className="h-3.5 w-3.5" /> Reset all filters
+                  </Button>
+                )}
+              </Empty>
+            )
           ) : viewMode === 'cards' ? (
             /* Cards View */
             <div className="grid gap-2.5">

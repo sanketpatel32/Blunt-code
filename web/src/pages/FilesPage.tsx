@@ -55,6 +55,17 @@ const EXTENSION_LANGUAGES: Record<string, string> = {
   pem: 'certificate', key: 'certificate', pub: 'certificate',
 };
 
+/** Friendly words for the tree's excluded_reason enum (internal/discovery skip
+ *  reasons): why the walk kept this path out of scans. Unmapped reasons fall
+ *  back to plain-space humanization, like HistoryPage's SKIP_LABELS. */
+const EXCLUDED_LABELS: Record<string, string> = {
+  excluded_user: 'your rules',
+  excluded_default: 'default rules',
+  generated_content: 'generated file',
+};
+
+function excludedLabel(reason: string) { return EXCLUDED_LABELS[reason] ?? reason.replaceAll('_', ' '); }
+
 /** Language of a tree node, mirroring discovery's rules: the API's `language`
  *  wins, then the extension, then the basename cases (Dockerfile, .env*,
  *  LICENSE files) whose "extension" is the whole name or absent. Lowercase. */
@@ -229,7 +240,7 @@ export function FilesPage({ id, go, notify }: { id: string; go?: (r: Route) => v
             const label = LANG_LABELS[l] ?? l;
             return <button key={l} type="button" className="chip" aria-pressed={lang === l} onClick={() => setLangFilter(l)}>{label}<small className="chip-count">{count}</small></button>;
           })}
-        {lang && <button type="button" className="text-button" onClick={() => setLangFilter('')}>Clear filter</button>}{!loadingTree && !treeError && <button type="button" className="button ghost tree-collapse-btn" onClick={() => setCollapseSignal((value) => value + 1)}>Collapse all</button>}</fieldset><div className="tree-scroll">{workspace.error ? <ErrorPanel error={workspace.error} retry={workspace.reload} /> : loadingTree ? <SkeletonLines lines={6} /> : treeError ? <ErrorPanel error={treeError} retry={loadTree} /> : <FileTree key={treeKey} nodes={nodes} query={debouncedQuery} lang={debouncedLang} workspaceId={id} overrides={overrides} onOverrides={setWorkingOverrides} collapseSignal={collapseSignal} onLoadedMeta={setLoadedMeta} />}</div><div className="tree-summary-bar"><span className="tabular-nums" title="Saved include rules for this workspace">{selectedCount} saved {selectedCount === 1 ? 'rule' : 'rules'}</span><span aria-hidden>·</span><span className="tabular-nums">{langDistinct} languages</span></div></div></div><RuleEditor rules={rules.rules} setRules={setWorkingRules} /></section>
+        {lang && <button type="button" className="text-button" onClick={() => setLangFilter('')}>Clear filter</button>}{!loadingTree && !treeError && <button type="button" className="button ghost tree-collapse-btn" onClick={() => setCollapseSignal((value) => value + 1)}>Collapse all</button>}</fieldset><div className="tree-scroll">{workspace.error ? <ErrorPanel error={workspace.error} retry={workspace.reload} /> : loadingTree ? <SkeletonLines lines={6} /> : treeError ? <ErrorPanel error={treeError} retry={loadTree} /> : <FileTree key={treeKey} nodes={nodes} query={debouncedQuery} lang={debouncedLang} workspaceId={id} overrides={overrides} onOverrides={setWorkingOverrides} collapseSignal={collapseSignal} onLoadedMeta={setLoadedMeta} hasScans={Boolean(workspace.data?.last_scan_at)} />}</div><div className="tree-summary-bar"><span className="tabular-nums" title="Saved include rules for this workspace">{selectedCount} saved {selectedCount === 1 ? 'rule' : 'rules'}</span><span aria-hidden>·</span><span className="tabular-nums">{langDistinct} languages</span></div></div></div><RuleEditor rules={rules.rules} setRules={setWorkingRules} /></section>
       </div>
     </div>
   );
@@ -251,7 +262,7 @@ interface TreeState {
   retry: (node: TreeNode) => void;
 }
 
-function FileTree({ nodes, query, lang, workspaceId, overrides, onOverrides, collapseSignal = 0, onLoadedMeta }: { nodes: TreeNode[]; query: string; lang?: string; workspaceId: string; overrides: PathOverride[]; onOverrides: (items: PathOverride[]) => void; collapseSignal?: number; onLoadedMeta?: (meta: { paths: number; langs: Record<string, number> }) => void }) {
+function FileTree({ nodes, query, lang, workspaceId, overrides, onOverrides, collapseSignal = 0, onLoadedMeta, hasScans = false }: { nodes: TreeNode[]; query: string; lang?: string; workspaceId: string; overrides: PathOverride[]; onOverrides: (items: PathOverride[]) => void; collapseSignal?: number; onLoadedMeta?: (meta: { paths: number; langs: Record<string, number> }) => void; hasScans?: boolean }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [children, setChildren] = useState<Record<string, TreeNode[]>>({});
   const [loading, setLoading] = useState<Set<string>>(new Set());
@@ -346,7 +357,7 @@ function FileTree({ nodes, query, lang, workspaceId, overrides, onOverrides, col
     <BulkBar targets={bulkTargets} selected={bulkSelected} overrides={overrides} onOverrides={onOverrides} filtered={needle !== '' || langFilter !== ''} />
     <p className="tree-loaded-count">{loaded.count} {loaded.count === 1 ? 'path' : 'paths'} loaded{langFilter ? ` · filtered by ${LANG_LABELS[langFilter] ?? langFilter}` : ''}</p>
     {needle && <div className="tree-search-meta" aria-live="polite"><p><strong>{matches.size}</strong> {matches.size === 1 ? 'matching path' : 'matching paths'}</p><p>Searching loaded folders — expand more to include their contents</p></div>}
-    {anyVisible ? <TreeLevel nodes={nodes} state={state} root /> : <Empty title="No matching paths" icon={<MagnifierIcon />}>Try a shorter search or clear the language filter.</Empty>}
+    {anyVisible ? <TreeLevel nodes={nodes} state={state} root /> : !hasScans && nodes.length === 0 && !needle && !langFilter ? <Empty title="No files discovered yet" icon={<MagnifierIcon />}>Run a scan to populate the file tree.</Empty> : <Empty title="No matching paths" icon={<MagnifierIcon />}>Try a shorter search or clear the language filter.</Empty>}
   </>;
 }
 
@@ -361,7 +372,7 @@ function TreeLevel({ nodes, state, root = false }: { nodes: TreeNode[]; state: T
     const open = state.expanded.has(node.path) || (state.needle !== '' && state.ancestors.has(node.path));
     const nodeLang = node.type === 'file' ? resolveLanguage(node) : '';
     // Stagger is capped so a 30-child folder doesn't hold its tail invisible for ~0.6s on every expand.
-    return <li key={node.path} className="tree-item" style={{ animationDelay: `${Math.min(index, 10) * 20}ms` }}><div className="tree-row"><button type="button" className="tree-toggle" aria-label={open ? `Collapse ${node.name}` : `Expand ${node.name}`} disabled={node.type !== 'directory'} onClick={() => state.toggle(node)}>{state.loading.has(node.path) ? <span className="spinner" aria-hidden="true" /> : node.type === 'directory' ? (open ? '−' : '+') : '·'}</button><input type="checkbox" checked={nodeIncluded(node, state.overrides)} ref={(input) => { if (input) input.indeterminate = isPartial(node, state); }} onChange={() => toggleNode(node, state.overrides, state.onOverrides)} aria-label={`Include ${node.path}`} /><span className="flex items-center gap-1.5 min-w-0"><span aria-hidden="true">{nodeLang ? languageIcon(nodeLang) : null}</span><span className="tree-name"><HighlightedName name={node.name} needle={state.needle} />{nodeLang && <small className="tree-lang-badge">{LANG_LABELS[nodeLang] ?? nodeLang}</small>}</span>{state.needle && !node.name.toLowerCase().includes(state.needle) && <PathMatchHint path={node.path} needle={state.needle} />}</span>{node.excluded_reason && <small className="tree-excluded">Excluded: {node.excluded_reason}</small>}{state.failed.has(node.path) && <span className="tree-load-error">Could not load<button type="button" className="text-button" onClick={() => state.retry(node)}>Retry</button></span>}</div>{open && <div className="tree-children"><TreeLevel nodes={state.children[node.path] ?? []} state={state} /></div>}</li>;
+    return <li key={node.path} className="tree-item" style={{ animationDelay: `${Math.min(index, 10) * 20}ms` }}><div className="tree-row"><button type="button" className="tree-toggle" aria-label={open ? `Collapse ${node.name}` : `Expand ${node.name}`} disabled={node.type !== 'directory'} onClick={() => state.toggle(node)}>{state.loading.has(node.path) ? <span className="spinner" aria-hidden="true" /> : node.type === 'directory' ? (open ? '−' : '+') : '·'}</button><input type="checkbox" checked={nodeIncluded(node, state.overrides)} ref={(input) => { if (input) input.indeterminate = isPartial(node, state); }} onChange={() => toggleNode(node, state.overrides, state.onOverrides)} aria-label={`Include ${node.path}`} /><span className="flex items-center gap-1.5 min-w-0"><span aria-hidden="true">{nodeLang ? languageIcon(nodeLang) : null}</span><span className="tree-name"><HighlightedName name={node.name} needle={state.needle} />{nodeLang && <small className="tree-lang-badge">{LANG_LABELS[nodeLang] ?? nodeLang}</small>}</span>{state.needle && !node.name.toLowerCase().includes(state.needle) && <PathMatchHint path={node.path} needle={state.needle} />}</span>{node.excluded_reason && <small className="tree-excluded">Excluded: {excludedLabel(node.excluded_reason)}</small>}{state.failed.has(node.path) && <span className="tree-load-error">Could not load<button type="button" className="text-button" onClick={() => state.retry(node)}>Retry</button></span>}</div>{open && <div className="tree-children"><TreeLevel nodes={state.children[node.path] ?? []} state={state} /></div>}</li>;
   })}</ul>;
 }
 

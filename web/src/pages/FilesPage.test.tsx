@@ -384,6 +384,70 @@ describe('FilesPage language filter', () => {
   });
 });
 
+describe('FilesPage empty states and excluded labels', () => {
+  async function localRender(workspaceBody: unknown, treeBody: unknown) {
+    const localFetch = vi.fn((input: string) => {
+      if (input.endsWith('/workspaces/ws-1')) return Promise.resolve(json(workspaceBody));
+      const child = input.match(/\/tree\?path=([^&]+)$/);
+      if (child) return Promise.resolve(json({ items: [] }));
+      if (input.endsWith('/tree')) return Promise.resolve(json(treeBody));
+      if (input.endsWith('/rules')) return Promise.resolve(json({ items: [] }));
+      if (input.endsWith('/path-overrides')) return Promise.resolve(json({ items: [] }));
+      return Promise.resolve(json({ items: [] }));
+    });
+    vi.stubGlobal('fetch', localFetch);
+    const host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+    await act(async () => { root.render(<FilesPage id="ws-1" notify={(_notice: Notice) => {}} />); });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    return host;
+  }
+
+  it('shows the undiscovered-tree dead end when the workspace has never been scanned', async () => {
+    const host = await localRender({ id: 'ws-1', name: 'Fresh', root_path: 'C:\\code\\fresh' }, { items: [] });
+    expect(host.textContent).toContain('No files discovered yet');
+    expect(host.textContent).toContain('Run a scan to populate the file tree.');
+    expect(host.textContent).not.toContain('Try a shorter search');
+  });
+
+  it('keeps the search copy when scans ran but the tree is empty or the view is filtered', async () => {
+    const scanned = { id: 'ws-1', name: 'Scanned', root_path: 'C:\\code\\scanned', last_scan_at: '2026-09-01T00:00:00Z' };
+    const scannedEmpty = await localRender(scanned, { items: [] });
+    expect(scannedEmpty.textContent).toContain('No matching paths');
+    expect(scannedEmpty.textContent).toContain('Try a shorter search');
+
+    await act(async () => { root.unmount(); });
+    document.body.replaceChildren();
+
+    const filtered = await localRender({ id: 'ws-1', name: 'Fresh', root_path: 'C:\\code\\fresh' }, { items: [
+      { path: 'src', name: 'src', type: 'directory', included: true },
+    ] });
+    const search = filtered.querySelector<HTMLInputElement>('[placeholder="src or package.json"]')!;
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+    await act(async () => {
+      setter.call(search, 'zzz-no-match');
+      search.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => { vi.advanceTimersByTime(200); });
+    expect(filtered.textContent).toContain('Try a shorter search');
+  });
+
+  it('labels excluded reasons in plain words instead of raw enum values', async () => {
+    const host = await localRender({ id: 'ws-1', name: 'Example', root_path: 'C:\\code\\example' }, { items: [
+      { path: 'vendor', name: 'vendor', type: 'directory', included: false, excluded_reason: 'excluded_user' },
+      { path: 'node_modules', name: 'node_modules', type: 'directory', included: false, excluded_reason: 'excluded_default' },
+      { path: 'schema.gen.go', name: 'schema.gen.go', type: 'file', included: false, excluded_reason: 'generated_content' },
+      { path: 'odd', name: 'odd', type: 'directory', included: false, excluded_reason: 'outside_root' },
+    ] });
+    const excluded = [...host.querySelectorAll('.tree-excluded')].map((el) => el.textContent);
+    expect(excluded).toContain('Excluded: your rules');
+    expect(excluded).toContain('Excluded: default rules');
+    expect(excluded).toContain('Excluded: generated file');
+    expect(excluded).toContain('Excluded: outside root'); // unmapped reasons humanize instead of showing raw underscores
+  });
+});
+
 describe('FilesPage reset and dirty state', () => {
   function actionButton(host: HTMLElement, label: string) {
     return [...host.querySelectorAll<HTMLButtonElement>('.files-toolbar button')].find((button) => button.textContent?.includes(label))!;

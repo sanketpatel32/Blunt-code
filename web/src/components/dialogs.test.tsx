@@ -194,7 +194,8 @@ describe('suppress finding dialog', () => {
     expect(SUPPRESSION_REASON_MAX).toBe(500);
     expect(document.activeElement).toBe(textarea); // the note field is the primary control
     expect(textarea.getAttribute('aria-describedby')).toContain('suppress-finding-hint');
-    expect(dialog.textContent).toContain('Suppressing hides this finding from future scans, reports, and the CI gate.');
+    expect(dialog.textContent).toContain('Suppressing hides this finding — matched by its fingerprint — from all future scans, reports, and the CI gate for this workspace.');
+    "You can restore it anytime from the workspace's Suppressions list." // restoration is one click away
     expect(dialog.textContent).toContain('Example finding'); // names the finding being hidden
   });
 

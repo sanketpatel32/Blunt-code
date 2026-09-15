@@ -68,9 +68,79 @@ describe('SearchPage', () => {
     expect(host.querySelector('table caption')?.textContent).toBe('Global search results'); // Loop W6
   });
 
-  it('shows the empty state when nothing matches', async () => {
-    const host = await renderPage(searchMock([]));
+  it('shows the filtered empty state when workspaces exist but nothing matches', async () => {
+    const host = await renderPage(searchMock([
+      ['/api/v1/workspaces', [{ id: 'ws-1', name: 'Example', root_path: 'C:\\code\\example' }]],
+    ]));
     expect(host.textContent).toContain('No matching findings');
+    expect(host.textContent).not.toContain('Nothing to search yet');
+  });
+
+  it('shows the cold-start empty state with a route to the add-workspace flow when no workspaces exist', async () => {
+    const go = vi.fn<(r: Route) => void>();
+    vi.stubGlobal('fetch', searchMock([]));
+    const host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+    await act(async () => { root.render(<SearchPage go={go} />); });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(host.textContent).toContain('Nothing to search yet');
+    expect(host.textContent).toContain('Add a workspace and run your first scan');
+    const add = [...host.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === 'Add workspace')!;
+    expect(add).toBeDefined();
+    await act(async () => { add.click(); });
+    expect(go).toHaveBeenCalledWith({ page: 'workspaces' });
+  });
+
+  it('filters by workspace through the name select while the URL keeps the mapped id', async () => {
+    // jsdom lacks the pointer-capture and scroll APIs Radix Select relies on.
+    Element.prototype.hasPointerCapture = () => false;
+    Element.prototype.releasePointerCapture = () => {};
+    Element.prototype.scrollIntoView = () => {};
+    const calls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn((input: string) => {
+      calls.push(String(input));
+      if (String(input).endsWith('/workspaces')) return Promise.resolve(json([{ id: 'ws-uuid-77', name: 'Alpha', root_path: 'C:\\alpha' }]));
+      return Promise.resolve(json({ items: [], total: 0, page: 1, page_size: 25, has_next: false }));
+    }));
+    const host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+    await act(async () => { root.render(<SearchPage go={vi.fn<(r: Route) => void>()} />); });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    // Open the workspace scope select and pick "Alpha" by its name.
+    const trigger = host.querySelector<HTMLButtonElement>('[aria-label="Filter by workspace"]')!;
+    expect(trigger.textContent).toContain('All workspaces');
+    await act(async () => { trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
+    const options = [...document.body.querySelectorAll<HTMLElement>('[role="option"]')];
+    const alpha = options.find((o) => o.textContent === 'Alpha');
+    expect(alpha).toBeDefined(); // listed by name — never by raw id
+    expect(options.map((o) => o.textContent)).not.toContain('ws-uuid-77');
+    await act(async () => {
+      alpha!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      alpha!.dispatchEvent(new Event('pointerup', { bubbles: true }));
+      alpha!.click();
+    });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    // The select shows the name; the request and the URL carry the mapped id.
+    expect(host.querySelector('[aria-label="Filter by workspace"]')!.textContent).toContain('Alpha');
+    const searchCalls = () => calls.filter((c) => c.includes('/findings/search'));
+    expect(searchCalls().some((c) => c.includes('workspace_id=ws-uuid-77'))).toBe(true);
+    expect(window.location.search).toContain('workspace=ws-uuid-77');
+
+    // Picking "All workspaces" clears the scope everywhere.
+    await act(async () => { host.querySelector<HTMLButtonElement>('[aria-label="Filter by workspace"]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
+    const all = [...document.body.querySelectorAll<HTMLElement>('[role="option"]')].find((o) => o.textContent === 'All workspaces')!;
+    await act(async () => {
+      all.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      all.dispatchEvent(new Event('pointerup', { bubbles: true }));
+      all.click();
+    });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(searchCalls().at(-1)).not.toContain('workspace_id=');
+    expect(window.location.search).not.toContain('workspace=');
   });
 
   it('debounces typing into one request that carries q and paging params', async () => {

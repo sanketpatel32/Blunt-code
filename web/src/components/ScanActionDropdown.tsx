@@ -109,48 +109,51 @@ export function ScanActionDropdown({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
-          <DropdownMenuLabel>Scan Profiles</DropdownMenuLabel>
+          <DropdownMenuLabel>Scan profiles</DropdownMenuLabel>
           <DropdownMenuItem onClick={() => setPendingProfile('standard')} className="gap-2 cursor-pointer">
             <Play className="h-4 w-4 text-[var(--color-accent-strong)]" />
             <div className="flex flex-col">
-              <span className="font-medium">Standard Scan</span>
-              <span className="text-[11px] text-[var(--color-ink-faint)]">Fast SAST &amp; code quality</span>
+              <span className="font-medium">Standard scan</span>
+              <span className="text-[11px] text-[var(--color-ink-faint)]">Recommended — full analyzers · a few minutes</span>
             </div>
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setPendingProfile('quick')} className="gap-2 cursor-pointer">
             <Zap className="h-4 w-4 text-[var(--color-warning)]" />
             <div className="flex flex-col">
-              <span className="font-medium">Quick Scan</span>
-              <span className="text-[11px] text-[var(--color-ink-faint)]">Rapid linter &amp; secret check</span>
+              <span className="font-medium">Quick scan</span>
+              <span className="text-[11px] text-[var(--color-ink-faint)]">Lint and secret check · usually under a minute</span>
             </div>
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setPendingProfile('deep')} className="gap-2 cursor-pointer">
             <Layers className="h-4 w-4 text-[var(--color-accent)]" />
             <div className="flex flex-col">
-              <span className="font-medium">Deep Scan</span>
-              <span className="text-[11px] text-[var(--color-ink-faint)]">Comprehensive multi-engine</span>
+              <span className="font-medium">Deep scan</span>
+              <span className="text-[11px] text-[var(--color-ink-faint)]">Every analyzer incl. dependencies and containers · can take 10+ minutes</span>
             </div>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuLabel>Pentest &amp; Security</DropdownMenuLabel>
+          <DropdownMenuLabel>Pentest &amp; security</DropdownMenuLabel>
           <DropdownMenuItem onClick={() => setPendingProfile('pentest')} className="gap-2 cursor-pointer text-[var(--color-danger)] focus:text-[var(--color-danger)]">
             <ShieldAlert className="h-4 w-4" />
             <div className="flex flex-col">
-              <span className="font-medium font-semibold">Run Pentest Scan</span>
-              <span className="text-[11px] text-[var(--color-ink-faint)]">OWASP Top 10 &amp; vulnerability audit</span>
+              <span className="font-medium font-semibold">Run pentest scan</span>
+              <span className="text-[11px] text-[var(--color-ink-faint)]">OWASP Top 10 security checks</span>
             </div>
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => go({ page: 'pentest', id: workspaceId })} className="gap-2 cursor-pointer">
             <ShieldCheck className="h-4 w-4 text-[var(--color-accent)]" />
             <div className="flex flex-col">
-              <span className="font-medium">Open Pentest Suite</span>
-              <span className="text-[11px] text-[var(--color-ink-faint)]">Interactive tests &amp; DAST probe</span>
+              <span className="font-medium">Open pentest suite</span>
+              <span className="text-[11px] text-[var(--color-ink-faint)]">Interactive security tests &amp; live HTTP probing (DAST)</span>
             </div>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
       {pendingProfile !== null && (
+        // tone="primary": starting a scan is a safe, cancellable action — the
+        // destructive red confirm would read as "you are about to break things".
         <ConfirmationDialog
+          tone="primary"
           title={`Run ${pendingProfile} scan${workspaceName ? ` on ${workspaceName}` : ''}?`}
           description={`A ${pendingProfile} scan runs the enabled analyzers over this workspace and can take several minutes. You can cancel it from the scan page while it runs.`}
           confirmLabel={`Run ${pendingProfile} scan`}
