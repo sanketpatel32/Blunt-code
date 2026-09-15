@@ -5,15 +5,39 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.24.0] - 2026-09-16
 
 ### Added
+- **Scan comparison in the web app**: the history page can compare any two finished scans — pick a base row, pick "with this", and a panel shows "since \<date\>: N new · M fixed · P still present" with collapsible top-10 lists; `?compare=&with=` URLs are shareable, cancelled scans join only after a "partial scan" acceptance, and the CLI's `history compare` finally has a web equivalent.
+- **`last_completed_scan` on workspace payloads**: the API pairs `latest_scan` with the most recent scan that actually finished whenever the newest run was cancelled or interrupted, so dashboards can grade on real data instead of blanking.
+- **Per-finding comparison status in the report payload**: `GET /scans/{id}/report` now stamps every finding `new`/`persistent` with the same rule the findings list and CSV use, so the report's status chips count real values.
+- **Command palette discoverability**: a Ctrl K pill in the header opens the palette without knowing the shortcut; nav links carry one-line tooltips.
+- **Rule-docs fallback links**: when a finding has no `documentation_url`, the source pane synthesizes one — Sonar rules (`lang:S####` → RSPEC page), Biome rule pages, Semgrep registry search.
 - **Workspace tags API wired up**: the finished GET/PUT `/api/v1/workspaces/{id}/tags` handlers are now routed, so the workspaces tag filter can finally see real data.
 - **Richer scan payloads**: the per-workspace scan list honors `page`/`page_size` and returns the `{items,total,page,page_size,has_next}` envelope; all scans serialize `duration_ms`; single-scan and workspace latest-scan responses carry `new_count`/`fixed_count` and `analyzer_runs`; global search returns whole-result `severity_counts`; file-tree nodes carry `language` and `excluded_reason`.
 - **API resilience**: a workspace whose root folder vanished returns 422 `WORKSPACE_ROOT_MISSING` instead of a 500; uppercase UUIDs are accepted; LIKE wildcards in `path`/`q` filters are escaped; control bytes in search queries are rejected with 400; every response carries `Cache-Control: no-store`.
 - **Analyzer inventory speed**: `/api/v1/analyzers` probes tools concurrently with a 30s TTL cache instead of ~4s of sequential process spawns per request.
 - **Deliberate tool actions**: Tools-page Install/Repair/Update now confirm through a dialog before starting the long POST; the dead, never-wired dropdown component is gone.
 - **Per-page document titles** and fuzzy (subsequence) matching in the Ctrl+K command palette.
+
+### Changed
+- **Terminology unified on "analyzers"**: "engines" is retired across the UI (scan verdict, live strip, pre-scan summary, Tools, CLI docs); the "N of N ready" readiness strip is qualified as *optional tools* because the 8 managed installs are not the 12-analyzer total; analyzer pills show display names ("Gitleaks", not `gitleaks-secrets`).
+- **Risk scores explain themselves**: grade tiles and the scan verdict carry the weighting (critical ×10, high ×5, medium ×2, low ×1; bands A 0–4 / B 5–19 / C 20–49 / D 50+) as tooltips, workspace trend glyphs became words ("improved 4 pts since last scan"), and the CLI docs' false "(0–100)" score claim is replaced with the real unbounded A–D scale (pinned by a test).
+- **Safe starts look safe**: run-scan confirmations use the accent button instead of destructive red; profile menu hints set expectations in plain words with durations ("Quick — lint and secret check · usually under a minute") and expand jargon (DAST, OWASP); the suppress dialog states its scope (all future scans, reports, and the CI gate for this workspace) and that it is reversible.
+- **Friendlier filters and empty states**: Search's workspace filter is a name dropdown instead of raw UUIDs and its cold start routes to add-workspace; Files explains "run a scan to populate the tree" versus search-tuning copy and translates skip reasons to plain words ("your rules", "default rules", "generated file").
+- **Workspace headers quantify honesty**: "Latest analysis" is "Latest scan", the quick-scan button names its target workspace, and the shortcuts dialog points first-run users at add-workspace → run scan.
+
+### Fixed
+- **A cancelled re-scan no longer erases good results**: home and workspace boards grade on `last_completed_scan` when the newest run was cancelled (with an honest "showing \<date\> results" note and the cancelled state badge kept); workspaces with no completed scan read "no scan yet" instead of all-zero cards that looked like "all clear".
+- **"What changed" stays honest**: the panel only claims fixes on completed scans — a cancelled run with fewer findings says so ("some analyzers never ran; these may reappear") instead of crediting them as fixed; the fixed-findings endpoint also applies the file-coverage rule so findings from deselected files are not counted as fixed.
+- **Scan report clarity**: the verdict gained a Persistent stat with New/Fixed/Persistent tooltips; the STATUS chips counted every finding as 0 (the report payload carried no per-finding status — now stamped); severity labels are capitalized consistently; "95050+" run-together score rendering fixed.
+- **Update check soft-fails offline**: an unreachable GitHub no longer errors the About-page update card — it reports "couldn't reach the update service" and leaves the version alone.
+- **Nav stability**: the nav oscillated at 1140–1230px and the Close-app control was unreachable at several widths (both fixed across 560–1250px); pentest suite rows fit 390px screens.
+- **History page**: the date filter now spans all pages (it filtered only the loaded page), dead columns were removed, and the current page survives in the URL.
+- **Files page**: Reset restores the saved selection (it cleared to nothing) and Save is disabled until something actually changed.
+- **Rule Studio**: regex patterns are validated before save (invalid patterns errored at scan time), pasted YAML is escaped in test output, and deletes confirm first.
+- **Contrast and labels**: dark-theme warning text/badges on soft fills, light-theme badge contrast, "Batch"/"PowerShell" language labels, and duplicate rule-id titles in the source pane (deduped; headings synthesized from the message when the title just echoes the rule id).
+- **Workspace coverage honesty**: partially-covered latest scans no longer merge stale snapshot languages from an older scan into the workspace card.
 
 ### Fixed
 - **Partial-coverage honesty feature lit up**: `latest_scan_coverage` serialized PascalCase while the UI read lowercase, so the "N of M workspaces ran with partial analyzer coverage" caveat and per-row partial badges never rendered for any workspace.
