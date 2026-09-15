@@ -148,8 +148,9 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
               </summary>
               <div className="nav-more-panel">
                 <div className="nav-more-group">{secondary.map(link)}</div>
-                {/* Closing the app is terminal and rare, so it rides at the foot
-                    of the overflow menu in narrow mode. */}
+                {/* Very narrow viewports hide the action-bar copy (styles.css,
+                    <= 30rem) to keep that row on screen; down there this panel
+                    is always the mounted mode, so it carries the affordance. */}
                 <div className="nav-more-foot">
                   <Button variant="ghost" size="sm" className="close-app" onClick={onClose}>{t('common.closeApp')}</Button>
                 </div>
@@ -160,7 +161,12 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
       </nav>
       <div className="nav-actions">
         {seqArmed && <span className="seq-hint" aria-hidden="true">g…</span>}
-        {flat && <Button variant="ghost" size="sm" className="close-app" onClick={onClose}>{t('common.closeApp')}</Button>}
+        {/* Close app renders in BOTH modes and at every width. The actions row
+            is part of the nav's fit measurement, so a mode-conditional button
+            (flat was ~100px narrower) made the verdict refute itself and the
+            header flip forever; a constant width keeps the mode a pure
+            function of one (needed, clientWidth) pair. */}
+        <Button variant="ghost" size="sm" className="close-app" onClick={onClose}>{t('common.closeApp')}</Button>
         {/* Preferences are chosen once and then never touched. They read as one
             cohesive group instead of four competing buttons — and every one of
             them is still reachable from the command palette (Ctrl/Cmd+K).
@@ -205,12 +211,14 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
           <Button variant="ghost" size="icon" className="nav-shortcuts" onClick={() => onShowShortcuts?.()} title={t('common.shortcuts')} aria-label={t('common.shortcuts')}>
             <HelpCircle className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="sm" className="theme-toggle" onClick={onToggleTheme} aria-pressed={theme === 'dark'} title={theme === 'dark' ? t('common.switchToLight') : t('common.switchToDark')}>
+          <Button variant="ghost" size="sm" className="theme-toggle" onClick={onToggleTheme} aria-pressed={theme === 'dark'} title={theme === 'dark' ? t('common.switchToLight') : t('common.switchToDark')} aria-label={theme === 'dark' ? t('common.switchToLight') : t('common.switchToDark')}>
             {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            {/* Icon-only in the cluster, but the name has to stay in the DOM:
-                it is the button's accessible label — phrased as the ACTION the
-                button performs, not the state it is already in, so screen
-                readers announce "Switch to light theme", never a no-op. */}
+            {/* Icon-only in the cluster. The aria-label is the authoritative
+                accessible name — phrased as the ACTION the button performs, so
+                screen readers announce "Switch to light theme", never a no-op —
+                because styles.css display:none's this sr-only twin below 68rem
+                and a hidden span names nothing. It stays in the DOM as the
+                visible-state fallback for wide viewports. */}
             <span className="theme-toggle-label sr-only">{theme === 'dark' ? t('common.switchToLight') : t('common.switchToDark')}</span>
           </Button>
         </div>

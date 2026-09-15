@@ -87,15 +87,23 @@
   border-radius: var(--radius-button);
 }
 
-/* ── Terminal action, demoted out of the action bar ─────────────── */
-.nav-more-foot {
-  display: flex;
-  margin-top: var(--space-3xs);
-  padding-top: var(--space-2xs);
-  border-top: var(--rule) solid var(--color-rule-faint);
+/* ── Terminal action ───────────────────────────────────────────── */
+/* The action-bar "Close app" is the affordance at nearly every width — it must
+   stay in BOTH nav modes and unhidden by breakpoint, because a mode-conditional
+   width made the fit verdict oscillate and the 63rem hide left the flat
+   two-row band (~575-800px) with no close affordance at all. The panel copy
+   below only renders at the <= 30rem floor (matching styles.css), where the
+   action-bar copy is hidden to keep that row on screen; inside the absolutely
+   positioned panel it contributes no width to the fit measurement either way. */
+.nav-more-foot { display: none; }
+@media (max-width: 30rem) {
+  .nav-more-foot {
+    display: flex;
+    margin-top: var(--space-3xs);
+    padding-top: var(--space-2xs);
+    border-top: var(--rule) solid var(--color-rule-faint);
+  }
 }
-/* styles.css hides `.close-app` below 63rem; inside the disclosure it must
-   stay reachable at every width. */
 .app-nav .nav-more .close-app {
   display: inline-flex;
   width: 100%;

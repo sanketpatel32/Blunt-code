@@ -480,7 +480,7 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .tree-bulkbar-btn { min-height: 2rem; padding: 0 var(--space-sm); font-size: var(--text-xs); }
 .tree-name { min-width: 6rem; display: inline-flex; align-items: center; gap: var(--space-xs); font-weight: 550; letter-spacing: -.005em; }
 .tree-lang-badge { display: inline-flex; align-items: center; padding: 1px 6px; border-radius: var(--radius-xs); background: var(--color-surface-muted); color: var(--color-ink-faint); font: 600 10px var(--font-mono); letter-spacing: .02em; }
-.tree-excluded { display: inline-flex; align-items: center; padding: 1px var(--space-xs); border-radius: var(--radius-pill); background: var(--color-warning-soft); color: var(--color-warning-ink, var(--color-warning)); font-size: 11px; font-weight: 600; overflow-wrap: anywhere; }
+.tree-excluded { display: inline-flex; align-items: center; padding: 1px var(--space-xs); border-radius: var(--radius-pill); background: var(--color-warning-soft); color: var(--color-warning-text, var(--color-warning)); font-size: 11px; font-weight: 600; overflow-wrap: anywhere; }
 .tree-hit { padding: 0 4px; border-radius: var(--radius-pill); background: var(--color-accent-soft); color: var(--color-accent-strong); font-weight: 700; }
 .tree-children { margin-left: var(--space-md); border-left: 1px solid var(--color-rule-faint); padding-left: var(--space-md); margin-top: 2px; overflow: hidden; transition: height 200ms var(--ease-out); will-change: height; }
 .rule-editor-head { display: flex; align-items: flex-start; justify-content: space-between; }
@@ -940,7 +940,13 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 @media (max-width: 56rem) { :root { --page-gutter: var(--space-md); } }
 @media (max-width: 38rem) { :root { --page-gutter: var(--space-sm); } }
 @media (max-width: 68rem) { .app-nav { gap: var(--space-md); } .app-nav nav { gap: .1rem; } .theme-toggle .theme-toggle-label { display: none; } }
-@media (max-width: 63rem) { .close-app { display: none; } }
+/* `.close-app` must not be hidden across the flat/overflow boundary: the nav's
+   fit verdict measures the actions row, so a width that varies between modes
+   makes the header oscillate, and the old 63rem hide left the ~575-800px flat
+   two-row band with no close affordance at all. Only the action-bar copy is
+   hidden here (panel copy keeps serving), and 30rem sits far below the
+   flat-mode floor so the panel is always mounted where this applies. */
+@media (max-width: 30rem) { .nav-actions .close-app { display: none; } }
 @media (max-width: 56rem) {
   .workspace-hero-bento { grid-template-columns: 1fr; }
   .workspace-next { width: 100%; min-width: 0; }
@@ -964,10 +970,19 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
   .filters .filter-search { grid-column: span 2; }
   .workspace-grid { grid-template-columns: 1fr; }
 }
-@media (max-width: 48rem) {
+/* The nav drops to its own full-width row below 64rem. Row one cannot hold the
+   pill bar beside the actions cluster down here: the 1fr nav column shrinks
+   (min-width: 0) and its links slide under the actions row — the always-on
+   "Close app" button overlapped "Search" at 775-810px. Stacking is pure CSS,
+   so unlike a measurement-driven flip it cannot oscillate; 64rem keeps the
+   narrowest row-one nav (~370px) clear of the primary+More content it must
+   hold (~333px in the widest locale). */
+@media (max-width: 64rem) {
   .app-nav { grid-template-columns: auto 1fr; gap: var(--space-sm); }
   .app-nav nav { order: 3; grid-column: 1 / -1; overflow-x: auto; padding-bottom: var(--space-xs); border-top: var(--rule) solid var(--color-rule-faint); margin-top: var(--space-2xs); padding-top: var(--space-2xs); }
   .nav-actions { margin-left: auto; }
+}
+@media (max-width: 48rem) {
   .findings-section .section-head { position: static; backdrop-filter: none; }
   .dashboard-summary, .dashboard-summary-loading .summary-grid { grid-template-columns: repeat(2, 1fr); }
 }
