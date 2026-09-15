@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { api } from '../api';
-import type { RecentScanItem, Severity, Tool, Workspace } from '../types';
+import type { RecentScanItem, Scan, Severity, Tool, Workspace } from '../types';
 import type { Route } from '../lib/router';
 import type { Notice } from '../lib/notice';
 import { message } from '../lib/notice';
@@ -23,13 +23,35 @@ import { GRADE_BANDS, bandFor, riskGrade, riskScore, severityCountsOf } from '..
 
 const FEED_LIMIT = 10;
 
-type FeedFilter = 'all' | 'running' | 'completed' | 'warnings';
+/** Short date for the cancelled-scan fallback note ("showing 15 Sep 2026 results"). */
+const shortDateFmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
 
-/** Only terminal scans with a full findings table count toward current risk. */
-function currentScan(workspace: Workspace) {
-  const scan = workspace.latest_scan;
-  return scan && (scan.state === 'completed' || scan.state === 'completed_with_warnings') ? scan : undefined;
+function shortDate(value?: string | null): string | null {
+  if (!value) return null;
+  const time = new Date(value).getTime();
+  if (Number.isNaN(time)) return null;
+  return shortDateFmt.format(time);
 }
+
+/**
+ * The scan whose findings are a workspace's current risk: the latest scan when it
+ * finished cleanly, otherwise the newest scan that actually completed. The API
+ * supplies `last_completed_scan` only when the newest run was cancelled/interrupted,
+ * so a good completed report isn't hidden behind a dead run's "—" grade. When the
+ * fallback is used the row says so (`superseded`) and the state badge stays honest
+ * about the cancelled run; workspaces with no completed scan at all stay ungraded.
+ */
+function riskScanOf(workspace: Workspace): { scan?: Scan; superseded: boolean } {
+  const latest = workspace.latest_scan;
+  if (latest && (latest.state === 'completed' || latest.state === 'completed_with_warnings')) {
+    return { scan: latest, superseded: false };
+  }
+  const completed = workspace.last_completed_scan;
+  if (completed && findingsAreFinal(completed.state)) return { scan: completed, superseded: true };
+  return { superseded: false };
+}
+
+type FeedFilter = 'all' | 'running' | 'completed' | 'warnings';
 
 /** States whose totals are final; anything else never finished counting, so no number is honest yet. */
 function findingsAreFinal(state?: string): boolean {
@@ -69,13 +91,15 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
     && !(recent.data?.scans?.length);
 
   // ── The verdict: one score from the latest completed scan of each workspace ──
+  // (When the newest run was cancelled/interrupted, the newest scan that actually
+  // completed stands in — see riskScanOf — so a good report still grades the board.)
   const ledgerBase = useMemo(() => {
     return (workspaces.data ?? []).map((workspace) => {
-      const current = currentScan(workspace);
+      const { scan: current, superseded } = riskScanOf(workspace);
       const score = current ? riskScore(severityCountsOf(current)) : null;
       const coverage = workspace.latest_scan_coverage;
       const partial = !!current && !!coverage && (coverage.failed > 0 || coverage.warned > 0);
-      return { workspace, current, score, total: current?.total_findings ?? 0, coverage, partial };
+      return { workspace, current, superseded, score, total: current?.total_findings ?? 0, coverage, partial };
     });
   }, [workspaces.data]);
 
@@ -190,6 +214,15 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
           }
         >
           Choose any folder on this computer. Blunt Code scans it locally, keeps the history here, and never changes your source files.
+          {' '}Blunt Code runs security and code-quality analyzers over the folder — surfacing secrets, vulnerabilities, and risky code — without changing your files.
+          <br />
+          <span className="mt-2 inline-flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xs text-[var(--color-ink-faint)]" aria-label="Getting started: add a workspace, run a scan, review findings">
+            <span>1. Add a workspace</span>
+            <span aria-hidden="true">→</span>
+            <span>2. Run a scan</span>
+            <span aria-hidden="true">→</span>
+            <span>3. Review findings</span>
+          </span>
         </Empty>
 
         <PrivacyNotice />
@@ -222,7 +255,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
               title={latestWorkspaceId ? 'Run a scan on the most recently scanned workspace' : undefined}
             >
               <Play className={`mr-1.5 h-3.5 w-3.5 ${quickScanning ? 'animate-spin' : ''}`} />
-              {quickScanning ? 'Starting scan…' : 'Scan latest workspace'}
+              {quickScanning ? 'Starting scan…' : quickScanTarget?.workspace_name ? `Scan ${quickScanTarget.workspace_name}` : 'Scan latest workspace'}
             </Button>
             <Button onClick={onAdd}>
               <FolderPlus className="mr-1.5 h-4 w-4" />
@@ -237,7 +270,11 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
         <div className="board-verdict-loading"><SkeletonCards count={1} variant="metric" /></div>
       ) : (
         <section className="board-verdict" aria-label="Current risk across your workspaces">
-          <div className="verdict-grade" data-grade={verdictTallied ? verdict.grade : 'none'}>
+          <div
+            className="verdict-grade"
+            data-grade={verdictTallied ? verdict.grade : 'none'}
+            title="Weighted risk score: critical ×10, high ×5, medium ×2, low ×1"
+          >
             <span className="verdict-letter" aria-hidden="true">{verdictTallied ? verdict.grade : '–'}</span>
             <span className="verdict-score">
               {verdictTallied ? (
@@ -253,8 +290,8 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
               {verdictTallied ? (
                 <>
                   <strong>{bandFor(verdict.grade).label}.</strong>{' '}
-                  {verdict.totalFindings} finding{verdict.totalFindings === 1 ? '' : 's'} across the latest completed scan
-                  of {verdict.scanned} workspace{verdict.scanned === 1 ? '' : 's'}.
+                  {verdict.totalFindings} finding{verdict.totalFindings === 1 ? '' : 's'} across the latest completed{' '}
+                  scan{verdict.scanned === 1 ? '' : 's'} of {verdict.scanned} workspace{verdict.scanned === 1 ? '' : 's'}.
                 </>
               ) : workspaces.error ? (
                 <>Couldn't load your workspaces. Nothing is lost — use "Try again" in the panel below to reload the board.</>
@@ -277,7 +314,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
               aria-label={`Grade ${verdictTallied ? verdict.grade : 'none'} at score ${verdictTallied ? verdict.score : 0}. Bands: ${GRADE_BANDS.map((band) => `${band.grade} ${band.range}`).join(', ')}.`}
             >
               {GRADE_BANDS.map((band) => (
-                <span key={band.grade} className="verdict-band" data-grade={band.grade} data-active={verdictTallied && verdict.grade === band.grade || undefined}>
+                <span key={band.grade} className="verdict-band" data-grade={band.grade} data-active={verdictTallied && verdict.grade === band.grade || undefined} title={band.label}>
                   <b>{band.grade}</b>
                   <small>{band.range}</small>
                 </span>
@@ -306,11 +343,11 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
               </dd>
             </div>
             <div className="rail-stat">
-              <dt>Last scan finished</dt>
+              <dt>Last completed scan</dt>
               <dd>{verdict.lastFinished ? relativeTime(verdict.lastFinished) : '—'}</dd>
             </div>
             <div className="rail-stat">
-              <dt>Engines</dt>
+              <dt>Optional tools</dt>
               <dd className="tabular-nums">
                 {readyTools} <span className="rail-of">of {totalTools}</span>
               </dd>
@@ -435,8 +472,8 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
         </section>
       </div>
 
-      {/* ── Engines strip: real tool readiness, nothing invented ── */}
-      <EnginesFoot tools={tools.data ?? []} ready={readyTools} total={totalTools} loading={tools.loading} error={tools.error} retry={tools.reload} go={go} />
+      {/* ── Optional-tools strip: real tool readiness, nothing invented ── */}
+      <ToolsFoot tools={tools.data ?? []} ready={readyTools} total={totalTools} loading={tools.loading} error={tools.error} retry={tools.reload} go={go} />
 
       {confirmQuickScan && quickScanTarget && (
         <ConfirmationDialog
@@ -501,7 +538,9 @@ function TrendBars({ scans }: { scans: RecentScanItem[] }) {
 
   return (
     <div className="board-trend">
-      <p className="board-trend-label">Findings per recent scan</p>
+      <p className="board-trend-label">
+        Findings per recent scan <span aria-hidden="true">· older → newer</span>
+      </p>
       <div className="trend-bars" role="img" aria-label={label} title={label}>
         {points.map((point, index) => (
           <i
@@ -602,6 +641,33 @@ function LedgerLanguages({ languages }: { languages?: string[] }) {
   );
 }
 
+/** Trajectory chip from the scan's comparison with its predecessor: green when fixes
+ *  outnumber new findings, amber otherwise, neutral on a tie; hidden when the scan
+ *  recorded neither (older backends omit the counts). */
+function DeltaChip({ scan }: { scan: Scan }) {
+  const fixed = scan.fixed_count ?? 0;
+  const fresh = scan.new_count ?? 0;
+  if (fixed === 0 && fresh === 0) return null;
+  const tone = fixed > fresh
+    ? 'bg-[var(--color-success-soft)] text-[var(--color-success-text)]'
+    : fresh > fixed
+      ? 'bg-[var(--color-warning-soft)] text-[var(--color-warning-text)]'
+      : 'bg-[var(--color-surface-muted)] text-[var(--color-ink-soft)]';
+  const parts = [
+    fixed > 0 ? `↓ ${fixed} fixed` : null,
+    fresh > 0 ? `↑ ${fresh} new` : null,
+  ].filter(Boolean).join(' · ');
+
+  return (
+    <span
+      className={`ledger-delta inline-flex items-center whitespace-nowrap rounded-full px-1.5 py-px text-[10px] font-medium tabular-nums ${tone}`}
+      title="Since the previous completed scan"
+    >
+      {parts}
+    </span>
+  );
+}
+
 function LedgerRow({
   workspace,
   score,
@@ -616,7 +682,9 @@ function LedgerRow({
   onRemoved: () => void;
 }) {
   const scan = workspace.latest_scan;
-  const current = currentScan(workspace);
+  // The row grades the newest scan that actually finished; `superseded` marks rows
+  // where that is a stand-in for a cancelled/interrupted newest run.
+  const { scan: current, superseded } = riskScanOf(workspace);
   const state = scanStateDisplay(scan?.state);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -671,6 +739,14 @@ function LedgerRow({
         </button>
         <PathCopy path={workspace.root_path} />
         <LedgerLanguages languages={workspace.languages} />
+        {superseded && current && scan && (
+          <small
+            className="muted ledger-fallback-note"
+            title={`Latest run ${state.label.toLowerCase()}${current.finished_at ? ` on ${date(current.finished_at)}` : ''}; grades come from the newest completed scan.`}
+          >
+            Latest scan {state.label.toLowerCase()} — showing {shortDate(current.finished_at) ?? 'earlier'} results
+          </small>
+        )}
       </div>
 
       <div className="ledger-mid">
@@ -684,6 +760,7 @@ function LedgerRow({
             <span className="ledger-count tabular-nums">
               {total} {total === 1 ? 'finding' : 'findings'}
             </span>
+            <DeltaChip scan={current} />
             {partialCoverage && coverage && (
               <span
                 className="ledger-partial-badge"
@@ -758,7 +835,7 @@ function LedgerRow({
   );
 }
 
-function EnginesFoot({
+function ToolsFoot({
   tools,
   ready,
   total,
@@ -776,19 +853,20 @@ function EnginesFoot({
   go: (r: Route) => void;
 }) {
   return (
-    <footer className="board-foot" aria-label="Analyzer engines">
+    <footer className="board-foot" aria-label="Analyzers">
       {loading ? (
         <div className="board-skeleton"><SkeletonLines lines={1} /></div>
       ) : error ? (
         <p className="board-foot-note">
-          Engine status is unavailable right now.{' '}
+          Analyzer status is unavailable right now.{' '}
           <button type="button" className="text-button" onClick={retry}>Try again</button>
         </p>
       ) : (
         <>
           <i className="board-foot-dot" data-state={total > 0 && ready === total ? 'ready' : 'partial'} aria-hidden="true" />
           <p className="board-foot-note">
-            <strong>{ready} of {total}</strong> engines ready · managed locally, nothing leaves this computer
+            {/* Managed-tool readiness, not the analyzer inventory — the totals must not read as "all N analyzers". */}
+            <strong>{ready} of {total}</strong> optional tools ready · managed locally, nothing leaves this computer
           </p>
           {tools.length > 0 && (
             <div className="board-foot-chips">

@@ -130,6 +130,9 @@ describe('HomePage risk board — verdict', () => {
     expect(host.querySelector('.verdict-letter')?.textContent).toBe('D');
     expect(host.querySelector('.verdict-score')?.textContent).toContain('73');
     expect(host.textContent).toContain('Critical risk.');
+    // Score explainability: the weighting travels on the grade tile and the band meaning on each tile.
+    expect(host.querySelector('.verdict-grade')?.getAttribute('title')).toBe('Weighted risk score: critical ×10, high ×5, medium ×2, low ×1');
+    expect(host.querySelector('.verdict-band')?.getAttribute('title')).toBe('Low risk');
     // Band ruler marks D active.
     const activeBand = host.querySelector('.verdict-band[data-active="true"]');
     expect(activeBand?.textContent).toContain('D');
@@ -190,7 +193,7 @@ describe('HomePage risk board — verdict', () => {
     expect(rail.textContent).toContain('6');
     expect(rail.textContent).toContain('Workspaces scanned');
     expect(rail.textContent).toContain('1 of 1'); // from the workspace list, not the stale summary shape
-    expect(rail.textContent).toContain('Engines');
+    expect(rail.textContent).toContain('Optional tools');
     expect(rail.textContent).toContain('2 of 2');
   });
 
@@ -267,6 +270,119 @@ describe('HomePage risk board — ledger', () => {
   });
 });
 
+describe('HomePage cancelled-scan fallback and trajectory', () => {
+  it('grades from the last completed scan when the newest run was cancelled, and says so', async () => {
+    const fallback = workspaceItem({
+      id: 'ws-fb',
+      name: 'Cancelled Then Good',
+      latest_scan: latestScan({
+        id: 'scan-dead',
+        state: 'cancelled',
+        finished_at: anHourAgo(),
+        total_findings: 0,
+        critical_count: 0,
+        high_count: 0,
+        medium_count: 0,
+        low_count: 0,
+      }),
+      last_completed_scan: latestScan({
+        id: 'scan-good',
+        state: 'completed',
+        finished_at: anHourAgo(),
+        total_findings: 7,
+        critical_count: 1,
+        high_count: 1,
+        medium_count: 2,
+        low_count: 3, // 10+5+4+3 = 22 → C
+        new_count: 1,
+        fixed_count: 4,
+      }),
+    });
+    const host = await render(homeFetchMock({ scans: [], total: 0, summary }, { items: [fallback] }));
+
+    // The row grades the completed report, not the dead run.
+    expect(host.querySelector('.ledger-grade')?.textContent).toBe('C');
+    expect(host.querySelector('.ledger-count')?.textContent).toContain('7 findings');
+    // The verdict and the "N of M workspaces" count use the same rule.
+    expect(host.querySelector('.verdict-letter')?.textContent).toBe('C');
+    expect(host.querySelector('.verdict-rail')?.textContent).toContain('1 of 1');
+    expect(host.textContent).toContain('7 findings across the latest completed scan of 1 workspace.');
+    // Honest note + honest state badge about the cancelled run.
+    const note = host.querySelector('.ledger-fallback-note');
+    expect(note?.textContent).toContain('Latest scan cancelled');
+    expect(note?.textContent).toContain('results');
+    expect(host.querySelector('.ledger-last')?.textContent).toContain('Cancelled');
+    // Trajectory chip comes from the completed scan's comparison.
+    const delta = host.querySelector('.ledger-delta');
+    expect(delta?.textContent).toBe('↓ 4 fixed · ↑ 1 new');
+    expect(delta?.getAttribute('title')).toBe('Since the previous completed scan');
+    expect(delta?.className).toContain('--color-success-text'); // fixed > new → green tint
+  });
+
+  it('keeps the honest ungraded row when a cancelled scan has no completed predecessor', async () => {
+    const dead = workspaceItem({
+      name: 'Only Cancelled',
+      latest_scan: latestScan({
+        state: 'cancelled',
+        finished_at: anHourAgo(),
+        total_findings: 0,
+        critical_count: 0,
+        high_count: 0,
+        medium_count: 0,
+        low_count: 0,
+      }),
+    });
+    const host = await render(homeFetchMock({ scans: [], total: 0, summary }, { items: [dead] }));
+
+    expect(host.querySelector('.ledger-grade')?.textContent).toBe('–');
+    expect(host.querySelector('.ledger-score-none')).not.toBeNull();
+    expect(host.textContent).toContain('Scan cancelled');
+    expect(host.querySelector('.ledger-fallback-note')).toBeNull();
+    expect(host.querySelector('.ledger-delta')).toBeNull();
+    expect(host.querySelector('.verdict-grade')?.getAttribute('data-grade')).toBe('none');
+  });
+
+  it('omits the trajectory chip when the scan reports no fixes or new findings', async () => {
+    const host = await render(homeFetchMock(
+      { scans: [], total: 0, summary },
+      { items: [workspaceItem({ latest_scan: latestScan({ new_count: 0, fixed_count: 0 }) })] },
+    ));
+    expect(host.querySelector('.ledger-delta')).toBeNull();
+  });
+
+  it('tones the trajectory chip amber when new findings outnumber fixes', async () => {
+    const host = await render(homeFetchMock(
+      { scans: [], total: 0, summary },
+      { items: [workspaceItem({ latest_scan: latestScan({ new_count: 3, fixed_count: 1 }) })] },
+    ));
+    const delta = host.querySelector('.ledger-delta');
+    expect(delta?.textContent).toBe('↓ 1 fixed · ↑ 3 new');
+    expect(delta?.className).toContain('--color-warning-text');
+  });
+
+  it('pluralizes the hero line across the latest completed scans of several workspaces', async () => {
+    const second = workspaceItem({
+      id: 'ws-2',
+      name: 'Second',
+      latest_scan: latestScan({ total_findings: 5, critical_count: 0, high_count: 1, medium_count: 2, low_count: 0, info_count: 0 }),
+    });
+    const host = await render(homeFetchMock({ scans: [scanItem()], total: 1, summary }, { items: [workspaceItem(), second] }));
+    expect(host.textContent).toContain('across the latest completed scans of 2 workspaces.');
+  });
+
+  it('talks about analyzers and optional tools instead of engines', async () => {
+    const host = await render(homeFetchMock(
+      { scans: [scanItem()], total: 1, summary },
+      undefined,
+      { items: [{ id: 'ruff', ready: true }, { id: 'semgrep', ready: false }] },
+    ));
+    expect(host.querySelector('.verdict-rail')?.textContent).toContain('Optional tools');
+    expect(host.querySelector('.board-foot')?.getAttribute('aria-label')).toBe('Analyzers');
+    expect(host.querySelector('.board-foot-note')?.textContent).toContain('1 of 2 optional tools ready');
+    expect(host.textContent).not.toContain('engine');
+  });
+});
+
 describe('HomePage risk board — activity feed', () => {
   it('renders recent scans with state, profile, findings and relative time', async () => {
     const host = await render(homeFetchMock({ scans: [scanItem()], total: 1, summary }));
@@ -290,6 +406,7 @@ describe('HomePage risk board — activity feed', () => {
     const bars = host.querySelectorAll('.trend-bars i');
     expect(bars).toHaveLength(3);
     expect(host.querySelector('.board-trend-label')?.textContent).toContain('Findings per recent scan');
+    expect(host.querySelector('.board-trend-label')?.textContent).toContain('older → newer');
   });
 
   it('hides the trend until at least two scans exist', async () => {
@@ -414,9 +531,12 @@ describe('HomePage quick actions', () => {
       return Promise.resolve(json({ items: [] }));
     });
     const host = await render(fetchMock);
-    const quickScan = findButton(host, 'Scan latest workspace');
+    // The button names its target once the latest workspace is known; the tooltip
+    // keeps explaining that "latest" means the most recently scanned one.
+    const quickScan = findButton(host, 'Scan Second Project');
     expect(quickScan).toBeDefined();
     expect(quickScan!.disabled).toBe(false);
+    expect(quickScan!.getAttribute('title')).toBe('Run a scan on the most recently scanned workspace');
 
     // The click confirms first — nothing is posted until the dialog accepts.
     await act(async () => { quickScan!.click(); });
@@ -434,18 +554,22 @@ describe('HomePage quick actions', () => {
     const host = await render(homeFetchMock({ scans: [], total: 0 }, { items: [] }));
     expect(host.textContent).toContain('Point Blunt Code at a project');
     expect(host.textContent).toContain('Add your first workspace');
+    expect(host.textContent).toContain('security and code-quality analyzers');
+    expect(host.textContent).toContain('1. Add a workspace');
+    expect(host.textContent).toContain('2. Run a scan');
+    expect(host.textContent).toContain('3. Review findings');
     expect(host.querySelector('.board-verdict')).toBeNull();
   });
 });
 
-describe('HomePage engines foot', () => {
-  it('reports real tool readiness with per-engine chips', async () => {
+describe('HomePage optional tools foot', () => {
+  it('reports real tool readiness with per-tool chips, without implying the analyzer total', async () => {
     const host = await render(homeFetchMock(
       { scans: [scanItem()], total: 1, summary },
       undefined,
       { items: [{ id: 'ruff', ready: true }, { id: 'semgrep', ready: true }, { id: 'gitleaks', ready: false }] },
     ));
-    expect(host.querySelector('.board-foot-note')?.textContent).toContain('2 of 3 engines ready');
+    expect(host.querySelector('.board-foot-note')?.textContent).toContain('2 of 3 optional tools ready');
     const chips = [...host.querySelectorAll('.board-foot-chip')];
     expect(chips.map((chip) => chip.textContent)).toEqual(['ruff', 'semgrep', 'gitleaks']);
     expect(chips[2].className).toContain('pending');

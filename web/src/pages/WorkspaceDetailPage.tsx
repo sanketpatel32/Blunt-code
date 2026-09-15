@@ -1,11 +1,11 @@
 import { Suspense, lazy, useState, type ReactNode } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { api } from '../api';
-import type { AnalyzerRun, RiskProfile } from '../types';
+import type { AnalyzerRun, RiskProfile, Scan } from '../types';
 import type { Route } from '../lib/router';
 import type { Notice } from '../lib/notice';
 import { message } from '../lib/notice';
-import { date, languageColor } from '../lib/format';
+import { analyzerName, date, languageColor } from '../lib/format';
 import { useLoad } from '../hooks/useLoad';
 import { Empty, ErrorPanel, LanguageBadges, Loading } from '../components/ui';
 import { ScanIcon } from '../components/icons';
@@ -27,6 +27,20 @@ import { PageHeader } from '../components/PageHeader';
 const AnalyticsCharts = lazy(() => import('../components/AnalyticsCharts').then((m) => ({ default: m.AnalyticsCharts })));
 const DependencyGraph = lazy(() => import('../components/DependencyGraph').then((m) => ({ default: m.DependencyGraph })) );
 const ComplianceMatrix = lazy(() => import('../components/ComplianceMatrix').then((m) => ({ default: m.ComplianceMatrix })) );
+
+/** A scan only speaks for the workspace once it finished; everything else (cancelled, interrupted, queued, running) records zeros or unknowns. */
+function isCompletedState(state?: string | null): boolean {
+  return state === 'completed' || state === 'completed_with_warnings';
+}
+
+/** Completion timestamp for ordering; hostile timestamps order as "oldest" instead of throwing. */
+function scanTime(scan: Scan): number {
+  const time = new Date(scan.finished_at ?? scan.started_at ?? '').getTime();
+  return Number.isNaN(time) ? 0 : time;
+}
+
+/** C3 · the number is only useful once the math behind it is one hover away. */
+const RISK_SCORE_EXPLAINER = 'Weighted risk score: critical ×10, high ×5, medium ×2, low · A 0–4, B 5–19, C 20–49, D 50+';
 
 export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) => void; notify: (n: Notice) => void }) {
   const workspace = useLoad(() => api.workspace(id), [id]);
@@ -51,18 +65,35 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
   const reduced = useReducedMotion();
   // Declared before the handlers below use it (openSettings reads name/profile).
   const item = workspace.data;
+  const scanHistory = scans.data ?? [];
   // The workspace payload's latest_scan omits the discovery snapshot that scan-list
   // rows carry (Scan.snapshot), so backfill it from the matching history row before
   // computing per-language coverage — without the backfill the Languages tab never
   // shows counts even though the snapshot is recorded.
-  const latestScan = item?.latest_scan;
-  const latest = latestScan
-    ? { ...latestScan, snapshot: latestScan.snapshot ?? scans.data?.find((scan) => scan.id === latestScan.id)?.snapshot }
-    : scans.data?.[0];
-  const isCompleted = latest?.state === 'completed' || latest?.state === 'completed_with_warnings';
-  // Real per-language file counts live on the latest scan's discovery snapshot; when it is absent the language list renders without counts rather than inventing them.
+  const withSnapshot = (scan?: Scan | null): Scan | undefined =>
+    scan ? { ...scan, snapshot: scan.snapshot ?? scanHistory.find((row) => row.id === scan.id)?.snapshot } : undefined;
+  const rawLatest = withSnapshot(item?.latest_scan);
+  // C2 · a cancelled/interrupted/queued "latest" scan records zeros, so metric cards
+  // built from it lied ("0 findings") beside a Risk card graded on real data. Metrics
+  // grade on the newest scan that actually finished: prefer latest_scan only when it
+  // completed, else the server's last_completed_scan, else the newest completed row
+  // from the loaded history. The raw latest stays on the Latest-scan panel, where
+  // "what ran last" belongs, with a notice bridging the two.
+  const newestCompletedScan = scanHistory
+    .filter((scan) => isCompletedState(scan.state))
+    .reduce<Scan | undefined>((newest, scan) => (!newest || scanTime(scan) > scanTime(newest) ? scan : newest), undefined);
+  const latest = isCompletedState(rawLatest?.state)
+    ? rawLatest
+    : withSnapshot(item?.last_completed_scan ?? newestCompletedScan);
+  const fellBackToCompleted = Boolean(rawLatest && latest && rawLatest.id !== latest.id);
+  // Plain-words bridge for the fallback above, shown next to the Latest-scan panel.
+  const fallbackNotice = fellBackToCompleted && rawLatest && latest
+    ? `Last scan was ${rawLatest.state.replaceAll('_', ' ')} — showing the last completed scan (${latest.total_findings ?? 0} findings, ${date(latest.finished_at ?? latest.started_at)}).`
+    : null;
+  // Real per-language file counts live on the effective scan's discovery snapshot; when it is absent the language list renders without counts rather than inventing them.
   const coverage = languageCoverageFromSnapshot(latest?.snapshot);
-  const scanHistory = scans.data ?? [];
+  // Confetti celebrates a fresh completed run — a cancelled one is not a milestone.
+  const isCompleted = isCompletedState(rawLatest?.state);
   async function start() { try { const scan = await api.startScan(id, profile); go({ page: 'scan', id: scan.id }); } catch (e) { notify({ kind: 'error', text: message(e) }); } }
   function copyPath() {
     const p = workspace.data?.root_path ?? '';
@@ -77,7 +108,8 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
   // A NOT_FOUND workspace never loads, so "Try again" alone is a dead end — offer the way back.
   if (workspace.error) return <div className="page"><ErrorPanel error={workspace.error} retry={workspace.reload} />{workspace.error.includes('NOT_FOUND') && <div className="mt-4 flex justify-center"><button type="button" className="button secondary" onClick={() => go({ page: 'workspaces' })}>Back to Workspaces</button></div>}</div>;
   if (!item) return <div className="page"><Loading /></div>;
-  const criticalHigh = (latest?.critical_count ?? 0) + (latest?.high_count ?? 0);
+  // Null (not 0) when nothing has completed: an unscanned workspace must not read as "all clear".
+  const criticalHigh = latest ? (latest.critical_count ?? 0) + (latest.high_count ?? 0) : null;
   return <div className="page workspace-page"><WorkspaceContextSidebar id={id} current={{ page: 'workspace', id }} onNavigate={go} /><div className="workspace-page-body">
     {/* 1 · Identify — who this is. Clean unified PageHeader. */}
     <PageHeader
@@ -150,19 +182,21 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
     {pruneOpen && <form className="settings-editor" onSubmit={(event) => { event.preventDefault(); void prune(); }} aria-label="Prune scan history"><label>Keep newest<input type="number" min={1} max={100} value={pruneKeep} onChange={(event) => setPruneKeep(Number(event.target.value))} /></label><div className="editor-actions"><button type="submit" className="button primary" disabled={pruning}>Delete older scans</button><button type="button" className="button secondary" onClick={() => setPruneOpen(false)}>Cancel</button></div></form>}
     {editing && <form className="settings-editor" onSubmit={(event) => { event.preventDefault(); saveSettings(); }} aria-label="Workspace settings"><label>Name<input value={nameDraft} onChange={(event) => setNameDraft(event.target.value)} maxLength={80} /></label><div className="settings-editor-profile"><span>Default profile</span><fieldset className="segmented" aria-label="Default profile">{['quick', 'standard', 'deep', 'pentest'].map((value) => <button key={value} type="button" aria-pressed={profileDraft === value} onClick={() => setProfileDraft(value)}>{value}</button>)}</fieldset></div><div className="editor-actions"><button type="submit" className="button primary" disabled={savingSettings}>Save</button><button type="button" className="button secondary" onClick={() => setEditing(false)}>Cancel</button></div></form>}
 
-    {/* 3 · Verdict — three headline numbers; the rest are one click away. */}
+    {/* 3 · Verdict — three headline numbers; the rest are one click away.
+        Cards grade on the effective (completed) scan; with nothing completed they
+        read "—" + "no scan yet" instead of zeros that imply all-clear. */}
     {!latest && scans.loading ? <SkeletonCards count={6} /> : <section className={`workspace-verdict ${reduced ? '' : 'is-animated'}`} aria-label="Latest scan summary">
       <div className="summary-grid premium">
-        <RiskCard risk={risk.data} />
-        <PremiumSummaryCard label="Critical + high" value={criticalHigh} tone="high" icon={<ShieldAlert className="h-4 w-4" />} spark={sparkSeries(scanHistory, (s) => s.critical_count != null && s.high_count != null ? s.critical_count + s.high_count : undefined)} delay={1} />
-        <PremiumSummaryCard label="Total findings" value={latest?.total_findings ?? 0} icon={<BarChart3 className="h-4 w-4" />} spark={sparkSeries(scanHistory, (s) => s.total_findings)} delay={2} />
+        <RiskCard risk={risk.data} unscanned={!latest} />
+        <PremiumSummaryCard label="Critical + high" value={criticalHigh} tone="high" icon={<ShieldAlert className="h-4 w-4" />} spark={latest ? sparkSeries(scanHistory, (s) => s.critical_count != null && s.high_count != null ? s.critical_count + s.high_count : undefined) : null} delay={1} />
+        <PremiumSummaryCard label="Total findings" value={latest ? latest.total_findings ?? 0 : null} icon={<BarChart3 className="h-4 w-4" />} spark={latest ? sparkSeries(scanHistory, (s) => s.total_findings) : null} delay={2} />
       </div>
-      <Disclosure label="All severity counts" hint={`${latest?.total_findings ?? 0} findings`}>
+      <Disclosure label="All severity counts" hint={latest ? `${latest.total_findings ?? 0} findings` : 'no scan yet'}>
         <div className="summary-grid premium">
-          <PremiumSummaryCard label="Medium" value={latest?.medium_count ?? 0} tone="medium" icon={<AlertTriangle className="h-4 w-4" />} spark={sparkSeries(scanHistory, (s) => s.medium_count)} delay={1} />
-          <PremiumSummaryCard label="Low + info" value={(latest?.low_count ?? 0) + (latest?.info_count ?? 0)} icon={<Layers className="h-4 w-4" />} spark={sparkSeries(scanHistory, (s) => s.low_count != null && s.info_count != null ? s.low_count + s.info_count : undefined)} delay={2} />
-          <PremiumSummaryCard label="New" value={latest?.new_count ?? 0} icon={<FileSearch className="h-4 w-4" />} spark={sparkSeries(scanHistory, (s) => s.new_count)} delay={3} />
-          <PremiumSummaryCard label="Fixed" value={latest?.fixed_count ?? 0} icon={<ShieldCheck className="h-4 w-4" />} spark={sparkSeries(scanHistory, (s) => s.fixed_count)} delay={4} />
+          <PremiumSummaryCard label="Medium" value={latest ? latest.medium_count ?? 0 : null} tone="medium" icon={<AlertTriangle className="h-4 w-4" />} spark={latest ? sparkSeries(scanHistory, (s) => s.medium_count) : null} delay={1} />
+          <PremiumSummaryCard label="Low + info" value={latest ? (latest.low_count ?? 0) + (latest.info_count ?? 0) : null} icon={<Layers className="h-4 w-4" />} spark={latest ? sparkSeries(scanHistory, (s) => s.low_count != null && s.info_count != null ? s.low_count + s.info_count : undefined) : null} delay={2} />
+          <PremiumSummaryCard label="New" value={latest ? latest.new_count ?? 0 : null} icon={<FileSearch className="h-4 w-4" />} spark={latest ? sparkSeries(scanHistory, (s) => s.new_count) : null} delay={3} />
+          <PremiumSummaryCard label="Fixed" value={latest ? latest.fixed_count ?? 0 : null} icon={<ShieldCheck className="h-4 w-4" />} spark={latest ? sparkSeries(scanHistory, (s) => s.fixed_count) : null} delay={4} />
         </div>
       </Disclosure>
     </section>}
@@ -210,10 +244,13 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
       </TabsContent>
     </Tabs>
 
-    {/* 5 · Activity — what ran, and what it found. */}
-    <section className="split-section workspace-history-section"><div className="workspace-section-card"><h2>Latest analysis</h2>{latest ? <><p className="muted">{latest.state.replaceAll('_', ' ')} · {date(latest.finished_at ?? latest.started_at)}</p>{latest.error_summary && <div className="inline-warning">Warning: {latest.error_summary}</div>}<AnalyzerStatuses runs={latest.analyzer_runs} /></> : <Empty title="Ready when you are" icon={<ScanIcon />}>Run the first scan to get a combined report.</Empty>}</div><div className="workspace-section-card"><h2>Scan history</h2>{scans.loading ? <SkeletonTable rows={4} cols={10} /> : scans.error ? <ErrorPanel error={scans.error} retry={scans.reload} /> : <HistoryTable scans={scans.data ?? []} go={go} />}</div></section>
+    {/* 5 · Activity — what ran, and what it found. The panel shows the scan that actually
+        ran last (even a cancelled one — that is the truthful "latest attempt"); when the
+        verdict cards above grade on an older completed scan instead, the notice says so. */}
+    <section className="split-section workspace-history-section"><div className="workspace-section-card"><h2>Latest scan</h2>{(rawLatest ?? latest) ? <>{fallbackNotice && <p className="muted" role="note">{fallbackNotice}</p>}<p className="muted">{(rawLatest ?? latest)!.state.replaceAll('_', ' ')} · {date((rawLatest ?? latest)!.finished_at ?? (rawLatest ?? latest)!.started_at)}</p>{(rawLatest ?? latest)!.error_summary && <div className="inline-warning">Warning: {(rawLatest ?? latest)!.error_summary}</div>}<AnalyzerStatuses runs={(rawLatest ?? latest)!.analyzer_runs} /></> : <Empty title="Ready when you are" icon={<ScanIcon />}>Run the first scan to get a combined report.</Empty>}</div><div className="workspace-section-card"><h2>Scan history</h2>{scans.loading ? <SkeletonTable rows={4} cols={10} /> : scans.error ? <ErrorPanel error={scans.error} retry={scans.reload} /> : <HistoryTable scans={scans.data ?? []} go={go} />}</div></section>
 
-    {/* 6 · Housekeeping — set once, then ignored. */}
+    {/* 6 · Housekeeping — set once, then ignored. The gloss keeps "Suppress" from reading as jargon. */}
+    <p className="muted suppressions-gloss">Suppress = “not an issue for us” — hides a finding from all future scans and reports for this workspace.</p>
     <SuppressionsSection workspaceId={id} notify={notify} />
   </div>
   {deleteOpen && <ConfirmationDialog title="Remove this workspace?" description="This removes the saved workspace, file rules, and local scan history from Blunt Code. Your project files will not be changed." confirmLabel="Remove workspace" busy={deleting} onCancel={() => setDeleteOpen(false)} onConfirm={remove} />}</div>;
@@ -239,11 +276,12 @@ function MiniSparkline({ values }: { values: number[] }) {
   return <svg viewBox={`0 0 ${w} ${h}`} width={64} height={20} aria-hidden="true" className="premium-sparkline"><polyline fill="none" stroke="var(--color-accent)" strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round" points={pts.join(' ')} /></svg>;
 }
 
-function PremiumSummaryCard({ label, value, tone, icon, spark, delay }: { label: string; value: number; tone?: string; icon: ReactNode; spark?: number[] | null; delay: number }) {
+function PremiumSummaryCard({ label, value, tone, icon, spark, delay }: { label: string; /** null = nothing has completed yet — the card reads "—" / "no scan yet" instead of a lying 0. */ value: number | null; tone?: string; icon: ReactNode; spark?: number[] | null; delay: number }) {
+  const unscanned = value == null;
   return <div className={`summary-card premium-card ${tone ?? ''}`} style={{ animationDelay: `${delay*40}ms` }}>
     <span className="premium-card-icon">{icon}</span>
-    <strong>{value}</strong>
-    <span>{label}</span>
+    <strong>{unscanned ? '—' : value}</strong>
+    <span>{unscanned ? 'no scan yet' : label}</span>
     {/* Only a real multi-scan trend draws a line (sparkSeries returns null below two points). */}
     {spark && spark.length > 1 && <MiniSparkline values={spark} />}
   </div>;
@@ -260,7 +298,9 @@ export function AnalyzerStatuses({ runs }: { runs?: AnalyzerRun[] }) {
   }
   return <div className="analyzers"><h3>Analyzer status</h3>{[...grouped.entries()].map(([cat, items]) => <div key={cat} className="analyzer-group"><span className="analyzer-group-label" style={{ borderLeftColor: categoryColor(cat as never) }}>{(CATEGORY_LABELS as Record<string, string>)[cat] ?? cat}</span>{items.map((run) => {
     const skipped = run.status === 'skipped';
-    return <div className="analyzer-row" key={run.analyzer_id}><span>{run.analyzer_id}</span><span className={`state ${run.status}`}>{run.status}</span>{skipped ? <small role="note" className="text-amber-600">Skipped — {run.message || 'no applicable files or profile excluded this analyzer'}</small> : run.message ? <small>{run.message}</small> : null}</div>;
+    // Display names read like products ("Gitleaks", not "gitleaks-secrets"); an
+    // id missing from the map falls back to itself, and the raw id stays on hover.
+    return <div className="analyzer-row" key={run.analyzer_id}><span title={run.analyzer_id}>{analyzerName(run.analyzer_id)}</span><span className={`state ${run.status}`}>{run.status}</span>{skipped ? <small role="note" className="text-amber-600">Skipped — {run.message || 'no applicable files or profile excluded this analyzer'}</small> : run.message ? <small>{run.message}</small> : null}</div>;
   })}</div>)}</div>;
 }
 
@@ -368,10 +408,22 @@ function ComplianceSection({ scanId, go }: { scanId: string; go: (r: Route) => v
   );
 }
 
-export function RiskCard({ risk }: { risk?: RiskProfile | null }) {
-  if (!risk?.available || typeof risk.score !== 'number') return <div className="summary-card premium-card risk-hero"><span className="premium-card-icon"><ShieldAlert className="h-4 w-4" /></span><strong>0</strong><span>Risk score</span></div>;
-  const arrow = risk.trend === 'up' ? '▲' : risk.trend === 'down' ? '▼' : '＝';
-  const delta = typeof risk.previous_score === 'number' ? ` · ${arrow} ${Math.abs(Math.round(risk.score - risk.previous_score))}` : '';
+export function RiskCard({ risk, unscanned }: { risk?: RiskProfile | null; /** true when no completed scan exists: "—" beats a 0 that reads as all-clear. */ unscanned?: boolean }) {
+  if (!risk?.available || typeof risk.score !== 'number') return <div className="summary-card premium-card risk-hero"><span className="premium-card-icon"><ShieldAlert className="h-4 w-4" /></span><strong>{unscanned ? '—' : '0'}</strong><span>Risk score{unscanned ? ' · no scan yet' : ''}</span></div>;
+  // C8 · words beat glyphs: "Risk D · ▼ 4" made screen readers say "down arrow" and
+  // left everyone else guessing whether down was good. Trend direction now says
+  // what happened, and color carries the verdict (down = good here).
+  const delta = typeof risk.previous_score === 'number' ? Math.abs(Math.round(risk.score - risk.previous_score)) : null;
+  const noChange = { text: 'no change', tone: 'text-[var(--color-ink-soft)]' };
+  const trendNote = risk.trend === 'flat'
+    ? noChange
+    : (risk.trend === 'up' || risk.trend === 'down') && delta != null
+      ? delta === 0
+        ? noChange
+        : risk.trend === 'down'
+          ? { text: `improved ${delta} pts since last scan`, tone: 'text-[var(--color-success)]' }
+          : { text: `worsened ${delta} pts`, tone: 'text-[var(--color-warning)]' }
+      : null;
   const gradeTone = risk.grade === 'A' ? 'positive' : risk.grade === 'B' ? 'medium' : 'high';
   // A grade is only as strong as the scan behind it: when analyzer runs
   // failed or degraded, the score reflects partial coverage and the card
@@ -379,15 +431,16 @@ export function RiskCard({ risk }: { risk?: RiskProfile | null }) {
   const coverage = risk.coverage;
   const partial = coverage && risk.complete === false;
   const coverageNote = partial
-    ? `partial coverage: ${coverage!.succeeded}/${coverage!.total} analyzers clean` +
+    ? `partial coverage: ${coverage!.succeeded} of ${coverage!.total} analyzers completed` +
       (coverage!.failed > 0 ? `, ${coverage!.failed} failed` : '') +
       (coverage!.warned > 0 ? `, ${coverage!.warned} degraded` : '')
     : null;
   return <div className={`summary-card premium-card risk-hero ${gradeTone}`} title={risk.finished_at ? `Latest scan finished ${risk.finished_at}` : undefined}>
     <span className="premium-card-icon"><ShieldAlert className="h-4 w-4" /></span>
     <span className="risk-grade">{risk.grade}</span>
-    <strong className="risk-score">{Math.round(risk.score)}</strong>
-    <span>Risk {risk.grade}{delta}</span>
+    <strong className="risk-score" title={RISK_SCORE_EXPLAINER}>{Math.round(risk.score)}</strong>
+    <span>Risk {risk.grade}</span>
+    {trendNote && <small role="note" className={`risk-trend ${trendNote.tone}`}>{trendNote.text}</small>}
     {coverageNote && <span className="risk-coverage-note" data-partial="true">{coverageNote}</span>}
   </div>;
 }
