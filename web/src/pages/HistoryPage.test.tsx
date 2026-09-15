@@ -1,9 +1,15 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { api } from '../api';
 import type { Route } from '../lib/router';
 import type { Scan } from '../types';
-import { historyDateBands, HistoryTable } from './HistoryPage';
+import { HistoryPage, historyDateBands, HistoryTable } from './HistoryPage';
+
+vi.mock('../api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../api')>();
+  return { ...actual, api: { ...actual.api, workspace: vi.fn(), scansPage: vi.fn() } };
+});
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
@@ -93,7 +99,7 @@ describe('HistoryTable date bands', () => {
     ]);
     const bands = bandHeaders(host);
     expect(bands.map((header) => header.textContent)).toEqual(['Today', 'Yesterday', 'This week', 'Earlier']);
-    expect(bands.map((header) => header.colSpan)).toEqual([7, 7, 7, 7]);
+    expect(bands.map((header) => header.colSpan)).toEqual([6, 6, 6, 6]);
     const sequence = [...host.querySelectorAll('tbody tr')].map((row) => row.classList.contains('history-band-row') ? `band:${row.textContent}` : `row:${row.querySelector('.profile-badge')?.textContent}`);
     expect(sequence).toEqual(['band:Today', 'row:now', 'band:Yesterday', 'row:yesterday', 'band:This week', 'row:week', 'band:Earlier', 'row:old']);
   });
@@ -121,7 +127,7 @@ describe('HistoryTable expandable rows', () => {
     expect(disclose.getAttribute('aria-expanded')).toBe('true');
     expect(host.querySelectorAll('.history-detail-row')).toHaveLength(1);
     const cell = host.querySelector<HTMLTableCellElement>('.history-detail-row td')!;
-    expect(cell.colSpan).toBe(7);
+    expect(cell.colSpan).toBe(6);
     const detail = cell.querySelector('.history-detail')!;
     const meta = detail.textContent!;
     expect(meta).toContain('Started');
@@ -187,6 +193,15 @@ describe('HistoryTable expandable rows', () => {
 });
 
 describe('HistoryTable scan rows', () => {
+  it('drops the always-zero New/Fixed columns (list items never carry those counts)', async () => {
+    const { host } = await renderTable([scan({ id: 's1', state: 'completed', new_count: 5, fixed_count: 2 })]);
+    const headers = [...host.querySelectorAll('thead th')].map((th) => th.textContent!.trim());
+    expect(headers).not.toContain('New');
+    expect(headers).not.toContain('Fixed');
+    expect(dataRows(host)[0]!.querySelectorAll('td')).toHaveLength(5);
+    expect((host.querySelector('.history-band') as HTMLTableCellElement | null)?.colSpan).toBe(6);
+  });
+
   it('shows the scan profile as a badge beside the state pill, only when present', async () => {
     const { host } = await renderTable([
       scan({ id: 'scan-1', state: 'completed', profile: 'deep' }),
@@ -340,5 +355,96 @@ describe('HistoryTable accessibility caption (Loop W6)', () => {
   it('names the history table for screen readers', async () => {
     const { host } = await renderTable([scan({ id: 's1', state: 'completed' })]);
     expect(host.querySelector('table caption')?.textContent).toBe('Scan history for this workspace');
+  });
+});
+
+describe('HistoryPage', () => {
+  // Built from LOCAL Date parts so the filter assertions hold in every timezone.
+  const localIso = (year: number, month: number, day: number) => new Date(year, month - 1, day, 12, 0, 0).toISOString();
+  const onAug29 = (id: string): Scan => scan({ id, state: 'completed', started_at: localIso(2026, 8, 29), finished_at: localIso(2026, 8, 29) });
+  const offRange = (id: string, day: number): Scan => scan({ id, state: 'completed', started_at: localIso(2026, 8, day), finished_at: localIso(2026, 8, day) });
+
+  function mockPages(pages: Scan[][], total: number) {
+    vi.mocked(api.workspace).mockResolvedValue({ id: 'ws-1', name: 'Example API', root_path: 'C:\\code\\example-api' });
+    vi.mocked(api.scansPage).mockImplementation(async (_id: string, page: number) => ({
+      items: pages[page - 1] ?? [],
+      total,
+      page,
+      page_size: 6,
+      has_next: page < pages.length,
+    }));
+  }
+
+  async function renderPage() {
+    const host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+    await act(async () => { root.render(<HistoryPage workspaceId="ws-1" go={vi.fn<(route: Route) => void>()} />); });
+    await act(async () => {});
+    return host;
+  }
+
+  beforeEach(() => {
+    vi.mocked(api.workspace).mockReset();
+    vi.mocked(api.scansPage).mockReset();
+    window.history.replaceState(null, '', '/');
+  });
+
+  afterEach(() => { window.history.replaceState(null, '', '/'); });
+
+  it('restores the page from ?page= on mount and keeps the param in sync on navigation', async () => {
+    mockPages([Array.from({ length: 6 }, (_, i) => offRange(`a${i}`, 10 + i)), Array.from({ length: 6 }, (_, i) => offRange(`b${i}`, 20 + i)), [offRange('c0', 28)]], 13);
+    window.history.replaceState(null, '', '/workspaces/ws-1/scans?page=3&sort=asc');
+    const host = await renderPage();
+    expect(api.scansPage).toHaveBeenCalledWith('ws-1', 3, 6);
+    expect(host.querySelector('output')!.textContent).toBe('Page 3 of 3');
+    const [previous] = [...host.querySelectorAll<HTMLButtonElement>('.history-pagination button')];
+    await act(async () => { previous!.click(); });
+    await act(async () => {});
+    expect(window.location.search).toBe('?page=2&sort=asc'); // other params survive
+    expect(host.querySelector('output')!.textContent).toBe('Page 2 of 3');
+  });
+
+  it('walks every server page while a date filter is active and totals reflect the filtered set', async () => {
+    mockPages([
+      [onAug29('a1'), offRange('x1', 10), onAug29('a2'), offRange('x2', 11), offRange('x3', 12), offRange('x4', 13)],
+      [offRange('x5', 14), onAug29('a3')],
+    ], 8);
+    const host = await renderPage();
+    vi.mocked(api.scansPage).mockClear();
+
+    const from = host.querySelector<HTMLInputElement>('input[aria-label="Filter from date"]')!;
+    const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    await act(async () => {
+      nativeSetter.call(from, '2026-08-29');
+      from.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {});
+
+    // Match on page 2 was invisible before; the walk must have fetched it.
+    expect(api.scansPage).toHaveBeenCalledWith('ws-1', 2, 6);
+    expect(dataRows(host)).toHaveLength(3);
+    expect(host.querySelector('.history-filter-count')!.textContent).toBe('3 scans');
+    expect(host.querySelector('.history-pagination-count')!.textContent).toBe('Showing 1–3 of 8 scans');
+    expect(host.querySelector('.history-pagination button')).toBeNull(); // page controls hidden while filtered
+  });
+
+  it('clears the filter back to normal server paging', async () => {
+    mockPages([[onAug29('a1'), offRange('x1', 10)]], 2);
+    const host = await renderPage();
+    const clear = host.querySelector<HTMLButtonElement>('.history-filter-clear');
+    expect(clear).toBeNull(); // no filter yet, nothing to clear
+    const from = host.querySelector<HTMLInputElement>('input[aria-label="Filter from date"]')!;
+    const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    await act(async () => {
+      nativeSetter.call(from, '2026-08-29');
+      from.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {});
+    expect(host.querySelector('.history-pagination-count')!.textContent).toBe('Showing 1–1 of 2 scans');
+    await act(async () => { host.querySelector<HTMLButtonElement>('.history-filter-clear')!.click(); });
+    await act(async () => {});
+    expect(host.querySelector('.history-pagination button')).not.toBeNull(); // controls return
+    expect(host.querySelector('.history-pagination-count')!.textContent).toBe('Showing 1–2 of 2 scans'); // normal server paging again
   });
 });
