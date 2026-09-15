@@ -60,6 +60,10 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }) {
           </div>)}</dl>
         </section>)}
       </div>
+      {/* Newcomer orientation (help-discoverability audit): the one sentence a
+          first-time reader needs, with the /about deep link as the exit. The
+          router serves full path loads, so a plain anchor is enough here. */}
+      <p className="muted shortcuts-newcomer"><a href="/about">New here? Add a workspace, then Run scan — everything stays on this computer.</a></p>
       <footer><button ref={gotItRef} type="button" className="button primary" onClick={onClose}>Got it</button></footer>
     </div></dialog>
   </div>);

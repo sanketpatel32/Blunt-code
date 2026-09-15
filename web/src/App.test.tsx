@@ -43,7 +43,7 @@ describe('Blunt Code home', () => {
     expect(host.textContent).toContain('TypeScript');
     expect(host.textContent).toContain('8 findings');
     expect(host.textContent).not.toContain('No analysis yet');
-    expect(host.textContent).toContain('1 of 1 engines ready');
+    expect(host.textContent).toContain('1 of 1 optional tools ready');
     expect(host.querySelector('.ledger-list')).not.toBeNull();
     expect(host.textContent).toContain('Completed');
     const remove = [...host.querySelectorAll('button')].find((button) => button.textContent === 'Remove');
@@ -210,7 +210,7 @@ describe('Blunt Code home', () => {
     expect(toolChips.map((chip) => chip.textContent)).toEqual(['Biome1', 'Semgrep0', 'SonarQube0']);
     expect([...host.querySelectorAll('button')].find((button) => button.textContent === 'Filters')).toBeUndefined();
     expect(host.textContent).toContain('Showing 1 of 1');
-    expect(host.textContent).toContain('3 of 3 engines succeeded'); // the meta line carries the outcome
+    expect(host.textContent).toContain('3 of 3 analyzers succeeded'); // the meta line carries the outcome
     await act(async () => { toolChips.find((chip) => chip.textContent === 'Semgrep0')!.click(); await Promise.resolve(); await Promise.resolve(); });
     expect(host.textContent).toContain('Semgrep reported no findings');
     await act(async () => { toolChips.find((chip) => chip.textContent === 'Semgrep0')!.click(); await Promise.resolve(); await Promise.resolve(); }); // clicking the active chip clears it

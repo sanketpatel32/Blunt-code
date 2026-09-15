@@ -78,7 +78,7 @@ describe('StatsOverview', () => {
       '5ScansTotal scans run across every workspace; the split counts completed runs and runs still in progress.3 completed · 1 running',
       '3FindingsFindings reported by the latest completed scan of each workspace, summed across all severities.Latest scan per workspace',
       '3SuppressionsFinding fingerprints currently hidden from future scans, reports, and the CI gate.',
-      '3 of 4Tools readyAnalyzer tools reporting ready out of everything installed.',
+      '3 of 4Optional tools readyOptional analyzer tools reporting ready out of everything installed.',
     ]);
     // Every counter renders in tabular numerals and every card explains itself to screen readers.
     expect(cards.every((card) => card.querySelector('strong')?.className === 'tnum')).toBe(true);
@@ -127,7 +127,7 @@ describe('StatsOverview', () => {
       '0ScansTotal scans run across every workspace; the split counts completed runs and runs still in progress.0 completed · 0 running',
       '0FindingsFindings reported by the latest completed scan of each workspace, summed across all severities.Latest scan per workspace',
       '0SuppressionsFinding fingerprints currently hidden from future scans, reports, and the CI gate.',
-      '0 of 4Tools readyAnalyzer tools reporting ready out of everything installed.',
+      '0 of 4Optional tools readyOptional analyzer tools reporting ready out of everything installed.',
     ]);
     expect(host.querySelector('.stats-grid .summary-card .pulse-dot')).toBeNull();
     const bar = host.querySelector<HTMLElement>('.stats-distribution .severity-bar')!;

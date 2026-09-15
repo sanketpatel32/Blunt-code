@@ -98,7 +98,7 @@ describe('keyboard journey through the core flow', () => {
     // 4) The incomplete result is understandable: state badge, failure reason, engine tally.
     expect(host.querySelector('.scan-state-badge')?.textContent).toBe('Completed with warnings');
     expect(host.querySelector('.scan-hero-reason')?.textContent).toContain('biome failed');
-    expect(host.textContent).toContain('2 of 3 engines succeeded');
+    expect(host.textContent).toContain('2 of 3 analyzers succeeded');
 
     // 5) Inspect a finding by keyboard: the row is focusable, Enter docks the source pane.
     const row = host.querySelector<HTMLTableRowElement>('.findings-table tbody tr')!;

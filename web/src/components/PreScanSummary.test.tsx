@@ -44,7 +44,7 @@ describe('PreScanSummary — what this profile will run before it runs (IMP-14)'
     const text = host.textContent ?? '';
     // python + yaml at standard: ruff, semgrep, sonarqube, gitleaks, secrets,
     // pentest, todo — license-scan's languages (json/toml/markdown/text) miss.
-    expect(text).toContain('7 engines queued for the standard profile');
+    expect(text).toContain('7 analyzers queued for the standard profile');
     expect(text).toContain('6 ready, 1 not installed (Semgrep)');
     expect(text).toContain('2 exclusions active');
     expect(text).toContain('Semgrep (not installed)');
@@ -62,7 +62,7 @@ describe('PreScanSummary — what this profile will run before it runs (IMP-14)'
     // discovery detected nothing.
     const host = await render({ profile: 'deep', languages: [], analyzers: [], exclusionCount: 0 });
     expect(host.querySelector('.pre-scan-summary')?.getAttribute('data-tone')).toBe('warning');
-    expect(host.textContent).toContain('No engines match the deep profile');
+    expect(host.textContent).toContain('No analyzers match the deep profile');
     expect(host.textContent).toContain('a scan would select no supported inputs');
   });
 });

@@ -123,6 +123,23 @@ describe('CLIPage', () => {
     expect(host.textContent).toContain('Running scans are never deleted');
   });
 
+  it('documents risk grading honestly: unbounded weighted score with A–D grade bands, not a fake 0-100 scale', async () => {
+    const host = await renderPage();
+    const input = host.querySelector('input[placeholder*="Search commands"]') as HTMLInputElement;
+
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+      setter?.call(input, 'risk');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    // Real weighted sums are unbounded (scores run 900+); the docs must state
+    // the actual grade bands instead of implying a 0-100 percentage scale.
+    expect(host.textContent).toContain('weighted risk score (unbounded) with letter grades A–D (A 0–4, B 5–19, C 20–49, D 50+)');
+    expect(host.textContent).not.toContain('(0-100)');
+  });
+
   it('associates Command Builder labels with their controls', async () => {
     const host = await renderPage();
     const tabs = Array.from(host.querySelectorAll('button.tab')) as HTMLButtonElement[];

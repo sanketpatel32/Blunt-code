@@ -74,9 +74,9 @@ describe('ToolsPage readiness strip', () => {
   it('counts managed tools only and chips every non-ready managed tool', async () => {
     const { host } = await renderPage(analyzersMock());
     const strip = host.querySelector('.tools-readiness')!;
-    expect(strip.textContent).toContain('1 of 2 ready');
+    expect(strip.textContent).toContain('optional tools 1 of 2 ready');
     expect(host.querySelector('.tools-all-ready')).toBeNull();
-    const chip = [...strip.querySelectorAll('.badge')].find((badge) => badge.textContent !== '1 of 2 ready')!;
+    const chip = [...strip.querySelectorAll('.badge')].find((badge) => badge.textContent !== 'optional tools 1 of 2 ready')!;
     expect(chip.querySelector('.dot.not-ready')).not.toBeNull();
     expect(chip.querySelector('.spinner')).toBeNull();
     expect(chip.textContent).toContain('Semgrep not installed');
@@ -88,7 +88,7 @@ describe('ToolsPage readiness strip', () => {
     const allReady = { items: analyzersBody.items.map((a) => (a.managed_tool ? { ...a, ready: true } : a)) };
     const fetchMock = vi.fn((input: string) => (input.endsWith('/analyzers') ? Promise.resolve(json(allReady)) : Promise.resolve(json({}))));
     const { host } = await renderPage(fetchMock);
-    expect(host.querySelector('.tools-all-ready')!.textContent).toBe('2 of 2 ready');
+    expect(host.querySelector('.tools-all-ready')!.textContent).toBe('optional tools 2 of 2 ready');
     expect(host.querySelectorAll('.tools-readiness .dot').length).toBe(0);
   });
 
@@ -100,7 +100,7 @@ describe('ToolsPage readiness strip', () => {
     expect(chip.querySelector('.spinner')).not.toBeNull();
     expect(chip.textContent).toContain('Semgrep installing…');
     expect(row(host, 'Semgrep').querySelector('.table-actions')!.getAttribute('aria-busy')).toBe('true');
-    expect(host.querySelector('.tools-readiness')!.textContent).toContain('1 of 2 ready');
+    expect(host.querySelector('.tools-readiness')!.textContent).toContain('optional tools 1 of 2 ready');
   });
 });
 
@@ -140,10 +140,10 @@ describe('ToolsPage inventory table', () => {
 });
 
 describe('ToolsPage header badge', () => {
-  it('shows an ellipsis count while the inventory loads instead of "0 engines"', async () => {
+  it('shows an ellipsis count while the inventory loads instead of "0 analyzers"', async () => {
     const fetchMock = vi.fn((input: string) => (input.endsWith('/analyzers') ? new Promise<Response>(() => {}) : Promise.resolve(json({}))));
     const { host } = await renderPage(fetchMock);
-    expect(host.querySelector('.page-heading-badge')!.textContent).toBe('… engines');
+    expect(host.querySelector('.page-heading-badge')!.textContent).toBe('… analyzers');
   });
 });
 
@@ -193,6 +193,6 @@ describe('ToolsPage actions', () => {
     failing = false;
     await act(async () => { [...host.querySelectorAll('button')].find((button) => button.textContent === 'Try again')!.click(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
     expect(host.querySelector('.error-panel')).toBeNull();
-    expect(host.querySelector('.tools-readiness')!.textContent).toContain('1 of 2 ready');
+    expect(host.querySelector('.tools-readiness')!.textContent).toContain('optional tools 1 of 2 ready');
   });
 });

@@ -20,6 +20,26 @@ const PRIMARY_PAGES: ReadonlyArray<Route['page']> = ['home', 'workspaces', 'sear
  *  the flat ⇄ overflow switch from oscillating at the exact fit boundary. */
 const MORE_RESERVE_PX = 96;
 
+/** One-line tooltip per nav link (nav-clarity audit): what lives behind it,
+ *  no essays. Every Route page needs an entry for Record exhaustiveness; the
+ *  workspace-scoped pages simply never appear in this bar. */
+const NAV_TITLES: Record<Route['page'], string> = {
+  home: 'Dashboard and recent activity',
+  workspaces: 'Your registered projects',
+  workspace: 'Workspace overview',
+  files: 'Workspace files',
+  history: 'Scan history',
+  scan: 'Run a scan',
+  search: 'Findings across all scans',
+  tools: 'Analyzer status & installs',
+  pentest: 'Dynamic web probes',
+  rules: 'Your custom YAML rule scratchpad',
+  settings: 'App preferences',
+  about: 'Version, updates, and privacy',
+  cli: 'Command-line reference',
+  'not-found': 'Page not found',
+};
+
 export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleTheme, onShowShortcuts, seqArmed = false }: { route: Route; onNavigate: (route: Route) => void; onAdd: () => void; onClose: () => void; theme: Theme; onToggleTheme: () => void; onShowShortcuts?: () => void; seqArmed?: boolean }) {
   const { t, locale, setLocale } = useT();
   const reduced = useReducedMotion();
@@ -105,6 +125,7 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
       href={href(next)}
       className={cn('nav-link', route.page === next.page ? 'active' : '')}
       aria-current={route.page === next.page ? 'page' : undefined}
+      title={NAV_TITLES[next.page]}
       onClick={(event) => { event.preventDefault(); onNavigate(next); }}
     >
       {label}
@@ -208,6 +229,22 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+          {/* The command palette is the fastest path to every action, but until
+              now its only advertisement was a line inside the "?" dialog. This
+              kbd-styled pill both advertises and triggers it: App's Ctrl/Cmd+K
+              listener is a plain window keydown handler with no isTrusted check,
+              so re-dispatching the same synthetic keydown opens the palette. */}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="nav-util nav-palette gap-1 px-2 font-mono text-xs font-semibold"
+            onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }))}
+            title="Open the command palette (Ctrl+K)"
+            aria-label="Open the command palette (Ctrl+K)"
+          >
+            <kbd className="kbd-hint">Ctrl</kbd>
+            <kbd className="kbd-hint">K</kbd>
+          </Button>
           <Button variant="ghost" size="icon" className="nav-shortcuts" onClick={() => onShowShortcuts?.()} title={t('common.shortcuts')} aria-label={t('common.shortcuts')}>
             <HelpCircle className="h-4 w-4" />
           </Button>

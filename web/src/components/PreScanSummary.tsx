@@ -3,7 +3,7 @@ import type { AnalyzerStatus } from '../types';
 
 /**
  * Pre-flight answer to "what will this scan actually do?" (IMP-14): given the
- * selected profile and the workspace's detected languages, name the engines
+ * selected profile and the workspace's detected languages, name the analyzers
  * expected to run, which of them are installed, and any exclusions that will
  * shape the selection — before the scan starts, not after it surprises.
  *
@@ -31,7 +31,7 @@ export function PreScanSummary({
   if (expected.length === 0) {
     return (
       <p className="pre-scan-summary" data-tone="warning">
-        No engines match the {profile} profile on this workspace's languages
+        No analyzers match the {profile} profile on this workspace's languages
         {languages?.length ? ` (${languages.join(', ')})` : ' (none detected)'} — a scan would select no supported inputs.
       </p>
     );
@@ -41,7 +41,7 @@ export function PreScanSummary({
   const readyCount = expected.length - missing.length;
   return (
     <p className="pre-scan-summary" data-tone={missing.length ? 'warning' : 'ok'}>
-      <strong>{expected.length}</strong> engine{expected.length === 1 ? '' : 's'} queued for the {profile} profile
+      <strong>{expected.length}</strong> analyzer{expected.length === 1 ? '' : 's'} queued for the {profile} profile
       {missing.length > 0
         ? <> — <strong>{readyCount}</strong> ready, {missing.length} not installed ({missing.map((meta) => meta.displayName).join(', ')})</>
         : ' — all ready'}

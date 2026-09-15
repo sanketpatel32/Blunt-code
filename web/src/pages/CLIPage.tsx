@@ -39,10 +39,10 @@ const COMMANDS: CLICommand[] = [
       'Runs an automated, headless quality and security scan on any folder. CI exit codes: 0 = clean, 1 = gate tripped, 2 = flag error, 3 = operational failure or incomplete coverage, 4 = cancelled, 130 = double Ctrl+C.',
     badge: 'Core / CI Gate',
     flags: [
-      { flag: '--profile', type: 'string', desc: 'Scan depth: quick, standard, deep, or pentest', def: 'standard' },
+      { flag: '--profile', type: 'string', desc: 'Profile: quick, standard, deep, or pentest', def: 'standard' },
       { flag: '--fail-on', type: 'severity+', desc: 'Exit 1 if findings remain at or above severity (e.g. high+, critical, medium+)' },
       { flag: '--max-findings', type: 'int', desc: 'Exit 1 if total findings exceed N' },
-      { flag: '--baseline', type: 'id|sarif', desc: 'Baseline scan ID or SARIF file; only trip gate on NEW findings' },
+      { flag: '--baseline', type: 'id|sarif', desc: 'Baseline scan ID or SARIF file; only trip gate on NEW findings (CLI only — not yet in the web app)' },
       { flag: '--format', type: 'string', desc: 'Output format: text, json, github, sarif, csv, jsonl, markdown', def: 'text' },
       { flag: '--output', type: 'file', desc: 'Write document format to file instead of stdout' },
       { flag: '--incremental', type: 'bool', desc: 'Only scan files changed since previous completed scan' },
@@ -238,7 +238,7 @@ const COMMANDS: CLICommand[] = [
     ],
     examples: [
       { title: 'Inspect installed analyzers', cmd: 'bluntcode tools list' },
-      { title: 'Install Semgrep engine', cmd: 'bluntcode tools install semgrep' },
+      { title: 'Install the Semgrep analyzer', cmd: 'bluntcode tools install semgrep' },
       { title: 'Repair Gitleaks binary installation', cmd: 'bluntcode tools repair gitleaks-secrets' },
     ],
   },
@@ -269,12 +269,12 @@ const COMMANDS: CLICommand[] = [
     name: 'bluntcode stats / trends / risk',
     category: 'Metrics & Trends',
     synopsis: 'bluntcode <stats|trends|risk> [workspace] [options]',
-    description: 'Calculate global or workspace metrics, historical severity trends, and weighted risk scores (0-100) with letter grades (A-D).',
+    description: 'Calculate global or workspace metrics, historical severity trends, and a weighted risk score (unbounded) with letter grades A–D (A 0–4, B 5–19, C 20–49, D 50+).',
     badge: 'Analytics',
     subcommands: [
       { name: 'stats', desc: 'Print scan count and finding totals', syntax: 'bluntcode stats [workspace] [--json]' },
       { name: 'trends', desc: 'Historical severity counts over time', syntax: 'bluntcode trends <workspace> [--limit N] [--json]' },
-      { name: 'risk', desc: 'Calculate weighted risk score (0-100) and grade (A-D)', syntax: 'bluntcode risk <workspace> [--json]' },
+      { name: 'risk', desc: 'Calculate a weighted risk score (unbounded) with letter grades A–D (A 0–4, B 5–19, C 20–49, D 50+)', syntax: 'bluntcode risk <workspace> [--json]' },
     ],
     flags: [
       { flag: '--limit', type: 'int', desc: 'Number of past scans to include in trendline (default: 10)' },

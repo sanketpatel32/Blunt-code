@@ -76,7 +76,7 @@ function statusLabel(analyzer: AnalyzerStatus): { text: string; state: 'ready' |
 function ReadinessStrip({ analyzers, busy }: { analyzers: AnalyzerStatus[]; busy?: BusyAction }) {
   const managed = analyzers.filter((a) => a.managed_tool);
   const ready = managed.filter((a) => a.ready).length;
-  return <div className="tools-readiness" role="status"><span className={`badge${managed.length > 0 && ready === managed.length ? ' tools-all-ready' : ''}`}>{ready} of {managed.length} ready</span>{managed.filter((a) => !a.ready).map((a) => {
+  return <div className="tools-readiness" role="status"><span className={`badge${managed.length > 0 && ready === managed.length ? ' tools-all-ready' : ''}`}>optional tools {ready} of {managed.length} ready</span>{managed.filter((a) => !a.ready).map((a) => {
     const active = busy !== undefined && busy.tool === a.id ? busy.operation : undefined;
     return <span key={a.id} className="badge">{active ? <span className="spinner" aria-hidden="true" /> : <i className="dot not-ready" aria-hidden="true" />}{a.display_name} {active ? operationBusyLabels[active].toLowerCase() : 'not installed'}</span>;
   })}</div>;
@@ -100,17 +100,20 @@ export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r
       <PageHeader
         eyebrow="Analyzers"
         title="Analysis tools"
-        badge={analyzers.error ? undefined : <Badge variant="secondary" className="text-xs font-mono tabular-nums">{analyzers.loading ? '… engines' : `${rows.length} engines`}</Badge>}
-        description="Every analyzer registered on this machine — category, scan tiers, network use, and readiness — straight from the backend capability inventory."
+        badge={analyzers.error ? undefined : <Badge variant="secondary" className="text-xs font-mono tabular-nums">{analyzers.loading ? '… analyzers' : `${rows.length} analyzers`}</Badge>}
+        description="Every analyzer registered on this machine — category, profiles, and local status."
       />
-      {analyzers.loading ? <SkeletonTable rows={ANALYZER_CATALOG.length} cols={8} className="tool-table" /> : analyzers.error ? <ErrorPanel error={analyzers.error} retry={analyzers.reload} /> : !rows.length ? <Empty title="No analyzers" icon={<WrenchIcon />}>Analyzer capabilities appear here after the backend registers its inventory.</Empty> : <><ReadinessStrip analyzers={rows} busy={busy} />
+      {/* Pentest entry point (discoverability audit): it is per-workspace, so
+          this page only points the way instead of pretending to host it. */}
+      <p className="muted">Pentest scans run per workspace — open a workspace and choose Pentest suite.</p>
+      {analyzers.loading ? <SkeletonTable rows={ANALYZER_CATALOG.length} cols={8} className="tool-table" /> : analyzers.error ? <ErrorPanel error={analyzers.error} retry={analyzers.reload} /> : !rows.length ? <Empty title="Nothing to set up" icon={<WrenchIcon />}>Analyzers appear automatically. Optional tools can be installed from here.</Empty> : <><ReadinessStrip analyzers={rows} busy={busy} />
       <div className="tool-table table-wrap border rounded-lg bg-[var(--color-surface)] overflow-hidden">
         <table>
           <thead>
             <tr>
               <th scope="col">Analyzer</th>
               <th scope="col">Category</th>
-              <th scope="col">Scan tiers</th>
+              <th scope="col">Profiles</th>
               <th scope="col">Network</th>
               <th scope="col">Version</th>
               <th scope="col">Status</th>
