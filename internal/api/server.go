@@ -71,11 +71,15 @@ type scanDetail struct {
 // and the most recent analysis. latest_scan_coverage pairs that analysis
 // with how much of its analyzer set actually completed (IMP-13): a grade
 // from a partial scan must not read as the assurance of a complete one.
+// last_completed_scan is the newest scan that finished: boards fall back to
+// it when latest_scan is a cancelled/interrupted run, so a killed re-scan
+// cannot erase a workspace's last good numbers.
 type workspaceView struct {
 	core.Workspace
-	Languages     []string               `json:"languages,omitempty"`
-	LatestScan    *scanDetail            `json:"latest_scan,omitempty"`
-	LatestScanCov *database.ScanCoverage `json:"latest_scan_coverage,omitempty"`
+	Languages          []string               `json:"languages,omitempty"`
+	LatestScan         *scanDetail            `json:"latest_scan,omitempty"`
+	LatestScanCov      *database.ScanCoverage `json:"latest_scan_coverage,omitempty"`
+	LastCompletedScan  *scanDetail            `json:"last_completed_scan,omitempty"`
 }
 
 func New(db *database.DB, bus *events.Bus, scanService *scans.Service, toolService *tools.Service, paths config.Paths, version string, logger *slog.Logger) *Server {
@@ -273,13 +277,32 @@ func (s *Server) listWorkspaces(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, "DATABASE_ERROR", "Could not load workspace analysis.")
 		return
 	}
+	// The completed fallback is only queried when some latest scan never
+	// finished (cancelled/interrupted), so the common all-completed list
+	// pays nothing for it.
+	var completedByWorkspace map[string]core.Scan
+	completedLoaded := false
 	views := make([]workspaceView, 0, len(items))
 	for _, item := range items {
 		var latest *core.Scan
 		if scan, ok := latestByWorkspace[item.ID]; ok {
 			latest = &scan
 		}
-		view, err := s.workspaceView(r.Context(), item, latest)
+		var lastCompleted *core.Scan
+		if latest == nil || (latest.State != "completed" && latest.State != "completed_with_warnings") {
+			if !completedLoaded {
+				completedByWorkspace, err = s.db.LatestCompletedScans(r.Context())
+				if err != nil {
+					fail(w, 500, "DATABASE_ERROR", "Could not load workspace analysis.")
+					return
+				}
+				completedLoaded = true
+			}
+			if scan, ok := completedByWorkspace[item.ID]; ok {
+				lastCompleted = &scan
+			}
+		}
+		view, err := s.workspaceView(r.Context(), item, latest, lastCompleted)
 		if err != nil {
 			fail(w, 500, "DATABASE_ERROR", "Could not load workspace analysis.")
 			return
@@ -366,7 +389,18 @@ func (s *Server) getWorkspace(w http.ResponseWriter, r *http.Request) {
 	if scan, ok := latestByWorkspace[workspace.ID]; ok {
 		latest = &scan
 	}
-	view, err := s.workspaceView(r.Context(), workspace, latest)
+	var lastCompleted *core.Scan
+	if latest == nil || (latest.State != "completed" && latest.State != "completed_with_warnings") {
+		completedByWorkspace, err := s.db.LatestCompletedScans(r.Context())
+		if err != nil {
+			fail(w, 500, "DATABASE_ERROR", "Could not load workspace analysis.")
+			return
+		}
+		if scan, ok := completedByWorkspace[workspace.ID]; ok {
+			lastCompleted = &scan
+		}
+	}
+	view, err := s.workspaceView(r.Context(), workspace, latest, lastCompleted)
 	if err != nil {
 		fail(w, 500, "DATABASE_ERROR", "Could not load workspace analysis.")
 		return
@@ -374,27 +408,42 @@ func (s *Server) getWorkspace(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, view)
 }
 
-func (s *Server) workspaceView(ctx context.Context, workspace core.Workspace, latest *core.Scan) (workspaceView, error) {
+func (s *Server) workspaceView(ctx context.Context, workspace core.Workspace, latest *core.Scan, lastCompleted *core.Scan) (workspaceView, error) {
 	view := workspaceView{Workspace: workspace}
-	if latest != nil {
-		if latest.Snapshot != nil {
-			view.Languages = languageNames(latest.Snapshot.Languages)
+	attach := func(scan *core.Scan) (*scanDetail, error) {
+		if scan == nil {
+			return nil, nil
+		}
+		if scan.Snapshot != nil {
+			view.Languages = languageNames(scan.Snapshot.Languages)
 		}
 		// The card pairs the scan with its analyzer runs and its new/fixed
 		// comparison (the same attach and comparison logic GET /scans/{id}
 		// serves), so both are loaded while the immutable snapshot is still
 		// at hand; the snapshot itself is then dropped because the dashboard
 		// does not need every selected path from it.
-		runs, err := s.db.AnalyzerRuns(ctx, latest.ID)
+		runs, err := s.db.AnalyzerRuns(ctx, scan.ID)
 		if err != nil {
+			return nil, err
+		}
+		newCount, fixedCount, err := s.scanComparisonCounts(ctx, *scan)
+		if err != nil {
+			return nil, err
+		}
+		scan.Snapshot = nil
+		return &scanDetail{Scan: *scan, AnalyzerRuns: analyzerRuns(runs), NewCount: newCount, FixedCount: fixedCount}, nil
+	}
+	detail, err := attach(latest)
+	if err != nil {
+		return workspaceView{}, err
+	}
+	view.LatestScan = detail
+	// When the latest run never finished, serve the last one that did so
+	// boards keep grading on real data (nil when none exists yet).
+	if latest == nil || (latest.State != "completed" && latest.State != "completed_with_warnings") {
+		if view.LastCompletedScan, err = attach(lastCompleted); err != nil {
 			return workspaceView{}, err
 		}
-		newCount, fixedCount, err := s.scanComparisonCounts(ctx, *latest)
-		if err != nil {
-			return workspaceView{}, err
-		}
-		latest.Snapshot = nil
-		view.LatestScan = &scanDetail{Scan: *latest, AnalyzerRuns: analyzerRuns(runs), NewCount: newCount, FixedCount: fixedCount}
 	}
 	if len(view.Languages) == 0 {
 		patterns, err := s.userExcludes(ctx, workspace.ID)
@@ -2201,6 +2250,22 @@ func (s *Server) reportModel(ctx context.Context, scan core.Scan, work core.Work
 	skippedCount := scan.CandidateFileCount - scan.SelectedFileCount
 	if skippedCount < 0 {
 		skippedCount = 0
+	}
+	// The findings list and CSV derive a per-row comparison status (new /
+	// persistent) from the previous completed scan; the report model needs the
+	// same stamp so UI status chips can count from the report payload instead
+	// of every row arriving without a status. Compare() classifies with the
+	// identical fingerprint-membership rule the SQL CASE uses.
+	previousByFingerprint := make(map[string]bool, len(comparison.Persistent))
+	for _, finding := range comparison.Persistent {
+		previousByFingerprint[finding.Fingerprint] = true
+	}
+	for i := range findings {
+		if previousByFingerprint[findings[i].Fingerprint] {
+			findings[i].Status = "persistent"
+		} else {
+			findings[i].Status = "new"
+		}
 	}
 	return reports.Build(reports.Input{
 		WorkspaceName: work.Name, WorkspacePath: work.RootPath, ScanID: scan.ID, Profile: scan.Profile, State: scan.State, BluntCodeVersion: bluntCodeVersion,

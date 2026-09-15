@@ -512,6 +512,27 @@ func (d *DB) LatestScans(ctx context.Context) (map[string]core.Scan, error) {
 	return result, rows.Err()
 }
 
+// LatestCompletedScans resolves each workspace's most recent scan that actually
+// finished (completed or completed_with_warnings) in one aggregate query. The
+// dashboards pair it with LatestScans so a cancelled or interrupted re-scan
+// cannot erase a workspace's last good numbers from boards keyed on "latest".
+func (d *DB) LatestCompletedScans(ctx context.Context) (map[string]core.Scan, error) {
+	rows, err := d.SQL.QueryContext(ctx, `SELECT `+scanSelectColumns("")+` FROM scans WHERE state IN ('completed','completed_with_warnings') AND id IN (SELECT id FROM (SELECT id,ROW_NUMBER() OVER (PARTITION BY workspace_id ORDER BY started_at DESC,id DESC) AS recency FROM scans WHERE state IN ('completed','completed_with_warnings')) ranked WHERE recency=1)`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make(map[string]core.Scan)
+	for rows.Next() {
+		var s core.Scan
+		if err := hydrateScanRow(rows, &s); err != nil {
+			return nil, err
+		}
+		result[s.WorkspaceID] = s
+	}
+	return result, rows.Err()
+}
+
 func (d *DB) Scan(ctx context.Context, id string) (core.Scan, error) {
 	var s core.Scan
 	if err := hydrateScanRow(d.SQL.QueryRowContext(ctx, `SELECT `+scanSelectColumns("")+` FROM scans WHERE id=?`, id), &s); err != nil {
