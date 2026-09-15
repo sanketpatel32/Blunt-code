@@ -51,10 +51,14 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
   const scans = recent.data?.scans ?? [];
   const summary = recent.data?.summary;
   const latestWorkspaceId = scans[0]?.workspace_id;
+  const quickScanTarget = scans[0];
   const readyTools = tools.data?.filter((tool) => tool.ready).length ?? 0;
   const totalTools = tools.data?.length ?? 0;
 
   const [quickScanning, setQuickScanning] = useState(false);
+  // Set when "Scan latest workspace" is clicked; the POST only fires after the
+  // confirmation dialog is accepted, so one misclick cannot start a minutes-long job.
+  const [confirmQuickScan, setConfirmQuickScan] = useState(false);
   const [pickingFolder, setPickingFolder] = useState(false);
   const [ledgerFilter, setLedgerFilter] = useState('');
   const [feedFilter, setFeedFilter] = useState<FeedFilter>('all');
@@ -213,7 +217,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
           <>
             <Button
               variant="outline"
-              onClick={() => void quickScan()}
+              onClick={() => setConfirmQuickScan(true)}
               disabled={!latestWorkspaceId || quickScanning}
               title={latestWorkspaceId ? 'Run a scan on the most recently scanned workspace' : undefined}
             >
@@ -252,6 +256,8 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
                   {verdict.totalFindings} finding{verdict.totalFindings === 1 ? '' : 's'} across the latest completed scan
                   of {verdict.scanned} workspace{verdict.scanned === 1 ? '' : 's'}.
                 </>
+              ) : workspaces.error ? (
+                <>Couldn't load your workspaces. Nothing is lost — use "Try again" in the panel below to reload the board.</>
               ) : workspaces.data?.length ? (
                 <>No completed scans yet — run a scan to grade your code.</>
               ) : (
@@ -431,6 +437,17 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
 
       {/* ── Engines strip: real tool readiness, nothing invented ── */}
       <EnginesFoot tools={tools.data ?? []} ready={readyTools} total={totalTools} loading={tools.loading} error={tools.error} retry={tools.reload} go={go} />
+
+      {confirmQuickScan && quickScanTarget && (
+        <ConfirmationDialog
+          title={`Run standard scan on ${quickScanTarget.workspace_name || 'your latest workspace'}?`}
+          description="A standard scan runs the enabled analyzers over that workspace and can take several minutes. You can cancel it from the scan page while it runs."
+          confirmLabel="Run scan"
+          busy={quickScanning}
+          onCancel={() => setConfirmQuickScan(false)}
+          onConfirm={() => { setConfirmQuickScan(false); void quickScan(); }}
+        />
+      )}
     </div>
   );
 }
@@ -708,6 +725,7 @@ function LedgerRow({
       <div className="ledger-actions">
         <ScanActionDropdown
           workspaceId={workspace.id}
+          workspaceName={workspace.name}
           defaultProfile={workspace.default_profile}
           go={go}
           notify={notify}

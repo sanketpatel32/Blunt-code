@@ -78,10 +78,18 @@ describe('keyboard journey through the core flow', () => {
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     expect(window.location.pathname).toBe('/workspaces/ws-1');
 
-    // 3) Start the scan from the focused primary action.
+    // 3) Start the scan from the focused primary action — a scan runs for minutes, so the click confirms first.
     const runScan = [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === 'Run scan')!;
     expect(runScan).toBeDefined();
     await act(async () => { runScan.focus(); expect(document.activeElement).toBe(runScan); runScan.click(); });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    // The click opened the confirmation dialog; nothing has been posted yet.
+    const confirmDialog = host.querySelector('dialog[open]');
+    expect(confirmDialog?.textContent).toContain('Run standard scan on Journey?');
+    expect(fetchMock.mock.calls.filter(([input, init]) => input.endsWith('/workspaces/ws-1/scans') && init?.method === 'POST')).toHaveLength(0);
+    const confirmScan = [...confirmDialog!.querySelectorAll('button')].find((button) => button.textContent === 'Run standard scan')!;
+    expect(confirmScan).toBeDefined();
+    await act(async () => { confirmScan.focus(); expect(document.activeElement).toBe(confirmScan); confirmScan.click(); });
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     const started = fetchMock.mock.calls.filter(([input, init]) => input.endsWith('/workspaces/ws-1/scans') && init?.method === 'POST');
     expect(started).toHaveLength(1);

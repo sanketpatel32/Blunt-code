@@ -405,7 +405,7 @@ describe('HomePage risk board — feed regressions', () => {
 });
 
 describe('HomePage quick actions', () => {
-  it('starts a scan on the most recently scanned workspace and follows it', async () => {
+  it('starts a scan on the most recently scanned workspace after confirming it by name', async () => {
     const fetchMock = vi.fn((input: string, init?: RequestInit) => {
       if (input === '/api/v1/workspaces/ws-2/scans' && init?.method === 'POST') return Promise.resolve(json({ id: 'scan-new', workspace_id: 'ws-2', state: 'queued' }));
       if (input === '/api/v1/scans') return Promise.resolve(json({ scans: [scanItem({ id: 'scan-9', workspace_id: 'ws-2', workspace_name: 'Second Project' }), scanItem()], total: 2, summary }));
@@ -417,7 +417,15 @@ describe('HomePage quick actions', () => {
     const quickScan = findButton(host, 'Scan latest workspace');
     expect(quickScan).toBeDefined();
     expect(quickScan!.disabled).toBe(false);
-    await act(async () => { quickScan!.click(); await Promise.resolve(); await Promise.resolve(); });
+
+    // The click confirms first — nothing is posted until the dialog accepts.
+    await act(async () => { quickScan!.click(); });
+    const dialog = host.querySelector('dialog[open]');
+    expect(dialog?.textContent).toContain('Run standard scan on Second Project?');
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/v1/workspaces/ws-2/scans', expect.objectContaining({ method: 'POST' }));
+    const confirm = [...dialog!.querySelectorAll('button')].find((button) => button.textContent === 'Run scan');
+    expect(confirm).toBeDefined();
+    await act(async () => { confirm!.click(); await Promise.resolve(); await Promise.resolve(); });
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/workspaces/ws-2/scans', expect.objectContaining({ method: 'POST' }));
     expect(go).toHaveBeenCalledWith({ page: 'scan', id: 'scan-new' });
   });
@@ -512,6 +520,6 @@ describe('HomePage workspace paths and languages', () => {
     const host = await render(homeFetchMock({ scans: [], total: 0, summary }, { items: [warned] }));
     const badge = host.querySelector('.ledger-last > div');
     expect(badge?.textContent).toBe('Completed with warnings');
-    expect(badge?.className).toContain('text-[var(--color-warning)]');
+    expect(badge?.className).toContain('text-[var(--color-warning-text)]');
   });
 });

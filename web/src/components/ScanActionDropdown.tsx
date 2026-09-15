@@ -13,9 +13,12 @@ import { ApiError, api } from '../api';
 import type { Route } from '../lib/router';
 import type { Notice } from '../lib/notice';
 import { message } from '../lib/notice';
+import { ConfirmationDialog } from './dialogs';
 
 export interface ScanActionDropdownProps {
   workspaceId: string;
+  /** Shown in the confirmation dialog so the user knows exactly what is about to run; optional because not every caller has the display name. */
+  workspaceName?: string;
   defaultProfile?: string;
   size?: 'default' | 'sm' | 'lg' | 'icon';
   variant?: 'default' | 'primary' | 'outline' | 'secondary' | 'ghost';
@@ -27,6 +30,7 @@ export interface ScanActionDropdownProps {
 
 export function ScanActionDropdown({
   workspaceId,
+  workspaceName,
   defaultProfile = 'standard',
   size = 'sm',
   variant = 'default',
@@ -36,6 +40,9 @@ export function ScanActionDropdown({
   className = '',
 }: ScanActionDropdownProps) {
   const [running, setRunning] = useState(false);
+  // Profile picked but not yet confirmed: a scan takes minutes, so one misclick
+  // must open a confirmation instead of starting the job outright.
+  const [pendingProfile, setPendingProfile] = useState<string | null>(null);
   const isFullWidth = className.includes('w-full');
 
   async function triggerScan(profile: string) {
@@ -75,7 +82,7 @@ export function ScanActionDropdown({
         size={size}
         variant={variant as never}
         disabled={running}
-        onClick={() => void triggerScan(defaultProfile)}
+        onClick={() => setPendingProfile(defaultProfile)}
         className={`rounded-r-none border-r border-black/15 dark:border-white/20 gap-1.5 focus-visible:z-10 focus-visible:ring-1 focus-visible:ring-offset-0 active:scale-100 ${
           isFullWidth ? 'flex-1 justify-center' : ''
         }`}
@@ -103,21 +110,21 @@ export function ScanActionDropdown({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
           <DropdownMenuLabel>Scan Profiles</DropdownMenuLabel>
-          <DropdownMenuItem onClick={() => void triggerScan('standard')} className="gap-2 cursor-pointer">
+          <DropdownMenuItem onClick={() => setPendingProfile('standard')} className="gap-2 cursor-pointer">
             <Play className="h-4 w-4 text-[var(--color-accent-strong)]" />
             <div className="flex flex-col">
               <span className="font-medium">Standard Scan</span>
               <span className="text-[11px] text-[var(--color-ink-faint)]">Fast SAST &amp; code quality</span>
             </div>
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => void triggerScan('quick')} className="gap-2 cursor-pointer">
+          <DropdownMenuItem onClick={() => setPendingProfile('quick')} className="gap-2 cursor-pointer">
             <Zap className="h-4 w-4 text-[var(--color-warning)]" />
             <div className="flex flex-col">
               <span className="font-medium">Quick Scan</span>
               <span className="text-[11px] text-[var(--color-ink-faint)]">Rapid linter &amp; secret check</span>
             </div>
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => void triggerScan('deep')} className="gap-2 cursor-pointer">
+          <DropdownMenuItem onClick={() => setPendingProfile('deep')} className="gap-2 cursor-pointer">
             <Layers className="h-4 w-4 text-[var(--color-accent)]" />
             <div className="flex flex-col">
               <span className="font-medium">Deep Scan</span>
@@ -126,7 +133,7 @@ export function ScanActionDropdown({
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuLabel>Pentest &amp; Security</DropdownMenuLabel>
-          <DropdownMenuItem onClick={() => void triggerScan('pentest')} className="gap-2 cursor-pointer text-[var(--color-danger)] focus:text-[var(--color-danger)]">
+          <DropdownMenuItem onClick={() => setPendingProfile('pentest')} className="gap-2 cursor-pointer text-[var(--color-danger)] focus:text-[var(--color-danger)]">
             <ShieldAlert className="h-4 w-4" />
             <div className="flex flex-col">
               <span className="font-medium font-semibold">Run Pentest Scan</span>
@@ -142,6 +149,20 @@ export function ScanActionDropdown({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      {pendingProfile !== null && (
+        <ConfirmationDialog
+          title={`Run ${pendingProfile} scan${workspaceName ? ` on ${workspaceName}` : ''}?`}
+          description={`A ${pendingProfile} scan runs the enabled analyzers over this workspace and can take several minutes. You can cancel it from the scan page while it runs.`}
+          confirmLabel={`Run ${pendingProfile} scan`}
+          busy={running}
+          onCancel={() => setPendingProfile(null)}
+          onConfirm={() => {
+            const selected = pendingProfile;
+            setPendingProfile(null);
+            if (selected) void triggerScan(selected);
+          }}
+        />
+      )}
     </div>
   );
 }

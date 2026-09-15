@@ -7,7 +7,27 @@ import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { ShieldCheck, AlertTriangle } from 'lucide-react';
 
+/** Friendly sentences for the API error codes people actually hit; the raw code
+ *  stays visible as a small detail line so bug reports keep the precise cause. */
+const FRIENDLY_ERROR_TEXT: Record<string, string> = {
+  WORKSPACE_NOT_FOUND: 'This workspace could not be found. It may have been removed from Blunt Code.',
+  SCAN_NOT_FOUND: 'This scan could not be found. It may have been pruned from your history.',
+  REQUEST_FAILED: 'The request to the Blunt Code server did not go through. Trying again usually fixes it.',
+};
+
+/** useLoad hands errors over as strings ("CODE: message"), so the code is matched
+ *  by prefix — the same approach as SourcePane's previewErrorText. Known codes get
+ *  a friendly sentence; anything else (including the no-code network sentence from
+ *  lib/notice) keeps the server's own words untouched. */
+function friendlyErrorText(error: string): { text: string; code?: string } {
+  for (const [code, text] of Object.entries(FRIENDLY_ERROR_TEXT)) {
+    if (error.startsWith(`${code}: `)) return { text, code };
+  }
+  return { text: error };
+}
+
 export function ErrorPanel({ error, retry }: { error: string; retry?: () => void }) {
+  const friendly = friendlyErrorText(error);
   return (
     <Card className="error-panel border-[var(--color-danger)] bg-[var(--color-danger-soft)]" role="alert">
       <CardContent className="p-8 text-center">
@@ -15,7 +35,8 @@ export function ErrorPanel({ error, retry }: { error: string; retry?: () => void
           <AlertTriangle className="h-5 w-5" />
         </div>
         <h2 className="font-display text-xl font-bold">Could not load this view</h2>
-        <p className="mt-2 text-sm text-[var(--color-ink-soft)]">{error}</p>
+        <p className="mt-2 text-sm text-[var(--color-ink-soft)]">{friendly.text}</p>
+        {friendly.code && <p className="mt-1 font-mono text-[11px] uppercase tracking-widest text-[var(--color-ink-faint)]">{friendly.code}</p>}
         {retry && <Button variant="outline" size="sm" className="mt-4" onClick={retry}>Try again</Button>}
       </CardContent>
     </Card>

@@ -49,7 +49,16 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
   const [pruning, setPruning] = useState(false);
   const [copied, setCopied] = useState(false);
   const reduced = useReducedMotion();
-  const latest = workspace.data?.latest_scan ?? scans.data?.[0];
+  // Declared before the handlers below use it (openSettings reads name/profile).
+  const item = workspace.data;
+  // The workspace payload's latest_scan omits the discovery snapshot that scan-list
+  // rows carry (Scan.snapshot), so backfill it from the matching history row before
+  // computing per-language coverage — without the backfill the Languages tab never
+  // shows counts even though the snapshot is recorded.
+  const latestScan = item?.latest_scan;
+  const latest = latestScan
+    ? { ...latestScan, snapshot: latestScan.snapshot ?? scans.data?.find((scan) => scan.id === latestScan.id)?.snapshot }
+    : scans.data?.[0];
   const isCompleted = latest?.state === 'completed' || latest?.state === 'completed_with_warnings';
   // Real per-language file counts live on the latest scan's discovery snapshot; when it is absent the language list renders without counts rather than inventing them.
   const coverage = languageCoverageFromSnapshot(latest?.snapshot);
@@ -67,7 +76,6 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
   if (workspace.loading) return <div className="page"><Loading /></div>;
   // A NOT_FOUND workspace never loads, so "Try again" alone is a dead end — offer the way back.
   if (workspace.error) return <div className="page"><ErrorPanel error={workspace.error} retry={workspace.reload} />{workspace.error.includes('NOT_FOUND') && <div className="mt-4 flex justify-center"><button type="button" className="button secondary" onClick={() => go({ page: 'workspaces' })}>Back to Workspaces</button></div>}</div>;
-  const item = workspace.data;
   if (!item) return <div className="page"><Loading /></div>;
   const criticalHigh = (latest?.critical_count ?? 0) + (latest?.high_count ?? 0);
   return <div className="page workspace-page"><WorkspaceContextSidebar id={id} current={{ page: 'workspace', id }} onNavigate={go} /><div className="workspace-page-body">
@@ -95,7 +103,8 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
       }
       description={
         <div className="workspace-path-row flex items-center gap-1.5 font-mono text-xs">
-          <code className="workspace-path text-[var(--color-ink-faint)] truncate max-w-md sm:max-w-xl" title={item.root_path}>
+          {/* w-fit keeps the code element hugging the text; a reserved max-width left the copy button floating far from short paths. */}
+          <code className="workspace-path w-fit max-w-full text-[var(--color-ink-faint)] truncate" title={item.root_path}>
             {item.root_path || 'No root path configured'}
           </code>
           {item.root_path && (
@@ -113,7 +122,7 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
     <div className="workspace-toolbar workspace-action-rail">
       <div className="action-rail-primary">
         <fieldset className="profile-picker segmented" aria-label="Scan profile"><span className="profile-picker-label">Profile</span>{['quick', 'standard', 'deep', 'pentest'].map((value) => <button key={value} type="button" aria-pressed={profile === value} onClick={() => setProfile(value)}>{value}</button>)}</fieldset>
-        <ScanActionDropdown workspaceId={id} defaultProfile={profile} size="default" variant="primary" go={go} notify={notify} />
+        <ScanActionDropdown workspaceId={id} workspaceName={item.name} defaultProfile={profile} size="default" variant="primary" go={go} notify={notify} />
       </div>
       <div className="action-rail-secondary">
         <button type="button" className="button ghost" onClick={() => go({ page: 'pentest', id })}>Pentest suite</button>
@@ -279,7 +288,7 @@ function LanguageDistributionDonut({ names, coverage, workspaceId, go }: { names
             </li>
           ))}
         </ul>
-        <p className="muted mt-3 text-xs">Per-language file counts appear once a scan records a discovery snapshot.</p>
+        <p className="muted mt-3 text-xs">No discovery snapshot available for this scan yet.</p>
       </section>
     );
   }
