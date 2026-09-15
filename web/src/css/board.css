@@ -131,7 +131,8 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: .04em;
-  color: var(--color-warning-ink, var(--color-ink-soft));
+  /* -text (not -ink): ink is an on-filled-chip color and goes dark-on-dark on the ledger surface. */
+  color: var(--color-warning-text, var(--color-ink-soft));
   border: 1px solid currentColor;
   border-radius: var(--radius-button);
   padding: 0 4px;

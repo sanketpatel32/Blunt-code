@@ -6,9 +6,9 @@ const badgeVariants = cva('inline-flex items-center rounded-full border px-2.5 p
   variants: {
     variant: {
       default: 'border-transparent bg-[var(--color-surface-muted)] text-[var(--color-ink-soft)]',
-      success: 'border-[color-mix(in_oklch,var(--color-success)_40%,var(--color-rule))] bg-[var(--color-success-soft)] text-[var(--color-success)]',
-      warning: 'border-[color-mix(in_oklch,var(--color-warning)_40%,var(--color-rule))] bg-[var(--color-warning-soft)] text-[var(--color-warning)]',
-      danger: 'border-[color-mix(in_oklch,var(--color-danger)_40%,var(--color-rule))] bg-[var(--color-danger-soft)] text-[var(--color-danger)]',
+      success: 'border-[color-mix(in_oklch,var(--color-success)_40%,var(--color-rule))] bg-[var(--color-success-soft)] text-[var(--color-success-text)]',
+      warning: 'border-[color-mix(in_oklch,var(--color-warning)_40%,var(--color-rule))] bg-[var(--color-warning-soft)] text-[var(--color-warning-text)]',
+      danger: 'border-[color-mix(in_oklch,var(--color-danger)_40%,var(--color-rule))] bg-[var(--color-danger-soft)] text-[var(--color-danger-text)]',
       accent: 'border-[color-mix(in_oklch,var(--color-accent)_40%,var(--color-rule))] bg-[var(--color-accent-soft)] text-[var(--color-accent-strong)]',
       outline: 'text-[var(--color-ink-soft)] border-[var(--color-rule)]',
       secondary: 'border-transparent bg-[var(--color-surface-muted)] text-[var(--color-ink-soft)]',

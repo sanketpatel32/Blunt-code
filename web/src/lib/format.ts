@@ -73,7 +73,7 @@ export const languageNames: Record<string, string> = {
   ruby: 'Ruby', php: 'PHP', perl: 'Perl', lua: 'Lua', r: 'R', swift: 'Swift',
   dart: 'Dart', rust: 'Rust', ex: 'Elixir', exs: 'Elixir Script', erl: 'Erlang',
   haskell: 'Haskell', hs: 'Haskell', clojure: 'Clojure', clj: 'Clojure',
-  shell: 'Shell', bash: 'Bash', zsh: 'Zsh', ps1: 'PowerShell', psm1: 'PowerShell Module', bat: 'Batch', cmd: 'Batch Script',
+  shell: 'Shell', bash: 'Bash', zsh: 'Zsh', ps1: 'PowerShell', psm1: 'PowerShell Module', powershell: 'PowerShell', bat: 'Batch', cmd: 'Batch Script', batch: 'Batch',
   sql: 'SQL', graphql: 'GraphQL', gql: 'GraphQL', proto: 'Protobuf',
   html: 'HTML', htm: 'HTML', vue: 'Vue', svelte: 'Svelte', astro: 'Astro',
   css: 'CSS', scss: 'SCSS', sass: 'Sass', less: 'Less',
@@ -81,6 +81,7 @@ export const languageNames: Record<string, string> = {
   toml: 'TOML', xml: 'XML', ini: 'INI', cfg: 'Config', conf: 'Config',
   env: 'Environment File', properties: 'Properties', tf: 'Terraform', terraform: 'Terraform', dockerfile: 'Dockerfile',
   markdown: 'Markdown', text: 'Text',
+  certificate: 'Certificate',
 };
 
 /** GitHub-Linguist-style colors so language badges read at a glance; unknown
@@ -97,7 +98,7 @@ export const languageColors: Record<string, string> = {
   ruby: '#701516', php: '#4F5D95', perl: '#0298c3', lua: '#3b5bdb', r: '#198CE7', swift: '#F05138',
   dart: '#00B4AB', rust: '#dea584', ex: '#6e4a7e', exs: '#6e4a7e', erl: '#a90533',
   haskell: '#5e5086', hs: '#5e5086', clojure: '#db5855', clj: '#db5855',
-  shell: '#89e051', bash: '#89e051', zsh: '#89e051', ps1: '#0e7cd1', psm1: '#0e7cd1', bat: '#C1F12E', cmd: '#C1F12E',
+  shell: '#89e051', bash: '#89e051', zsh: '#89e051', ps1: '#0e7cd1', psm1: '#0e7cd1', powershell: '#0e7cd1', bat: '#C1F12E', cmd: '#C1F12E', batch: '#C1F12E',
   sql: '#e38c00', graphql: '#e10098', gql: '#e10098', proto: '#8cbf3f',
   html: '#e34c26', htm: '#e34c26', vue: '#41b883', svelte: '#ff3e00', astro: '#ff5a03',
   css: '#663399', scss: '#c6538c', sass: '#c6538c', less: '#2f5aa8',
@@ -105,6 +106,7 @@ export const languageColors: Record<string, string> = {
   toml: '#9c4221', xml: '#0060ac', ini: '#a1a1aa', cfg: '#a1a1aa', conf: '#a1a1aa',
   env: '#ecd53f', properties: '#a1a1aa', tf: '#844FBA', terraform: '#844FBA', dockerfile: '#2496ED',
   markdown: '#083fa1', text: '#94a3b8',
+  certificate: '#a1a1aa',
 };
 
 export function languageColor(id: string): string {

@@ -97,7 +97,7 @@ export function SourcePane({
       </> : null}
     </div>
     <div className="source-pane-context">
-      <div className="context-row"><strong>{title}</strong>{finding.rule_id && <code>{finding.rule_id}</code>}<span className="badge">{analyzerName(finding.analyzer_id)}</span>{finding.status && <span className={`status-text${suppressed ? ' suppressed' : ''}`}>{finding.status}</span>}</div>
+      <div className="context-row"><strong>{title}</strong>{finding.rule_id && finding.rule_id !== title && <code>{finding.rule_id}</code>}<span className="badge">{analyzerName(finding.analyzer_id)}</span>{finding.status && <span className={`status-text${suppressed ? ' suppressed' : ''}`}>{finding.status}</span>}</div>
       <p className="pane-message">{finding.message}</p>
       <p className="remediation">{finding.remediation || 'No remediation provided for this rule.'}</p>
       {finding.documentation_url && <a href={finding.documentation_url} target="_blank" rel="noreferrer">Rule docs</a>}
