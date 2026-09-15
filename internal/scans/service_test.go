@@ -999,7 +999,7 @@ func TestPreviousCompletedScanSkipsCancelledScan(t *testing.T) {
 			t.Fatal(err)
 		}
 		return current
-	}(), 10)
+	}(), 10, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

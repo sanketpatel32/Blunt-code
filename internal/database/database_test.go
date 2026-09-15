@@ -291,7 +291,7 @@ func TestFixedFindingsAppliesCoverageRuleAndSeverityOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, err := db.FixedFindings(ctx, current, 0)
+	result, err := db.FixedFindings(ctx, current, 0, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -310,9 +310,21 @@ func TestFixedFindingsAppliesCoverageRuleAndSeverityOrder(t *testing.T) {
 		}
 	}
 	// A tighter limit caps the rows while Total keeps the exact count.
-	capped, err := db.FixedFindings(ctx, current, 1)
+	capped, err := db.FixedFindings(ctx, current, 1, nil)
 	if err != nil || capped.Total != 2 || len(capped.Items) != 1 {
 		t.Fatalf("limit must cap rows without losing the total: %#v (%v)", capped, err)
+	}
+
+	// The file-coverage half of the rule: when the caller passes the current
+	// scan's selected files, findings whose file was not re-evaluated are
+	// unknown, not fixed — matching what scans.Compare reports in the verdict.
+	covered, err := db.FixedFindings(ctx, current, 0, []string{"src/stay.py", "src/gone-high.py", "src/gone-low.py"})
+	if err != nil || covered.Total != 2 || len(covered.Items) != 2 {
+		t.Fatalf("files inside the selected set still count as fixed: %#v (%v)", covered, err)
+	}
+	deselected, err := db.FixedFindings(ctx, current, 0, []string{"src/stay.py"})
+	if err != nil || deselected.Total != 0 || len(deselected.Items) != 0 {
+		t.Fatalf("files outside the selected set are unknown, not fixed: %#v (%v)", deselected, err)
 	}
 
 	// The first completed scan of a workspace has no comparison basis.
@@ -330,7 +342,7 @@ func TestFixedFindingsAppliesCoverageRuleAndSeverityOrder(t *testing.T) {
 	if err := db.CompleteScan(ctx, first.ID, "completed", ""); err != nil {
 		t.Fatal(err)
 	}
-	result, err = db.FixedFindings(ctx, first, 0)
+	result, err = db.FixedFindings(ctx, first, 0, nil)
 	if err != nil || result.ComparisonAvailable || result.Total != 0 || len(result.Items) != 0 || result.PreviousScanID != "" {
 		t.Fatalf("a scan without a previous completed scan has nothing to compare: %#v (%v)", result, err)
 	}
@@ -374,11 +386,11 @@ func TestFixedFindingsCapsLimitAndReportsTrueTotal(t *testing.T) {
 	if err := db.CompleteScan(ctx, current.ID, "completed", ""); err != nil {
 		t.Fatal(err)
 	}
-	result, err := db.FixedFindings(ctx, current, 0)
+	result, err := db.FixedFindings(ctx, current, 0, nil)
 	if err != nil || result.Total != total || len(result.Items) != DefaultFixedFindingsLimit {
 		t.Fatalf("default limit must apply while the total stays exact: total=%d items=%d err=%v", result.Total, len(result.Items), err)
 	}
-	result, err = db.FixedFindings(ctx, current, total*10)
+	result, err = db.FixedFindings(ctx, current, total*10, nil)
 	if err != nil || result.Total != total || len(result.Items) != MaxFixedFindingsLimit {
 		t.Fatalf("limit must clamp to %d while the total stays exact: total=%d items=%d err=%v", MaxFixedFindingsLimit, result.Total, len(result.Items), err)
 	}
@@ -631,7 +643,7 @@ func TestSuppressedFindingsExcludedFromTotalsExportsAndFixed(t *testing.T) {
 	}
 
 	// A dismissed fingerprint that disappeared is not fixed.
-	fixed, err := db.FixedFindings(ctx, loaded, 0)
+	fixed, err := db.FixedFindings(ctx, loaded, 0, nil)
 	if err != nil || fixed.Total != 0 || len(fixed.Items) != 0 {
 		t.Fatalf("a suppressed fingerprint must not report as fixed: %#v (%v)", fixed, err)
 	}
@@ -979,7 +991,7 @@ func TestLargeVolumeFixedFindings(t *testing.T) {
 	var result FixedFindingsResult
 	p95, worst := measurePerf(t, 10, func() error {
 		var err error
-		result, err = db.FixedFindings(ctx, scan, MaxFixedFindingsLimit)
+		result, err = db.FixedFindings(ctx, scan, MaxFixedFindingsLimit, nil)
 		return err
 	})
 	if result.Total != 20000 || len(result.Items) != MaxFixedFindingsLimit {

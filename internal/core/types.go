@@ -1,7 +1,10 @@
 // Package core contains analyzer-independent application models.
 package core
 
-import "time"
+import (
+	"path/filepath"
+	"time"
+)
 
 type Workspace struct {
 	ID                string         `json:"id"`
@@ -158,4 +161,22 @@ type FileEntry struct {
 	Selected     bool   `json:"selected"`
 	SkipReason   string `json:"skip_reason,omitempty"`
 	IsDir        bool   `json:"is_dir"`
+}
+
+// NormalizePath canonicalizes a workspace-relative path so set membership
+// tests (comparison coverage, fixed-finding filtering) agree regardless of
+// which subsystem produced the string: separators become forward slashes,
+// "./" prefixes are stripped, and "." collapses to "".
+func NormalizePath(path string) string {
+	if path == "" {
+		return ""
+	}
+	path = filepath.ToSlash(filepath.Clean(path))
+	for len(path) > 2 && path[:2] == "./" {
+		path = path[2:]
+	}
+	if path == "." {
+		return ""
+	}
+	return path
 }

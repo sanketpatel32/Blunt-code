@@ -1888,7 +1888,15 @@ func (s *Server) fixedFindings(w http.ResponseWriter, r *http.Request) {
 		}
 		limit = value
 	}
-	result, err := s.db.FixedFindings(r.Context(), scan, limit)
+	// The fixed panel must agree with the verdict's fixed count (computed via
+	// scanComparisonCounts → scans.Compare), so the same file-coverage half of
+	// the rule — only files this scan actually evaluated can report fixes —
+	// rides along here.
+	var selectedPaths []string
+	if scan.Snapshot != nil {
+		selectedPaths = scan.Snapshot.SelectedFiles
+	}
+	result, err := s.db.FixedFindings(r.Context(), scan, limit, selectedPaths)
 	if err != nil {
 		fail(w, 500, "DATABASE_ERROR", "Could not load fixed findings.")
 		return

@@ -1464,19 +1464,34 @@ type FixedFindingsResult struct {
 }
 
 // FixedFindings lists the findings that existed in the previous completed scan
-// of the same workspace and disappeared from this scan. The coverage rule from
-// scans.Compare is applied in SQL: a disappeared finding only counts as fixed
-// when its analyzer also succeeded in the current scan, because its absence is
-// otherwise unknown, not fixed. Rows reuse the shared finding projection and
-// row scanner of FindingsPage with the status column pinned to "fixed"; limit
-// defaults to DefaultFixedFindingsLimit and is capped at MaxFixedFindingsLimit
-// while Total always reports the uncapped count.
-func (d *DB) FixedFindings(ctx context.Context, scan core.Scan, limit int) (FixedFindingsResult, error) {
+// of the same workspace and disappeared from this scan. The coverage rules from
+// scans.Compare are applied: a disappeared finding only counts as fixed when
+// its analyzer also succeeded in the current scan (SQL) AND — when the caller
+// passes the current scan's selected files — its file was actually part of this
+// scan's input set (Go filter), because its absence is otherwise unknown, not
+// fixed. Rows reuse the shared finding projection and row scanner of
+// FindingsPage with the status column pinned to "fixed"; limit defaults to
+// DefaultFixedFindingsLimit and is capped at MaxFixedFindingsLimit while Total
+// always reports the uncapped, coverage-filtered count.
+func (d *DB) FixedFindings(ctx context.Context, scan core.Scan, limit int, selectedRelPaths []string) (FixedFindingsResult, error) {
 	if limit <= 0 {
 		limit = DefaultFixedFindingsLimit
 	}
 	if limit > MaxFixedFindingsLimit {
 		limit = MaxFixedFindingsLimit
+	}
+	// Mirrors scans.NewComparisonCoverage: an empty/absent path list leaves the
+	// set nil, which falls back to the analyzer-only contract instead of
+	// declaring every file out of scope.
+	var evaluatedFiles map[string]bool
+	for _, path := range selectedRelPaths {
+		if path == "" {
+			continue
+		}
+		if evaluatedFiles == nil {
+			evaluatedFiles = make(map[string]bool, len(selectedRelPaths))
+		}
+		evaluatedFiles[core.NormalizePath(path)] = true
 	}
 	previousID, err := d.PreviousCompletedScanID(ctx, scan.WorkspaceID, scan.ID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -1490,35 +1505,43 @@ func (d *DB) FixedFindings(ctx context.Context, scan core.Scan, limit int) (Fixe
 	// buildFindingQuery pointed the other way: previous findings whose
 	// fingerprint no longer exists in the current scan are gone. The analyzer
 	// subquery is the SQL form of SuccessfulAnalyzerIDs for the coverage rule,
-	// and a suppressed fingerprint never reports as fixed â€” it was dismissed,
-	// not resolved.
-	// The fingerprint predicate mirrors the comparison status in
-	// buildFindingQuery pointed the other way: previous findings whose
-	// fingerprint no longer exists in the current scan are gone. The analyzer
-	// subquery is the SQL form of SuccessfulAnalyzerIDs for the coverage rule,
-	// and a suppressed fingerprint never reports as fixed â€” it was dismissed,
+	// and a suppressed fingerprint never reports as fixed — it was dismissed,
 	// not resolved. The NOT IN form materializes the workspace's suppression
 	// set once instead of probing per row (measured: the correlated EXISTS
-	// probe added ~60% to a 20k-row panel).
+	// probe added ~60% to a 20k-row panel). The file-coverage half of the rule
+	// cannot be expressed against the snapshot JSON without duplicating the
+	// path normalizer in SQL, so every SQL-matched row is loaded (no LIMIT)
+	// and filtered in Go; the panel is on-demand and the returned window stays
+	// capped at limit.
 	where := `findings.scan_id=? AND NOT EXISTS (SELECT 1 FROM findings AS current_scan WHERE current_scan.scan_id=? AND current_scan.fingerprint=findings.fingerprint) AND findings.analyzer_id IN (SELECT analyzer_id FROM analyzer_runs WHERE scan_id=? AND state='succeeded') AND findings.fingerprint NOT IN (SELECT fingerprint FROM suppressed_findings WHERE workspace_id=?)`
 	args := []any{previousID, scan.ID, scan.ID, scan.WorkspaceID}
-	if err := d.SQL.QueryRowContext(ctx, `SELECT COUNT(*) FROM findings WHERE `+where, args...).Scan(&result.Total); err != nil {
-		return FixedFindingsResult{}, err
-	}
-	queryArgs := append(append([]any(nil), args...), limit)
-	rows, err := d.SQL.QueryContext(ctx, `SELECT `+findingColumns+`,'fixed' FROM findings WHERE `+where+` ORDER BY `+severityRankExpr+` DESC, findings.relative_path ASC, findings.start_line ASC, findings.analyzer_id ASC, findings.rule_id ASC LIMIT ?`, queryArgs...)
+	rows, err := d.SQL.QueryContext(ctx, `SELECT `+findingColumns+`,'fixed' FROM findings WHERE `+where+` ORDER BY `+severityRankExpr+` DESC, findings.relative_path ASC, findings.start_line ASC, findings.analyzer_id ASC, findings.rule_id ASC`, args...)
 	if err != nil {
 		return FixedFindingsResult{}, err
 	}
 	defer rows.Close()
+	var matched []analyzers.Finding
 	for rows.Next() {
 		f, err := scanFindingRow(rows)
 		if err != nil {
 			return FixedFindingsResult{}, err
 		}
-		result.Items = append(result.Items, f)
+		// Project-level (path-less) findings follow their analyzer: a
+		// successful run re-evaluated the whole project, so they can be fixed.
+		if evaluatedFiles != nil && f.RelativePath != "" && !evaluatedFiles[core.NormalizePath(f.RelativePath)] {
+			continue
+		}
+		matched = append(matched, f)
 	}
-	return result, rows.Err()
+	if err := rows.Err(); err != nil {
+		return FixedFindingsResult{}, err
+	}
+	result.Total = len(matched)
+	if len(matched) > limit {
+		matched = matched[:limit]
+	}
+	result.Items = matched
+	return result, nil
 }
 
 func (d *DB) Metrics(ctx context.Context, scanID string) ([]analyzers.Metric, error) {

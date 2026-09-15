@@ -96,6 +96,11 @@ type UpdateCheckResult struct {
 	Available    bool   `json:"available"`
 	ReleaseURL   string `json:"release_url"`
 	ReleaseNotes string `json:"release_notes"`
+	// Unreachable is true when the release check could not run (no network,
+	// GitHub unreachable). The answer is still 200: the browser logs every
+	// >=400 response as a console error, and "can't check right now" is not
+	// an error the UI acts on — it must stay silent.
+	Unreachable bool `json:"unreachable"`
 }
 
 // CheckUpdateDirect checks GitHub releases for a newer version than currentVersion.
@@ -132,7 +137,9 @@ func (s *Server) updateCheck(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := CheckUpdateDirect(s.version)
 	if err != nil {
-		fail(w, http.StatusBadGateway, "UPDATE_CHECK_FAILED", err.Error())
+		// Soft-fail with 200 + unavailable instead of a 502 pass-through so an
+		// offline machine never accumulates console errors on every load.
+		writeJSON(w, http.StatusOK, UpdateCheckResult{Current: s.version, Unreachable: true})
 		return
 	}
 	writeJSON(w, http.StatusOK, res)

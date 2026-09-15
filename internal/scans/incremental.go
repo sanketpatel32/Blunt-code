@@ -96,18 +96,10 @@ type incrementalState struct {
 // normalizeReusePath canonicalizes a workspace-relative path for reuse
 // matching: slash separators, no leading "./", and "" for path-less
 // (project-level) rows, mirroring the fingerprint normalizer in SetFingerprint.
+// The implementation lives in core so the database layer's fixed-finding
+// coverage filter normalizes identically.
 func normalizeReusePath(path string) string {
-	if path == "" {
-		return ""
-	}
-	path = filepath.ToSlash(filepath.Clean(path))
-	for len(path) > 2 && path[:2] == "./" {
-		path = path[2:]
-	}
-	if path == "." {
-		return ""
-	}
-	return path
+	return core.NormalizePath(path)
 }
 
 // hashFileContent streams the file through sha256 and returns the hex digest.

@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"bluntcode/internal/analyzers"
+	"bluntcode/internal/core"
 )
 
 // ComparisonCoverage states what the current scan actually evaluated: which
@@ -29,7 +30,7 @@ func NewComparisonCoverage(succeeded map[string]bool, selectedRelPaths []string)
 		if evaluated == nil {
 			evaluated = make(map[string]bool, len(selectedRelPaths))
 		}
-		evaluated[normalizeReusePath(path)] = true
+		evaluated[core.NormalizePath(path)] = true
 	}
 	return ComparisonCoverage{Succeeded: succeeded, EvaluatedFiles: evaluated}
 }
@@ -92,5 +93,5 @@ func (c ComparisonCoverage) evaluated(finding analyzers.Finding) bool {
 	if finding.RelativePath == "" || c.EvaluatedFiles == nil {
 		return true
 	}
-	return c.EvaluatedFiles[normalizeReusePath(finding.RelativePath)]
+	return c.EvaluatedFiles[core.NormalizePath(finding.RelativePath)]
 }

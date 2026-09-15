@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -100,6 +101,31 @@ func TestUpdateCheckUpToDateAndOffline(t *testing.T) {
 	}
 	if !strings.Contains(recorder.Body.String(), "UPDATE_OFFLINE") {
 		t.Fatalf("offline error code missing: %s", recorder.Body.String())
+	}
+}
+
+func TestUpdateCheckSoftFailsWhenUnreachable(t *testing.T) {
+	s := testServer(t)
+	s.version = "0.6.0"
+	original := fetchURLBytes
+	fetchURLBytes = func(url string) ([]byte, error) { return nil, fmt.Errorf("dial tcp: connection refused") }
+	t.Cleanup(func() { fetchURLBytes = original })
+	recorder := httptest.NewRecorder()
+	s.updateCheck(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/update/check", nil))
+	// An unreachable GitHub is a soft answer (200 + unreachable), not a 502:
+	// the browser logs every >=400 response as a console error on every load.
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("unreachable check status = %d, want 200", recorder.Code)
+	}
+	var payload struct {
+		Available   bool `json:"available"`
+		Unreachable bool `json:"unreachable"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Available || !payload.Unreachable {
+		t.Fatalf("unexpected payload: %+v", payload)
 	}
 }
 
