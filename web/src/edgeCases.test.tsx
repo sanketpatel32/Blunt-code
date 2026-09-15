@@ -167,7 +167,7 @@ describe('hostile API fixtures', () => {
     ]);
     const host = await renderAt('/scans/scan-1', fetchMock);
     expectClean(host);
-    expect(host.textContent).toContain('Analysis'); // the verdict header renders above a null-safe report
+    expect(host.textContent).toContain('Scan ·'); // the scan hero eyebrow renders above a null-safe report
     expect(host.textContent).toContain('All clear'); // zero findings, no filters
     expect(host.textContent).toContain('0 findings fixed'); // fixed: null stays at zero
   });
@@ -195,7 +195,7 @@ describe('hostile API fixtures', () => {
     ]);
     const host = await renderAt('/scans/scan-1', fetchMock);
     expectClean(host);
-    expect(host.textContent).toContain('0 findings · 0 engines ran'); // no pager renders for an empty list — and nothing crashes
+    expect(host.textContent).toContain('0 findings · 0 analyzers ran'); // no pager renders for an empty list — and nothing crashes
   });
 
   it('ReportView survives a report payload with no scan at all', async () => {
@@ -223,7 +223,7 @@ describe('hostile API fixtures', () => {
     const fetchMock = routeMock([['/api/v1/analyzers', null]]);
     const host = await renderAt('/tools', fetchMock);
     expectClean(host);
-    expect(host.textContent).toContain('No analyzers');
+    expect(host.textContent).toContain('Nothing to set up'); // null response renders the empty state, not a crash
   });
 
   it('SettingsPage survives meta/settings payloads with missing keys', async () => {

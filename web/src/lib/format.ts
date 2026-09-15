@@ -1,4 +1,4 @@
-import type { Finding } from '../types';
+import type { Finding, Severity } from '../types';
 
 const SECOND_MS = 1_000;
 const MINUTE_MS = 60 * SECOND_MS;
@@ -115,6 +115,9 @@ export function languageColor(id: string): string {
 
 export type ScanStateVariant = 'success' | 'warning' | 'danger' | 'accent' | 'outline';
 
+/** Human-capitalized severity labels so toolbar chips and verdict cards agree on casing. */
+export const SEVERITY_LABELS: Record<Severity, string> = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low', info: 'Info' };
+
 /**
  * Human label + Badge tone for a scan lifecycle state. The raw snake_case
  * leaked onto surfaces that don't use the CSS `.state` pill system, and
@@ -132,11 +135,14 @@ export function scanStateDisplay(state?: string | null): { label: string; varian
 }
 
 /** Compact display names for chips, badges, and table cells; surfaces that have
- *  room for the full brand use analyzerCatalog's displayName instead. */
+ *  room for the full brand use analyzerCatalog's displayName instead. Both the
+ *  catalog ids and the bare short ids the backend sometimes reports map here,
+ *  so a pill never shows a raw internal id. */
 export const analyzerDisplayNames: Record<string, string> = {
   biome: 'Biome', ruff: 'Ruff', semgrep: 'Semgrep', sonarqube: 'SonarQube',
-  'gitleaks-secrets': 'Gitleaks', 'osv-dependencies': 'OSV', 'container-trivy': 'Trivy',
-  'iac-checkov': 'Checkov', 'license-scan': 'License', secrets: 'Secrets', pentest: 'Pentest', todo: 'Todo',
+  'gitleaks-secrets': 'Gitleaks', gitleaks: 'Gitleaks', 'osv-dependencies': 'OSV', osv: 'OSV',
+  'container-trivy': 'Trivy', trivy: 'Trivy', 'iac-checkov': 'Checkov', checkov: 'Checkov',
+  'license-scan': 'License Scanner', secrets: 'Secrets', pentest: 'Pentest', todo: 'Todo Scanner',
 };
 
 export function analyzerName(id: string) {
@@ -169,4 +175,46 @@ export function shortPath(path: string): string {
   const parts = path.split(/[\\/]/).filter(Boolean);
   if (parts.length <= 3) return path;
   return `…${separator}${parts.slice(-2).join(separator)}`;
+}
+
+/**
+ * The best documentation link for a finding: the analyzer's own URL when the
+ * backend recorded one, otherwise a synthesized rule-docs URL for the analyzers
+ * whose rule ids map cleanly onto public docs (SonarQube RSPEC, Biome, Semgrep).
+ * Undefined when nothing reliable can be guessed — a wrong link is worse than none.
+ */
+export function ruleDocsUrl(finding: Pick<Finding, 'analyzer_id' | 'rule_id' | 'documentation_url'>): string | undefined {
+  if (finding.documentation_url) return finding.documentation_url;
+  const rule = finding.rule_id?.trim();
+  if (!rule) return undefined;
+  if (finding.analyzer_id === 'sonarqube') {
+    // Sonar rules arrive language-prefixed ("typescript:S3776"); the trailing
+    // RSPEC number deep-links the rule, otherwise the rules index is all we know.
+    const match = rule.match(/^(typescript|javascript|python|java|go|css|html):(.+)$/);
+    if (!match) return undefined;
+    const num = match[2]!.match(/(\d+)$/)?.[1];
+    return num ? `https://rules.sonarsource.com/${match[1]}/RSPEC-${num}/` : 'https://rules.sonarsource.com/';
+  }
+  if (finding.analyzer_id === 'biome') return `https://biomejs.dev/linter/rules/${rule.toLowerCase()}/`;
+  if (finding.analyzer_id === 'semgrep') return `https://semgrep.dev/r?q=${encodeURIComponent(rule)}`;
+  return undefined;
+}
+
+/** First sentence/clause of a message (cut at the first "." or ":"), capped near 80 chars — heading material. */
+function firstMessageClause(text: string): string {
+  const cut = text.search(/[.:]/);
+  const clause = (cut > 0 ? text.slice(0, cut) : text).trim();
+  if (clause.length > 80) return `${clause.slice(0, 79).trimEnd()}…`;
+  return clause;
+}
+
+/**
+ * The heading a finding deserves: when the backend could only echo the rule id
+ * back as the title, synthesize a readable one from the message's first clause
+ * so a pane heading is never an opaque rule id.
+ */
+export function friendlyFindingTitle(finding: Partial<Pick<Finding, 'title' | 'rule_id' | 'message'>>): string {
+  const title = finding.title ?? finding.rule_id;
+  if (!title || title !== finding.rule_id) return title ?? 'Finding';
+  return firstMessageClause(finding.message ?? '') || title;
 }

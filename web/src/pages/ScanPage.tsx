@@ -4,8 +4,8 @@ import type { AnalyzerRun, Finding, Scan } from '../types';
 import type { Route } from '../lib/router';
 import type { Notice } from '../lib/notice';
 import { message } from '../lib/notice';
-import { analyzerName, count, date, elapsed, findingLocation, scanStateDisplay } from '../lib/format';
-import { eventCopy, isTerminalScanState, latestAnalyzerCompletions, liveHeadline, severityTotalsSoFar, stageLabels, type ScanEvent } from '../lib/scanEvents';
+import { SEVERITY_LABELS, analyzerName, count, date, elapsed, findingLocation, scanStateDisplay } from '../lib/format';
+import { analyzerStatusLabels, eventCopy, isTerminalScanState, latestAnalyzerCompletions, liveHeadline, severityTotalsSoFar, stageLabels, type ScanEvent } from '../lib/scanEvents';
 import { bandFor, riskGrade, riskScore, severityCountsOf } from '../lib/risk';
 import { useLoad } from '../hooks/useLoad';
 import { useTicker } from '../hooks/useTicker';
@@ -118,8 +118,8 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
   /** One sentence the whole page hangs on: the verdict, in the same grade language as the dashboard. */
   const headline = live
     ? liveHeadline(events, current.state)
-    : current.state === 'failed' ? 'Analysis failed'
-      : current.state === 'cancelled' ? 'Analysis cancelled'
+    : current.state === 'failed' ? 'Scan failed'
+      : current.state === 'cancelled' ? 'Scan cancelled'
         : current.state === 'interrupted' ? 'Scan interrupted — partial results below'
           : total === 0
             ? incomplete ? 'No findings — but coverage was incomplete' : 'All clear — no findings'
@@ -134,7 +134,7 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
     <header className="scan-hero" data-tone={heroTone}>
       <div className="scan-hero-main">
         <p className="eyebrow">
-          Analysis · {current.profile} profile
+          Scan · {current.profile} profile
           <span className={`scan-state-badge variant-${state.variant}`}>{state.label}</span>
         </p>
         <div className="scan-hero-title-row">
@@ -151,7 +151,7 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
               <span>{live ? `elapsed ${durationText}` : durationText}</span>
               {runs.length > 0 && <>
                 <span aria-hidden="true">·</span>
-                <span>{succeeded} of {runs.length} {runs.length === 1 ? 'engine' : 'engines'} succeeded</span>
+                <span>{succeeded} of {runs.length} {runs.length === 1 ? 'analyzer' : 'analyzers'} succeeded</span>
               </>}
             </p>
             {/* The reason a scan failed or warned must survive outside the
@@ -203,7 +203,7 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
             const value = counts[sev] ?? 0;
             const pct = total > 0 ? Math.max(value > 0 ? 2 : 0, Math.round((value / total) * 100)) : 0;
             return <li key={sev} className={`verdict-bar-row ${value === 0 ? 'is-zero' : ''}`}>
-              <span className="verdict-bar-label"><i className={`sev-dot sev-${sev}`} aria-hidden="true" />{sev}</span>
+              <span className="verdict-bar-label"><i className={`sev-dot sev-${sev}`} aria-hidden="true" />{SEVERITY_LABELS[sev]}</span>
               <span className="verdict-bar-track" role="img" aria-label={`${value} ${sev} ${value === 1 ? 'finding' : 'findings'}`}>
                 <i className={`verdict-bar-fill sev-${sev}`} aria-hidden="true" style={{ width: `${pct}%` }} />
               </span>
@@ -213,14 +213,19 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
         </ul>
       </div>
       <dl className="verdict-stats">
-        <div className="verdict-stat"><dt>Risk score</dt><dd>{score}<span className="verdict-stat-note">{bandFor(riskGrade(score)).range}</span></dd></div>
-        <div className="verdict-stat"><dt>New</dt><dd>{current.new_count ?? 0}</dd></div>
-        <div className="verdict-stat"><dt>Fixed</dt><dd>{current.fixed_count ?? 0}</dd></div>
-        <div className="verdict-stat"><dt>Engines</dt><dd>{runs.length ? `${succeeded}/${runs.length}` : '—'}</dd></div>
+        <div className="verdict-stat" title={RISK_SCORE_TOOLTIP}><dt>Risk score</dt><dd>{score}<span className="verdict-stat-note"> {bandFor(riskGrade(score)).range}</span></dd></div>
+        <div className="verdict-stat" title={VERDICT_TRIO_TOOLTIP}><dt>New</dt><dd>{current.new_count ?? 0}</dd></div>
+        <div className="verdict-stat" title={VERDICT_TRIO_TOOLTIP}><dt>Fixed</dt><dd>{current.fixed_count ?? 0}</dd></div>
+        <div className="verdict-stat" title={VERDICT_TRIO_TOOLTIP}><dt>Persistent</dt><dd>{Math.max(0, total - (current.new_count ?? 0))}</dd></div>
+        <div className="verdict-stat"><dt>Analyzers</dt><dd>{runs.length ? `${succeeded}/${runs.length}` : '—'}</dd></div>
       </dl>
     </section>}
-    {terminal && (current.fixed_count ?? 0) > 0 && <WhatChanged scanId={id} fixedCount={current.fixed_count ?? 0} />}
-    {terminal && <ReportView scanId={id} notify={notify} runs={current.analyzer_runs ?? []} />}
+    {terminal && (current.fixed_count ?? 0) > 0 && (current.state === 'completed' || current.state === 'completed_with_warnings'
+      ? <WhatChanged scanId={id} fixedCount={current.fixed_count ?? 0} />
+      : current.state === 'cancelled' || current.state === 'interrupted'
+        ? <CancelledDiffNote fixedCount={current.fixed_count ?? 0} state={current.state} />
+        : null)}
+    {terminal && <ReportView scanId={id} notify={notify} go={go} runs={current.analyzer_runs ?? []} />}
   </div>;
 }
 
@@ -279,8 +284,8 @@ export function LiveAnalyzerStrip({ runs, events }: { runs?: AnalyzerRun[]; even
             const failed = pill.status === 'failed';
             const found = pill.status === 'succeeded' ? completions.get(pill.id)?.findings : undefined;
             return <li key={pill.id} title={skipped || failed ? (pill.message || (skipped ? 'Skipped — no applicable files or not enabled for this profile' : 'Failed')) : undefined} className={reduced ? '' : 'live-pill-enter'} style={reduced ? undefined : { animationDelay: `${(gIdx * items.length + pIdx) * 40}ms`, willChange: 'transform, opacity' } as never}>
-              <span className="badge"><i className="category-dot" style={{ background: categoryColor((analyzerMeta(pill.id)?.category ?? 'security') as never) } as never} aria-hidden="true" />{pill.id}</span>
-              <span className={`state ${pill.status}`}>{pill.status}</span>
+              <span className="badge"><i className="category-dot" style={{ background: categoryColor((analyzerMeta(pill.id)?.category ?? 'security') as never) } as never} aria-hidden="true" />{analyzerName(pill.id)}</span>
+              <span className={`state ${pill.status}`}>{analyzerStatusLabels[pill.status] ?? pill.status}</span>
               {found !== undefined && <span className="pill-count">{count(found)} {found === 1 ? 'finding' : 'findings'}</span>}
               {skipped && <span className="text-xs" style={{ color: 'var(--color-ink-faint)', marginLeft: '4px' }} role="note">skipped: {pill.message || 'no applicable files'}</span>}
               {failed && pill.message && <span className="text-xs" style={{ color: 'var(--color-danger)', marginLeft: '4px' }} role="note">{pill.message}</span>}
@@ -296,6 +301,10 @@ export function LiveAnalyzerStrip({ runs, events }: { runs?: AnalyzerRun[]; even
 const FIXED_VISIBLE_LIMIT = 10;
 const mediumTime = new Intl.DateTimeFormat(undefined, { timeStyle: 'medium' });
 
+/** Hover explainers for the verdict stat trio and the weighted risk score. */
+const VERDICT_TRIO_TOOLTIP = 'New = found for the first time in this scan · Fixed = gone since the previous completed scan · Persistent = carried over';
+const RISK_SCORE_TOOLTIP = 'Weighted: critical ×10, high ×5, medium ×2, low ×1 · A 0–4, B 5–19, C 20–49, D 50+';
+
 function WhatChanged({ scanId, fixedCount }: { scanId: string; fixedCount: number }) {
   const fixed = useLoad(() => api.fixedFindings(scanId), [scanId]);
   const header = <header className="what-changed-header"><div><h2>What changed</h2><p>Fixed since the previous scan</p></div></header>;
@@ -310,6 +319,20 @@ function WhatChanged({ scanId, fixedCount }: { scanId: string; fixedCount: numbe
 
 function FixedRow({ finding }: { finding: Finding }) {
   return <li className="what-changed-row"><span className={`severity ${finding.severity}`}>{finding.severity}</span><span className="what-changed-rule">{finding.title ?? finding.rule_id ?? 'Finding'}</span><code>{findingLocation(finding)}</code><span className="badge">{analyzerName(finding.analyzer_id)}</span></li>;
+}
+
+/**
+ * A cancelled/interrupted scan still reports fixed_count from whatever ran, but
+ * "13 findings fixed" would be a lie — engines that never ran did not fix anything.
+ * The diff gets no panel and no /fixed fetch; this muted note keeps the number honest.
+ */
+function CancelledDiffNote({ fixedCount, state }: { fixedCount: number; state: string }) {
+  const reason = state === 'interrupted' ? 'interrupted' : 'cancelled';
+  return <section className="what-changed-cancelled">
+    <p role="note" style={{ margin: 0, color: 'var(--color-ink-soft)', fontSize: 'var(--text-sm)' } as never}>
+      {count(fixedCount)} {fixedCount === 1 ? 'finding' : 'findings'} no longer detected — but this scan was {reason}, so some analyzers never ran; {fixedCount === 1 ? 'it' : 'these'} may reappear.
+    </p>
+  </section>;
 }
 
 function ScanStageList({ scan, events }: { scan: Scan; events: ScanEvent[] }) {

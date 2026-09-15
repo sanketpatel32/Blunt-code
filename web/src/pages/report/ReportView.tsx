@@ -2,9 +2,10 @@ import * as React from 'react';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { api } from '../../api';
 import type { AnalyzerRun, Finding, FindingPage, Report, Scan, Severity } from '../../types';
+import type { Route } from '../../lib/router';
 import type { Notice } from '../../lib/notice';
 import { message } from '../../lib/notice';
-import { analyzerName, compactDuration, findingLocation, shortFindingLocation } from '../../lib/format';
+import { SEVERITY_LABELS, analyzerName, compactDuration, findingLocation, shortFindingLocation } from '../../lib/format';
 import { copyToClipboard } from '../../lib/clipboard';
 import { useLoad } from '../../hooks/useLoad';
 import { findingCategoryLabel } from '../../lib/analyzerCatalog';
@@ -26,6 +27,8 @@ export type FindingFilter = { severity: string; category: string; analyzer: stri
 
 const SEVERITY_ORDER: Severity[] = ['critical', 'high', 'medium', 'low', 'info'];
 const STATUS_OPTIONS = ['new', 'persistent', 'suppressed'] as const;
+/** Chip labels for the status filter; the filter value stays the raw API status. */
+const STATUS_LABELS: Record<(typeof STATUS_OPTIONS)[number], string> = { new: 'New', persistent: 'Still present', suppressed: 'Suppressed' };
 
 /** Text filters wait for typing to pause before hitting the API; empty values flush instantly. */
 const TEXT_FILTER_DELAY_MS = 300;
@@ -139,7 +142,7 @@ function CheckIcon() {
   return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d="m5 13 4.2 4.2L19 6.5" /></svg>;
 }
 
-export function ReportView({ scanId, notify, runs: runsProp }: { scanId: string; notify?: (n: Notice) => void; runs?: AnalyzerRun[] }) {
+export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: string; notify?: (n: Notice) => void; runs?: AnalyzerRun[]; /** Navigation callback from the hosting page; present, the suppress toast gains a "View suppressions" jump to the workspace. */ go?: (r: Route) => void }) {
   const report = useLoad(() => api.report(scanId), [scanId]);
   // Read the shareable URL state exactly once per mount so all three slices
   // stay mutually consistent even if the address changes mid-render.
@@ -265,6 +268,12 @@ export function ReportView({ scanId, notify, runs: runsProp }: { scanId: string;
   for (const suppression of suppressions.data ?? []) {
     if (suppression.reason) suppressionReasons.set(suppression.fingerprint, suppression.reason);
   }
+  /** Where a landed suppression can be reviewed. With navigation the success
+   *  toast gains a "View suppressions" jump; without it the toast says where
+   *  to go instead of promising a button it cannot render. */
+  const suppressionsRoute: Route | undefined = workspaceId ? { page: 'workspace', id: workspaceId } : undefined;
+  const suppressionAction = go && suppressionsRoute ? { label: 'View suppressions', onClick: () => go(suppressionsRoute) } : undefined;
+  const suppressionHint = !suppressionAction && workspaceId ? " Manage them from the workspace's Suppressions section." : '';
   /** Deleting a suppression restores the finding: the toast confirms what happened before the refresh. */
   async function restoreFinding(finding: Finding) {
     if (!finding.fingerprint || !workspaceId) return;
@@ -286,7 +295,7 @@ export function ReportView({ scanId, notify, runs: runsProp }: { scanId: string;
     if (queue.length <= 1) {
       setSuppressQueue([]);
       setSuppressionVersion((version) => version + 1);
-      notify?.({ kind: 'success', text: `Finding suppressed${reason ? ` (${reason})` : ''}. It will not appear in future scans, reports, or the CI gate.` });
+      notify?.({ kind: 'success', text: `Finding suppressed${reason ? ` (${reason})` : ''}. It will not appear in future scans, reports, or the CI gate.${suppressionHint}`, action: suppressionAction });
       await reloadAllPages();
       return;
     }
@@ -306,7 +315,7 @@ export function ReportView({ scanId, notify, runs: runsProp }: { scanId: string;
     setSuppressQueue([]);
     setSelectionEpoch((epoch) => epoch + 1);
     setSuppressionVersion((version) => version + 1);
-    notify?.({ kind: failed ? 'error' : 'success', text: failed ? `Suppressed ${done} of ${queue.length} findings — ${failed} failed; retry the rest.` : `Suppressed ${done} findings${reason ? ` (${reason})` : ''}. They will not appear in future scans, reports, or the CI gate.` });
+    notify?.({ kind: failed ? 'error' : 'success', text: failed ? `Suppressed ${done} of ${queue.length} findings — ${failed} failed; retry the rest.` : `Suppressed ${done} findings${reason ? ` (${reason})` : ''}. They will not appear in future scans, reports, or the CI gate.${suppressionHint}`, action: failed ? undefined : suppressionAction });
     await reloadAllPages();
   }
   /** Bulk entry point from the selection toolbar: confirm the reason once in the dialog, then apply it to every selected finding. */
@@ -323,8 +332,10 @@ export function ReportView({ scanId, notify, runs: runsProp }: { scanId: string;
   const runs = runsProp ?? dataScan.analyzer_runs ?? [];
   const runById = new Map<string, AnalyzerRun | undefined>(runs.map((run) => [run.analyzer_id, run] as const));
   const countByAnalyzer = new Map<string, number>();
+  const countByStatus = new Map<string, number>();
   for (const finding of data.findings ?? []) {
     countByAnalyzer.set(finding.analyzer_id, (countByAnalyzer.get(finding.analyzer_id) ?? 0) + 1);
+    if (finding.status) countByStatus.set(finding.status, (countByStatus.get(finding.status) ?? 0) + 1);
     if (!runById.has(finding.analyzer_id)) runById.set(finding.analyzer_id, undefined);
   }
   const tools = [...runById.keys()];
@@ -355,11 +366,11 @@ export function ReportView({ scanId, notify, runs: runsProp }: { scanId: string;
       <div className="toolbar-groups">
         <div className="filter-group">
           <span className="filter-group-label" aria-hidden="true">Severity</span>
-          <fieldset className="chip-group" aria-label="Severity">{SEVERITY_ORDER.map((severity) => { const count = counts[severity]; const active = selectedSeverities.includes(severity); return <button type="button" key={severity} className={`chip sev-chip ${severity}${active ? ' pressed' : ''}`} aria-pressed={active} disabled={count === 0 && !active} onClick={() => toggleSeverity(severity)}><i className={`sev-dot sev-${severity}`} aria-hidden="true" />{severity}<span className="count">{count}</span></button>; })}</fieldset>
+          <fieldset className="chip-group" aria-label="Severity">{SEVERITY_ORDER.map((severity) => { const count = counts[severity]; const active = selectedSeverities.includes(severity); return <button type="button" key={severity} className={`chip sev-chip ${severity}${active ? ' pressed' : ''}`} aria-pressed={active} disabled={count === 0 && !active} onClick={() => toggleSeverity(severity)}><i className={`sev-dot sev-${severity}`} aria-hidden="true" />{SEVERITY_LABELS[severity]}<span className="count">{count}</span></button>; })}</fieldset>
         </div>
         <div className="filter-group">
           <span className="filter-group-label" aria-hidden="true">Status</span>
-          <fieldset className="chip-group" aria-label="Status"><button type="button" className="chip" aria-pressed={!filters.status} onClick={() => updateFilters({ ...filters, status: '' })}>Any status</button>{STATUS_OPTIONS.map((status) => <button type="button" key={status} className={`chip${filters.status === status ? ' pressed' : ''}`} aria-pressed={filters.status === status} onClick={() => toggleStatus(status)}>{status}</button>)}</fieldset>
+          <fieldset className="chip-group" aria-label="Status"><button type="button" className="chip" aria-pressed={!filters.status} onClick={() => updateFilters({ ...filters, status: '' })}>Any status</button>{STATUS_OPTIONS.map((status) => <button type="button" key={status} className={`chip${filters.status === status ? ' pressed' : ''}`} aria-pressed={filters.status === status} onClick={() => toggleStatus(status)}>{STATUS_LABELS[status]}<span className="count">{countByStatus.get(status) ?? 0}</span></button>)}</fieldset>
         </div>
         {tools.length > 0 && <div className="filter-group">
           <span className="filter-group-label" aria-hidden="true">Tool</span>
@@ -387,7 +398,7 @@ export function ReportView({ scanId, notify, runs: runsProp }: { scanId: string;
       {selected && <SourcePane scanId={scanId} finding={selected} workspaceId={workspaceId} onClose={() => setSelectedKey(undefined)} onPrev={() => { if (selectedIndex > 0) setSelectedKey(findingKey(items[selectedIndex - 1]!, selectedIndex - 1)); }} onNext={() => { if (selectedIndex >= 0 && selectedIndex < items.length - 1) setSelectedKey(findingKey(items[selectedIndex + 1]!, selectedIndex + 1)); }} hasPrev={selectedIndex > 0} hasNext={selectedIndex >= 0 && selectedIndex < items.length - 1} onSuppress={setSuppressing} onRestore={restoreFinding} />}
     </div>
     <footer className="report-foot">
-      <span className="report-foot-count">{total} {total === 1 ? 'finding' : 'findings'} · {tools.length || 0} {tools.length === 1 ? 'engine' : 'engines'} ran</span>
+      <span className="report-foot-count">{total} {total === 1 ? 'finding' : 'findings'} · {tools.length || 0} {tools.length === 1 ? 'analyzer' : 'analyzers'} ran</span>
       <ExportMenu scanId={scanId} csvParams={csvParams} findings={items} />
     </footer>
     {suppressing && <SuppressFindingDialog workspaceId={workspaceId} finding={suppressing} onClose={() => { setSuppressing(undefined); setSuppressQueue([]); }} onSuppressed={(reason) => { void suppressQueued(reason); }} notify={notify ?? noopNotify} />}
@@ -397,17 +408,17 @@ export function ReportView({ scanId, notify, runs: runsProp }: { scanId: string;
 /** Flat export row — plain `<a download>` GET links for the Markdown/HTML/SARIF attachments plus a CSV of the currently filtered findings and a client-side Jira CSV. */
 function ExportMenu({ scanId, csvParams, findings }: { scanId: string; csvParams: Record<string, string>; findings?: Finding[] }) {
   const items = [
-    { label: 'Markdown', ext: '.md', href: api.markdownUrl(scanId) },
-    { label: 'HTML', ext: '.html', href: api.exportUrl(scanId, 'html') },
-    { label: 'SARIF', ext: '.sarif', href: api.exportUrl(scanId, 'sarif') },
-    { label: 'CSV (current filters)', ext: '.csv', href: api.exportUrl(scanId, 'csv', csvParams) },
+    { label: 'Markdown', ext: '.md', href: api.markdownUrl(scanId), title: 'Paste into docs or PRs' },
+    { label: 'HTML', ext: '.html', href: api.exportUrl(scanId, 'html'), title: 'Standalone shareable report' },
+    { label: 'SARIF', ext: '.sarif', href: api.exportUrl(scanId, 'sarif'), title: 'For GitHub code scanning & CI gates' },
+    { label: 'CSV (current filters)', ext: '.csv', href: api.exportUrl(scanId, 'csv', csvParams), title: 'Current filters as CSV' },
   ];
   const handleJiraCsv = () => {
     const data = findings ?? [];
     if (!data.length) return;
     downloadJiraCsv(data, `jira-${scanId}.csv`);
   };
-  return <fieldset className="export-menu export-inline" aria-label="Export report">{items.map((item) => <a key={item.label} className="export-item" href={item.href} download>{item.label}<small>{item.ext}</small></a>)}<button type="button" className="export-item" onClick={handleJiraCsv}>Jira CSV<small>.csv</small></button></fieldset>;
+  return <fieldset className="export-menu export-inline" aria-label="Export report">{items.map((item) => <a key={item.label} className="export-item" href={item.href} title={item.title} download>{item.label}<small>{item.ext}</small></a>)}<button type="button" className="export-item" onClick={handleJiraCsv}>Jira CSV<small>.csv</small></button></fieldset>;
 }
 
 /** Active-filter chips for the filters that have no other visible control —

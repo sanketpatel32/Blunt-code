@@ -2,7 +2,11 @@ import { count } from './format';
 
 export type ScanEvent = { type: string; stage?: string; status?: string; message?: string; analyzer_id?: string; name?: string; findings?: number; /** Per-severity finding counts the backend attaches to analyzer.completed, so live panels can show real severity totals before the final summary lands. */ severities?: Record<string, number>; error?: string; state?: string; at: number; /** Receive-order sequence assigned by the live stream; a stable React key even when two events share a millisecond. */ seq?: number };
 
-export const stageLabels: Record<string, string> = { preparing: 'Preparing workspace', discovering: 'Detecting languages', checking_tools: 'Checking analyzers', running: 'Running analyzers', normalizing: 'Normalizing findings', generating_report: 'Generating report', completed: 'Complete' };
+export const stageLabels: Record<string, string> = { preparing: 'Preparing workspace', discovering: 'Detecting languages', checking_tools: 'Checking analyzers', running: 'Running analyzers', normalizing: 'Combining results', generating_report: 'Generating report', completed: 'Complete' };
+
+/** Wording for analyzer run states on the live pills; the CSS class and any
+ *  stored value keep the raw API status ('succeeded' etc.), only the label changes. */
+export const analyzerStatusLabels: Record<string, string> = { succeeded: 'done', failed: 'failed', running: 'running', skipped: 'not needed' };
 
 export function isTerminalScanState(state: string) {
   return ['completed', 'completed_with_warnings', 'failed', 'cancelled', 'interrupted'].includes(state);

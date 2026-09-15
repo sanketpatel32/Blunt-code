@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../../api';
 import type { Finding } from '../../types';
 import { message } from '../../lib/notice';
-import { analyzerName, findingLocation } from '../../lib/format';
+import { analyzerName, findingLocation, friendlyFindingTitle, ruleDocsUrl } from '../../lib/format';
 import { copyToClipboard } from '../../lib/clipboard';
 import { useLoad } from '../../hooks/useLoad';
 import { SkeletonLines } from '../../components/skeletons';
@@ -81,7 +81,10 @@ export function SourcePane({
   const data = preview.data;
   const suppressed = finding.status === 'suppressed';
   const canSuppress = Boolean(workspaceId && finding.fingerprint);
-  const title = finding.title ?? finding.rule_id ?? 'Finding';
+  // When the backend could only echo the rule id back as the title, the heading
+  // is synthesized from the message so it reads like a sentence, not an id.
+  const title = friendlyFindingTitle(finding);
+  const docsUrl = ruleDocsUrl(finding);
   return <aside className="source-pane pane-fade" aria-label={`Source for ${title}`}>
     <div className="source-pane-head">
       <button type="button" className="icon-button" onClick={onPrev} disabled={!hasPrev} aria-label="Previous finding" title="Previous finding (↑ in the list)">↑</button>
@@ -100,7 +103,7 @@ export function SourcePane({
       <div className="context-row"><strong>{title}</strong>{finding.rule_id && finding.rule_id !== title && <code>{finding.rule_id}</code>}<span className="badge">{analyzerName(finding.analyzer_id)}</span>{finding.status && <span className={`status-text${suppressed ? ' suppressed' : ''}`}>{finding.status}</span>}</div>
       <p className="pane-message">{finding.message}</p>
       <p className="remediation">{finding.remediation || 'No remediation provided for this rule.'}</p>
-      {finding.documentation_url && <a href={finding.documentation_url} target="_blank" rel="noreferrer">Rule docs</a>}
+      {docsUrl && <a href={docsUrl} target="_blank" rel="noreferrer" title="Opens the rule's documentation" style={{ color: 'var(--color-ink-soft)' } as never}>Rule docs</a>}
     </div>
     <div className="source-pane-foot">
       <button type="button" className={`button secondary copy-location${copied ? ' copied' : ''}`} onClick={() => void copyLocation()}>{copied ? 'Copied' : 'Copy location'}</button>

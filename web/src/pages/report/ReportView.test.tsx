@@ -142,8 +142,8 @@ describe('ReportView toolbar filters', () => {
 
   it('severity chips are multi-select and send the comma list the server accepts', async () => {
     const host = await render();
-    const high = chipIn(host, 'Severity', 'high');
-    const medium = chipIn(host, 'Severity', 'medium');
+    const high = chipIn(host, 'Severity', 'High');
+    const medium = chipIn(host, 'Severity', 'Medium');
     expect(high.querySelector('.count')!.textContent).toBe('2'); // chips double as the legend
     expect(high.getAttribute('aria-pressed')).toBe('false');
 
@@ -161,21 +161,40 @@ describe('ReportView toolbar filters', () => {
 
   it('disables zero-count severities and keeps an active chip selectable', async () => {
     const host = await render();
-    expect(chipIn(host, 'Severity', 'critical').disabled).toBe(true);
-    expect(chipIn(host, 'Severity', 'high').disabled).toBe(false);
+    expect(chipIn(host, 'Severity', 'Critical').disabled).toBe(true);
+    expect(chipIn(host, 'Severity', 'High').disabled).toBe(false);
   });
 
   it('status chips replace Any status with one status at a time', async () => {
     const host = await render();
-    await click(chipIn(host, 'Status', 'new'));
+    await click(chipIn(host, 'Status', 'New'));
     expect(findingUrls().at(-1)).toContain('status=new');
 
-    await click(chipIn(host, 'Status', 'persistent'));
+    await click(chipIn(host, 'Status', 'Still present'));
     expect(findingUrls().at(-1)).toContain('status=persistent');
     expect(findingUrls().at(-1)).not.toContain('persistent,'); // single-select, not a list
 
-    await click(chipIn(host, 'Status', 'persistent'));
+    await click(chipIn(host, 'Status', 'Still present'));
     expect(findingUrls().at(-1)).not.toContain('status='); // clicking the active chip clears it
+  });
+
+  it('status chips carry per-status counts from the report payload and read as labels, not raw statuses', async () => {
+    const rows = [
+      { ...finding, id: 'finding-new-1', status: 'new' },
+      { ...finding, id: 'finding-new-2', status: 'new' },
+      { ...finding, id: 'finding-persistent', status: 'persistent' },
+      { ...finding, id: 'finding-suppressed', status: 'suppressed' },
+    ];
+    await fetchMock.withImplementation((input: string) => {
+      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, warnings: [], findings: rows }));
+      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: rows, total: rows.length, limit: 100, offset: 0, has_more: false, has_next: false }));
+      return Promise.resolve(json({ items: [] }));
+    }, async () => {
+      const host = await render();
+      expect(chipIn(host, 'Status', 'New').querySelector('.count')!.textContent).toBe('2');
+      expect(chipIn(host, 'Status', 'Still present').querySelector('.count')!.textContent).toBe('1'); // "persistent" value, human label
+      expect(chipIn(host, 'Status', 'Suppressed').querySelector('.count')!.textContent).toBe('1');
+    });
   });
 
   it('tool chips carry per-tool finding counts and toggle the analyzer filter', async () => {
@@ -221,7 +240,7 @@ describe('ReportView toolbar filters', () => {
     const host = await render();
     await type(host.querySelector<HTMLInputElement>('[placeholder="Search message, rule, or file"]')!, 'eval');
     await advance(300);
-    await click(chipIn(host, 'Severity', 'high'));
+    await click(chipIn(host, 'Severity', 'High'));
     expect(findingUrls().at(-1)).toContain('severity=high');
 
     await click([...host.querySelectorAll('button')].find((button) => button.textContent === 'Clear')!);
@@ -233,9 +252,9 @@ describe('ReportView toolbar filters', () => {
   it('keeps toolbar-only filters out of the summary chip row', async () => {
     const host = await render();
     await type(host.querySelector<HTMLInputElement>('[placeholder="Search message, rule, or file"]')!, 'eval');
-    await click(chipIn(host, 'Severity', 'high'));
+    await click(chipIn(host, 'Severity', 'High'));
     await click(chipIn(host, 'Tool', 'Ruff'));
-    await click(chipIn(host, 'Status', 'new'));
+    await click(chipIn(host, 'Status', 'New'));
     await settle();
     expect(host.querySelector('.filter-chips')).toBeNull(); // pressed chips + the search box already show this state
     expect(findingUrls().at(-1)).toContain('severity=high');
@@ -368,7 +387,7 @@ describe('ReportView load-more pagination', () => {
       await settle();
       expect(rows(host)).toHaveLength(200);
 
-      await click(chipIn(host, 'Severity', 'high'));
+      await click(chipIn(host, 'Severity', 'High'));
       expect(findingUrls().at(-1)).toContain('severity=high');
       expect(findingUrls().at(-1)).toContain('page=1');
       await settle();
@@ -459,6 +478,26 @@ describe('ReportView split pane', () => {
     });
   });
 
+  it('synthesizes the rule-docs link and a readable heading when the title just echoes the rule id', async () => {
+    const sonar = { ...finding, id: 'finding-sonar', analyzer_id: 'sonarqube', rule_id: 'typescript:S3776', title: 'typescript:S3776', message: 'Cognitive Complexity of functions should not be too high. Refactor.' };
+    await fetchMock.withImplementation((input: string) => {
+      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, warnings: [], findings: [sonar] }));
+      if (input.includes('/preview')) return Promise.resolve(json(previewBody));
+      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: [sonar], total: 1, limit: 100, offset: 0, has_more: false, has_next: false }));
+      return Promise.resolve(json({ items: [] }));
+    }, async () => {
+      const host = await render();
+      await click(rows(host)[0]);
+      await settle();
+      const pane = host.querySelector('.source-pane')!;
+      const docs = pane.querySelector<HTMLAnchorElement>('a[title="Opens the rule\'s documentation"]')!;
+      expect(docs.textContent).toBe('Rule docs');
+      expect(docs.getAttribute('href')).toBe('https://rules.sonarsource.com/typescript/RSPEC-3776/');
+      expect(pane.querySelector('.context-row strong')!.textContent).toBe('Cognitive Complexity of functions should not be too high'); // heading, not the rule id
+      expect(pane.querySelector('.context-row code')!.textContent).toBe('typescript:S3776'); // the rule id moves to its chip
+    });
+  });
+
   it('Escape closes the pane and the list returns to full width', async () => {
     await twoFindings(async (host) => {
       await click(rows(host)[0]);
@@ -544,7 +583,7 @@ describe('ReportView suppression actions', () => {
       const rowButton = host.querySelector<HTMLButtonElement>('[aria-label="Suppress Example finding"]')!;
       expect(rowButton.textContent).toBe('Suppress…');
       await click(rowButton);
-      expect(host.querySelector('dialog')!.textContent).toContain('Suppressing hides this finding from future scans, reports, and the CI gate.');
+      expect(host.querySelector('dialog')!.textContent).toContain('Suppressing hides this finding — matched by its fingerprint — from all future scans, reports, and the CI gate for this workspace.');
 
       await click([...host.querySelectorAll('button')].find((button) => button.textContent === 'Suppress finding')!);
       await flush();
@@ -592,6 +631,54 @@ describe('ReportView suppression actions', () => {
       const reason = host.querySelector('.suppression-reason')!;
       expect(reason.textContent).toBe('third-party generated code');
       expect(reason.getAttribute('title')).toBe('Suppressed: third-party generated code');
+    });
+  });
+
+  it('the suppress toast carries a View suppressions action when navigation is available', async () => {
+    const notify = vi.fn();
+    const go = vi.fn();
+    await fetchMock.withImplementation((input: string) => {
+      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, warnings: [], findings: [fingerprinted] }));
+      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: [fingerprinted], total: 1, limit: 100, offset: 0, has_more: false, has_next: false }));
+      return Promise.resolve(json({ fingerprint: FINGERPRINT, created_at: '2026-09-15T00:00:00Z' }, 201));
+    }, async () => {
+      vi.stubGlobal('fetch', fetchMock);
+      const host = document.createElement('div');
+      document.body.append(host);
+      root = createRoot(host);
+      await act(async () => { root.render(<ReportView scanId="scan-1" notify={notify} go={go} />); });
+      await settle();
+      await click(host.querySelector<HTMLButtonElement>('[aria-label="Suppress Example finding"]')!);
+      await click([...host.querySelectorAll('button')].find((button) => button.textContent === 'Suppress finding')!);
+      await settle();
+      const notice = notify.mock.calls.at(-1)![0];
+      expect(notice.kind).toBe('success');
+      expect(notice.text).not.toContain('Suppressions section.');
+      expect(notice.action.label).toBe('View suppressions');
+      notice.action.onClick();
+      expect(go).toHaveBeenCalledWith({ page: 'workspace', id: 'ws-1' });
+    });
+  });
+
+  it('without navigation the suppress toast points at the workspace Suppressions section instead', async () => {
+    const notify = vi.fn();
+    await fetchMock.withImplementation((input: string) => {
+      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, warnings: [], findings: [fingerprinted] }));
+      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: [fingerprinted], total: 1, limit: 100, offset: 0, has_more: false, has_next: false }));
+      return Promise.resolve(json({ fingerprint: FINGERPRINT, created_at: '2026-09-15T00:00:00Z' }, 201));
+    }, async () => {
+      vi.stubGlobal('fetch', fetchMock);
+      const host = document.createElement('div');
+      document.body.append(host);
+      root = createRoot(host);
+      await act(async () => { root.render(<ReportView scanId="scan-1" notify={notify} />); });
+      await settle();
+      await click(host.querySelector<HTMLButtonElement>('[aria-label="Suppress Example finding"]')!);
+      await click([...host.querySelectorAll('button')].find((button) => button.textContent === 'Suppress finding')!);
+      await settle();
+      const notice = notify.mock.calls.at(-1)![0];
+      expect(notice.action).toBeUndefined();
+      expect(notice.text).toContain("Manage them from the workspace's Suppressions section.");
     });
   });
 });
@@ -657,7 +744,7 @@ describe('ReportView bulk suppression', () => {
 describe('ReportView export foot', () => {
   it('lists the five export targets as always-visible links and carries the active filter in the CSV href', async () => {
     const host = await render();
-    await click(chipIn(host, 'Severity', 'high')); // filter first so the CSV link carries it
+    await click(chipIn(host, 'Severity', 'High')); // filter first so the CSV link carries it
     const items = [...host.querySelectorAll('.export-menu.export-inline .export-item')] as HTMLElement[];
     expect(items.map((item) => item.textContent)).toEqual(['Markdown.md', 'HTML.html', 'SARIF.sarif', 'CSV (current filters).csv', 'Jira CSV.csv']);
     expect(items[0].getAttribute('href')).toBe('/api/v1/scans/scan-1/report.md');
@@ -670,10 +757,19 @@ describe('ReportView export foot', () => {
     expect(items.slice(0, 4).every((item) => (item as HTMLAnchorElement).hasAttribute('download'))).toBe(true); // plain GET navigation, no fetch
   });
 
-  it('the foot counts findings and engines from the report payload', async () => {
+  it('the foot counts findings and analyzers from the report payload', async () => {
     const host = await render();
     expect(host.querySelector('.report-foot-count')!.textContent).toContain('1 finding');
-    expect(host.querySelector('.report-foot-count')!.textContent).toContain('1 engine');
+    expect(host.querySelector('.report-foot-count')!.textContent).toContain('1 analyzer');
+  });
+
+  it('hover hints say what each export is for', async () => {
+    const host = await render();
+    const items = [...host.querySelectorAll('.export-menu.export-inline .export-item')] as HTMLElement[];
+    expect(items[0].getAttribute('title')).toBe('Paste into docs or PRs');
+    expect(items[1].getAttribute('title')).toBe('Standalone shareable report');
+    expect(items[2].getAttribute('title')).toBe('For GitHub code scanning & CI gates');
+    expect(items[3].getAttribute('title')).toBe('Current filters as CSV');
   });
 });
 

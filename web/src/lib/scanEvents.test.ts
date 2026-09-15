@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { eventCopy, latestAnalyzerCompletions, severityTotalsSoFar, type ScanEvent } from './scanEvents';
+import { analyzerStatusLabels, eventCopy, latestAnalyzerCompletions, severityTotalsSoFar, stageLabels, type ScanEvent } from './scanEvents';
 
 const completed = (analyzer_id: string, findings: number, severities?: Record<string, number>): ScanEvent =>
   ({ type: 'analyzer.completed', analyzer_id, findings, severities, at: 0 });
@@ -43,5 +43,15 @@ describe('severityTotalsSoFar', () => {
 describe('eventCopy formatting', () => {
   it('formats large finding counts with locale grouping', () => {
     expect(eventCopy(completed('gitleaks-secrets', 10768))).toMatch(/10[.,\u202f\u00a0]?768/);
+  });
+});
+
+describe('copy tables', () => {
+  it('describes the normalize stage as combining results, not jargon', () => {
+    expect(stageLabels.normalizing).toBe('Combining results');
+  });
+
+  it('labels analyzer run states for humans while the CSS class keeps the raw status', () => {
+    expect(analyzerStatusLabels).toEqual({ succeeded: 'done', failed: 'failed', running: 'running', skipped: 'not needed' });
   });
 });

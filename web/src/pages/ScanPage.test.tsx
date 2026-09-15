@@ -151,6 +151,67 @@ describe('ScanPage what-changed panel', () => {
     expect(host.querySelector('.what-changed')).toBeNull();
     expect(host.querySelector('.report')).not.toBeNull();
   });
+
+  it('keeps the full panel for completed_with_warnings scans', async () => {
+    const { host } = await renderScanPage(
+      scanFixture({ state: 'completed_with_warnings', fixed_count: 1 }),
+      { fixed: [fixedFinding(1)], total_fixed: 1, comparison_available: true, previous_scan_id: 'scan-0' },
+    );
+    const panel = host.querySelector<HTMLElement>('.what-changed')!;
+    expect(panel).not.toBeNull();
+    expect(panel.textContent).toContain('Fixed since the previous scan');
+    expect(panel.textContent).toContain('1 finding fixed');
+  });
+
+  it('tells the truth about a cancelled scan: a muted note, never a "fixed" panel, no comparison fetch', async () => {
+    const { host, fetchMock } = await renderScanPage(
+      scanFixture({ state: 'cancelled', fixed_count: 3 }),
+      { fixed: [fixedFinding(1)], total_fixed: 3, comparison_available: true, previous_scan_id: 'scan-0' },
+    );
+    expect(host.querySelector('.what-changed')).toBeNull();
+    expect(host.textContent).not.toContain('Fixed since the previous scan');
+    const note = host.querySelector('.what-changed-cancelled')!;
+    expect(note.textContent).toContain('3 findings no longer detected — but this scan was cancelled, so some analyzers never ran; these may reappear.');
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/fixed'))).toBe(false);
+  });
+
+  it('wording the honesty note for interrupted scans too', async () => {
+    const { host } = await renderScanPage(
+      scanFixture({ state: 'interrupted', fixed_count: 1 }),
+      { fixed: [fixedFinding(1)], total_fixed: 1, comparison_available: true, previous_scan_id: 'scan-0' },
+    );
+    const note = host.querySelector('.what-changed-cancelled')!;
+    expect(note.textContent).toContain('1 finding no longer detected — but this scan was interrupted, so some analyzers never ran; it may reappear.');
+  });
+
+  it('names analyzers (not engines) in the hero meta and verdict stats, under a Scan eyebrow', async () => {
+    const { host } = await renderScanPage(scanFixture({ total_findings: 5, new_count: 2, critical_count: 1 }));
+    expect(host.querySelector('.scan-hero-meta')?.textContent).toContain('1 of 1 analyzer succeeded');
+    expect(host.querySelector('.scan-hero-main .eyebrow')?.textContent).toContain('Scan ·');
+    const stats = [...host.querySelectorAll('.verdict-stats .verdict-stat')];
+    expect(stats.map((stat) => stat.querySelector('dt')?.textContent)).toEqual(['Risk score', 'New', 'Fixed', 'Persistent', 'Analyzers']);
+    expect(host.textContent).not.toContain('engine');
+  });
+
+  it('explains the verdict stats: tooltips, Persistent math, and the spaced score+range', async () => {
+    const { host } = await renderScanPage(scanFixture({ total_findings: 5, new_count: 2, critical_count: 1 }));
+    const stats = new Map([...host.querySelectorAll('.verdict-stats .verdict-stat')].map((stat) => [stat.querySelector('dt')?.textContent, stat]));
+    expect(stats.get('Risk score')?.querySelector('dd')?.textContent).toBe('10 5–19'); // score and band range separated, never "105–19"
+    expect(stats.get('Risk score')?.getAttribute('title')).toBe('Weighted: critical ×10, high ×5, medium ×2, low ×1 · A 0–4, B 5–19, C 20–49, D 50+');
+    expect(stats.get('New')?.querySelector('dd')?.textContent).toBe('2');
+    expect(stats.get('Fixed')?.querySelector('dd')?.textContent).toBe('0');
+    expect(stats.get('Persistent')?.querySelector('dd')?.textContent).toBe('3'); // total_findings − new_count
+    for (const key of ['New', 'Fixed', 'Persistent']) {
+      expect(stats.get(key)?.getAttribute('title')).toBe('New = found for the first time in this scan · Fixed = gone since the previous completed scan · Persistent = carried over');
+    }
+    const labels = [...host.querySelectorAll('.verdict-bar-label')].map((label) => label.textContent);
+    expect(labels).toEqual(['Critical', 'High', 'Medium', 'Low', 'Info']); // verdict card matches chip casing
+  });
+
+  it('headlines failed and cancelled scans as scans, not analyses', async () => {
+    const { host } = await renderScanPage(scanFixture({ state: 'cancelled', total_findings: 0, fixed_count: 0 }));
+    expect(host.querySelector('h1')?.textContent).toBe('Scan cancelled');
+  });
 });
 
 /** The scan record arrives mid-scan, so the page connects once while it is
@@ -216,9 +277,12 @@ describe('ScanPage live results panel', () => {
     expect(digits(host.querySelector('.severity-counts .high')?.textContent)).toBe('1308');
     expect(digits(host.querySelector('.severity-counts .low')?.textContent)).toBe('3');
     const pills = [...host.querySelectorAll('.live-analyzers li')];
-    expect(digits(pills.find((li) => li.textContent?.includes('biome'))?.querySelector('.pill-count')?.textContent)).toBe('3');
-    expect(digits(pills.find((li) => li.textContent?.includes('gitleaks-secrets'))?.querySelector('.pill-count')?.textContent)).toBe('10768');
-    expect(pills.find((li) => li.textContent?.includes('semgrep'))?.querySelector('.pill-count')).toBeNull();
+    expect(digits(pills.find((li) => li.textContent?.includes('Biome'))?.querySelector('.pill-count')?.textContent)).toBe('3');
+    expect(digits(pills.find((li) => li.textContent?.includes('Gitleaks'))?.querySelector('.pill-count')?.textContent)).toBe('10768');
+    expect(pills.find((li) => li.textContent?.includes('Semgrep'))?.querySelector('.pill-count')).toBeNull();
+    // Pill states are labeled for humans ('done'), the raw status stays in the CSS class.
+    const biomePill = pills.find((li) => li.textContent?.includes('Biome'))!;
+    expect(biomePill.querySelector('.state.succeeded')?.textContent).toBe('done');
   });
 
   it('recovers live totals after a reconnect re-replays history', async () => {
