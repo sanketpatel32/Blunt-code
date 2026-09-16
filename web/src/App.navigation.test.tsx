@@ -42,14 +42,18 @@ describe('navigation resilience', () => {
     expect(host.textContent).toContain('Point Blunt Code at a project');
   });
 
-  it('adds About as the last navigation item and routes to the About page', async () => {
+  it('keeps the high-frequency pages flat and routes to About from the More menu', async () => {
     const host = await renderApp();
     const labels = [...host.querySelectorAll('.app-nav nav a')].map((link) => link.textContent);
-    expect(labels).toEqual(expect.arrayContaining(['Home', 'Workspaces', 'Search', 'Tools', 'Settings', 'About']));
-    expect(labels[labels.length - 1]).toBe('About');
-    const about = host.querySelector<HTMLAnchorElement>('.app-nav nav a[href="/about"]');
-    expect(about?.textContent).toBe('About');
-    await act(async () => { about!.click(); await Promise.resolve(); await Promise.resolve(); });
+    expect(labels).toEqual(['Home', 'Workspaces', 'Search', 'Tools']);
+    // Rare pages (Rules, CLI docs, Settings, About) collapsed behind "More":
+    // the rail is chrome, not a link wall. About still routes from the menu.
+    const more = host.querySelector<HTMLButtonElement>('.nav-more-toggle');
+    expect(more).toBeDefined();
+    await act(async () => { more!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
+    const aboutItem = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent === 'About');
+    expect(aboutItem).toBeDefined();
+    await act(async () => { aboutItem!.click(); await Promise.resolve(); await Promise.resolve(); });
     expect(window.location.pathname).toBe('/about');
     expect(document.title).toBe('About · Blunt Code'); // per-page tab title, no ids
     expect(host.textContent).toContain('Local by default');
@@ -106,8 +110,13 @@ describe('browser history and hostile URLs', () => {
 
   it('follows back and forward navigation (popstate) without remounting the app', async () => {
     const host = await renderApp();
-    const about = host.querySelector<HTMLAnchorElement>('.app-nav nav a[href="/about"]')!;
-    await act(async () => { about.click(); await Promise.resolve(); await Promise.resolve(); });
+    // Navigate to About through the More menu (its new home), then exercise popstate.
+    const more = host.querySelector<HTMLButtonElement>('.nav-more-toggle')!;
+    expect(more).toBeDefined();
+    await act(async () => { more.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
+    const aboutItem = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent === 'About')!;
+    expect(aboutItem).toBeDefined();
+    await act(async () => { aboutItem.click(); await Promise.resolve(); await Promise.resolve(); });
     expect(window.location.pathname).toBe('/about');
     expect(host.textContent).toContain('Local by default');
 

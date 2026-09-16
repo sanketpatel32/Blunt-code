@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import '../css/tools.css';
 import { api } from '../api';
 import type { AnalyzerStatus } from '../types';
@@ -8,17 +8,18 @@ import { useLoad } from '../hooks/useLoad';
 import { Empty, ErrorPanel } from '../components/ui';
 import { WrenchIcon } from '../components/icons';
 import { SkeletonTable } from '../components/skeletons';
-import { analyzerMeta, categoryColor, ANALYZER_CATALOG, type AnalyzerCategory } from '../lib/analyzerCatalog';
+import { ANALYZER_CATALOG } from '../lib/analyzerCatalog';
 import { LanguageCoverage } from '../components/LanguageCoverage';
 import { ConfirmationDialog } from '../components/dialogs';
+import { RowMenu } from '../components/RowMenu';
 import type { Route } from '../lib/router';
 import { PageHeader } from '../components/PageHeader';
-import { Badge } from '../components/ui/badge';
-import { Wrench, Shield, Bug, KeyRound, Boxes, Container, FileCog, Scale, Palette, Zap, Crosshair, Radar, Package, ListTodo, Gauge } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 
 type ToolOperation = 'install' | 'repair' | 'update';
 type BusyAction = { tool: string; operation: ToolOperation };
 type PendingAction = { analyzer: AnalyzerStatus; operation: ToolOperation };
+type StatusFilter = 'all' | 'ready' | 'setup';
 
 const operationLabels: Record<ToolOperation, string> = { install: 'Install', repair: 'Repair', update: 'Update' };
 const operationBusyLabels: Record<ToolOperation, string> = { install: 'Installing…', repair: 'Repairing…', update: 'Updating…' };
@@ -33,8 +34,7 @@ const operationConfirmCopy: Record<ToolOperation, (name: string) => string> = {
 };
 
 /** The backend capability inventory's category vocabulary (internal/analyzers)
- *  with human labels; unknown values fall back to the raw string. The icon and
- *  hue stay purely visual, from the frontend catalog below. */
+ *  with human labels; unknown values fall back to the raw string. */
 const API_CATEGORY_LABELS: Record<string, string> = {
   'code-quality': 'Code quality',
   compliance: 'Compliance',
@@ -45,11 +45,6 @@ const API_CATEGORY_LABELS: Record<string, string> = {
   security: 'Security',
 };
 
-const categoryIcons: Record<string, React.ElementType> = {
-  lint: Wrench, style: Palette, security: Shield, pentest: Zap, secrets: KeyRound, maintainability: Gauge,
-  dependencies: Package, container: Container, iac: FileCog, license: Scale,
-};
-
 const NETWORK_LABELS: Record<AnalyzerStatus['network'], string> = {
   none: 'No network',
   outbound: 'Outbound',
@@ -58,34 +53,47 @@ const NETWORK_LABELS: Record<AnalyzerStatus['network'], string> = {
 
 const PROFILE_LABELS: Record<string, string> = { quick: 'Quick', standard: 'Standard', deep: 'Deep', pentest: 'Pentest' };
 
-/** Visual accent (icon + hue) for a row, looked up in the frontend catalog.
- *  The rendered label is the API's analyzer.category — see API_CATEGORY_LABELS. */
-function visualCategory(analyzer: AnalyzerStatus): AnalyzerCategory {
-  return analyzerMeta(analyzer.id)?.category ?? ('security' as AnalyzerCategory);
-}
+const FILTER_LABELS: Record<StatusFilter, string> = { all: 'All', ready: 'Ready', setup: 'Needs setup' };
 
 /** Status cell: external tools are Ready/Not installed, in-process analyzers are
- *  Built-in — or Unavailable when offline mode withheld them at startup. */
-function statusLabel(analyzer: AnalyzerStatus): { text: string; state: 'ready' | 'not-ready' | 'built-in' } {
+ *  Ready — or Offline mode when offline mode withheld them at startup. The tone
+ *  carries the chroma contract: "ready" is the norm and stays quiet; only
+ *  not-ready states get color (danger = needs install, warning = withheld). */
+function statusLabel(analyzer: AnalyzerStatus): { text: string; tone: 'ok' | 'danger' | 'warning' } {
   if (analyzer.execution === 'in-process') {
-    return analyzer.registered ? { text: 'Built-in', state: 'built-in' } : { text: 'Offline mode', state: 'not-ready' };
+    return analyzer.registered ? { text: 'Ready', tone: 'ok' } : { text: 'Offline mode', tone: 'warning' };
   }
-  return analyzer.ready ? { text: 'Ready', state: 'ready' } : { text: 'Not installed', state: 'not-ready' };
+  return analyzer.ready ? { text: 'Ready', tone: 'ok' } : { text: 'Not installed', tone: 'danger' };
 }
 
-function ReadinessStrip({ analyzers, busy }: { analyzers: AnalyzerStatus[]; busy?: BusyAction }) {
-  const managed = analyzers.filter((a) => a.managed_tool);
-  const ready = managed.filter((a) => a.ready).length;
-  return <div className="tools-readiness" role="status"><span className={`badge${managed.length > 0 && ready === managed.length ? ' tools-all-ready' : ''}`}>optional tools {ready} of {managed.length} ready</span>{managed.filter((a) => !a.ready).map((a) => {
-    const active = busy !== undefined && busy.tool === a.id ? busy.operation : undefined;
-    return <span key={a.id} className="badge">{active ? <span className="spinner" aria-hidden="true" /> : <i className="dot not-ready" aria-hidden="true" />}{a.display_name} {active ? operationBusyLabels[active].toLowerCase() : 'not installed'}</span>;
-  })}</div>;
+function statusStateClass(tone: 'ok' | 'danger' | 'warning'): string {
+  return tone === 'ok' ? 'tools-state' : tone === 'danger' ? 'tools-state blocked' : 'tools-state warn';
+}
+
+/** Only not-ready states earn a dot — a green dot on every Ready row is wallpaper. */
+function statusDotClass(tone: 'danger' | 'warning'): string {
+  return tone === 'danger' ? 'dot not-ready' : 'dot warn';
+}
+
+function matchesFilter(analyzer: AnalyzerStatus, filter: StatusFilter): boolean {
+  if (filter === 'ready') return statusLabel(analyzer).tone === 'ok';
+  if (filter === 'setup') return statusLabel(analyzer).tone !== 'ok';
+  return true;
+}
+
+/** Languages are secondary detail: a long list collapses to a count so the
+ *  details row never grows a second table. */
+function languagesText(analyzer: AnalyzerStatus): string {
+  return analyzer.languages.length > 8 ? `${analyzer.languages.length} languages` : analyzer.languages.join(', ');
 }
 
 export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r: Route) => void }) {
   const analyzers = useLoad(api.analyzers, []);
   const [busy, setBusy] = useState<BusyAction>();
   const [pending, setPending] = useState<PendingAction>();
+  const [filter, setFilter] = useState<StatusFilter>('all');
+  const [expanded, setExpanded] = useState<string>();
+
   async function action(analyzer: AnalyzerStatus, operation: ToolOperation) {
     if (!analyzer.managed_tool) return;
     setBusy({ tool: analyzer.managed_tool, operation });
@@ -93,6 +101,10 @@ export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r
   }
 
   const rows = analyzers.data ?? [];
+  const managed = rows.filter((a) => a.managed_tool);
+  const readyManaged = managed.filter((a) => a.ready).length;
+  const managedAllReady = managed.length > 0 && readyManaged === managed.length;
+  const filtered = rows.filter((a) => matchesFilter(a, filter));
   const pendingName = pending ? pending.analyzer.display_name || pending.analyzer.id : '';
 
   return (
@@ -100,65 +112,103 @@ export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r
       <PageHeader
         eyebrow="Analyzers"
         title="Analysis tools"
-        badge={analyzers.error ? undefined : <Badge variant="secondary" className="text-xs font-mono tabular-nums">{analyzers.loading ? '… analyzers' : `${rows.length} analyzers`}</Badge>}
-        description="Every analyzer registered on this machine — category, profiles, and local status."
+        description="Every analyzer registered on this machine — category, profiles, and local status. Pentest scans run per workspace: open one and choose Pentest suite."
       />
-      {/* Pentest entry point (discoverability audit): it is per-workspace, so
-          this page only points the way instead of pretending to host it. */}
-      <p className="muted">Pentest scans run per workspace — open a workspace and choose Pentest suite.</p>
-      {analyzers.loading ? <SkeletonTable rows={ANALYZER_CATALOG.length} cols={8} className="tool-table" /> : analyzers.error ? <ErrorPanel error={analyzers.error} retry={analyzers.reload} /> : !rows.length ? <Empty title="Nothing to set up" icon={<WrenchIcon />}>Analyzers appear automatically. Optional tools can be installed from here.</Empty> : <><ReadinessStrip analyzers={rows} busy={busy} />
-      <div className="tool-table table-wrap border rounded-lg bg-[var(--color-surface)] overflow-hidden">
-        <table>
-          <thead>
-            <tr>
-              <th scope="col">Analyzer</th>
-              <th scope="col">Category</th>
-              <th scope="col">Profiles</th>
-              <th scope="col">Network</th>
-              <th scope="col">Version</th>
-              <th scope="col">Status</th>
-              <th scope="col">Details</th>
-              <th scope="col">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((analyzer) => {
-              const activeOperation = busy && busy.tool === analyzer.managed_tool ? busy.operation : undefined;
-              const cat = visualCategory(analyzer);
-              const status = statusLabel(analyzer);
-              const Icon = categoryIcons[cat] ?? Wrench;
-              const detail = analyzer.detail || analyzer.description;
-              // The inventory always sends display_name, but a hostile or
-              // older payload must degrade to the id, never render "undefined".
-              const name = analyzer.display_name || analyzer.id;
-              return (
-                <tr key={analyzer.id}>
-                  <td><strong className="flex items-center gap-1.5">{name}</strong></td>
-                  <td><span className="badge inline-flex items-center gap-1 text-[10px]" style={{ borderColor: `color-mix(in oklch, ${categoryColor(cat)} 34%, var(--color-rule))`, color: categoryColor(cat), background: `color-mix(in oklch, ${categoryColor(cat)} 12%, var(--color-surface))` }}><Icon className="h-3 w-3" />{API_CATEGORY_LABELS[analyzer.category] ?? analyzer.category}</span></td>
-                  <td className="text-xs">{(analyzer.profiles ?? []).map((p) => PROFILE_LABELS[p] ?? p).join(', ')}</td>
-                  <td><span className="badge text-[10px]" title={analyzer.network_note || undefined}>{NETWORK_LABELS[analyzer.network] ?? analyzer.network}</span></td>
-                  <td><span className="badge tool-version">{analyzer.version ? `v${analyzer.version}` : analyzer.execution === 'in-process' ? 'Built-in' : 'Managed version'}</span></td>
-                  <td><span className={`state ${status.state === 'not-ready' ? 'not-ready' : 'ready'}`}>{status.text}</span></td>
-                  <td className="text-xs"><div className="max-w-[12rem] truncate" title={detail}>{detail}</div></td>
-                  <td className="table-actions" aria-busy={activeOperation ? true : undefined}>
-                    {analyzer.managed_tool ? <span className="flex gap-1">{(['install', 'repair', 'update'] as const).map((operation) => <button type="button" key={operation} className="text-button" disabled={activeOperation !== undefined} onClick={() => setPending({ analyzer, operation })}>{activeOperation === operation ? <><span className="spinner" aria-hidden="true" />{operationBusyLabels[operation]}</> : operationLabels[operation]}</button>)}</span> : <span className="text-xs text-[var(--color-ink-soft)]">—</span>}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      <LanguageCoverage />
-      {pending && <ConfirmationDialog
-        title={`${operationLabels[pending.operation]} ${pendingName}`}
-        description={operationConfirmCopy[pending.operation](pendingName)}
-        confirmLabel={operationLabels[pending.operation]}
-        busy={false}
-        onCancel={() => setPending(undefined)}
-        onConfirm={() => { const { analyzer, operation } = pending; setPending(undefined); void action(analyzer, operation); }}
-      />}
-    </>}
-  </div>
+      {analyzers.error ? <ErrorPanel error={analyzers.error} retry={analyzers.reload} /> : <>
+        <div className="toolbar-row tools-toolbar">
+          <div className="toolbar-filters">
+            <div className="segmented" role="group" aria-label="Filter analyzers by status">
+              {(['all', 'ready', 'setup'] as const).map((f) => (
+                <button key={f} type="button" aria-pressed={filter === f} disabled={analyzers.loading} onClick={() => setFilter(f)}>{FILTER_LABELS[f]}</button>
+              ))}
+            </div>
+          </div>
+          <span className="tools-readiness toolbar-meta" role="status">
+            {analyzers.loading ? '… analyzers' : <>
+              <span className="tools-count tabular-nums">{filter === 'all' ? `${rows.length} analyzers` : `${filtered.length} of ${rows.length} analyzers`}</span>
+              {managed.length > 0 && <span className={managedAllReady ? 'tools-all-ready' : undefined}>{readyManaged} of {managed.length} optional tools ready</span>}
+            </>}
+          </span>
+        </div>
+        {analyzers.loading ? <SkeletonTable rows={ANALYZER_CATALOG.length} cols={5} className="tool-table" /> : !rows.length ? <Empty title="Nothing to set up" icon={<WrenchIcon />}>Analyzers appear automatically. Optional tools can be installed from here.</Empty> : <div className="tool-table table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Tool</th>
+                <th scope="col">Version</th>
+                <th scope="col">Status</th>
+                <th scope="col">Source</th>
+                <th scope="col">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((analyzer) => {
+                const activeOperation = busy && busy.tool === analyzer.managed_tool ? busy.operation : undefined;
+                const status = statusLabel(analyzer);
+                // The inventory always sends display_name, but a hostile or
+                // older payload must degrade to the id, never render "undefined".
+                const name = analyzer.display_name || analyzer.id;
+                const open = expanded === analyzer.id;
+                const detailsId = `tools-details-${analyzer.id}`;
+                return (
+                  <Fragment key={analyzer.id}>
+                    <tr>
+                      <td>
+                        <button type="button" className="tools-name" aria-expanded={open} {...(open ? { 'aria-controls': detailsId } : {})} onClick={() => setExpanded(open ? undefined : analyzer.id)}>
+                          {name}
+                          <ChevronDown className="tools-caret" aria-hidden="true" />
+                        </button>
+                      </td>
+                      <td className="tools-version" title={analyzer.version ? `v${analyzer.version}` : undefined}>{analyzer.version ? `v${analyzer.version}` : '—'}</td>
+                      <td><span className={statusStateClass(status.tone)}>{status.tone !== 'ok' && <i className={statusDotClass(status.tone)} aria-hidden="true" />}{status.text}</span></td>
+                      <td className="tools-source">{analyzer.execution === 'in-process' ? 'Built-in' : 'Managed'}</td>
+                      <td className="table-actions" aria-busy={activeOperation ? true : undefined}>
+                        {analyzer.managed_tool ? (activeOperation
+                          ? <span className="tools-busy"><span className="spinner" aria-hidden="true" />{operationBusyLabels[activeOperation]}</span>
+                          : <>
+                            {!analyzer.ready && <button type="button" className="button secondary tools-install" onClick={() => setPending({ analyzer, operation: 'install' })}>Install</button>}
+                            <RowMenu
+                              label={`Actions for ${name}`}
+                              items={[
+                                ...(analyzer.ready ? [{ label: operationLabels.update, onSelect: () => setPending({ analyzer, operation: 'update' }) }] : []),
+                                { label: operationLabels.repair, onSelect: () => setPending({ analyzer, operation: 'repair' }) },
+                              ]}
+                            />
+                          </>) : <span className="tools-none" aria-hidden="true">—</span>}
+                      </td>
+                    </tr>
+                    {open && (
+                      <tr className="tools-details-row">
+                        <td colSpan={5} id={detailsId}>
+                          <div className="tools-details">
+                            <p className="tools-detail-desc">{analyzer.detail || analyzer.description}</p>
+                            <dl className="tools-facts">
+                              <div><dt>Category</dt><dd>{API_CATEGORY_LABELS[analyzer.category] ?? analyzer.category}</dd></div>
+                              <div><dt>Profiles</dt><dd>{(analyzer.profiles ?? []).map((p) => PROFILE_LABELS[p] ?? p).join(', ') || '—'}</dd></div>
+                              <div><dt>Network</dt><dd>{NETWORK_LABELS[analyzer.network] ?? analyzer.network}{analyzer.network_note ? <small>{analyzer.network_note}</small> : null}</dd></div>
+                              <div><dt>Languages</dt><dd>{languagesText(analyzer)}</dd></div>
+                            </dl>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>}
+        <LanguageCoverage />
+        {pending && <ConfirmationDialog
+          tone="primary"
+          title={`${operationLabels[pending.operation]} ${pendingName}`}
+          description={operationConfirmCopy[pending.operation](pendingName)}
+          confirmLabel={operationLabels[pending.operation]}
+          busy={false}
+          onCancel={() => setPending(undefined)}
+          onConfirm={() => { const { analyzer, operation } = pending; setPending(undefined); void action(analyzer, operation); }}
+        />}
+      </>}
+    </div>
   );
 }

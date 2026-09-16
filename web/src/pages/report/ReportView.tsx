@@ -5,13 +5,14 @@ import type { AnalyzerRun, Finding, FindingPage, Report, Scan, Severity } from '
 import type { Route } from '../../lib/router';
 import type { Notice } from '../../lib/notice';
 import { message } from '../../lib/notice';
-import { SEVERITY_LABELS, analyzerName, compactDuration, findingLocation, shortFindingLocation } from '../../lib/format';
+import { SEVERITY_LABELS, analyzerName, compactDuration, findingLocation, friendlyFindingTitle, shortFindingLocation } from '../../lib/format';
 import { copyToClipboard } from '../../lib/clipboard';
 import { useLoad } from '../../hooks/useLoad';
 import { findingCategoryLabel } from '../../lib/analyzerCatalog';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { Empty, ErrorPanel } from '../../components/ui';
 import { CheckShieldIcon, MagnifierIcon, SparkleIcon } from '../../components/icons';
+import { RowMenu } from '../../components/RowMenu';
 import { SkeletonTable } from '../../components/skeletons';
 import { SuppressFindingDialog } from '../../components/dialogs';
 import { downloadJiraCsv } from '../../components/JiraExport';
@@ -108,9 +109,6 @@ function buildUrlSearch(filters: FindingFilter, sort: SortState, page: number, p
   return sp.toString();
 }
 
-/** How long a row's copy button shows its check-mark confirm before reverting; short by design so long lists cannot toast-spam. */
-const COPY_CONFIRM_MS = 800;
-
 /** Stand-in notify for report views mounted without a toast channel (tests embed ReportView directly). */
 const noopNotify = (_notice: Notice) => {};
 
@@ -134,12 +132,21 @@ function findingKey(finding: Finding, index = 0) {
   return finding.id || finding.fingerprint || `idx-${index}`;
 }
 
-/** Small decorative row-action icons; they inherit the button color and carry no semantics. */
-function ClipboardIcon() {  return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15h-.25A1.75 1.75 0 0 1 3 13.25V4.75C3 3.78 3.78 3 4.75 3h8.5c.97 0 1.75.78 1.75 1.75V5" /></svg>;
-}
-
-function CheckIcon() {
-  return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d="m5 13 4.2 4.2L19 6.5" /></svg>;
+/**
+ * The row's body text, de-duplicated. Some analyzers echo the rule id as the
+ * title AND prefix it to the message ("aws-access-token: AWS Access Token"), so
+ * the row used to read "aws-access-token: aws-access-token: AWS Access Token".
+ * The rule-id prefix goes first; when the row title was synthesized from this
+ * same message (friendlyFindingTitle), its leading clause goes too — the title
+ * already says it. Returns '' when nothing would remain.
+ */
+function rowMessage(finding: Finding): string {
+  const rule = finding.rule_id?.trim();
+  let text = finding.message ?? '';
+  if (rule && text.startsWith(`${rule}: `)) text = text.slice(rule.length + 2);
+  const title = friendlyFindingTitle(finding);
+  if (title && text.startsWith(title)) text = text.slice(title.length).replace(/^[.:]?\s*/, '');
+  return text;
 }
 
 export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: string; notify?: (n: Notice) => void; runs?: AnalyzerRun[]; /** Navigation callback from the hosting page; present, the suppress toast gains a "View suppressions" jump to the workspace. */ go?: (r: Route) => void }) {
@@ -366,19 +373,19 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
       <div className="toolbar-groups">
         <div className="filter-group">
           <span className="filter-group-label" aria-hidden="true">Severity</span>
-          <fieldset className="chip-group" aria-label="Severity">{SEVERITY_ORDER.map((severity) => { const count = counts[severity]; const active = selectedSeverities.includes(severity); return <button type="button" key={severity} className={`chip sev-chip ${severity}${active ? ' pressed' : ''}`} aria-pressed={active} disabled={count === 0 && !active} onClick={() => toggleSeverity(severity)}><i className={`sev-dot sev-${severity}`} aria-hidden="true" />{SEVERITY_LABELS[severity]}<span className="count">{count}</span></button>; })}</fieldset>
+          <fieldset className="chip-group" aria-label="Severity">{SEVERITY_ORDER.map((severity) => { const count = counts[severity]; const active = selectedSeverities.includes(severity); return <button type="button" key={severity} className={`chip sev-chip ${severity}${active ? ' pressed' : ''}`} aria-pressed={active} disabled={count === 0 && !active} onClick={() => toggleSeverity(severity)}><i className={`sev-dot sev-${severity}`} aria-hidden="true" />{SEVERITY_LABELS[severity]}<span className="chip-count">{count}</span></button>; })}</fieldset>
         </div>
         <div className="filter-group">
           <span className="filter-group-label" aria-hidden="true">Status</span>
-          <fieldset className="chip-group" aria-label="Status"><button type="button" className="chip" aria-pressed={!filters.status} onClick={() => updateFilters({ ...filters, status: '' })}>Any status</button>{STATUS_OPTIONS.map((status) => <button type="button" key={status} className={`chip${filters.status === status ? ' pressed' : ''}`} aria-pressed={filters.status === status} onClick={() => toggleStatus(status)}>{STATUS_LABELS[status]}<span className="count">{countByStatus.get(status) ?? 0}</span></button>)}</fieldset>
+          <fieldset className="chip-group" aria-label="Status">{STATUS_OPTIONS.map((status) => <button type="button" key={status} className={`chip${filters.status === status ? ' pressed' : ''}`} aria-pressed={filters.status === status} onClick={() => toggleStatus(status)}>{STATUS_LABELS[status]}<span className="chip-count">{countByStatus.get(status) ?? 0}</span></button>)}</fieldset>
         </div>
         {tools.length > 0 && <div className="filter-group">
           <span className="filter-group-label" aria-hidden="true">Tool</span>
-          <fieldset className="chip-group" aria-label="Tool">{tools.map((tool) => { const run = runById.get(tool); const runTitle = run ? `${run.status ?? 'unknown'}${run.duration_ms !== undefined ? ` · ${compactDuration(run.duration_ms)}` : ''}${run.warning_count ? ` · coverage incomplete (${run.warning_count} warning${run.warning_count === 1 ? '' : 's'})` : ''}` : 'Reported findings; no run recorded on this scan'; return <button type="button" key={tool} className={`chip${filters.analyzer === tool ? ' pressed' : ''}`} aria-pressed={filters.analyzer === tool} title={runTitle} onClick={() => toggleAnalyzer(tool)}>{analyzerName(tool)}{run?.warning_count ? <span className="chip-flag" aria-label="coverage incomplete">!</span> : null}<span className="count">{countByAnalyzer.get(tool) ?? 0}</span></button>; })}</fieldset>
+          <fieldset className="chip-group" aria-label="Tool">{tools.map((tool) => { const run = runById.get(tool); const runTitle = run ? `${run.status ?? 'unknown'}${run.duration_ms !== undefined ? ` · ${compactDuration(run.duration_ms)}` : ''}${run.warning_count ? ` · coverage incomplete (${run.warning_count} warning${run.warning_count === 1 ? '' : 's'})` : ''}` : 'Reported findings; no run recorded on this scan'; return <button type="button" key={tool} className={`chip${filters.analyzer === tool ? ' pressed' : ''}`} aria-pressed={filters.analyzer === tool} title={runTitle} onClick={() => toggleAnalyzer(tool)}>{analyzerName(tool)}{run?.warning_count ? <span className="chip-flag" aria-label="coverage incomplete">!</span> : null}<span className="chip-count">{countByAnalyzer.get(tool) ?? 0}</span></button>; })}</fieldset>
         </div>}
         {categories.length > 0 && <div className="filter-group filter-group-wide">
           <span className="filter-group-label" aria-hidden="true">Type</span>
-          <fieldset className="chip-rail chip-group" aria-label="Type">{categories.map(([category, count]) => <button type="button" key={category} className={`chip${filters.category === category ? ' pressed' : ''}`} aria-pressed={filters.category === category} onClick={() => toggleCategory(category)}>{findingCategoryLabel(category)}<span className="count">{count}</span></button>)}</fieldset>
+          <fieldset className="chip-rail chip-group" aria-label="Type">{categories.map(([category, count]) => <button type="button" key={category} className={`chip${filters.category === category ? ' pressed' : ''}`} aria-pressed={filters.category === category} onClick={() => toggleCategory(category)}>{findingCategoryLabel(category)}<span className="chip-count">{count}</span></button>)}</fieldset>
         </div>}
       </div>
     </div>
@@ -387,7 +394,7 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
       <div className="findings-col" data-scoped={selected ? 'true' : undefined}>
         {suppressQueue.length > 1 && <p role="status" aria-live="polite">{suppressStatus || `Bulk suppression: the reason you enter applies to all ${suppressQueue.length} selected findings.`}</p>}
         <div className={`finding-list analysis-list${dense ? ' finding-dense' : ''}`}>
-          {findings.loading && !items.length ? <SkeletonTable rows={5} cols={5} className="findings-table" /> : findings.error && !items.length ? <ErrorPanel error={findings.error} retry={findings.reload} /> : items.length ? <FindingsTable findings={items} sort={sort} onSort={changeSort} activeKey={selectedKey} onSelect={(finding, index) => setSelectedKey(findingKey(finding, index))} canSuppress={canManageSuppressions} onSuppress={setSuppressing} onBulkSuppress={queueBulkSuppress} selectionReset={selectionEpoch} onRestore={restoreFinding} suppressionReasons={suppressionReasons} /> : overRange ? <Empty title="This page is past the end of the list" icon={<MagnifierIcon />} action={<button type="button" className="button secondary" onClick={() => setPages(1)}>Back to first page</button>}>Nothing lives on this page — the report has {total} findings in total. Head back to the first page to read the list from the top.</Empty> : allClear ? <Empty title="All clear — no findings" tone="positive" icon={<><CheckShieldIcon /><span className="empty-sparkle one"><SparkleIcon /></span><span className="empty-sparkle two"><SparkleIcon /></span></>}>Every analyzer finished and found nothing to flag. Nice work.</Empty> : <Empty title={noFindingsTitle} icon={<MagnifierIcon />}>{noFindingsCopy}</Empty>}
+          {findings.loading && !items.length ? <SkeletonTable rows={5} cols={5} className="findings-table" /> : findings.error && !items.length ? <ErrorPanel error={findings.error} retry={findings.reload} /> : items.length ? <FindingsTable findings={items} sort={sort} onSort={changeSort} activeKey={selectedKey} onSelect={(finding, index) => setSelectedKey(findingKey(finding, index))} canSuppress={canManageSuppressions} onSuppress={setSuppressing} onBulkSuppress={queueBulkSuppress} selectionReset={selectionEpoch} onRestore={restoreFinding} suppressionReasons={suppressionReasons} notify={notify ?? noopNotify} /> : overRange ? <Empty title="This page is past the end of the list" icon={<MagnifierIcon />} action={<button type="button" className="button secondary" onClick={() => setPages(1)}>Back to first page</button>}>Nothing lives on this page — the report has {total} findings in total. Head back to the first page to read the list from the top.</Empty> : allClear ? <Empty title="All clear — no findings" tone="positive" icon={<><CheckShieldIcon /><span className="empty-sparkle one"><SparkleIcon /></span><span className="empty-sparkle two"><SparkleIcon /></span></>}>Every analyzer finished and found nothing to flag. Nice work.</Empty> : <Empty title={noFindingsTitle} icon={<MagnifierIcon />}>{noFindingsCopy}</Empty>}
         </div>
         {(items.length > 0 || loadingMore) && <div className="load-more">
           <span className="load-more-status">Showing {items.length} of {total}</span>
@@ -452,23 +459,20 @@ function useColWidthsReport() {
  * Findings table for the split layout: clicking a row selects it — the docked source
  * pane shows its code, remediation, and actions while this list keeps scrolling.
  * Rows are keyboard-walkable (ArrowUp/ArrowDown move focus, Enter/Space select).
- * Bulk selection, per-row copy, suppress/restore, and resizable columns are preserved.
+ * Bulk selection stays on the rows; copy and suppress/restore live in each row's
+ * RowMenu overflow so a row carries exactly one visible control. Columns stay resizable.
  */
-function FindingsTable({ findings, sort, onSort, activeKey, onSelect, canSuppress, onSuppress, onBulkSuppress, selectionReset = 0, onRestore, suppressionReasons }: { findings: Finding[]; sort: SortState; onSort: (key: SortKey) => void; activeKey?: string; onSelect: (finding: Finding, index: number) => void; canSuppress: boolean; onSuppress: (finding: Finding) => void; /** Present when the parent supports bulk suppression: receives every selected, suppressible finding at once. */ onBulkSuppress?: (selected: Finding[]) => void; /** Bump to clear the checkbox selection (the parent does this after a bulk action lands). */ selectionReset?: number; onRestore: (finding: Finding) => void; suppressionReasons?: Map<string, string> }) {
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
-  const copyTimer = useRef<number | undefined>(undefined);
-  useEffect(() => () => window.clearTimeout(copyTimer.current), []);
-  const copyFinding = async (finding: Finding, key: string) => {
-    if (!(await copyToClipboard(findingSummaryText(finding)))) return;
-    setCopiedKey(key);
-    window.clearTimeout(copyTimer.current);
-    copyTimer.current = window.setTimeout(() => setCopiedKey(null), COPY_CONFIRM_MS);
-  };
+function FindingsTable({ findings, sort, onSort, activeKey, onSelect, canSuppress, onSuppress, onBulkSuppress, selectionReset = 0, onRestore, suppressionReasons, notify }: { findings: Finding[]; sort: SortState; onSort: (key: SortKey) => void; activeKey?: string; onSelect: (finding: Finding, index: number) => void; canSuppress: boolean; onSuppress: (finding: Finding) => void; /** Present when the parent supports bulk suppression: receives every selected, suppressible finding at once. */ onBulkSuppress?: (selected: Finding[]) => void; /** Bump to clear the checkbox selection (the parent does this after a bulk action lands). */ selectionReset?: number; onRestore: (finding: Finding) => void; suppressionReasons?: Map<string, string>; notify?: (n: Notice) => void }) {
   // bulk selection (checkbox per row, additive header)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   // The parent bumps selectionReset after a bulk action (e.g. suppression) so
   // the checkboxes don't keep pointing at rows whose status just flipped.
   useEffect(() => { if (selectionReset > 0) setSelectedIds(new Set()); }, [selectionReset]);
+  /** Clipboard write with a toast confirm — the row menu closes on select, so the
+   *  old inline check-mark swap has nothing to attach to. */
+  const copyFinding = async (finding: Finding) => {
+    if (await copyToClipboard(findingSummaryText(finding))) notify?.({ kind: 'success', text: 'Finding details copied to the clipboard.' });
+  };
   const allIds = findings.map((finding, index) => findingKey(finding, index));
   const allSelected = allIds.length > 0 && allIds.every((id) => selectedIds.has(id));
   const someSelected = allIds.some((id) => selectedIds.has(id)) && !allSelected;
@@ -540,5 +544,5 @@ function FindingsTable({ findings, sort, onSort, activeKey, onSelect, canSuppres
       <th scope="col" className="relative" style={headerStyle('path')} aria-sort={sort.key==='path'?(sort.dir==='asc'?'ascending':'descending'):'none'}><button type="button" className={'th-sort'+(sort.key==='path'?' active':'')} onClick={()=>onSort('path')}>File<span className="sort-arrow" aria-hidden="true">{sort.key==='path'?(sort.dir==='asc'?'▲':'▼'):'↕'}</span>{sort.key==='path' && <span className="sr-only"> (sorted {sort.dir==='asc'?'ascending':'descending'})</span>}</button>{resizeHandle('path')}</th>
       <th scope="col" className="relative" style={headerStyle('analyzer')} aria-sort={sort.key==='analyzer'?(sort.dir==='asc'?'ascending':'descending'):'none'}><button type="button" className={'th-sort'+(sort.key==='analyzer'?' active':'')} onClick={()=>onSort('analyzer')}>Tool<span className="sort-arrow" aria-hidden="true">{sort.key==='analyzer'?(sort.dir==='asc'?'▲':'▼'):'↕'}</span>{sort.key==='analyzer' && <span className="sr-only"> (sorted {sort.dir==='asc'?'ascending':'descending'})</span>}</button>{resizeHandle('analyzer')}</th>
       <th scope="col" className="relative" style={headerStyle('status')} aria-sort={sort.key==='status'?(sort.dir==='asc'?'ascending':'descending'):'none'}><button type="button" className={'th-sort'+(sort.key==='status'?' active':'')} onClick={()=>onSort('status')}>Status<span className="sort-arrow" aria-hidden="true">{sort.key==='status'?(sort.dir==='asc'?'▲':'▼'):'↕'}</span>{sort.key==='status' && <span className="sr-only"> (sorted {sort.dir==='asc'?'ascending':'descending'})</span>}</button>{resizeHandle('status')}</th>
-    </tr></thead><tbody>{findings.map((finding, index) => { const rowKey = findingKey(finding, index); const copied = copiedKey === rowKey; const rowName = finding.title ?? finding.rule_id ?? 'finding'; const suppressed = finding.status === 'suppressed'; const isSelected = selectedIds.has(rowKey); const isActive = activeKey === rowKey; const rowAction = canSuppress && finding.fingerprint ? suppressed ? <button type="button" className="text-button restore-finding" aria-label={'Restore '+rowName} title="Stop hiding this finding" onClick={(e)=>{ e.stopPropagation(); onRestore(finding);}}>Restore</button> : <button type="button" className="text-button suppress-finding" aria-label={'Suppress '+rowName} title="Hide this finding from future scans" onClick={(e)=>{ e.stopPropagation(); onSuppress(finding);}}>Suppress…</button> : null; return <tr key={rowKey} data-index={index} className={`${severityEdgeClass(finding.severity)}${isSelected ? ' selected' : ''}${isActive ? ' active' : ''}`} aria-label={`${finding.severity} ${rowName}${finding.relative_path ? ` in ${finding.relative_path}` : ''} — open in the source pane`} tabIndex={0} onClick={()=>onSelect(finding, index)} onKeyDown={(e)=>onRowKeyDown(e, index)}><td className="sticky left-0 z-[1] bg-[var(--color-surface)] shadow-[var(--shadow-card)]" style={headerStyle('severity')} onClick={(e)=>e.stopPropagation()}><span className="flex items-center gap-2"><input type="checkbox" role="checkbox" aria-label={'Select row '+rowKey} checked={isSelected} onChange={(e)=>toggleRowSelect(rowKey,e.target.checked)} onClick={(e)=>e.stopPropagation()} /><span className={'severity '+finding.severity}><i className="sev-dot" aria-hidden="true" />{finding.severity}</span></span></td><td className="finding-summary" style={headerStyle('finding')} title={finding.message ?? rowName}><strong>{finding.title ?? finding.rule_id ?? 'Finding'}</strong><span className="finding-message">{finding.message}</span>{finding.remediation && <span className="finding-remediation">Fix: {finding.remediation}</span>}</td><td style={headerStyle('path')}><code className="finding-path" title={findingLocation(finding)}>{shortFindingLocation(finding)}</code></td><td style={headerStyle('analyzer')}><span className="badge">{analyzerName(finding.analyzer_id)}</span></td><td style={headerStyle('status')} onClick={(e)=>e.stopPropagation()}><div className="finding-actions-cell">{finding.status ? <span className={'status-text'+(suppressed ? ' suppressed' : '')}>{finding.status}</span> : '—'}{suppressed && finding.fingerprint && suppressionReasons?.has(finding.fingerprint) && <span className="suppression-reason" title={`Suppressed: ${suppressionReasons.get(finding.fingerprint)}`}>{suppressionReasons.get(finding.fingerprint)}</span>}<span className="finding-row-actions">{rowAction}<button type="button" className={'icon-button copy-finding'+(copied ? ' copied' : '')} aria-label="Copy finding details" title="Copy finding details" onClick={()=> void copyFinding(finding, rowKey)}>{copied ? <CheckIcon /> : <ClipboardIcon />}</button></span></div></td></tr>; })}</tbody></table></div></div>;
+    </tr></thead><tbody>{findings.map((finding, index) => { const rowKey = findingKey(finding, index); const rowTitle = friendlyFindingTitle(finding); const rowBody = rowMessage(finding); const suppressed = finding.status === 'suppressed'; const isSelected = selectedIds.has(rowKey); const isActive = activeKey === rowKey; const rowMenuItems = [{ label: 'Copy details', onSelect: () => { void copyFinding(finding); } }, ...(canSuppress && finding.fingerprint ? [suppressed ? { label: 'Restore', onSelect: () => onRestore(finding) } : { label: 'Suppress…', onSelect: () => onSuppress(finding) }] : [])]; return <tr key={rowKey} data-index={index} className={`${severityEdgeClass(finding.severity)}${isSelected ? ' selected' : ''}${isActive ? ' active' : ''}`} aria-label={`${finding.severity} ${rowTitle}${finding.relative_path ? ` in ${finding.relative_path}` : ''} — open in the source pane`} tabIndex={0} onClick={()=>onSelect(finding, index)} onKeyDown={(e)=>onRowKeyDown(e, index)}><td className="sticky left-0 z-[1] bg-[var(--color-surface)] shadow-[var(--shadow-card)]" style={headerStyle('severity')} onClick={(e)=>e.stopPropagation()} onKeyDown={(e)=>e.stopPropagation()}><span className="flex items-center gap-2"><input type="checkbox" role="checkbox" aria-label={'Select row '+rowKey} checked={isSelected} onChange={(e)=>toggleRowSelect(rowKey,e.target.checked)} onClick={(e)=>e.stopPropagation()} /><span className={'severity '+finding.severity}><i className="sev-dot" aria-hidden="true" />{SEVERITY_LABELS[finding.severity] ?? finding.severity}</span></span></td><td className="finding-summary" style={headerStyle('finding')} title={finding.message ?? rowTitle}><strong>{rowTitle}</strong>{rowBody && <span className="finding-message">{rowBody}</span>}</td><td style={headerStyle('path')}><code className="finding-path" title={findingLocation(finding)}>{shortFindingLocation(finding)}</code></td><td style={headerStyle('analyzer')}><span className="tag">{analyzerName(finding.analyzer_id)}</span></td><td style={headerStyle('status')} onClick={(e)=>e.stopPropagation()} onKeyDown={(e)=>e.stopPropagation()}><div className="finding-actions-cell">{finding.status ? <span className={'status-text'+(suppressed ? ' suppressed' : '')}>{finding.status}</span> : '—'}{suppressed && finding.fingerprint && suppressionReasons?.has(finding.fingerprint) && <span className="suppression-reason" title={`Suppressed: ${suppressionReasons.get(finding.fingerprint)}`}>{suppressionReasons.get(finding.fingerprint)}</span>}<span className="finding-row-actions"><RowMenu label={'Actions for '+rowTitle} items={rowMenuItems} /></span></div></td></tr>; })}</tbody></table></div></div>;
 }

@@ -196,7 +196,7 @@ describe('ScanPage what-changed panel', () => {
   it('explains the verdict stats: tooltips, Persistent math, and the spaced score+range', async () => {
     const { host } = await renderScanPage(scanFixture({ total_findings: 5, new_count: 2, critical_count: 1 }));
     const stats = new Map([...host.querySelectorAll('.verdict-stats .verdict-stat')].map((stat) => [stat.querySelector('dt')?.textContent, stat]));
-    expect(stats.get('Risk score')?.querySelector('dd')?.textContent).toBe('10 5–19'); // score and band range separated, never "105–19"
+    expect(stats.get('Risk score')?.querySelector('dd')?.textContent).toBe('10 band 5–19'); // score, then the labeled band — a bare range reads as part of the number
     expect(stats.get('Risk score')?.getAttribute('title')).toBe('Weighted: critical ×10, high ×5, medium ×2, low ×1 · A 0–4, B 5–19, C 20–49, D 50+');
     expect(stats.get('New')?.querySelector('dd')?.textContent).toBe('2');
     expect(stats.get('Fixed')?.querySelector('dd')?.textContent).toBe('0');

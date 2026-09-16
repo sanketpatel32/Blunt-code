@@ -25,6 +25,18 @@ async function render(fetchMock: ReturnType<typeof vi.fn>) {
   return host;
 }
 
+/** Close app lives in the nav's "More options" overflow (nav-clarity pass), a
+ *  Radix menu portaled outside the app host. Open the trigger with its
+ *  keyboard affordance, then pick the danger item. */
+async function closeAppDialog(host: HTMLElement) {
+  const moreOptions = host.querySelector('button[aria-label="More options"]');
+  expect(moreOptions).toBeDefined();
+  await act(async () => { moreOptions!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
+  const closeApp = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent === 'Close app');
+  expect(closeApp).toBeDefined();
+  await act(async () => { closeApp!.click(); await Promise.resolve(); await Promise.resolve(); });
+}
+
 describe('Blunt Code home', () => {
   beforeEach(() => { window.history.replaceState({}, '', '/'); });
   afterEach(async () => { await act(async () => { root?.unmount(); }); document.body.replaceChildren(); vi.unstubAllGlobals(); });
@@ -46,14 +58,17 @@ describe('Blunt Code home', () => {
     expect(host.textContent).toContain('1 of 1 optional tools ready');
     expect(host.querySelector('.ledger-list')).not.toBeNull();
     expect(host.textContent).toContain('Completed');
-    const remove = [...host.querySelectorAll('button')].find((button) => button.textContent === 'Remove');
-    expect(remove).toBeDefined();
-    await act(async () => { remove!.click(); });
+    // Remove is a destructive action: it lives behind the ledger row's overflow
+    // menu (the one visible control is Run scan), confirmed via its dialog.
+    const ledgerMore = host.querySelector('button[aria-label="More actions for Example API"]');
+    expect(ledgerMore).toBeDefined();
+    await act(async () => { ledgerMore!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
+    const removeItem = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent === 'Remove workspace');
+    expect(removeItem).toBeDefined();
+    await act(async () => { removeItem!.click(); await Promise.resolve(); await Promise.resolve(); });
     expect(host.textContent).toContain('Remove this workspace?');
     expect(host.textContent).toContain('Your project files will not be changed.');
-    const closeApp = [...host.querySelectorAll('button')].find((button) => button.textContent === 'Close app');
-    expect(closeApp).toBeDefined();
-    await act(async () => { closeApp!.click(); });
+    await closeAppDialog(host);
     expect(host.textContent).toContain('Close Blunt Code?');
     expect(host.textContent).toContain('Any active scan will be cancelled');
   });
@@ -141,14 +156,21 @@ describe('Blunt Code home', () => {
     expect(rows).toHaveLength(2);
     const ruffButtons = [...rows[0].querySelectorAll('button')];
     const semgrepButtons = [...rows[1].querySelectorAll('button')];
-    expect(ruffButtons.map((button) => button.textContent)).toEqual(['Install', 'Repair', 'Update']);
-    await act(async () => { ruffButtons[0].click(); });
+    // Per row one contextual control: the disclosure name button, then for a
+    // not-installed tool the Install button (ready tools get only the overflow
+    // menu trigger, whose label is icon-only).
+    expect(ruffButtons.map((button) => button.textContent)).toEqual(['Ruff', 'Install', '']);
+    expect(semgrepButtons.map((button) => button.textContent)).toEqual(['Semgrep', '']);
+    await act(async () => { ruffButtons[1].click(); });
     // The row button arms the confirmation dialog; confirming starts the in-flight POST.
     await act(async () => { [...host.querySelectorAll<HTMLButtonElement>('dialog button')].find((button) => button.textContent === 'Install')!.click(); });
-    expect(ruffButtons[0].textContent).toContain('Installing…');
-    expect(rows[0].querySelector('.table-actions')?.getAttribute('aria-busy')).toBe('true');
-    for (const button of ruffButtons) expect(button.disabled).toBe(true);
-    for (const button of semgrepButtons) expect(button.disabled).toBe(false);
+    const busyRow = host.querySelectorAll('.tool-table tbody tr')[0];
+    expect(busyRow.textContent).toContain('Installing…');
+    expect(busyRow.querySelector('.table-actions')?.getAttribute('aria-busy')).toBe('true');
+    // While busy the row offers no action controls (the name disclosure stays
+    // usable — expanding details during an install is harmless).
+    expect(busyRow.querySelector('.table-actions button')).toBeNull();
+    for (const button of host.querySelectorAll('.tool-table tbody tr')[1].querySelectorAll('button')) expect(button.disabled).toBe(false);
   });
 
   it('paginates scan history in the workspace view', async () => {
@@ -265,9 +287,7 @@ describe('closing the app', () => {
   afterEach(async () => { await act(async () => { root?.unmount(); }); document.body.replaceChildren(); vi.unstubAllGlobals(); });
 
   async function openCloseDialog(host: HTMLElement) {
-    const closeApp = [...host.querySelectorAll('button')].find((button) => button.textContent === 'Close app');
-    expect(closeApp).toBeDefined();
-    await act(async () => { closeApp!.click(); await Promise.resolve(); await Promise.resolve(); });
+    await closeAppDialog(host);
     return host.querySelector('.confirmation-dialog')!;
   }
 

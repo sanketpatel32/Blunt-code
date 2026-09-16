@@ -392,22 +392,6 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .table-wrap tbody tr { transition: background var(--dur-fast) var(--ease-out); }
 .table-wrap tbody tr:hover { background: color-mix(in oklch, var(--color-accent) 5%, transparent); }
 .table-actions { display: flex; gap: var(--space-sm); align-items: center; }
-/* Tool table (ToolsPage): the Actions column pins to the right edge while the
-   wrap scrolls, so Install/Repair/Update stay reachable at narrow widths.
-   `border-collapse: separate` keeps each cell's borders travelling with it —
-   under `collapse` the table owns the borders and the stuck cells render bare.
-   Backgrounds and the left-edge shadow use theme tokens so both themes read
-   the overlap as intentional. */
-.tool-table table { border-collapse: separate; border-spacing: 0; }
-.tool-table th:last-child,
-.tool-table td:last-child {
-  position: sticky;
-  right: 0;
-  background: var(--color-surface);
-  box-shadow: inset 1px 0 0 var(--color-rule), inset 10px 0 8px -8px color-mix(in oklch, var(--color-ink) 30%, transparent);
-}
-.tool-table th:last-child { background: var(--color-surface-muted); }
-.tool-table tbody tr:hover td:last-child { background: color-mix(in oklch, var(--color-accent) 5%, var(--color-surface)); }
 /* history-pagination bento — see css/history.css */
 
 /* ── Analyzer results tiles ────────────────────────────────────── */
@@ -1190,3 +1174,16 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 }
 
 
+
+/* ── Action-hierarchy contract primitives (design wave 2026-09-16) ──
+   One visible action per row; the rest lives in RowMenu. Chromatic color
+   is reserved for severity/state/grade — metadata stays neutral. */
+.tag { display: inline-flex; align-items: center; gap: var(--space-3xs); max-width: 100%; padding: 1px var(--space-sm); border: var(--rule) solid var(--color-rule-faint); border-radius: var(--radius-pill); background: var(--color-surface-muted); color: var(--color-ink-soft); font: 600 var(--text-2xs) var(--font-mono); letter-spacing: .02em; white-space: nowrap; }
+.tag > span, .tag > code { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.toolbar-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); margin: 0 0 var(--space-md); }
+.toolbar-row .toolbar-filters { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap; min-width: 0; }
+.toolbar-row .toolbar-meta { margin-left: auto; color: var(--color-ink-faint); font: 600 var(--text-xs) var(--font-mono); white-space: nowrap; }
+.table-dense { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+.table-dense th { padding: var(--space-2xs) var(--space-sm); border-bottom: var(--rule) solid var(--color-rule-strong); color: var(--color-ink-faint); font: 700 var(--text-2xs) var(--font-mono); letter-spacing: .06em; text-align: left; text-transform: uppercase; white-space: nowrap; }
+.table-dense td { padding: var(--space-2xs) var(--space-sm); border-bottom: var(--rule) solid var(--color-rule-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.table-dense tbody tr:hover td { background: color-mix(in oklch, var(--color-accent) 3%, var(--color-surface)); }

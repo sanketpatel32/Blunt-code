@@ -63,9 +63,41 @@ describe('SearchPage', () => {
     ]));
     expect(host.querySelectorAll('tbody tr')).toHaveLength(2);
     expect(host.querySelector('.severity.critical')?.textContent).toBe('critical');
-    const links = [...host.querySelectorAll<HTMLAnchorElement>('a')].filter((a) => a.textContent === 'Open report');
+    const links = [...host.querySelectorAll<HTMLAnchorElement>('a')].filter((a) => a.textContent === 'Open');
     expect(links.map((a) => a.getAttribute('href'))).toEqual(['/scans/scan-9', '/scans/scan-3']);
     expect(host.querySelector('table caption')?.textContent).toBe('Global search results'); // Loop W6
+  });
+
+  it('groups consecutive same rule+file results into one header with deduped occurrence lines', async () => {
+    const secret = (id: string, line: number) => ({
+      ...hit(id, 'scan-9', 'critical', 'aws-access-token'),
+      message: 'aws-access-token: Identified a pattern that may indicate AWS credentials.',
+      relative_path: '.env',
+      start_line: line,
+    });
+    const host = await renderPage(searchMock([
+      ['/api/v1/findings/search', {
+        items: [secret('f1', 34), secret('f2', 37), secret('f3', 34)],
+        total: 3, page: 1, page_size: 25, has_next: false,
+      }],
+    ]));
+    // Three identical rows collapse into one group header…
+    const group = host.querySelector('.search-group-row');
+    expect(group).toBeDefined();
+    expect(group!.getAttribute('aria-label')).toContain('3 occurrences');
+    // …whose title comes from the message clause, not the echoed rule id — the
+    // id renders once (neutral rule tag), never the "aws-access-token:
+    // aws-access-token: …" double.
+    expect(group!.textContent).toContain('Identified a pattern that may indicate AWS credentials');
+    expect(group!.textContent!.split('aws-access-token')).toHaveLength(2); // id appears exactly once
+    // Occurrence lines are deduped by line number (34 appears twice upstream).
+    expect(host.querySelectorAll('.search-occurrence-row')).toHaveLength(2);
+    // Toggling the chip ungroups back to flat per-occurrence rows.
+    const toggle = [...host.querySelectorAll<HTMLButtonElement>('.toolbar-filters .chip')].find((b) => b.textContent === 'Group by rule + file')!;
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    await act(async () => { toggle.click(); });
+    expect(host.querySelectorAll('.search-group-row')).toHaveLength(0);
+    expect(host.querySelectorAll('tbody tr')).toHaveLength(3);
   });
 
   it('shows the filtered empty state when workspaces exist but nothing matches', async () => {

@@ -165,7 +165,9 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
         {live && <div className="scan-hero-progress"><ScanProgressBar scan={current} events={events} /></div>}
       </div>
       <div className="scan-hero-side">
-        <span className={`stream-state ${streamState}`} aria-live="polite">
+        {/* The green .live skin belongs to streaming; a finished report is quiet —
+            "Saved report" must not glow green over a critical-risk headline. */}
+        <span className={`stream-state${terminal ? '' : ` ${streamState}`}`} aria-live="polite">
           <i aria-hidden="true" />
           {terminal ? 'Saved report' : streamState === 'live' ? 'Live updates' : streamState === 'reconnecting' ? `Reconnecting${streamAttempts > 1 ? ` (try ${streamAttempts})` : ''}` : 'Connecting'}
         </span>
@@ -213,7 +215,7 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
         </ul>
       </div>
       <dl className="verdict-stats">
-        <div className="verdict-stat" title={RISK_SCORE_TOOLTIP}><dt>Risk score</dt><dd>{score}<span className="verdict-stat-note"> {bandFor(riskGrade(score)).range}</span></dd></div>
+        <div className="verdict-stat" title={RISK_SCORE_TOOLTIP}><dt>Risk score</dt><dd>{score}<span className="verdict-stat-note"> band {bandFor(riskGrade(score)).range}</span></dd></div>
         <div className="verdict-stat" title={VERDICT_TRIO_TOOLTIP}><dt>New</dt><dd>{current.new_count ?? 0}</dd></div>
         <div className="verdict-stat" title={VERDICT_TRIO_TOOLTIP}><dt>Fixed</dt><dd>{current.fixed_count ?? 0}</dd></div>
         <div className="verdict-stat" title={VERDICT_TRIO_TOOLTIP}><dt>Persistent</dt><dd>{Math.max(0, total - (current.new_count ?? 0))}</dd></div>

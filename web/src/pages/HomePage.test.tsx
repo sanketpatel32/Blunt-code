@@ -130,13 +130,17 @@ describe('HomePage risk board — verdict', () => {
     expect(host.querySelector('.verdict-letter')?.textContent).toBe('D');
     expect(host.querySelector('.verdict-score')?.textContent).toContain('73');
     expect(host.textContent).toContain('Critical risk.');
-    // Score explainability: the weighting travels on the grade tile and the band meaning on each tile.
+    // Score explainability: the weighting travels on the grade tile, the band
+    // meaning on the tile's label, and the scale as an inline band range — the
+    // old four-tile ruler row is gone (one summary strip, no stacked bands).
     expect(host.querySelector('.verdict-grade')?.getAttribute('title')).toBe('Weighted risk score: critical ×10, high ×5, medium ×2, low ×1');
-    expect(host.querySelector('.verdict-band')?.getAttribute('title')).toBe('Low risk');
-    // Band ruler marks D active.
-    const activeBand = host.querySelector('.verdict-band[data-active="true"]');
-    expect(activeBand?.textContent).toContain('D');
-    expect(activeBand?.textContent).toContain('50+');
+    expect(host.querySelector('.verdict-grade')?.getAttribute('aria-label')).toContain('Grade bands: A 0–4, B 5–19, C 20–49, D 50+');
+    const range = host.querySelector('.verdict-bandrange');
+    expect(range?.textContent).toContain('D');
+    expect(range?.textContent).toContain('50+');
+    // One hero number per view, carrying its composition right below.
+    expect(host.querySelector('.verdict-hero-num')?.textContent).toBe('21');
+    expect(host.querySelector('.verdict-bar')).not.toBeNull();
   });
 
   it('tallies severity from the latest completed scan of each workspace', async () => {
@@ -186,15 +190,16 @@ describe('HomePage risk board — verdict', () => {
     const host = await render(homeFetchMock({ scans: [scanItem()], total: 1, summary }));
 
     const rail = host.querySelector('.verdict-rail')!;
-    expect(rail.textContent).toContain('Active scans');
-    expect(rail.textContent).toContain('1');
-    expect(rail.querySelector('.pulse-dot')).not.toBeNull(); // live dot while scans run
     expect(rail.textContent).toContain('Scans this week');
     expect(rail.textContent).toContain('6');
     expect(rail.textContent).toContain('Workspaces scanned');
     expect(rail.textContent).toContain('1 of 1'); // from the workspace list, not the stale summary shape
+    expect(rail.textContent).toContain('Last completed scan');
     expect(rail.textContent).toContain('Optional tools');
     expect(rail.textContent).toContain('2 of 2');
+    // A count never appears twice: active scans live only in the header pill.
+    expect(rail.textContent).not.toContain('Active scans');
+    expect(host.querySelector('.board-live')?.textContent).toContain('1 scan running');
   });
 
   it('flags running scans in the page header badge', async () => {
@@ -209,7 +214,9 @@ describe('HomePage risk board — verdict', () => {
     ));
     expect(host.querySelector('.verdict-grade')?.getAttribute('data-grade')).toBe('none');
     expect(host.textContent).toContain('No completed scans yet');
-    expect(host.querySelector('.verdict-band[data-active="true"]')).toBeNull();
+    // Ungraded: no scale context, and no hero count that would read as scanned-and-clean.
+    expect(host.querySelector('.verdict-bandrange')).toBeNull();
+    expect(host.querySelector('.verdict-hero-num')).toBeNull();
   });
 
   it('drills into findings search from the severity tally', async () => {
@@ -259,14 +266,16 @@ describe('HomePage risk board — ledger', () => {
     expect(go).toHaveBeenCalledWith({ page: 'workspaces' });
   });
 
-  it('offers a scan action and a guarded remove per row', async () => {
+  it('keeps one visible control per row: scan split-button, remove behind the overflow menu', async () => {
     const host = await render(homeFetchMock({ scans: [scanItem()], total: 1, summary }));
-    const remove = [...host.querySelectorAll('button')].find((button) => button.textContent === 'Remove');
-    expect(remove).toBeDefined();
-    await act(async () => { remove!.click(); });
-    expect(host.textContent).toContain('Remove this workspace?');
-    expect(host.textContent).toContain('Your project files will not be changed.');
+    // The row's forward action is the scan split-button…
     expect(host.querySelector('.ledger-row .ledger-actions button'));// scan action dropdown trigger lives in the row
+    // …and the destructive action is NOT directly visible on the row: it lives
+    // in the RowMenu, named for the workspace, behind its confirmation dialog.
+    const menuTrigger = host.querySelector<HTMLButtonElement>('button[aria-label="More actions for Example API"]');
+    expect(menuTrigger).not.toBeNull();
+    const rowButtons = [...host.querySelectorAll('.ledger-actions button')];
+    expect(rowButtons.map((button) => button.textContent)).not.toContain('Remove');
   });
 });
 
@@ -316,7 +325,9 @@ describe('HomePage cancelled-scan fallback and trajectory', () => {
     const delta = host.querySelector('.ledger-delta');
     expect(delta?.textContent).toBe('↓ 4 fixed · ↑ 1 new');
     expect(delta?.getAttribute('title')).toBe('Since the previous completed scan');
-    expect(delta?.className).toContain('--color-success-text'); // fixed > new → green tint
+    // The grade owns the row's color: the delta stays neutral ink even when
+    // fixes outnumber new findings (no green tint beside a red grade).
+    expect(delta?.className).not.toContain('--color-success');
   });
 
   it('keeps the honest ungraded row when a cancelled scan has no completed predecessor', async () => {
@@ -350,14 +361,16 @@ describe('HomePage cancelled-scan fallback and trajectory', () => {
     expect(host.querySelector('.ledger-delta')).toBeNull();
   });
 
-  it('tones the trajectory chip amber when new findings outnumber fixes', async () => {
+  it('keeps the trajectory chip neutral ink so the grade owns the color, even when risk rises', async () => {
     const host = await render(homeFetchMock(
       { scans: [], total: 0, summary },
       { items: [workspaceItem({ latest_scan: latestScan({ new_count: 3, fixed_count: 1 }) })] },
     ));
     const delta = host.querySelector('.ledger-delta');
     expect(delta?.textContent).toBe('↓ 1 fixed · ↑ 3 new');
-    expect(delta?.className).toContain('--color-warning-text');
+    expect(delta?.className).toContain('ledger-delta');
+    expect(delta?.className).not.toContain('--color-warning');
+    expect(delta?.className).not.toContain('--color-success');
   });
 
   it('pluralizes the hero line across the latest completed scans of several workspaces', async () => {
@@ -439,17 +452,19 @@ describe('HomePage risk board — activity feed', () => {
     expect(go).toHaveBeenCalledWith({ page: 'workspace', id: 'ws-1' });
   });
 
-  it('shows the empty feed state and a disabled quick scan when there are no scans', async () => {
+  it('shows the empty feed state and keeps the header scan primary available for the unscanned workspace', async () => {
     const host = await render(homeFetchMock(
       { scans: [], total: 0, summary: { ...summary, active_scans: 0 } },
       { items: [workspaceItem()] },
     ));
     expect(host.textContent).toContain('No scans yet');
     expect(host.querySelector('.empty .empty-icon svg')).not.toBeNull();
-    expect(host.querySelector('.verdict-rail .pulse-dot')).toBeNull();
-    const quickScan = findButton(host, 'Scan latest workspace');
-    expect(quickScan).toBeDefined();
-    expect(quickScan!.disabled).toBe(true);
+    expect(host.querySelector('.board-live')).toBeNull();
+    // A workspace exists even though it has never been scanned — the primary
+    // stays available and targets it, instead of disabling itself.
+    const runScan = findButton(host, 'Run scan');
+    expect(runScan).toBeDefined();
+    expect(runScan!.disabled).toBe(false);
   });
 });
 
@@ -473,13 +488,14 @@ describe('HomePage risk board — feed regressions', () => {
     expect(rows[0].querySelector('.feed-state.danger')?.textContent).toBe('Interrupted');
   });
 
-  it('shows an em dash instead of a zero count for scans that never finished', async () => {
+  it('shows no findings count for scans that never finished', async () => {
     const unfinished = scanItem({ id: 'scan-1', state: 'cancelled', total_findings: undefined, critical_count: 0, high_count: 0, medium_count: 0, low_count: 0 });
     const clean = scanItem({ id: 'scan-2', total_findings: 0, critical_count: 0, high_count: 0, medium_count: 0, low_count: 0 });
     const host = await render(homeFetchMock({ scans: [unfinished, clean], total: 2, summary }));
 
     const rows = host.querySelectorAll('.feed-list .feed-row');
-    expect(rows[0].querySelector('.feed-findings-text')?.textContent).toBe('—');
+    // Unfinished rows carry the state pill alone — a bare "—" reads like lost data.
+    expect(rows[0].querySelector('.feed-findings-text')).toBeNull();
     expect(rows[1].querySelector('.feed-findings-text')?.textContent).toBe('0 findings'); // a completed 0 stays 0
   });
 
@@ -522,6 +538,21 @@ describe('HomePage risk board — feed regressions', () => {
 });
 
 describe('HomePage quick actions', () => {
+  it('targets the header scan primary at the riskiest workspace and confirms by name', async () => {
+    const risky = workspaceItem({ id: 'ws-risky', name: 'Risky Core', latest_scan: latestScan({ id: 's-r', workspace_id: 'ws-risky', critical_count: 2, high_count: 0, medium_count: 0, low_count: 0, total_findings: 2 }) }); // 20 → C
+    const mild = workspaceItem({ id: 'ws-mild', name: 'Mild Web', latest_scan: latestScan({ id: 's-m', workspace_id: 'ws-mild', critical_count: 0, high_count: 0, medium_count: 0, low_count: 1, total_findings: 1 }) }); // 1 → A
+    const host = await render(homeFetchMock({ scans: [], total: 0, summary }, { items: [mild, risky] }));
+
+    // The page's one primary is the header's Run scan split-button…
+    const runScan = findButton(host, 'Run scan');
+    expect(runScan).toBeDefined();
+    expect(runScan!.disabled).toBe(false);
+    // …and it names its target: the riskiest workspace, not the mildest.
+    await act(async () => { runScan!.click(); });
+    const dialog = host.querySelector('dialog[open]');
+    expect(dialog?.textContent).toContain('Run standard scan on Risky Core?');
+  });
+
   it('starts a scan on the most recently scanned workspace after confirming it by name', async () => {
     const fetchMock = vi.fn((input: string, init?: RequestInit) => {
       if (input === '/api/v1/workspaces/ws-2/scans' && init?.method === 'POST') return Promise.resolve(json({ id: 'scan-new', workspace_id: 'ws-2', state: 'queued' }));
@@ -531,19 +562,19 @@ describe('HomePage quick actions', () => {
       return Promise.resolve(json({ items: [] }));
     });
     const host = await render(fetchMock);
-    // The button names its target once the latest workspace is known; the tooltip
-    // keeps explaining that "latest" means the most recently scanned one.
-    const quickScan = findButton(host, 'Scan Second Project');
-    expect(quickScan).toBeDefined();
-    expect(quickScan!.disabled).toBe(false);
-    expect(quickScan!.getAttribute('title')).toBe('Run a scan on the most recently scanned workspace');
+    // With no workspace list to rank, the header primary falls back to the most
+    // recently scanned workspace from the feed…
+    const runScan = findButton(host, 'Run scan');
+    expect(runScan).toBeDefined();
+    expect(runScan!.disabled).toBe(false);
 
-    // The click confirms first — nothing is posted until the dialog accepts.
-    await act(async () => { quickScan!.click(); });
+    // …and the split-button still confirms first — nothing is posted until the
+    // dialog accepts (one misclick cannot start a minutes-long job).
+    await act(async () => { runScan!.click(); });
     const dialog = host.querySelector('dialog[open]');
     expect(dialog?.textContent).toContain('Run standard scan on Second Project?');
     expect(fetchMock).not.toHaveBeenCalledWith('/api/v1/workspaces/ws-2/scans', expect.objectContaining({ method: 'POST' }));
-    const confirm = [...dialog!.querySelectorAll('button')].find((button) => button.textContent === 'Run scan');
+    const confirm = [...dialog!.querySelectorAll('button')].find((button) => button.textContent === 'Run standard scan');
     expect(confirm).toBeDefined();
     await act(async () => { confirm!.click(); await Promise.resolve(); await Promise.resolve(); });
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/workspaces/ws-2/scans', expect.objectContaining({ method: 'POST' }));
@@ -624,16 +655,16 @@ describe('HomePage workspace paths and languages', () => {
     expect(dots[2].style.background).not.toContain('#'); // unknown language falls back to the accent token
   });
 
-  it('caps ledger language chips at four plus an overflow count', async () => {
+  it('caps ledger language chips at three plus an overflow count', async () => {
     const many = ['python', 'typescript', 'go', 'rust', 'ruby', 'haskell', 'lua'];
     const host = await render(homeFetchMock(
       { scans: [], total: 0, summary },
       { items: [workspaceItem({ name: 'Polyglot', root_path: 'C:\\code\\poly', languages: many })] },
     ));
     const badges = [...host.querySelectorAll('.ledger-identity .badges li')];
-    expect(badges.map((badge) => badge.textContent)).toEqual(['Python', 'TypeScript', 'Go', 'Rust', '+3']);
-    const overflow = badges[4] as HTMLElement;
-    expect(overflow.title).toContain('Also detected: Ruby, Haskell, Lua');
+    expect(badges.map((badge) => badge.textContent)).toEqual(['Python', 'TypeScript', 'Go', '+4']);
+    const overflow = badges[3] as HTMLElement;
+    expect(overflow.title).toContain('Also detected: Rust, Ruby, Haskell, Lua');
   });
 
   it('tones completed_with_warnings as a warning and labels it in sentence case', async () => {

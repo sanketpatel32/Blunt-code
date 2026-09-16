@@ -4,7 +4,7 @@ import '../css/history.css';
 import type { Scan } from '../types';
 import type { Route } from '../lib/router';
 import { isTerminalScanState } from '../lib/scanEvents';
-import { analyzerName, compactDuration, date, relativeTime, scanStateDisplay } from '../lib/format';
+import { analyzerName, compactDuration, count, date, relativeTime, scanStateDisplay } from '../lib/format';
 import { useLoad } from '../hooks/useLoad';
 import { Empty, ErrorPanel } from '../components/ui';
 import { ScanIcon } from '../components/icons';
@@ -12,6 +12,7 @@ import { SkeletonTable } from '../components/skeletons';
 import { ComparePanel } from '../components/ComparePanel';
 import { WorkspaceContextSidebar } from '../components/WorkspaceContext';
 import { PageHeader } from '../components/PageHeader';
+import { RowMenu, type RowMenuItem } from '../components/RowMenu';
 import { Badge } from '../components/ui/badge';
 
 function useDateFilter() {
@@ -94,12 +95,12 @@ export function HistoryPage({ workspaceId, go }: { workspaceId: string; go: (r: 
   }, [workspaceId, dateFilter.from, dateFilter.to]);
   const filtering = dateFilter.hasFilter;
   const view = filtering ? allPages : state;
-  // With a filter active the badge and counter report the number of MATCHES
-  // across the whole history; the count line under the table keeps the full
-  // workspace total for context ("Showing 1–1 of 16 scans").
-  const totalScans = filtering
-    ? (allPages.data?.items ?? []).filter((s) => scanMatchesDateRange(s, dateFilter.from, dateFilter.to)).length
-    : state.data?.total ?? state.data?.items?.length ?? 0;
+  // The toolbar count is the ONE place this screen reports "how many scans":
+  // with a filter active it reports MATCHES across the whole history ("3 of 8
+  // scans"); without one, the workspace total. No badge, no repeated chips.
+  const fullTotal = state.data?.total ?? state.data?.items?.length ?? 0;
+  const filteredTotal = filtering ? (allPages.data?.items ?? []).filter((s) => scanMatchesDateRange(s, dateFilter.from, dateFilter.to)).length : fullTotal;
+  const countLine = !view.data ? '' : filtering && fullTotal !== filteredTotal ? `${count(filteredTotal)} of ${count(fullTotal)} scans` : `${count(filteredTotal)} ${filteredTotal === 1 ? 'scan' : 'scans'}`;
   const gotoPage = (next: number) => { setPage(next); syncPageParam(next); };
   useEffect(() => {
     if (state.data && state.data.items.length === 0 && state.data.total > 0 && page > 1) { setPage(1); syncPageParam(1); }
@@ -147,28 +148,26 @@ export function HistoryPage({ workspaceId, go }: { workspaceId: string; go: (r: 
   const compareSelecting = !!pair.a && !pair.b;
   const stripBaseId = pendingPartial?.id ?? pair.a;
   const stripBaseScan = pendingPartial ?? (pair.a ? knownScans.get(pair.a) : undefined);
-  // Rows always offer "Compare"; once a base is picked they swap to "with this".
-  // With the pair complete the panel is up, so the rows drop compare controls.
+  // Rows always offer "Compare with…" in the row menu; once a base is picked
+  // they swap to "Compare with this". With the pair complete the panel is up,
+  // so the rows drop compare controls entirely.
   const tableCompareProps = pair.b ? {} : pair.a ? { compareBaseId: pair.a, onComparePick } : { onComparePick };
   return (
     <div className="page workspace-page">
       <WorkspaceContextSidebar id={workspaceId} current={{ page: 'history', id: workspaceId }} onNavigate={go} />
       <div className="workspace-page-body">
-        <PageHeader
-          eyebrow="History"
-          title={workspace.data?.name ? `${workspace.data.name} — History` : 'Previous analyses'}
-          badge={view.data ? <Badge variant="secondary" className="text-xs font-mono tabular-nums">{totalScans} {totalScans === 1 ? 'scan' : 'scans'}</Badge> : undefined}
-          description="Every scan of this workspace — open a report or compare two scans to see what changed."
-        />
-        <div className="history-filter-bar">
-          <label className="history-filter-field"><span className="history-filter-label">From</span><span className="history-filter-input-wrap"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 9h18"/></svg><input type="date" value={dateFilter.from} onChange={(e)=>{dateFilter.setFrom(e.target.value); setPage(1); syncPageParam(1);}} className="history-filter-input" aria-label="Filter from date" /></span></label>
-          <label className="history-filter-field"><span className="history-filter-label">To</span><span className="history-filter-input-wrap"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 9h18"/></svg><input type="date" value={dateFilter.to} onChange={(e)=>{dateFilter.setTo(e.target.value); setPage(1); syncPageParam(1);}} className="history-filter-input" aria-label="Filter to date" /></span></label>
-          {dateFilter.hasFilter && <button type="button" className="history-filter-clear" onClick={()=>{dateFilter.setFrom(''); dateFilter.setTo(''); setPage(1); syncPageParam(1);}} aria-label="Clear date filters">✕ Clear</button>}
-          <span className="history-filter-count tabular-nums" aria-live="polite">{view.data ? `${totalScans} scan${totalScans === 1 ? '' : 's'}` : ''}</span>
+        <PageHeader title={workspace.data?.name ? `${workspace.data.name} — History` : 'Scan history'} />
+        <div className="toolbar-row history-toolbar">
+          <div className="toolbar-filters">
+            <label className="history-filter-field"><span className="history-filter-label">From</span><span className="history-filter-input-wrap"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 9h18"/></svg><input type="date" value={dateFilter.from} onChange={(e)=>{dateFilter.setFrom(e.target.value); setPage(1); syncPageParam(1);}} className="history-filter-input" aria-label="Filter from date" /></span></label>
+            <label className="history-filter-field"><span className="history-filter-label">To</span><span className="history-filter-input-wrap"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 9h18"/></svg><input type="date" value={dateFilter.to} onChange={(e)=>{dateFilter.setTo(e.target.value); setPage(1); syncPageParam(1);}} className="history-filter-input" aria-label="Filter to date" /></span></label>
+            {dateFilter.hasFilter && <button type="button" className="history-filter-clear" onClick={()=>{dateFilter.setFrom(''); dateFilter.setTo(''); setPage(1); syncPageParam(1);}} aria-label="Clear date filters">✕ Clear</button>}
+          </div>
+          <span className="toolbar-meta history-count tabular-nums" aria-live="polite">{countLine}</span>
         </div>
         {(pendingPartial || compareSelecting) && stripBaseId && <CompareStrip baseId={stripBaseId} baseScan={stripBaseScan} pendingScan={pendingPartial} onCancel={cancelCompare} onAccept={acceptPartial} />}
         {pair.a && pair.b && <ComparePanel aId={pair.a} bId={pair.b} />}
-        {view.loading ? <SkeletonTable rows={6} cols={6} /> : view.error ? <ErrorPanel error={view.error} retry={view.reload} /> : filtering
+        {view.loading ? <SkeletonTable rows={6} cols={5} /> : view.error ? <ErrorPanel error={view.error} retry={view.reload} /> : filtering
           ? <HistoryTable scans={allPages.data?.items ?? []} go={go} paging={{ page: 1, pageSize: historyPageSize, total: allPages.data?.total ?? 0, hasNext: false, onPage: () => {}, filtered: true }} dateFrom={dateFilter.from} dateTo={dateFilter.to} {...tableCompareProps} />
           : <HistoryTable scans={state.data?.items ?? []} go={go} paging={{ page, pageSize: historyPageSize, total: state.data?.total ?? 0, hasNext: state.data?.has_next ?? false, onPage: gotoPage }} dateFrom={dateFilter.from} dateTo={dateFilter.to} {...tableCompareProps} />}
       </div>
@@ -176,7 +175,7 @@ export function HistoryPage({ workspaceId, go }: { workspaceId: string; go: (r: 
   );
 }
 
-/** Sticky instruction strip for compare selection mode. Names the base scan and points at the "with this" buttons; when a cancelled (partial) scan was picked, it swaps to an explicit "compare anyway" acceptance. The base scan is usually already in the table rows; if the selection came from a deep link pointing at another server page, it is fetched here. */
+/** Sticky instruction strip for compare selection mode. Names the base scan and points at the row menus; when a cancelled (partial) scan was picked, it swaps to an explicit "compare anyway" acceptance. The base scan is usually already in the table rows; if the selection came from a deep link pointing at another server page, it is fetched here. */
 function CompareStrip({ baseId, baseScan, pendingScan, onCancel, onAccept }: { baseId: string; baseScan?: Scan; pendingScan?: Scan; onCancel: () => void; onAccept: () => void }) {
   const loaded = useLoad(async (): Promise<Scan | undefined> => baseScan ?? ((await api.scan(baseId)) ?? undefined), [baseId, baseScan?.id]);
   const accepting = !!pendingScan;
@@ -186,7 +185,7 @@ function CompareStrip({ baseId, baseScan, pendingScan, onCancel, onAccept }: { b
       {accepting
         ? <p>The <strong>{date(pendingScan!.finished_at ?? pendingScan!.started_at)}</strong> scan is a partial scan (cancelled before every analyzer finished). Compare anyway?</p>
         : subject
-          ? <p>Comparing the <strong>{date(subject.finished_at ?? subject.started_at)}</strong> scan (<strong className="tabular-nums">{subject.total_findings ?? 0}</strong> findings) with… — pick a second scan below</p>
+          ? <p>Comparing the <strong>{date(subject.finished_at ?? subject.started_at)}</strong> scan (<strong className="tabular-nums">{subject.total_findings ?? 0}</strong> findings) with… — pick a second scan from a row's actions menu</p>
           : <p>Loading scan details…</p>}
       <div className="compare-strip-actions">
         {accepting && <button type="button" className="button secondary" onClick={onAccept}>Compare anyway</button>}
@@ -208,11 +207,12 @@ export interface HistoryPaging {
 }
 
 const historyPageSize = 6;
-const barSeverities = ['critical', 'high', 'medium', 'low'] as const;
-
 const DAY_MS = 86_400_000;
 export type HistoryBand = 'Today' | 'Yesterday' | 'This week' | 'Earlier';
 const bandOrder: HistoryBand[] = ['Today', 'Yesterday', 'This week', 'Earlier'];
+
+/** Short absolute stamp ("Sep 15, 14:05") shown beside a recent scan's relative time — chronology without stealing a second line. */
+const shortStamp = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 function startOfDay(time: number) {
   const day = new Date(time);
@@ -256,28 +256,41 @@ function findingsCounts(scan: Scan) {
   return { critical: scan.critical_count ?? 0, high: scan.high_count ?? 0, medium: scan.medium_count ?? 0, low: scan.low_count ?? 0 };
 }
 
-function segmentWidth(count: number, total: number) {
-  return `${Math.round((count * 1000) / total) / 10}%`;
-}
-
-/** Width style for a severity-bar segment; a nonzero segment also gets a 2px
- *  floor so small counts (4 critical in 11,228 findings) stay visible instead
- *  of rounding down to an invisible 0% sliver. */
-function segmentStyle(count: number, total: number) {
-  return { width: segmentWidth(count, total), minWidth: count > 0 ? 2 : undefined };
-}
-
 function hasMarkdownExport(scan: Scan) {
   return isTerminalScanState(scan.state) && (scan.total_findings ?? 0) > 0;
 }
 
+/** Downloads (or opens) an export by synthesizing the same anchor click the old inline links performed, so Content-Disposition handling stays identical. */
+function triggerDownload(href: string) {
+  const link = document.createElement('a');
+  link.href = href;
+  link.rel = 'noopener';
+  document.body.append(link);
+  link.click();
+  link.remove();
+}
+
+const severityOrder = ['critical', 'high', 'medium', 'low'] as const;
+
+/** The findings cell reads as severity-composed counts — colored numbers via the
+ *  severity tokens ("2 critical · 14 high"), zero buckets omitted — replacing the
+ *  old misaligned pill bar. When the API total exceeds the four categorized
+ *  buckets, the full total leads ("500 findings · 2 critical · 480 low"). */
 function FindingsCell({ scan }: { scan: Scan }) {
   const counts = findingsCounts(scan);
-  const barTotal = counts.critical + counts.high + counts.medium + counts.low;
-  const total = scan.total_findings ?? barTotal;
-  if (!total) return <span className="findings-zero tabular-nums">0</span>;
-  const breakdown = `${counts.critical} critical · ${counts.high} high · ${counts.medium} medium · ${counts.low} low`;
-  return <div className="findings-cell"><span className="findings-total tabular-nums">{total}</span>{barTotal > 0 ? <div className="severity-bar stacked severity-bar--pill" role="img" aria-label={breakdown} title={breakdown}>{barSeverities.filter((severity) => counts[severity] > 0).map((severity) => <i key={severity} className={`bar-${severity}`} style={segmentStyle(counts[severity], barTotal)} />)}</div> : <div className="severity-bar severity-bar--pill" role="img" aria-label={breakdown} title={breakdown} />}</div>;
+  const categorized = counts.critical + counts.high + counts.medium + counts.low;
+  const total = scan.total_findings ?? categorized;
+  // A scan that never finished has no meaningful zero — "0 findings" would read
+  // as scanned-and-clean; only finished scans may claim a clean sheet.
+  if (!total) return <span className="findings-zero tabular-nums">{scan.state === 'completed' || scan.state === 'completed_with_warnings' ? '0' : '—'}</span>;
+  return (
+    <span className="findings-inline tabular-nums" title={categorized > 0 ? `${counts.critical} critical · ${counts.high} high · ${counts.medium} medium · ${counts.low} low` : undefined}>
+      {total > categorized && <span className="findings-total">{count(total)}</span>}
+      {severityOrder.filter((severity) => counts[severity] > 0).map((severity) => (
+        <span key={severity} className={`findings-sev sev-${severity}`}>{count(counts[severity])} <em>{severity}</em></span>
+      ))}
+    </span>
+  );
 }
 
 /** Human labels for discovery's skip reasons (core.SkipCounts) — why files the
@@ -296,6 +309,28 @@ function skipCoverageSummary(skip?: Record<string, number>): string {
     .filter(([, n]) => n > 0)
     .map(([reason, n]) => `${n} ${SKIP_LABELS[reason] ?? reason.replaceAll('_', ' ')}`)
     .join(', ');
+}
+
+/** One visible control per row ("Open report", the forward action); everything
+ *  else — compare and the exports — lives in this overflow menu. */
+function scanRowMenuItems(scan: Scan, compareBaseId?: string, onComparePick?: (scan: Scan) => void): RowMenuItem[] {
+  const items: RowMenuItem[] = [];
+  if (onComparePick) {
+    if (!compareBaseId) {
+      if (isComparableScan(scan)) items.push({ label: 'Compare with…', onSelect: () => onComparePick(scan) });
+    } else if (scan.id !== compareBaseId && isComparableScan(scan)) {
+      items.push({ label: 'Compare with this', onSelect: () => onComparePick(scan) });
+    }
+  }
+  if (hasMarkdownExport(scan)) {
+    items.push(
+      { label: 'Export Markdown', onSelect: () => triggerDownload(api.markdownUrl(scan.id)) },
+      { label: 'Export JSON', onSelect: () => triggerDownload(api.exportUrl(scan.id, 'json')) },
+      { label: 'Export SARIF', onSelect: () => triggerDownload(api.exportUrl(scan.id, 'sarif')) },
+      { label: 'Export HTML', onSelect: () => triggerDownload(api.exportUrl(scan.id, 'html')) },
+    );
+  }
+  return items;
 }
 
 export function HistoryTable({ scans, go, paging, dateFrom, dateTo, compareBaseId, onComparePick }: { scans: Scan[]; go: (r: Route) => void; paging?: HistoryPaging; dateFrom?: string; dateTo?: string; compareBaseId?: string; onComparePick?: (scan: Scan) => void }) {
@@ -317,8 +352,8 @@ export function HistoryTable({ scans, go, paging, dateFrom, dateTo, compareBaseI
     return () => { el.removeEventListener('scroll', update); window.removeEventListener('resize', update); };
   }, [scans]);
   // Filtered mode: `scans` spans every server page and paging.filtered is set —
-  // show every match with no page controls, and let the count line report the
-  // filtered range against the full workspace total.
+  // show every match with no page controls, and let the toolbar count report
+  // the filtered range against the full workspace total.
   const filteredMode = !!paging?.filtered;
   const serverMode = !!paging && !filteredMode;
   const pageSize = serverMode ? paging!.pageSize : historyPageSize;
@@ -341,11 +376,17 @@ export function HistoryTable({ scans, go, paging, dateFrom, dateTo, compareBaseI
   // resets itself to 1.)
   if (dateFiltered.length === 0 && (dateFrom || dateTo)) return <Empty title="No scans match these dates" icon={<span style={{ display: 'grid', placeItems: 'center', width: 48, height: 48, color: 'var(--color-ink-faint)' }}><ScanIcon /></span>}>Try widening the range or clearing the date filters.</Empty>;
 
-  return <><div style={{ position: 'relative' }}><div ref={tableWrapRef} className="table-wrap history-table-wrap history-timeline overflow-x-auto overscroll-x-contain rounded-[var(--radius-card)] border border-[var(--color-rule-faint)] bg-[var(--color-surface)] shadow-[var(--shadow-card)]"><table><caption className="sr-only">Scan history for this workspace</caption><thead className="sticky top-0 z-[1] bg-[var(--color-surface-muted)]"><tr><th scope="col">Date</th><th scope="col">Status</th><th scope="col">Findings</th><th scope="col">Duration</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead><tbody>{historyDateBands(visibleScans).map(({ band, scans: banded }) => <Fragment key={band}><tr className="history-band-row"><th className="history-band" colSpan={6} scope="colgroup" data-count={String(banded.length)} data-date={band}>{band}</th></tr>{banded.map((scan) => {
+  return <><div style={{ position: 'relative' }}><div ref={tableWrapRef} className="table-wrap history-table-wrap history-timeline overflow-x-auto overscroll-x-contain rounded-[var(--radius-card)] border border-[var(--color-rule-faint)] bg-[var(--color-surface)] shadow-[var(--shadow-card)]"><table className="table-dense"><caption className="sr-only">Scan history for this workspace</caption><thead className="sticky top-0 z-[1] bg-[var(--color-surface-muted)]"><tr><th scope="col">Date</th><th scope="col">Status</th><th scope="col">Findings</th><th scope="col">Duration</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead><tbody>{historyDateBands(visibleScans).map(({ band, scans: banded }) => <Fragment key={band}><tr className="history-band-row"><th className="history-band" colSpan={5} scope="colgroup" data-count={String(banded.length)} data-date={band}>{band}</th></tr>{banded.map((scan) => {
     const stateDisplay = scanStateDisplay(scan.state);
     const tone = scan.id === scans[0].id ? scan.state === 'failed' ? 'row-danger' : scan.state === 'completed_with_warnings' ? 'row-warning' : '' : '';
     const isOpen = expanded.has(scan.id);
     const runs = scan.analyzer_runs ?? [];
-    return <Fragment key={scan.id}><tr className={[tone, isOpen ? 'is-expanded' : ''].filter(Boolean).join(' ') || undefined}><td title={date(scan.finished_at ?? scan.started_at)}><span className="history-date"><button type="button" className="history-disclose" aria-expanded={isOpen} aria-controls={`history-detail-${scan.id}`} aria-label={`${isOpen ? 'Hide' : 'Show'} details for the scan from ${relativeTime(scan.finished_at ?? scan.started_at)}`} onClick={() => toggleExpanded(scan.id)}><span className="disclose-arrow" aria-hidden="true">▸</span></button>{relativeTime(scan.finished_at ?? scan.started_at)}</span></td><td><div className="history-status"><Badge variant={stateDisplay.variant} className="whitespace-nowrap">{stateDisplay.label}</Badge>{scan.profile && <span className="badge profile-badge">{scan.profile}</span>}</div></td><td><FindingsCell scan={scan} /></td><td>{compactDuration(scan.duration_ms)}</td><td><div className="table-actions"><button type="button" className="text-button" onClick={() => go({ page: 'scan', id: scan.id })}>Open report</button>{onComparePick && !compareBaseId && isComparableScan(scan) && <button type="button" className="text-button" onClick={() => onComparePick(scan)}>Compare</button>}{onComparePick && compareBaseId && (scan.id === compareBaseId ? <span className="compare-base-tag">Base scan</span> : isComparableScan(scan) && <button type="button" className="text-button compare-pick" onClick={() => onComparePick(scan)}>with this</button>)}{hasMarkdownExport(scan) && <><a className="text-button" href={api.markdownUrl(scan.id)}>Export .md</a><a className="text-button" href={api.exportUrl(scan.id, 'sarif')}>SARIF</a><a className="text-button" href={api.exportUrl(scan.id, 'html')}>HTML</a><a className="text-button" href={api.exportUrl(scan.id, 'json')}>JSON</a></>}</div></td></tr>{isOpen && <tr className="history-detail-row"><td colSpan={6}><div className="history-detail" id={`history-detail-${scan.id}`}><dl className="history-detail-meta"><div><dt>Started</dt><dd>{date(scan.started_at)}</dd></div><div><dt>Finished</dt><dd>{date(scan.finished_at)}</dd></div>{scan.profile && <div><dt>Profile</dt><dd>{scan.profile}</dd></div>}</dl>{scan.snapshot && <p className="history-coverage">Selected {scan.snapshot.selected_file_count ?? 0} of {scan.snapshot.candidate_file_count ?? 0} candidate files{skipCoverageSummary(scan.snapshot.skip_counts) && <> — skipped {skipCoverageSummary(scan.snapshot.skip_counts)}</>}{(scan.snapshot.exclusions?.length ?? 0) > 0 && <> · {scan.snapshot.exclusions!.length} exclusion{scan.snapshot.exclusions!.length === 1 ? '' : 's'} in effect</>}</p>}{scan.error_summary && <div className="inline-warning">Warning: {scan.error_summary}</div>}{runs.length > 0 && <ul className="history-analyzers">{runs.map((run) => <li key={run.analyzer_id}><span>{analyzerName(run.analyzer_id)}</span><span className={`state ${run.status}`}>{run.status.replaceAll('_', ' ')}</span></li>)}</ul>}</div></td></tr>}</Fragment>;
-  })}</Fragment>)}</tbody></table></div>{scrollCue && <div aria-hidden="true" style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: '2.25rem', pointerEvents: 'none', borderRadius: '0 var(--radius-card) var(--radius-card) 0', background: 'linear-gradient(to right, transparent, var(--color-surface))' }} />}</div><nav className="history-pagination" aria-label="Scan history pagination"><span className="history-pagination-count tabular-nums">Showing <strong>{shownFrom}–{shownTo}</strong> of <strong>{windowTotal}</strong> scans</span>{!filteredMode && <div><button type="button" className="button secondary" onClick={() => serverMode ? paging!.onPage(paging!.page - 1) : setClientPage(currentPage - 1)} disabled={serverMode ? paging!.page <= 1 : currentPage === 0}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="14" height="14"><path d="M15 18 9 12l6-6" strokeLinecap="round" strokeLinejoin="round"/></svg>Previous</button><output aria-live="polite" className="tabular-nums">Page {serverMode ? paging!.page : currentPage + 1} of {pageCount}</output><button type="button" className="button secondary" onClick={() => serverMode ? paging!.onPage(paging!.page + 1) : setClientPage(currentPage + 1)} disabled={serverMode ? !paging!.hasNext : currentPage >= pageCount - 1}>Next<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="14" height="14"><path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round"/></svg></button></div>}</nav></>;
+    const stampValue = scan.finished_at ?? scan.started_at ?? '';
+    const stampTime = new Date(stampValue).getTime();
+    // Recent scans read "2 hours ago · Sep 15, 14:05"; older ones fall back to
+    // the absolute short date that relativeTime already produces by itself.
+    const showAbsDate = !Number.isNaN(stampTime) && Date.now() - stampTime >= 0 && Date.now() - stampTime < 7 * DAY_MS;
+    const menuItems = scanRowMenuItems(scan, compareBaseId, onComparePick);
+    return <Fragment key={scan.id}><tr className={[tone, isOpen ? 'is-expanded' : ''].filter(Boolean).join(' ') || undefined}><td title={date(stampValue)}><span className="history-date"><button type="button" className="history-disclose" aria-expanded={isOpen} aria-controls={`history-detail-${scan.id}`} aria-label={`${isOpen ? 'Hide' : 'Show'} details for the scan from ${relativeTime(stampValue)}`} onClick={() => toggleExpanded(scan.id)}><span className="disclose-arrow" aria-hidden="true">▸</span></button><span className="history-when"><span className="history-relative">{relativeTime(stampValue)}</span>{showAbsDate && <span className="history-abs">{shortStamp.format(stampTime)}</span>}</span></span></td><td><div className="history-status"><Badge variant={stateDisplay.variant} className="whitespace-nowrap">{stateDisplay.label}</Badge>{scan.profile && <span className="badge profile-badge">{scan.profile}</span>}</div></td><td><FindingsCell scan={scan} /></td><td>{compactDuration(scan.duration_ms)}</td><td><div className="table-actions history-actions"><button type="button" className="text-button" onClick={() => go({ page: 'scan', id: scan.id })}>Open report</button>{compareBaseId === scan.id && <span className="compare-base-tag">Base scan</span>}<RowMenu label={`Actions for scan ${scan.id}`} items={menuItems} /></div></td></tr>{isOpen && <tr className="history-detail-row"><td colSpan={5}><div className="history-detail" id={`history-detail-${scan.id}`}><dl className="history-detail-meta"><div><dt>Started</dt><dd>{date(scan.started_at)}</dd></div><div><dt>Finished</dt><dd>{date(scan.finished_at)}</dd></div>{scan.profile && <div><dt>Profile</dt><dd>{scan.profile}</dd></div>}</dl>{scan.snapshot && <p className="history-coverage">Selected {scan.snapshot.selected_file_count ?? 0} of {scan.snapshot.candidate_file_count ?? 0} candidate files{skipCoverageSummary(scan.snapshot.skip_counts) && <> — skipped {skipCoverageSummary(scan.snapshot.skip_counts)}</>}{(scan.snapshot.exclusions?.length ?? 0) > 0 && <> · {scan.snapshot.exclusions!.length} exclusion{scan.snapshot.exclusions!.length === 1 ? '' : 's'} in effect</>}</p>}{scan.error_summary && <div className="inline-warning">Warning: {scan.error_summary}</div>}{runs.length > 0 && <ul className="history-analyzers">{runs.map((run) => <li key={run.analyzer_id}><span>{analyzerName(run.analyzer_id)}</span><span className={`state ${run.status}`}>{run.status.replaceAll('_', ' ')}</span></li>)}</ul>}</div></td></tr>}</Fragment>;
+  })}</Fragment>)}</tbody></table></div>{scrollCue && <div aria-hidden="true" style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: '2.25rem', pointerEvents: 'none', borderRadius: '0 var(--radius-card) var(--radius-card) 0', background: 'linear-gradient(to right, transparent, var(--color-surface))' }} />}</div>{!filteredMode && <nav className="history-pagination" aria-label="Scan history pagination">{!paging && <span className="history-pagination-count tabular-nums">Showing <strong>{shownFrom}–{shownTo}</strong> of <strong>{windowTotal}</strong> scans</span>}<div><button type="button" className="button secondary" onClick={() => serverMode ? paging!.onPage(paging!.page - 1) : setClientPage(currentPage - 1)} disabled={serverMode ? paging!.page <= 1 : currentPage === 0}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="14" height="14"><path d="M15 18 9 12l6-6" strokeLinecap="round" strokeLinejoin="round"/></svg>Previous</button><output aria-live="polite" className="tabular-nums">Page {serverMode ? paging!.page : currentPage + 1} of {pageCount}</output><button type="button" className="button secondary" onClick={() => serverMode ? paging!.onPage(paging!.page + 1) : setClientPage(currentPage + 1)} disabled={serverMode ? !paging!.hasNext : currentPage >= pageCount - 1}>Next<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="14" height="14"><path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round"/></svg></button></div></nav>}</>;
 }

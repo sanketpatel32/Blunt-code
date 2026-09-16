@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import '../css/search.css';
+import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { api } from '../api';
 import type { SearchedFinding, Workspace } from '../types';
 import type { Route } from '../lib/router';
-import { analyzerName, findingLocation } from '../lib/format';
+import { analyzerName, findingLocation, friendlyFindingTitle, shortFindingLocation } from '../lib/format';
 import { useLoad } from '../hooks/useLoad';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { Empty, ErrorPanel } from '../components/ui';
@@ -23,7 +24,6 @@ import {
   Filter,
   SlidersHorizontal,
   ChevronDown,
-  ChevronRight,
   ShieldAlert,
   Zap,
   KeyRound,
@@ -56,9 +56,9 @@ const ANALYZERS = [
 ] as const;
 
 const SEARCH_COLUMNS = [
-  ['severity', 'Severity'],
-  ['finding', 'Finding & Rule'],
+  ['finding', 'Finding'],
   ['location', 'Location'],
+  ['severity', 'Severity'],
   ['actions', 'Actions'],
 ] as const;
 
@@ -66,6 +66,55 @@ const SEARCH_COLUMNS = [
 function findingActionLabel(finding: SearchedFinding) {
   const name = finding.title ?? finding.rule_id ?? 'finding';
   return `${finding.severity} ${name}${finding.relative_path ? ` in ${finding.relative_path}` : ''} — open quick look`;
+}
+
+/**
+ * Rule engines echo their own id as the message lead ("aws-access-token: Identified…")
+ * while the title already shows the id — rendering both gives "aws-access-token:
+ * aws-access-token: …". The page-local strip (lib/format is shared and frozen for
+ * this wave) drops the "${lead}: " prefix so the id never appears twice.
+ */
+function stripMessagePrefix(finding: Pick<SearchedFinding, 'title' | 'rule_id' | 'message'>): string {
+  const lead = finding.title || finding.rule_id;
+  const message = finding.message ?? '';
+  if (!lead) return message;
+  const prefix = `${lead}: `;
+  return message.startsWith(prefix) ? message.slice(prefix.length) : message;
+}
+
+/** The heading a result deserves: a real backend title wins; a title that merely
+ *  echoes the rule id is upgraded to the first clause of the prefix-stripped
+ *  message via the shared formatter, so an opaque id never leads a row. */
+function findingDisplayTitle(finding: Pick<SearchedFinding, 'title' | 'rule_id' | 'message'>): string {
+  const realTitle = finding.title && finding.title !== finding.rule_id ? finding.title : undefined;
+  return friendlyFindingTitle({ title: realTitle, rule_id: finding.rule_id, message: stripMessagePrefix(finding) });
+}
+
+/** Grouping key: consecutive results sharing rule + file collapse into one group. */
+function resultGroupKey(finding: SearchedFinding) {
+  return `${finding.rule_id ?? ''}\u0000${finding.relative_path ?? ''}`;
+}
+
+type SearchRow =
+  | { kind: 'single'; finding: SearchedFinding }
+  | { kind: 'group'; key: string; occurrences: SearchedFinding[] };
+
+/** Collapse consecutive same rule+file results into groups (client-side; the API
+ *  window is untouched). With 80k findings, six identical consecutive rows are
+ *  unusable — one header with an occurrence count plus deduped line lines reads. */
+function buildSearchRows(items: SearchedFinding[], grouped: boolean): SearchRow[] {
+  const rows: SearchRow[] = [];
+  for (const finding of items) {
+    const last = rows[rows.length - 1];
+    const key = resultGroupKey(finding);
+    if (grouped && last && (last.kind === 'group' ? last.key : resultGroupKey(last.finding)) === key) {
+      if (last.kind === 'group') last.occurrences.push(finding);
+      else rows[rows.length - 1] = { kind: 'group', key, occurrences: [last.finding, finding] };
+    } else {
+      rows.push({ kind: 'single', finding });
+    }
+  }
+  return rows;
 }
 
 function useSavedSearches() {
@@ -106,7 +155,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
   });
   const [analyzer, setAnalyzer] = useState(() => new URLSearchParams(window.location.search).get('analyzer') ?? '');
   const [workspace, setWorkspace] = useState(() => new URLSearchParams(window.location.search).get('workspace') ?? '');
-  const [visibleCols, setVisibleCols] = useState({ severity: true, finding: true, location: true, actions: true });
+  const [visibleCols, setVisibleCols] = useState({ finding: true, location: true, severity: true, actions: true });
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('table');
   const [selectedFinding, setSelectedFinding] = useState<SearchedFinding | null>(null);
 
@@ -210,7 +259,6 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
   }, [severities, analyzer, workspace, query]);
 
   const state = useLoad(() => api.searchFindings(params), [params.q, params.severity, params.analyzer, params.page, params.page_size, params.workspace_id]);
-  const hiddenColumnCount = SEARCH_COLUMNS.filter(([key]) => !visibleCols[key as keyof typeof visibleCols]).length;
   const items = state.data?.items ?? [];
   const total = state.data?.total ?? 0;
   const actualPageSize = state.data?.page_size ?? pageSize;
@@ -241,11 +289,40 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
     setSelectedFinding(finding);
   };
 
+  /** Navigate to the finding's originating scan report (the one visible row action). */
+  const openReport = (event: ReactMouseEvent, finding: SearchedFinding) => {
+    event.preventDefault();
+    event.stopPropagation();
+    go({ page: 'scan', id: finding.scan_id });
+  };
+
   // Severity facet counts: the API's `severity_counts` totals every matched
   // finding across the whole result set. Legacy payloads omit the field —
   // counting only this page's rows would read as authoritative ("High 0" against
   // 77k matches), so the badges are omitted instead.
   const severityCounts = state.data?.severity_counts as Record<string, number> | undefined;
+
+  // Analyzer facet counts have no server facet; the served page is the only
+  // honest source, so chips carry page-local counts and say so in the facet
+  // title. Zero only ever means "not on this page" — never "no matches" — so
+  // zero chips dim but stay clickable.
+  const analyzerPageCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const finding of items) counts[finding.analyzer_id] = (counts[finding.analyzer_id] ?? 0) + 1;
+    return counts;
+  }, [items]);
+
+  // Rule+file grouping: defaults on when this page holds consecutive duplicates;
+  // null means "follow the default" so a fresh result set re-decides.
+  const [grouping, setGrouping] = useState<boolean | null>(null);
+  const hasDuplicates = useMemo(() => {
+    for (let i = 1; i < items.length; i++) {
+      if (resultGroupKey(items[i]) === resultGroupKey(items[i - 1])) return true;
+    }
+    return false;
+  }, [items]);
+  const grouped = grouping ?? hasDuplicates;
+  const rows = useMemo(() => buildSearchRows(items, grouped), [items, grouped]);
 
   const activeFiltersCount = useMemo(() => {
     let count = 0;
@@ -361,45 +438,39 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
         </div>
       </div>
 
-      {/* Analyzer Engines */}
+      {/* Analyzer engines — shared .chip styling (state via aria-pressed), page-local
+          counts. Zero-count engines are omitted, not dimmed: a page-local "0" chip is
+          an unusable filter presented as noise; the facet hint keeps counts honest. */}
       <div className="facet-section">
         <div className="flex items-center justify-between">
-          <p className="facet-title text-xs font-semibold uppercase tracking-wider text-[var(--color-ink-faint)]">Engine / Analyzer</p>
+          <p className="facet-title text-xs font-semibold uppercase tracking-wider text-[var(--color-ink-faint)]">
+            Engine <span className="search-facet-hint">· this page</span>
+          </p>
           {analyzer && (
             <button type="button" onClick={() => setAnalyzer('')} className="text-[11px] text-[var(--color-accent-strong)] hover:underline">
               All
             </button>
           )}
         </div>
-        <fieldset className="chip-group mt-2 flex flex-wrap gap-1.5" aria-label="Filter by analyzer">
-          <button
-            type="button"
-            className={`chip text-[11px] px-2.5 py-1 rounded-full border transition-all ${
-              analyzer === ''
-                ? 'bg-[var(--color-accent)] text-[var(--color-accent-ink)] border-[var(--color-accent)] font-semibold'
-                : 'border-[var(--color-rule-faint)] bg-[var(--color-surface-muted)] text-[var(--color-ink-soft)] hover:text-[var(--color-ink)]'
-            }`}
-            aria-pressed={analyzer === ''}
-            onClick={() => setAnalyzer('')}
-          >
+        <fieldset className="chip-group mt-2" aria-label="Filter by analyzer">
+          <button type="button" className="chip" aria-pressed={analyzer === ''} onClick={() => setAnalyzer('')}>
             All engines
           </button>
-          {ANALYZERS.map((id) => {
+          {/* The active selection stays visible even at zero so the current filter
+              is always legible. */}
+          {ANALYZERS.filter((id) => (analyzerPageCounts[id] ?? 0) > 0 || analyzer === id).map((id) => {
             const meta = analyzerMeta(id);
-            const isSelected = analyzer === id;
+            const count = analyzerPageCounts[id] ?? 0;
             return (
               <button
                 key={id}
                 type="button"
-                className={`chip text-[11px] px-2.5 py-1 rounded-full border transition-all ${
-                  isSelected
-                    ? 'bg-[var(--color-accent)] text-[var(--color-accent-ink)] border-[var(--color-accent)] font-semibold'
-                    : 'border-[var(--color-rule-faint)] bg-[var(--color-surface-muted)] text-[var(--color-ink-soft)] hover:text-[var(--color-ink)]'
-                }`}
-                aria-pressed={isSelected}
+                className="chip search-engine-chip"
+                aria-pressed={analyzer === id}
                 onClick={() => setAnalyzer(id)}
               >
                 {meta?.displayName ?? analyzerName(id)}
+                <small className="chip-count">{count}</small>
               </button>
             );
           })}
@@ -462,12 +533,30 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
     </div>
   );
 
+  /** Rule tag next to a display title — skipped when the title already is the
+   *  rule id (or leads with it), so one row never renders the id twice. */
+  const ruleTagFor = (finding: SearchedFinding, title: string) =>
+    finding.rule_id && finding.rule_id !== title ? (
+      <code className="tag" key="rule">
+        <span>{finding.rule_id}</span>
+      </code>
+    ) : null;
+
+  const visibleColCount = Math.max(1, Object.values(visibleCols).filter(Boolean).length);
+
+  /** One visible action per row: "Open" jumps to the finding's scan report.
+   *  Everything else (quick look) stays on the row click / keyboard. */
+  const openLink = (finding: SearchedFinding) => (
+    <a href={`/scans/${finding.scan_id}`} className="search-row-open" onClick={(event) => openReport(event, finding)}>
+      Open
+    </a>
+  );
+
   return (
-    <div className="page search-page space-y-3">
+    <div className="page page-search search-page space-y-3">
       <PageHeader
         eyebrow="Findings Search"
         title="Search findings"
-        badge={total > 0 ? <Badge variant="secondary" className="text-xs font-mono tabular-nums">{total.toLocaleString()} matches</Badge> : undefined}
         description="Searches every stored scan on this computer. Suppressed findings stay hidden."
         actions={
           <>
@@ -592,21 +681,21 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
 
         {/* Results Area */}
         <div className="search-main space-y-4 min-w-0">
-          {/* Controls Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-[var(--color-rule-faint)]">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-[var(--color-ink)] tabular-nums">
-                {state.loading ? 'Searching…' : `${total.toLocaleString()} ${total === 1 ? 'finding match' : 'findings matched'}`}
-              </span>
+          {/* Result toolbar: filters left, the single grounded count right. The
+              matched total renders exactly once on this screen — here. */}
+          <div className="toolbar-row">
+            <div className="toolbar-filters">
               {total > 0 && (
-                <span className="text-xs text-[var(--color-ink-faint)]">
-                  (Showing {first + 1}–{Math.min(first + items.length, total)})
-                </span>
+                <button
+                  type="button"
+                  className="chip"
+                  aria-pressed={grouped}
+                  title="Collapse consecutive results that share a rule and file"
+                  onClick={() => setGrouping(!grouped)}
+                >
+                  Group by rule + file
+                </button>
               )}
-            </div>
-
-            <div className="flex items-center gap-2">
-              {/* View Switcher */}
               <div className="segmented inline-flex items-center rounded-[var(--radius-button)] border border-[var(--color-rule)] bg-[var(--color-surface-muted)] p-0.5" role="group" aria-label="View mode">
                 <button
                   type="button"
@@ -638,7 +727,6 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                   <summary className="search-columns-toggle flex items-center gap-1 px-2.5 py-1 rounded-[var(--radius-button)] border border-[var(--color-rule-faint)] bg-[var(--color-surface)] cursor-pointer text-[var(--color-ink-soft)] hover:text-[var(--color-ink)]">
                     <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
                     <span>Columns</span>
-                    {hiddenColumnCount > 0 && <small className="text-[var(--color-warning)]">({hiddenColumnCount} hidden)</small>}
                   </summary>
                   <div className="search-columns-panel absolute right-0 mt-1.5 w-44 rounded-[var(--radius-md)] border border-[var(--color-rule)] bg-[var(--color-surface)] p-2 shadow-lg z-20 space-y-1">
                     {SEARCH_COLUMNS.map(([key, label]) => (
@@ -661,6 +749,10 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                 </details>
               )}
             </div>
+
+            <span className="toolbar-meta tabular-nums" aria-live="polite">
+              {state.loading ? 'Searching…' : total > 0 ? `Showing ${first + 1}–${Math.min(first + items.length, total)} of ${total.toLocaleString()}` : 'No matches'}
+            </span>
           </div>
 
           {/* Results List / Table */}
@@ -696,10 +788,12 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
               </Empty>
             )
           ) : viewMode === 'cards' ? (
-            /* Cards View */
+            /* Cards View — title leads, message de-duplicated, one quiet action. */
             <div className="grid gap-2.5">
               {items.map((finding: SearchedFinding) => {
                 const meta = analyzerMeta(finding.analyzer_id);
+                const title = findingDisplayTitle(finding);
+                const message = stripMessagePrefix(finding);
                 return (
                   <Card
                     key={`${finding.scan_id}:${finding.id}`}
@@ -716,22 +810,20 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                           <span className={`severity ${finding.severity} text-[10px] uppercase font-mono px-2 py-0.5 rounded font-semibold`}>
                             {finding.severity}
                           </span>
-                          <span className="font-mono text-xs font-semibold text-[var(--color-ink)] truncate">
-                            {findingLocation(finding)}
+                          <span className="tag">
+                            <span title={findingLocation(finding)}>{shortFindingLocation(finding)}</span>
                           </span>
-                          {finding.rule_id && (
-                            <Badge variant="outline" className="text-[10px] font-mono">
-                              {finding.rule_id}
-                            </Badge>
-                          )}
-                          <Badge variant="secondary" className="text-[10px]">
-                            {meta?.displayName ?? analyzerName(finding.analyzer_id)}
-                          </Badge>
+                          {ruleTagFor(finding, title)}
+                          <span className="tag">
+                            <span>{meta?.displayName ?? analyzerName(finding.analyzer_id)}</span>
+                          </span>
                         </div>
-                        <p className="text-xs text-[var(--color-ink)] leading-relaxed">
-                          {finding.title && <strong className="block text-sm font-semibold">{finding.title}</strong>}
-                          {finding.message}
-                        </p>
+                        <strong className="block text-sm font-semibold text-[var(--color-ink)] truncate" title={message}>
+                          {title}
+                        </strong>
+                        {message && message !== title && (
+                          <p className="text-xs text-[var(--color-ink-soft)] leading-relaxed line-clamp-2">{message}</p>
+                        )}
                         {finding.remediation && (
                           <p className="text-[11px] text-[var(--color-ink-soft)] bg-[var(--color-surface-muted)] p-2 rounded-[var(--radius-sm)] font-mono truncate">
                             <span className="font-semibold text-[var(--color-ink)]">Fix: </span>
@@ -740,103 +832,139 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                         )}
                       </div>
 
-                      <div className="flex flex-col items-end gap-2 shrink-0">
-                        <a
-                          href={`/scans/${finding.scan_id}`}
-                          onClick={(event) => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            go({ page: 'scan', id: finding.scan_id });
-                          }}
-                          className="button primary text-xs h-7 px-2.5 gap-1"
-                        >
-                          Open report <ChevronRight className="h-3 w-3" />
-                        </a>
-                      </div>
+                      <div className="flex flex-col items-end gap-2 shrink-0">{openLink(finding)}</div>
                     </div>
                   </Card>
                 );
               })}
             </div>
           ) : (
-            /* Table View */
+            /* Table View — dense single-line rows; consecutive same rule+file
+               results collapse into a group header with deduped occurrence lines. */
             <div className="table-wrap overflow-x-auto rounded-[var(--radius-md)] border border-[var(--color-rule-faint)] bg-[var(--color-surface)]">
-              <table className="search-results w-full text-left text-xs">
+              <table className="search-results table-dense w-full text-left">
                 <caption className="sr-only">Global search results</caption>
-                <thead className="sticky top-0 z-[1] bg-[var(--color-surface-muted)] border-b border-[var(--color-rule)]">
+                <colgroup>
+                  {visibleCols.finding && <col />}
+                  {visibleCols.location && <col className="search-col-location" />}
+                  {visibleCols.severity && <col className="search-col-severity" />}
+                  {visibleCols.actions && <col className="search-col-actions" />}
+                </colgroup>
+                <thead>
                   <tr>
-                    {visibleCols.severity && <th scope="col" className="py-2.5 px-3 font-semibold text-[var(--color-ink)]">Severity</th>}
-                    {visibleCols.finding && <th scope="col" className="py-2.5 px-3 font-semibold text-[var(--color-ink)]">Finding &amp; Rule</th>}
-                    {visibleCols.location && <th scope="col" className="py-2.5 px-3 font-semibold text-[var(--color-ink)]">Location</th>}
+                    {visibleCols.finding && <th scope="col">Finding</th>}
+                    {visibleCols.location && <th scope="col">Location</th>}
+                    {visibleCols.severity && <th scope="col" className="search-cell-severity">Severity</th>}
                     {visibleCols.actions && (
-                      <th scope="col" className="py-2.5 px-3 font-semibold text-[var(--color-ink)] text-right">
+                      <th scope="col" className="search-cell-action">
                         <span className="sr-only">Actions</span>
                       </th>
                     )}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[var(--color-rule-faint)]">
-                  {items.map((finding: SearchedFinding) => (
-                    <tr
-                      key={`${finding.scan_id}:${finding.id}`}
-                      className="hover:bg-[var(--color-surface-muted)] transition-colors cursor-pointer"
-                      tabIndex={0}
-                      aria-label={findingActionLabel(finding)}
-                      onClick={() => setSelectedFinding(finding)}
-                      onKeyDown={(event) => openFromKeyboard(event, finding)}
-                    >
-                      {visibleCols.severity && (
-                        <td className="py-2.5 px-3 align-top">
-                          <span className={`severity ${finding.severity} text-[10px] uppercase font-mono px-2 py-0.5 rounded font-semibold`}>
-                            {finding.severity}
-                          </span>
-                        </td>
-                      )}
-                      {visibleCols.finding && (
-                        <td className="finding-summary py-2.5 px-3 align-top space-y-1 max-w-md">
-                          {finding.title ? <strong className="block font-semibold text-[var(--color-ink)]">{finding.title}</strong> : null}
-                          <span className="text-[var(--color-ink)] line-clamp-2">{finding.message}</span>
-                          <div className="flex items-center gap-1.5 pt-0.5">
-                            {finding.rule_id ? <code className="badge text-[10px]">{finding.rule_id}</code> : null}
-                            <span className="text-[10px] text-[var(--color-ink-faint)]">
-                              via {analyzerName(finding.analyzer_id)}
+                <tbody>
+                  {rows.map((row) => {
+                    if (row.kind === 'single') {
+                      const finding = row.finding;
+                      const title = findingDisplayTitle(finding);
+                      return (
+                        <tr
+                          key={`${finding.scan_id}:${finding.id}`}
+                          className="search-row"
+                          tabIndex={0}
+                          aria-label={findingActionLabel(finding)}
+                          title={stripMessagePrefix(finding)}
+                          onClick={() => setSelectedFinding(finding)}
+                          onKeyDown={(event) => openFromKeyboard(event, finding)}
+                        >
+                          {visibleCols.finding && (
+                            <td className="search-cell-finding">
+                              <span className="search-finding-line">
+                                <span className="search-finding-title">{title}</span>
+                                {ruleTagFor(finding, title)}
+                              </span>
+                            </td>
+                          )}
+                          {visibleCols.location && (
+                            <td className="search-cell-location">
+                              <span className="tag">
+                                <span title={findingLocation(finding)}>{shortFindingLocation(finding)}</span>
+                              </span>
+                            </td>
+                          )}
+                          {visibleCols.severity && (
+                            <td className="search-cell-severity">
+                              <span className={`severity ${finding.severity} text-[10px] uppercase font-mono px-2 py-0.5 rounded font-semibold`}>
+                                {finding.severity}
+                              </span>
+                            </td>
+                          )}
+                          {visibleCols.actions && <td className="search-cell-action">{openLink(finding)}</td>}
+                        </tr>
+                      );
+                    }
+                    const head = row.occurrences[0];
+                    const title = findingDisplayTitle(head);
+                    // Occurrences of one rule in one file differ only by line; show
+                    // each line once, in order, instead of N near-identical rows.
+                    const seenLines = new Set<string>();
+                    const lines = row.occurrences.filter((f) => {
+                      const label = f.start_line ? `Line ${f.start_line}` : findingLocation(f);
+                      if (seenLines.has(label)) return false;
+                      seenLines.add(label);
+                      return true;
+                    });
+                    return (
+                      <Fragment key={`group:${row.key}:${head.scan_id}:${head.id}`}>
+                        <tr
+                          className="search-group-row"
+                          tabIndex={0}
+                          aria-label={`${title} — ${row.occurrences.length} occurrences in ${head.relative_path ?? 'project'} — open quick look`}
+                          onClick={() => setSelectedFinding(head)}
+                          onKeyDown={(event) => openFromKeyboard(event, head)}
+                        >
+                          <td colSpan={visibleColCount}>
+                            <span className="search-group-line">
+                              <span className={`search-group-dot sev-${head.severity}`} aria-hidden="true" />
+                              <span className="search-group-title">{title}</span>
+                              {ruleTagFor(head, title)}
+                              <span className="tag">
+                                <span title={head.relative_path ?? undefined}>{head.relative_path ?? 'Project-level'}</span>
+                              </span>
+                              <span className="search-group-count">
+                                {row.occurrences.length} occurrence{row.occurrences.length === 1 ? '' : 's'}
+                              </span>
+                              {openLink(head)}
                             </span>
-                          </div>
-                        </td>
-                      )}
-                      {visibleCols.location && (
-                        <td className="py-2.5 px-3 align-top font-mono text-[11px] text-[var(--color-ink-soft)]">
-                          <code>{findingLocation(finding)}</code>
-                        </td>
-                      )}
-                      {visibleCols.actions && (
-                        <td className="py-2.5 px-3 align-top text-right">
-                          <a
-                            href={`/scans/${finding.scan_id}`}
-                            onClick={(event) => {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              go({ page: 'scan', id: finding.scan_id });
-                            }}
-                            className="inline-flex items-center gap-1 text-xs font-medium text-[var(--color-accent-strong)] hover:underline whitespace-nowrap"
+                          </td>
+                        </tr>
+                        {lines.map((finding) => (
+                          <tr
+                            key={`${finding.scan_id}:${finding.id}`}
+                            className="search-occurrence-row"
+                            tabIndex={0}
+                            aria-label={findingActionLabel(finding)}
+                            title={stripMessagePrefix(finding)}
+                            onClick={() => setSelectedFinding(finding)}
+                            onKeyDown={(event) => openFromKeyboard(event, finding)}
                           >
-                            Open report
-                          </a>
-                        </td>
-                      )}
-                    </tr>
-                  ))}
+                            <td colSpan={visibleColCount}>
+                              <span className="search-occurrence">{finding.start_line ? `Line ${finding.start_line}` : findingLocation(finding)}</span>
+                            </td>
+                          </tr>
+                        ))}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           )}
 
-          {/* Pagination */}
+          {/* Pagination — the window range lives in the toolbar meta; the nav
+              carries only movement, so the matched total is never rendered twice. */}
           {total > 0 && (
-            <nav className="findings-pagination flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[var(--color-rule-faint)]" aria-label="Search result pagination">
-              <span className="text-xs text-[var(--color-ink-soft)]">
-                Showing {total === 0 ? 0 : first + 1}–{Math.min(first + items.length, total)} of {total}
-              </span>
+            <nav className="findings-pagination flex flex-wrap items-center justify-end gap-3 pt-3 border-t border-[var(--color-rule-faint)]" aria-label="Search result pagination">
               <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
@@ -847,7 +975,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                 >
                   Previous
                 </Button>
-                <output aria-live="polite" className="text-xs font-semibold px-2">
+                <output aria-live="polite" className="text-xs font-semibold px-2 tabular-nums">
                   Page {page}
                 </output>
                 <Button
@@ -875,13 +1003,13 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                   <span className={`severity ${selectedFinding.severity} text-[10px] uppercase font-mono px-2 py-0.5 rounded font-semibold`}>
                     {selectedFinding.severity}
                   </span>
-                  <Badge variant="outline" className="text-[10px] font-mono">
-                    {selectedFinding.rule_id}
-                  </Badge>
+                  {selectedFinding.rule_id && selectedFinding.rule_id !== findingDisplayTitle(selectedFinding) && (
+                    <Badge variant="outline" className="text-[10px] font-mono">
+                      {selectedFinding.rule_id}
+                    </Badge>
+                  )}
                 </div>
-                <SheetTitle className="text-base mt-2">
-                  {selectedFinding.title || selectedFinding.rule_id || 'Finding Details'}
-                </SheetTitle>
+                <SheetTitle className="text-base mt-2">{findingDisplayTitle(selectedFinding)}</SheetTitle>
                 <SheetDescription className="font-mono text-xs text-[var(--color-ink-soft)]">
                   {findingLocation(selectedFinding)}
                 </SheetDescription>
@@ -891,7 +1019,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                 <div>
                   <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--color-ink-faint)]">Diagnostic Message</h4>
                   <p className="mt-1 text-xs text-[var(--color-ink)] leading-relaxed bg-[var(--color-surface-muted)] p-3 rounded-[var(--radius-sm)]">
-                    {selectedFinding.message}
+                    {stripMessagePrefix(selectedFinding)}
                   </p>
                 </div>
 

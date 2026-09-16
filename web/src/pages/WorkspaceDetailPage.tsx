@@ -9,7 +9,7 @@ import { analyzerName, date, languageColor } from '../lib/format';
 import { useLoad } from '../hooks/useLoad';
 import { Empty, ErrorPanel, LanguageBadges, Loading } from '../components/ui';
 import { ScanIcon } from '../components/icons';
-import { SkeletonCards, SkeletonTable } from '../components/skeletons';
+import { SkeletonCards, SkeletonLines, SkeletonTable } from '../components/skeletons';
 import { SeverityTrendSection } from '../components/SeverityTrendChart';
 import { SuppressionsSection } from '../components/SuppressionsPanel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
@@ -19,7 +19,8 @@ import { HistoryTable } from './HistoryPage';
 import { analyzerMeta, categoryColor, CATEGORY_LABELS } from '../lib/analyzerCatalog';
 import { languageCoverageFromSnapshot, severityCountsFromSummary, sparkSeries, trendPointsFromScans, type LanguageCoverage } from '../lib/chartData';
 import { useReducedMotion } from '../hooks/useReducedMotion';
-import { Sparkles, Copy, Check, ShieldAlert, BarChart3, AlertTriangle, Layers, FileSearch, ShieldCheck, Bug } from 'lucide-react';
+import { Copy, Check, ShieldAlert, BarChart3, AlertTriangle, Layers, FileSearch, ShieldCheck, ArrowDown, ArrowUp, FileText, FileDown, Settings2, Eraser, Trash2 } from 'lucide-react';
+import { RowMenu, type RowMenuItem } from '../components/RowMenu';
 import { ScanActionDropdown } from '../components/ScanActionDropdown';
 import { PreScanSummary } from '../components/PreScanSummary';
 import { PageHeader } from '../components/PageHeader';
@@ -94,7 +95,6 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
   const coverage = languageCoverageFromSnapshot(latest?.snapshot);
   // Confetti celebrates a fresh completed run — a cancelled one is not a milestone.
   const isCompleted = isCompletedState(rawLatest?.state);
-  async function start() { try { const scan = await api.startScan(id, profile); go({ page: 'scan', id: scan.id }); } catch (e) { notify({ kind: 'error', text: message(e) }); } }
   function copyPath() {
     const p = workspace.data?.root_path ?? '';
     if (!p) return;
@@ -110,20 +110,35 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
   if (!item) return <div className="page"><Loading /></div>;
   // Null (not 0) when nothing has completed: an unscanned workspace must not read as "all clear".
   const criticalHigh = latest ? (latest.critical_count ?? 0) + (latest.high_count ?? 0) : null;
+  // Design contract: Run scan is the page's one visible primary; every other
+  // action folds into this overflow menu, destructive Remove last. Navigation
+  // is not duplicated here — the sidebar owns Overview / Pentest / Files / History.
+  const workspaceMenu: RowMenuItem[] = [
+    { label: 'View last report', icon: <FileText className="h-4 w-4" />, disabled: !latest, onSelect: () => { if (latest) go({ page: 'scan', id: latest.id }); } },
+    ...(latest ? [{ label: 'Export Markdown', icon: <FileDown className="h-4 w-4" />, onSelect: () => { window.location.href = api.markdownUrl(latest.id); } }] : []),
+    { label: 'Workspace settings', icon: <Settings2 className="h-4 w-4" />, onSelect: openSettings },
+    { label: 'Prune scan history…', icon: <Eraser className="h-4 w-4" />, onSelect: () => setPruneOpen(true) },
+    { label: 'Remove workspace', icon: <Trash2 className="h-4 w-4" />, tone: 'danger', onSelect: () => setDeleteOpen(true) },
+  ];
   return <div className="page workspace-page"><WorkspaceContextSidebar id={id} current={{ page: 'workspace', id }} onNavigate={go} /><div className="workspace-page-body">
-    {/* 1 · Identify — who this is. Clean unified PageHeader. */}
+    {/* 1 · Identify + Act — one PageHeader row: who this is on the left, the
+        single primary (Run scan) and the overflow menu on the right. */}
     <PageHeader
       eyebrow="Workspace"
       title={item.name}
       badge={
         item.languages?.length ? (
           <div className="workspace-lang-dots flex items-center gap-1.5 flex-wrap" aria-label="Detected languages">
-            {item.languages.map((lang) => (
+            {/* Color is signal: at most three language dots on the page — the
+                rest fold into one neutral tag (full list on hover, and for
+                screen readers via the sr-only badges). */}
+            {item.languages.slice(0, 3).map((lang) => (
               <span key={lang} className="ws-lang-dot text-xs flex items-center gap-1 px-2 py-0.5 rounded-[var(--radius-xs)] bg-[var(--color-surface-muted)] border border-[var(--color-rule-faint)] text-[var(--color-ink-soft)] font-mono">
                 <i className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: languageColor(lang) }} />
                 {lang}
               </span>
             ))}
+            {item.languages.length > 3 && <span className="tag" title={`Also: ${item.languages.slice(3).join(', ')}`}>+{item.languages.length - 3} more</span>}
             <span className="sr-only"><LanguageBadges languages={item.languages} /></span>
           </div>
         ) : (
@@ -146,26 +161,19 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
           )}
         </div>
       }
+      actions={
+        <div className="workspace-header-actions">
+          <fieldset className="profile-picker segmented" aria-label="Scan profile"><span className="profile-picker-label">Profile</span>{['quick', 'standard', 'deep', 'pentest'].map((value) => <button key={value} type="button" aria-pressed={profile === value} onClick={() => setProfile(value)}>{value}</button>)}</fieldset>
+          {/* The accent-filled default variant is the design system's primary —
+              the shared Button has no 'primary' variant, and passing one
+              rendered the run control unstyled. */}
+          <ScanActionDropdown workspaceId={id} workspaceName={item.name} defaultProfile={profile} size="default" go={go} notify={notify} />
+          <RowMenu label={`Actions for ${item.name}`} items={workspaceMenu} align="end" />
+        </div>
+      }
     >
       {isCompleted && !reduced && <div className="workspace-confetti" aria-hidden="true"><i /><i /><i /><i /><i /><i /></div>}
     </PageHeader>
-
-    {/* 2 · Act — one primary action, everything else quietly grouped beside it. */}
-    <div className="workspace-toolbar workspace-action-rail">
-      <div className="action-rail-primary">
-        <fieldset className="profile-picker segmented" aria-label="Scan profile"><span className="profile-picker-label">Profile</span>{['quick', 'standard', 'deep', 'pentest'].map((value) => <button key={value} type="button" aria-pressed={profile === value} onClick={() => setProfile(value)}>{value}</button>)}</fieldset>
-        <ScanActionDropdown workspaceId={id} workspaceName={item.name} defaultProfile={profile} size="default" variant="primary" go={go} notify={notify} />
-      </div>
-      <div className="action-rail-secondary">
-        <button type="button" className="button ghost" onClick={() => go({ page: 'pentest', id })}>Pentest suite</button>
-        <button type="button" className="button ghost" onClick={() => go({ page: 'files', id })}>Configure files</button>
-        <button type="button" className="button ghost" disabled={!latest} onClick={() => latest && go({ page: 'scan', id: latest.id })}>View last report</button>
-        {latest && <a className="button ghost" href={api.markdownUrl(latest.id)}>Export Markdown</a>}
-        <button type="button" className="button ghost" onClick={openSettings}>Workspace settings</button>
-        <button type="button" className="button ghost" onClick={()=>setPruneOpen(true)}>Prune history…</button>
-        <button type="button" className="button ghost workspace-danger-item" onClick={()=>setDeleteOpen(true)}>Remove workspace</button>
-      </div>
-    </div>
     {/* Pre-flight: what this profile will run before it runs (IMP-14). */}
     <PreScanSummary
       profile={profile}
@@ -179,8 +187,9 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
         (overrides.data ?? []).filter((override) => override.mode === 'exclude').length
       }
     />
-    {pruneOpen && <form className="settings-editor" onSubmit={(event) => { event.preventDefault(); void prune(); }} aria-label="Prune scan history"><label>Keep newest<input type="number" min={1} max={100} value={pruneKeep} onChange={(event) => setPruneKeep(Number(event.target.value))} /></label><div className="editor-actions"><button type="submit" className="button primary" disabled={pruning}>Delete older scans</button><button type="button" className="button secondary" onClick={() => setPruneOpen(false)}>Cancel</button></div></form>}
-    {editing && <form className="settings-editor" onSubmit={(event) => { event.preventDefault(); saveSettings(); }} aria-label="Workspace settings"><label>Name<input value={nameDraft} onChange={(event) => setNameDraft(event.target.value)} maxLength={80} /></label><div className="settings-editor-profile"><span>Default profile</span><fieldset className="segmented" aria-label="Default profile">{['quick', 'standard', 'deep', 'pentest'].map((value) => <button key={value} type="button" aria-pressed={profileDraft === value} onClick={() => setProfileDraft(value)}>{value}</button>)}</fieldset></div><div className="editor-actions"><button type="submit" className="button primary" disabled={savingSettings}>Save</button><button type="button" className="button secondary" onClick={() => setEditing(false)}>Cancel</button></div></form>}
+    {/* Editors submit as secondary: Run scan stays the screen's one primary. */}
+    {pruneOpen && <form className="settings-editor" onSubmit={(event) => { event.preventDefault(); void prune(); }} aria-label="Prune scan history"><label>Keep newest<input type="number" min={1} max={100} value={pruneKeep} onChange={(event) => setPruneKeep(Number(event.target.value))} /></label><div className="editor-actions"><button type="submit" className="button secondary" disabled={pruning}>Delete older scans</button><button type="button" className="button secondary" onClick={() => setPruneOpen(false)}>Cancel</button></div></form>}
+    {editing && <form className="settings-editor" onSubmit={(event) => { event.preventDefault(); saveSettings(); }} aria-label="Workspace settings"><label>Name<input value={nameDraft} onChange={(event) => setNameDraft(event.target.value)} maxLength={80} /></label><div className="settings-editor-profile"><span>Default profile</span><fieldset className="segmented" aria-label="Default profile">{['quick', 'standard', 'deep', 'pentest'].map((value) => <button key={value} type="button" aria-pressed={profileDraft === value} onClick={() => setProfileDraft(value)}>{value}</button>)}</fieldset></div><div className="editor-actions"><button type="submit" className="button secondary" disabled={savingSettings}>Save</button><button type="button" className="button secondary" onClick={() => setEditing(false)}>Cancel</button></div></form>}
 
     {/* 3 · Verdict — three headline numbers; the rest are one click away.
         Cards grade on the effective (completed) scan; with nothing completed they
@@ -200,6 +209,11 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
         </div>
       </Disclosure>
     </section>}
+
+    {/* Decision-useful content first: the highest-severity findings from the
+        effective scan sit directly under the summary strip, so "what do I fix
+        first" never needs a tab hunt. The full list stays on the report. */}
+    {latest && <TopFindingsStrip scanId={latest.id} go={go} />}
 
     {/* 4 · Insights — five diagnostics share one card, one on screen at a time.
         Radix only mounts the selected panel, so the lazy chunks stay unloaded
@@ -263,6 +277,35 @@ function Disclosure({ label, hint, children }: { label: string; hint?: string; c
     <summary className="workspace-disclosure-toggle"><ChevronDown className="workspace-disclosure-caret" aria-hidden="true" />{label}{hint && <small>{hint}</small>}</summary>
     {mounted && <div className="workspace-disclosure-panel">{children}</div>}
   </details>;
+}
+
+/** The three highest-severity findings of the effective scan — the page's
+ *  answer to "what should I fix first?", kept out of the Insights tabs so it
+ *  is never below the fold. Dense rows, not cards; a row opens the full
+ *  report. Renders nothing for a clean (or unscanned) workspace. */
+function TopFindingsStrip({ scanId, go }: { scanId: string; go: (r: Route) => void }) {
+  const report = useLoad(() => api.report(scanId), [scanId]);
+  const findings = report.data?.findings ?? [];
+  const severityRank: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
+  const top = [...findings].sort((a, b) => (severityRank[a.severity] ?? 9) - (severityRank[b.severity] ?? 9)).slice(0, 3);
+  if (report.loading) return <div className="workspace-top-findings is-loading" aria-busy="true"><SkeletonLines lines={2} /></div>;
+  if (!top.length) return null;
+  return (
+    <section className="workspace-top-findings" aria-label="Highest severity findings">
+      <h2>Fix these first</h2>
+      <ul>
+        {top.map((finding) => (
+          <li key={finding.id || finding.fingerprint}>
+            <button type="button" className="workspace-top-findings-row" onClick={() => go({ page: 'scan', id: scanId })} title="Open the full report">
+              <span className={`severity ${finding.severity}`}>{finding.severity}</span>
+              <span className="workspace-top-findings-message">{finding.message}</span>
+              {finding.relative_path && <code>{finding.relative_path}{finding.start_line ? `:${finding.start_line}` : ''}</code>}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
 }
 
 function MiniSparkline({ values }: { values: number[] }) {
@@ -412,17 +455,19 @@ export function RiskCard({ risk, unscanned }: { risk?: RiskProfile | null; /** t
   if (!risk?.available || typeof risk.score !== 'number') return <div className="summary-card premium-card risk-hero"><span className="premium-card-icon"><ShieldAlert className="h-4 w-4" /></span><strong>{unscanned ? '—' : '0'}</strong><span>Risk score{unscanned ? ' · no scan yet' : ''}</span></div>;
   // C8 · words beat glyphs: "Risk D · ▼ 4" made screen readers say "down arrow" and
   // left everyone else guessing whether down was good. Trend direction now says
-  // what happened, and color carries the verdict (down = good here).
+  // what happened. The delta note stays neutral ink with a decorative arrow:
+  // the grade owns this card's color — a green "improved" beside a red grade
+  // read as two verdicts disagreeing (design audit D2).
   const delta = typeof risk.previous_score === 'number' ? Math.abs(Math.round(risk.score - risk.previous_score)) : null;
-  const noChange = { text: 'no change', tone: 'text-[var(--color-ink-soft)]' };
+  const noChange = { text: 'no change', arrow: null as ReactNode };
   const trendNote = risk.trend === 'flat'
     ? noChange
     : (risk.trend === 'up' || risk.trend === 'down') && delta != null
       ? delta === 0
         ? noChange
         : risk.trend === 'down'
-          ? { text: `improved ${delta} pts since last scan`, tone: 'text-[var(--color-success)]' }
-          : { text: `worsened ${delta} pts`, tone: 'text-[var(--color-warning)]' }
+          ? { text: `risk improved ${delta} pts since last scan`, arrow: <ArrowDown className="risk-trend-arrow" aria-hidden="true" /> }
+          : { text: `risk worsened ${delta} pts since last scan`, arrow: <ArrowUp className="risk-trend-arrow" aria-hidden="true" /> }
       : null;
   const gradeTone = risk.grade === 'A' ? 'positive' : risk.grade === 'B' ? 'medium' : 'high';
   // A grade is only as strong as the scan behind it: when analyzer runs
@@ -440,7 +485,7 @@ export function RiskCard({ risk, unscanned }: { risk?: RiskProfile | null; /** t
     <span className="risk-grade">{risk.grade}</span>
     <strong className="risk-score" title={RISK_SCORE_EXPLAINER}>{Math.round(risk.score)}</strong>
     <span>Risk {risk.grade}</span>
-    {trendNote && <small role="note" className={`risk-trend ${trendNote.tone}`}>{trendNote.text}</small>}
+    {trendNote && <small role="note" className="risk-trend">{trendNote.arrow}{trendNote.text}</small>}
     {coverageNote && <span className="risk-coverage-note" data-partial="true">{coverageNote}</span>}
   </div>;
 }

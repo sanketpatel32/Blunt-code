@@ -1,24 +1,35 @@
-import { useEffect, useRef, useState } from 'react';
 import { href, type Route } from '../lib/router';
 import type { Theme } from '../hooks/useTheme';
 import { Button } from './ui/button';
-import { HelpCircle, Moon, Sun, Plus, Languages, ChevronDown, Check } from 'lucide-react';
+import { Check, ChevronDown, FileCode, HelpCircle, Info, Languages, MoreHorizontal, Moon, Power, Settings, Sun, Terminal } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { NotificationsCenter } from './NotificationsCenter';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { cn } from '../lib/utils';
 import { LOCALES, useT } from '../lib/i18n';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 
 /**
- * The three places people actually live in. Everything else moves behind
- * "More" — but only when the viewport is too narrow to show the whole bar;
- * with room to spare every link sits flat in the nav (see the measure row).
+ * The four high-frequency pages sit flat in the rail; everything else collapses
+ * behind the permanent "More" menu (nav-clarity audit: the rail had eight
+ * top-level items, most of them visited rarely). The menu is NOT
+ * viewport-dependent — with four links plus "More" the bar fits at every width
+ * this app supports, and a static structure cannot oscillate the way the old
+ * measure-driven flat/overflow flip could.
  */
-const PRIMARY_PAGES: ReadonlyArray<Route['page']> = ['home', 'workspaces', 'search'];
+const PRIMARY_PAGES: ReadonlyArray<Route['page']> = ['home', 'workspaces', 'search', 'tools'];
+/** Collapse the rare pages into "More". History is deliberately absent from
+ *  BOTH groups: the route is workspace-scoped (/workspaces/:id/scans), so a
+ *  nav link without an id would land on the 404 page. Scan history stays
+ *  reachable from each workspace (and the home dashboard's recent activity). */
+const MORE_PAGES: ReadonlyArray<Route['page']> = ['rules', 'cli', 'settings', 'about'];
 
-/** Approximate width of the "More ▾" toggle; the hysteresis reserve that keeps
- *  the flat ⇄ overflow switch from oscillating at the exact fit boundary. */
-const MORE_RESERVE_PX = 96;
+const MORE_ICONS: Partial<Record<Route['page'], LucideIcon>> = {
+  rules: FileCode,
+  cli: Terminal,
+  settings: Settings,
+  about: Info,
+};
 
 /** One-line tooltip per nav link (nav-clarity audit): what lives behind it,
  *  no essays. Every Route page needs an entry for Record exhaustiveness; the
@@ -40,84 +51,22 @@ const NAV_TITLES: Record<Route['page'], string> = {
   'not-found': 'Page not found',
 };
 
-export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleTheme, onShowShortcuts, seqArmed = false }: { route: Route; onNavigate: (route: Route) => void; onAdd: () => void; onClose: () => void; theme: Theme; onToggleTheme: () => void; onShowShortcuts?: () => void; seqArmed?: boolean }) {
+export function AppShell({ route, onNavigate, onClose, theme, onToggleTheme, onShowShortcuts, seqArmed = false }: { route: Route; onNavigate: (route: Route) => void; /** No longer rendered in the nav (one primary action per view: the Workspaces and Home pages own their Add/Scan CTAs, and the Ctrl+K palette keeps its Add entry). The prop stays in the signature because App.tsx — which owns the AddWorkspaceDialog — still passes it. */ onAdd?: () => void; onClose: () => void; theme: Theme; onToggleTheme: () => void; onShowShortcuts?: () => void; seqArmed?: boolean }) {
   const { t, locale, setLocale } = useT();
   const reduced = useReducedMotion();
-  const moreRef = useRef<HTMLDetailsElement>(null);
-  const navRef = useRef<HTMLElement>(null);
-  const measureRef = useRef<HTMLDivElement>(null);
-  const [flat, setFlat] = useState(true);
-  const items: Array<[Route, string]> = [
+  const primary: Array<[Route, string]> = [
     [{ page: 'home' }, t('nav.home')],
     [{ page: 'workspaces' }, t('nav.workspaces')],
     [{ page: 'search' }, t('nav.search')],
     [{ page: 'tools' }, t('nav.tools')],
+  ];
+  const more: Array<[Route, string]> = [
     [{ page: 'rules' }, t('nav.rules')],
     [{ page: 'cli' }, t('nav.cli')],
     [{ page: 'settings' }, t('nav.settings')],
     [{ page: 'about' }, t('nav.about')],
   ];
-  const primary = items.filter(([next]) => PRIMARY_PAGES.includes(next.page));
-  const secondary = items.filter(([next]) => !PRIMARY_PAGES.includes(next.page));
-  const secondaryActive = secondary.some(([next]) => next.page === route.page);
-
-  // `<details>` alone leaves a floating panel open after you click away, which
-  // reads as a stuck overlay. Close on outside pointer, on Escape, and after
-  // navigating to one of the links inside.
-  useEffect(() => {
-    const close = () => { if (moreRef.current) moreRef.current.open = false; };
-    const onPointerDown = (event: Event) => {
-      if (moreRef.current && !moreRef.current.contains(event.target as Node)) close();
-    };
-    const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') close(); };
-    document.addEventListener('pointerdown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown);
-      document.removeEventListener('keydown', onKeyDown);
-    };
-  }, []);
-
-  // Dynamic overflow: an off-screen copy of the full link row measures its
-  // natural width; the nav stays flat exactly while that width fits inside
-  // the nav minus the "More" reserve. BOTH directions use the same threshold,
-  // which is what makes the toggle stable — the mode is a pure function of
-  // (needed, clientWidth):
-  //     flat  ⇔  needed <= clientWidth - MORE_RESERVE_PX
-  // so the collapse and restore conditions can never both be true. (The
-  // previous restore check used `needed <= clientWidth`, so across the ~96px
-  // band clientWidth-96 < needed <= clientWidth every `flat` flip re-ran this
-  // effect, flipped the state back, and looped — thousands of DOM toggles.)
-  useEffect(() => {
-    const nav = navRef.current;
-    const measure = measureRef.current;
-    if (!nav || !measure) return;
-    const check = () => {
-      // No layout information (jsdom tests, hidden header): keep the current
-      // mode — deciding on zero widths would oscillate forever.
-      if (nav.clientWidth === 0) return;
-      const needed = measure.scrollWidth;
-      const fits = needed <= nav.clientWidth - MORE_RESERVE_PX;
-      // No-op unless the measurement contradicts the current mode, so re-runs
-      // on unrelated renders can never toggle the nav by themselves.
-      if (fits !== flat) setFlat(fits);
-    };
-    check();
-    if (typeof ResizeObserver === 'undefined') {
-      window.addEventListener('resize', check);
-      return () => window.removeEventListener('resize', check);
-    }
-    const observer = new ResizeObserver(check);
-    observer.observe(nav);
-    return () => observer.disconnect();
-  }, [flat, locale, route.page]);
-
-  // Same stuck-overlay class as the bell popover: a g-sequence changes the
-  // route without any pointer event near this header, so the "More" panel's
-  // outside-click dismissal never fires. Close it whenever the route changes.
-  useEffect(() => {
-    if (moreRef.current) moreRef.current.open = false;
-  }, [route]);
+  const moreActive = more.some(([next]) => next.page === route.page);
 
   const link = ([next, label]: [Route, string]) => (
     <a
@@ -132,12 +81,6 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
     </a>
   );
 
-  const measureLink = ([, label]: [Route, string]) => (
-    // A span, not an anchor: same nav-link metrics for measuring, but no
-    // href/click semantics — querySelector('a') must only ever find real links.
-    <span key={label} className="nav-link" aria-hidden="true">{label}</span>
-  );
-
   return (
     <header className={cn('app-nav', reduced && 'nav-no-motion')}>
       <a className="brand group" href="/" onClick={(event) => { event.preventDefault(); onNavigate({ page: 'home' }); }}>
@@ -149,105 +92,124 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
         </svg>
         <b>Blunt Code</b>
       </a>
-      <nav ref={navRef} aria-label="Main navigation">
-        <div className="nav-primary nav-measure" ref={measureRef} aria-hidden="true">{items.map(measureLink)}</div>
-        {flat ? (
-          <div className="nav-primary">{items.map(link)}</div>
-        ) : (
-          <>
-            <div className="nav-primary">{primary.map(link)}</div>
-            {/* biome-ignore lint/a11y/useKeyWithClickEvents: <details> is natively keyboard-operable through its summary; this onClick only closes the open menu after a link inside it is chosen. */}
-            <details
-              className="nav-more"
-              ref={moreRef}
-              data-active={secondaryActive ? 'true' : 'false'}
-              onClick={(event) => { if ((event.target as HTMLElement).closest('a, button') && moreRef.current) moreRef.current.open = false; }}
+      <nav aria-label="Main navigation">
+        <div className="nav-primary">{primary.map(link)}</div>
+        {/* The collapsed pages keep their route semantics: aria-current rides on
+            the active menu item (a menu button itself cannot be "the current
+            page"), the dot repeats it visually, and the toggle tints accent so
+            the bar still answers "where am I?" while the menu is closed. */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="nav-more-toggle"
+              data-active={moreActive ? 'true' : undefined}
             >
-              <summary className="nav-more-toggle">
-                {t('nav.more')}
-                <ChevronDown className="nav-more-chevron" aria-hidden="true" />
-              </summary>
-              <div className="nav-more-panel">
-                <div className="nav-more-group">{secondary.map(link)}</div>
-                {/* Very narrow viewports hide the action-bar copy (styles.css,
-                    <= 30rem) to keep that row on screen; down there this panel
-                    is always the mounted mode, so it carries the affordance. */}
-                <div className="nav-more-foot">
-                  <Button variant="ghost" size="sm" className="close-app" onClick={onClose}>{t('common.closeApp')}</Button>
-                </div>
-              </div>
-            </details>
-          </>
-        )}
+              {t('nav.more')}
+              <ChevronDown className="nav-more-chevron" aria-hidden="true" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-[11rem] p-1">
+            {more.map(([next, label]) => {
+              const Icon = MORE_ICONS[next.page];
+              return (
+                <DropdownMenuItem
+                  key={label}
+                  onSelect={() => onNavigate(next)}
+                  aria-current={route.page === next.page ? 'page' : undefined}
+                  title={NAV_TITLES[next.page]}
+                  className="gap-2 cursor-pointer"
+                >
+                  {Icon ? <Icon className="h-4 w-4 text-[var(--color-ink-faint)]" aria-hidden="true" /> : null}
+                  <span>{label}</span>
+                  {route.page === next.page && <span className="nav-more-dot" aria-hidden="true" />}
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </nav>
       <div className="nav-actions">
         {seqArmed && <span className="seq-hint" aria-hidden="true">g…</span>}
-        {/* Close app renders in BOTH modes and at every width. The actions row
-            is part of the nav's fit measurement, so a mode-conditional button
-            (flat was ~100px narrower) made the verdict refute itself and the
-            header flip forever; a constant width keeps the mode a pure
-            function of one (needed, clientWidth) pair. */}
-        <Button variant="ghost" size="sm" className="close-app" onClick={onClose}>{t('common.closeApp')}</Button>
         {/* Preferences are chosen once and then never touched. They read as one
-            cohesive group instead of four competing buttons — and every one of
-            them is still reachable from the command palette (Ctrl/Cmd+K).
+            cohesive group instead of competing buttons — and every one of them
+            is still reachable from the command palette (Ctrl/Cmd+K).
             Notifications live here too: it is a utility, and styling it apart
             made it the loudest thing in the row for the wrong reason. */}
         <div className="nav-utils">
           <NotificationsCenter routeKey={href(route)} />
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="nav-util nav-lang gap-1 px-2 font-mono text-xs font-semibold"
-                aria-label={t('common.language')}
-                title={t('common.language')}
-              >
-                <Languages className="h-4 w-4 shrink-0" aria-hidden="true" />
-                <span className="uppercase">{locale}</span>
-                <ChevronDown className="h-3 w-3 opacity-60" aria-hidden="true" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-36 p-1">
-              <DropdownMenuLabel className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[var(--color-ink-faint)]">
-                {t('common.language')}
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {LOCALES.map((l) => (
-                <DropdownMenuItem
-                  key={l.value}
-                  onClick={() => setLocale(l.value as never)}
-                  className="flex items-center justify-between gap-2 px-2 py-1.5 text-xs cursor-pointer"
-                >
-                  <span className="flex items-center gap-2">
-                    <span className="font-mono font-bold">{l.label}</span>
-                    <span className="text-[var(--color-ink-soft)]">{l.name}</span>
-                  </span>
-                  {locale === l.value && <Check className="h-3.5 w-3.5 text-[var(--color-accent-strong)]" />}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
           {/* The command palette is the fastest path to every action, but until
               now its only advertisement was a line inside the "?" dialog. This
-              kbd-styled pill both advertises and triggers it: App's Ctrl/Cmd+K
-              listener is a plain window keydown handler with no isTrusted check,
-              so re-dispatching the same synthetic keydown opens the palette. */}
+              pill both advertises and triggers it — as ONE bordered pill, not
+              the two adjacent key boxes that read as broken chrome. App's
+              Ctrl/Cmd+K listener is a plain window keydown handler with no
+              isTrusted check, so re-dispatching the same synthetic keydown
+              opens the palette. */}
           <Button
             variant="ghost"
             size="sm"
-            className="nav-util nav-palette gap-1 px-2 font-mono text-xs font-semibold"
+            className="nav-util nav-palette px-2 font-mono text-xs font-semibold"
             onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }))}
             title="Open the command palette (Ctrl+K)"
             aria-label="Open the command palette (Ctrl+K)"
           >
-            <kbd className="kbd-hint">Ctrl</kbd>
-            <kbd className="kbd-hint">K</kbd>
+            <kbd className="kbd-hint nav-palette-kbd">Ctrl K</kbd>
           </Button>
-          <Button variant="ghost" size="icon" className="nav-shortcuts" onClick={() => onShowShortcuts?.()} title={t('common.shortcuts')} aria-label={t('common.shortcuts')}>
-            <HelpCircle className="h-4 w-4" />
-          </Button>
+          {/* The grab-bag overflow: shortcuts help, language, and Close app —
+              two of which used to be permanent buttons competing with every
+              page's own actions. Close app is the destructive end of the menu
+              (danger tone, below the separator) and keeps invoking App's
+              confirmation → AppClosedScreen flow unchanged. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="nav-util nav-overflow"
+                aria-label="More options"
+                title="More options"
+              >
+                <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-[13rem] p-1">
+              <DropdownMenuItem onSelect={() => onShowShortcuts?.()} className="gap-2 cursor-pointer">
+                <HelpCircle className="h-4 w-4 text-[var(--color-ink-faint)]" aria-hidden="true" />
+                <span className="font-medium">{t('common.shortcuts')}</span>
+                <DropdownMenuShortcut>?</DropdownMenuShortcut>
+              </DropdownMenuItem>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger className="gap-2 cursor-pointer">
+                  <Languages className="h-4 w-4 text-[var(--color-ink-faint)]" aria-hidden="true" />
+                  <span className="font-medium">{t('common.language')}</span>
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="min-w-[11rem] p-1">
+                  {LOCALES.map((l) => (
+                    <DropdownMenuItem
+                      key={l.value}
+                      onSelect={() => setLocale(l.value as never)}
+                      className="flex items-center justify-between gap-2 cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2">
+                        <span className="font-mono font-bold">{l.label}</span>
+                        <span className="text-[var(--color-ink-soft)]">{l.name}</span>
+                      </span>
+                      {locale === l.value && <Check className="h-3.5 w-3.5 text-[var(--color-accent-strong)]" />}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={onClose}
+                className="nav-danger-item gap-2 cursor-pointer text-[var(--color-danger)] focus:text-[var(--color-danger)]"
+              >
+                <Power className="h-4 w-4" aria-hidden="true" />
+                <span className="font-medium">{t('common.closeApp')}</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button variant="ghost" size="sm" className="theme-toggle" onClick={onToggleTheme} aria-pressed={theme === 'dark'} title={theme === 'dark' ? t('common.switchToLight') : t('common.switchToDark')} aria-label={theme === 'dark' ? t('common.switchToLight') : t('common.switchToDark')}>
             {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             {/* Icon-only in the cluster. The aria-label is the authoritative
@@ -259,9 +221,6 @@ export function AppShell({ route, onNavigate, onAdd, onClose, theme, onToggleThe
             <span className="theme-toggle-label sr-only">{theme === 'dark' ? t('common.switchToLight') : t('common.switchToDark')}</span>
           </Button>
         </div>
-        <Button onClick={onAdd} size="sm" className="add shadow-[var(--shadow-accent)] active:shadow-sm">
-          <Plus className="h-4 w-4" /> <span className="hidden sm:inline">{t('common.addWorkspace')}</span><span className="sm:hidden">{t('common.add')}</span>
-        </Button>
       </div>
     </header>
   );

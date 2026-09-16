@@ -71,10 +71,16 @@ describe('keyboard journey through the core flow', () => {
     expect(window.location.pathname).toBe('/workspaces');
     expect(host.textContent).toContain('Journey');
 
-    // 2) Open the workspace from a focused control.
-    const openDetails = [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === 'Open details')!;
-    expect(openDetails).toBeDefined();
-    await act(async () => { openDetails.focus(); expect(document.activeElement).toBe(openDetails); openDetails.click(); });
+    // 2) Open the workspace from the focused table row — the row IS the link
+    //    (the one visible per-row control is Scan; Open details lives in the
+    //    row's overflow menu).
+    const wsRow = host.querySelector<HTMLElement>('.table-dense tbody tr[role="link"]');
+    expect(wsRow).toBeDefined();
+    await act(async () => {
+      wsRow!.focus();
+      expect(document.activeElement).toBe(wsRow);
+      wsRow!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    });
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     expect(window.location.pathname).toBe('/workspaces/ws-1');
 

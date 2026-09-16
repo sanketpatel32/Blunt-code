@@ -47,22 +47,22 @@ export function ComparePanel({ aId, bId }: { aId: string; bId: string }) {
         <h2>Scan comparison</h2>
         <p className="compare-headline">
           Since <strong>{date(previous.finished_at ?? previous.started_at)}</strong>:{' '}
-          <strong className="compare-count">{summary.new}</strong> new ·{' '}
-          <strong className="compare-count">{summary.fixed}</strong> fixed ·{' '}
-          <strong className="compare-count">{summary.persistent}</strong> still present
+          <strong className="compare-count tabular-nums">{summary.new}</strong> new ·{' '}
+          <strong className="compare-count tabular-nums">{summary.fixed}</strong> fixed ·{' '}
+          <strong className="compare-count tabular-nums">{summary.persistent}</strong> still present
         </p>
         <p className="compare-sub">Comparing {date(current.finished_at ?? current.started_at)} with {date(previous.finished_at ?? previous.started_at)}</p>
         {notEvaluated.length > 0 && <p className="compare-note">Some analyzers did not finish in the newer scan, so their findings are not counted: {notEvaluated.join(', ')}.</p>}
       </header>
-      <CompareSection label="New" count={summary.new} items={comparison.new ?? []} moreNoun="new" />
-      <CompareSection label="Fixed" count={summary.fixed} items={comparison.fixed ?? []} moreNoun="fixed" />
-      <CompareSection label="Still present" count={summary.persistent} items={comparison.persistent ?? []} moreNoun="still present" />
+      <CompareSection label="New" items={comparison.new ?? []} moreNoun="new" />
+      <CompareSection label="Fixed" items={comparison.fixed ?? []} moreNoun="fixed" />
+      <CompareSection label="Still present" items={comparison.persistent ?? []} moreNoun="still present" />
     </section>
   );
 }
 
-/** One collapsible group of findings; hidden entirely when the diff has none (the headline already says 0). */
-function CompareSection({ label, count, items, moreNoun }: { label: string; count: number; items: Finding[]; moreNoun: string }) {
+/** One collapsible group of findings; hidden entirely when the diff has none (the headline already says 0). Section headings carry no count chips — the headline owns the numbers. */
+function CompareSection({ label, items, moreNoun }: { label: string; items: Finding[]; moreNoun: string }) {
   const [open, setOpen] = useState(true);
   if (items.length === 0) return null;
   const visible = items.slice(0, SECTION_VISIBLE_LIMIT);
@@ -72,7 +72,7 @@ function CompareSection({ label, count, items, moreNoun }: { label: string; coun
       <h3 className="compare-section-heading">
         <button type="button" className="compare-section-toggle" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
           <span className="disclose-arrow" aria-hidden="true">▸</span>
-          {label} <span className="compare-section-count tabular-nums">{count}</span>
+          {label}
         </button>
       </h3>
       {open && <>

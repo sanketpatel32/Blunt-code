@@ -1,0 +1,67 @@
+/* Workspaces list — dense table redesign (design wave 2026-09-16).
+   Scoped under .page-workspaces; imported after styles.css.
+   Builds on shared primitives (.table-dense, .table-wrap, .toolbar-row,
+   .toolbar-filters, .toolbar-meta, .tag, .th-sort, .state) with tokens only,
+   so both themes work unchanged. */
+
+/* — Toolbar: filters left, the single count on the right — */
+.page-workspaces .ws-toolbar { flex-wrap: wrap; }
+
+/* — Table shell: .table-wrap already provides border, radius, shadow, and the
+     horizontal-scroll fade edges; the dense table stays ~one line per row so
+     roughly 25 rows fit a 1440x900 viewport. — */
+.page-workspaces .ws-table { min-width: 56rem; }
+.page-workspaces .ws-table thead th { background: var(--color-surface-muted); white-space: nowrap; }
+.page-workspaces .ws-table td { vertical-align: middle; white-space: nowrap; }
+
+/* The whole row is one link to the workspace detail. */
+.page-workspaces .ws-table tbody tr { cursor: pointer; }
+.page-workspaces .ws-table tbody tr:focus-visible { outline: 2px solid var(--color-focus); outline-offset: -2px; }
+
+/* First column stays put while the rest scrolls horizontally on narrow windows. */
+.page-workspaces .ws-table thead th:first-child,
+.page-workspaces .ws-table tbody td:first-child { position: sticky; left: 0; border-right: var(--rule) solid var(--color-rule-faint); }
+.page-workspaces .ws-table thead th:first-child { z-index: 2; }
+.page-workspaces .ws-table tbody td:first-child { z-index: 1; background: var(--color-surface); }
+/* Sticky cell needs its own hover tint — the shared row-hover rule loses to this specificity otherwise. */
+.page-workspaces .ws-table tbody tr:hover td:first-child { background: color-mix(in oklch, var(--color-accent) 3%, var(--color-surface)); }
+
+/* — Name cell: bold name, muted truncated path, at most two tag chips + "+N" — */
+.page-workspaces .ws-name { display: block; max-width: 18rem; overflow: hidden; text-overflow: ellipsis; color: var(--color-ink); font-weight: 650; }
+.page-workspaces .ws-sub { display: flex; align-items: center; gap: var(--space-3xs); min-width: 0; margin-top: 1px; }
+.page-workspaces .ws-path { min-width: 0; max-width: 15rem; overflow: hidden; text-overflow: ellipsis; color: var(--color-ink-faint); font-family: var(--font-mono); font-size: var(--text-2xs); }
+.page-workspaces .ws-tags { display: inline-flex; flex: none; gap: 4px; }
+.page-workspaces .ws-tags .tag { padding: 0 var(--space-2xs); }
+
+/* — Languages: three color dots + "+N" tag; full list in the tooltip — */
+.page-workspaces .ws-langs { display: inline-flex; align-items: center; gap: 5px; }
+.page-workspaces .ws-lang { flex: none; width: 0.6rem; height: 0.6rem; border-radius: 50%; box-shadow: 0 0 0 1px color-mix(in oklch, var(--color-ink) 14%, transparent); }
+.page-workspaces .ws-langs .tag { justify-content: center; min-width: 1.35rem; }
+
+/* — Risk: compact grade chip colored by grade (.state success/warning/failed) — */
+.page-workspaces .ws-risk { justify-content: center; min-width: 1.6rem; font-weight: 700; }
+
+/* — Unfinished-scan state pill (Findings cell when nothing has completed yet) — */
+.page-workspaces .ws-state { padding: 1px var(--space-2xs); font-size: var(--text-2xs); }
+
+/* — Findings: total + colored per-severity counts, severity tokens only — */
+.page-workspaces .ws-findings { display: inline-flex; align-items: baseline; white-space: nowrap; }
+.page-workspaces .ws-findings > * + * { margin-left: var(--space-sm); }
+.page-workspaces .ws-findings > * + *::before { content: '·'; margin-right: var(--space-sm); color: var(--color-ink-faint); font-weight: 400; }
+.page-workspaces .ws-findings-total { color: var(--color-ink); font-weight: 650; }
+.page-workspaces .ws-findings em { font-style: normal; color: var(--color-ink-faint); font-weight: 500; }
+.page-workspaces .ws-sev-critical { color: var(--color-sev-critical); }
+.page-workspaces .ws-sev-high { color: var(--color-sev-high); }
+.page-workspaces .ws-sev-medium { color: var(--color-sev-medium); }
+.page-workspaces .ws-sev-low { color: var(--color-sev-low); }
+.page-workspaces .ws-findings-zero { color: var(--color-ink-faint); font-weight: 600; }
+
+/* — Last scan: relative time, absolute in tooltip; failed keeps the danger signal — */
+.page-workspaces .ws-scan { color: var(--color-ink-soft); }
+.page-workspaces .ws-scan-failed { color: var(--color-danger-text); font-weight: 600; }
+
+/* — Empty metadata shares one muted dash — */
+.page-workspaces .ws-none { color: var(--color-ink-faint); }
+
+/* — Actions: the row's single visible control + overflow menu, right-aligned — */
+.page-workspaces .ws-actions { justify-content: flex-end; }

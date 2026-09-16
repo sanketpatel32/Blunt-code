@@ -1,23 +1,18 @@
 /* ════════════════════════════════════════════════════════════════════
-   NAV CLARITY — header information-architecture pass
+   NAV CLARITY — header information-architecture pass (D7)
    Companion to components/AppShell.tsx. Loaded after styles.css so these
    rules win on specificity/source order; tokens only, so dark mode holds.
-   Structure: brand · primary nav (3) + "More" disclosure · utility cluster · CTA
+   Structure: brand · 4 high-frequency links + "More" menu · utility cluster
+   (bell · Ctrl K pill · ⋯ overflow · theme). No global Add CTA — each page
+   owns its primary action, and the Ctrl+K palette keeps the Add entry.
    ════════════════════════════════════════════════════════════════════ */
 
 /* ── Primary rail ──────────────────────────────────────────────── */
-/* styles.css gives `.app-nav nav` an overflow-x scroller for the old eight-link
-   rail, and an overflow ancestor clips the absolutely-positioned "More" panel
-   even when the trigger itself is `overflow: visible`. With three links plus
-   "More" the scroller is no longer needed, so drop it on the nav itself. */
-.app-nav nav { overflow: visible; }
-
 .app-nav .nav-primary {
   display: flex;
   align-items: center;
-  gap: var(--space-xs);
+  gap: var(--space-2xs);
   min-width: 0;
-  overflow: visible;
 }
 
 .app-nav nav a.nav-link {
@@ -25,101 +20,64 @@
   border-radius: var(--radius-button);
 }
 
-/* ── "More" disclosure ─────────────────────────────────────────── */
-.nav-more { position: relative; }
-
-.app-nav .nav-more > .nav-more-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2xs);
-  padding: var(--space-xs) var(--space-sm);
-  border-radius: var(--radius-button);
+/* ── "More" pages menu ─────────────────────────────────────────── */
+/* A permanent Radix dropdown (same primitive as the bell's popover), not a
+   viewport-dependent disclosure: with four links plus "More" the rail fits at
+   every width this app supports, and a static structure cannot oscillate the
+   way the old measure-driven flat/overflow flip did. The panel itself is
+   styled by components/ui/dropdown-menu; only the trigger needs nav dressing.
+   The ghost variant's accent hover would break the neutral rail, so the
+   toggle hovers like a nav link: muted surface, plain ink. */
+.app-nav .nav-more-toggle {
   color: var(--color-ink-soft);
   font-size: var(--text-sm);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: -.005em;
-  white-space: nowrap;
-  list-style: none;
-  cursor: pointer;
-  transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
 }
-.app-nav .nav-more > .nav-more-toggle::-webkit-details-marker { display: none; }
-.app-nav .nav-more > .nav-more-toggle::marker { content: ''; }
-.app-nav .nav-more > .nav-more-toggle:hover { color: var(--color-ink); background: var(--color-surface-muted); }
-.nav-more > .nav-more-toggle:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.app-nav .nav-more-toggle:hover,
+.app-nav .nav-more-toggle[data-state='open'] {
+  color: var(--color-ink);
+  background: var(--color-surface-muted);
+}
+.nav-more-toggle:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
 
-/* The active route lives inside the collapsed panel — surface it here so the
-   user can still tell where they are. */
-.app-nav .nav-more[data-active='true'] > .nav-more-toggle {
+/* The active route lives inside the collapsed menu — surface it here so the
+   bar still answers "where am I?" while the menu is closed (the exact item is
+   marked with aria-current + an accent dot once opened). */
+.app-nav .nav-more-toggle[data-active='true'] {
   color: var(--color-accent-strong);
   background: var(--color-accent-soft);
   box-shadow: inset 0 0 0 var(--rule) var(--color-accent);
 }
 
 .nav-more-chevron {
-  width: .85rem;
-  height: .85rem;
   opacity: .65;
   transition: transform var(--dur-fast) var(--ease-out);
 }
-.nav-more[open] > .nav-more-toggle .nav-more-chevron { transform: rotate(180deg); }
+.nav-more-toggle[data-state='open'] .nav-more-chevron { transform: rotate(180deg); }
 
-.app-nav .nav-more-panel {
-  position: absolute;
-  z-index: 5;
-  top: calc(100% + var(--space-2xs));
-  right: 0;
-  display: grid;
-  gap: var(--space-3xs);
-  min-width: 11.5rem;
-  padding: var(--space-xs);
-  border: var(--rule) solid var(--color-rule);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-card);
+.nav-more-dot {
+  width: .4rem;
+  height: .4rem;
+  margin-left: auto;
+  border-radius: 50%;
+  background: var(--color-accent-strong);
 }
 
-.nav-more-group { display: grid; gap: var(--space-3xs); }
+/* ── Utility overflow (⋯) ──────────────────────────────────────── */
+/* "Close app" is the destructive end of the menu: danger text on hover too,
+   matching the RowMenu danger pattern (focus:text is on the item itself). */
+.nav-danger-item:hover { background: var(--color-danger-soft); }
 
-.app-nav .nav-more-panel a {
-  display: block;
-  padding: var(--space-xs) var(--space-sm);
-  border-radius: var(--radius-button);
-}
-
-/* ── Terminal action ───────────────────────────────────────────── */
-/* The action-bar "Close app" is the affordance at nearly every width — it must
-   stay in BOTH nav modes and unhidden by breakpoint, because a mode-conditional
-   width made the fit verdict oscillate and the 63rem hide left the flat
-   two-row band (~575-800px) with no close affordance at all. The panel copy
-   below only renders at the <= 30rem floor (matching styles.css), where the
-   action-bar copy is hidden to keep that row on screen; inside the absolutely
-   positioned panel it contributes no width to the fit measurement either way. */
-.nav-more-foot { display: none; }
-@media (max-width: 30rem) {
-  .nav-more-foot {
-    display: flex;
-    margin-top: var(--space-3xs);
-    padding-top: var(--space-2xs);
-    border-top: var(--rule) solid var(--color-rule-faint);
-  }
-}
-.app-nav .nav-more .close-app {
-  display: inline-flex;
-  width: 100%;
-  justify-content: flex-start;
-  color: var(--color-danger);
-}
-.app-nav .nav-more .close-app:hover {
-  background: var(--color-danger-soft);
-  color: var(--color-danger);
-}
-
-/* ── Action cluster vs. primary CTA ────────────────────────────── */
+/* ── Action cluster ────────────────────────────────────────────── */
 .app-nav .nav-actions { gap: var(--space-md); }
 
-/* Utility controls read as one cohesive group, clearly separate from the
-   single dominant "Add workspace" CTA. */
+/* Utility controls read as one cohesive group: bell · Ctrl K pill · ⋯ · theme.
+   The theme toggle stays visible (Settings has no theme control) and the bell
+   keeps its popover (deliberate exception). */
 .nav-utils {
   display: flex;
   align-items: center;
@@ -132,7 +90,6 @@
 /* Inside the cluster every control drops its own chrome: the group is the
    visual container, so repeating a border per control doubles the noise. */
 .nav-utils .nav-util,
-.nav-utils .nav-shortcuts,
 .nav-utils .nav-bell,
 .nav-utils .theme-toggle {
   display: inline-flex;
@@ -148,28 +105,42 @@
   transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
 }
 .nav-utils .nav-util:hover,
-.nav-utils .nav-util[data-state="open"],
-.nav-utils .nav-shortcuts:hover,
+.nav-utils .nav-util[data-state='open'],
 .nav-utils .nav-bell:hover,
+.nav-utils .nav-bell[data-state='open'],
 .nav-utils .theme-toggle:hover {
   background: var(--color-surface);
   color: var(--color-ink);
 }
 
-/* The chrome-stripping rule above also flattened the controls' focus ring
-   (box-shadow: none), leaving the bell, language, shortcuts and theme buttons
-   with no visible keyboard focus (WCAG 2.4.7). Restore a ring on keyboard
-   focus only, using the same outline pattern as the More toggle and the
-   language select above. */
+/* The chrome-stripping rule above also flattens the controls' focus ring
+   (box-shadow: none), leaving the bell, pill, ⋯ and theme buttons without a
+   visible keyboard focus (WCAG 2.4.7). Restore a ring on keyboard focus only. */
 .nav-utils .nav-util:focus-visible,
-.nav-utils .nav-shortcuts:focus-visible,
 .nav-utils .nav-bell:focus-visible,
 .nav-utils .theme-toggle:focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
 }
 
-.nav-utils .nav-shortcuts, .nav-utils .nav-bell { width: 2rem; justify-content: center; padding: 0; }
+/* Icon-only controls get one consistent square footprint inside the cluster
+   (the ⋯ trigger arrives as size="icon", 2.25rem — pull it back to 2rem). */
+.nav-utils .nav-bell,
+.nav-utils .nav-overflow {
+  width: 2rem;
+  min-width: 2rem;
+  justify-content: center;
+  padding: 0;
+}
+
+/* ONE pill for the palette shortcut — styles.css renders .kbd-hint as a single
+   bordered key box, so a lone kbd element reads as one "Ctrl K" pill instead
+   of the old two adjacent boxes. */
+.nav-utils .nav-palette .kbd-hint {
+  margin-left: 0;
+  padding: 1px var(--space-2xs);
+  letter-spacing: .06em;
+}
 
 .nav-lang-select {
   max-width: 3.4rem;
@@ -181,19 +152,36 @@
 }
 .nav-lang-select:focus-visible { outline: var(--rule-focus) solid var(--color-focus); outline-offset: 2px; }
 
-/* ── Narrow viewports ──────────────────────────────────────────── */
-@media (max-width: 68rem) {
-  .app-nav .nav-primary { gap: var(--space-2xs); }
+/* ── Width bands ───────────────────────────────────────────────── */
+/* The flat rail shrank from eight links to four + "More" (~350px in the widest
+   locale), so the row-one budget that forced the links onto their own full row
+   below 64rem no longer applies. Hold the single-row header — one ~52px bar,
+   inside the 56px chrome budget — down to 56rem; below that, restack exactly
+   as styles.css did (these rules must restate the stacked layout because they
+   override the 64rem band above at every narrower width too). */
+@media (max-width: 64rem) {
+  .app-nav { grid-template-columns: auto 1fr auto; gap: var(--space-md); }
+  .app-nav nav {
+    order: 0;
+    grid-column: auto;
+    margin: 0;
+    padding: 0;
+    border-top: 0;
+  }
+  .nav-actions { margin-left: 0; }
 }
-@media (max-width: 48rem) {
-  .app-nav .nav-primary { justify-content: flex-start; }
-  /* The panel stays RIGHT-anchored at every width: anchoring it to the More
-     button's left edge clipped its 184px off-screen at 320-480px viewports
-     (panel spanning 237..421 at 320px, "Close app" unreachable). Right
-     anchoring keeps it inside (124..308 @320); the max-width is
-     belt-and-braces so it can never exceed the page gutters either. */
-  .app-nav .nav-more-panel { max-width: calc(100vw - 2 * var(--page-gutter)); }
-  .app-nav .nav-actions { gap: var(--space-sm); }
+@media (max-width: 56rem) {
+  .app-nav { grid-template-columns: auto 1fr; gap: var(--space-sm); }
+  .app-nav nav {
+    order: 3;
+    grid-column: 1 / -1;
+    overflow-x: auto;
+    margin-top: var(--space-2xs);
+    padding-bottom: var(--space-xs);
+    padding-top: var(--space-2xs);
+    border-top: var(--rule) solid var(--color-rule-faint);
+  }
+  .nav-actions { margin-left: auto; }
 }
 
 /* ── Reduced motion (belt-and-braces with the global media query; the
@@ -203,21 +191,4 @@
 .app-nav.nav-no-motion a.nav-link { transition: none; }
 @media (prefers-reduced-motion: reduce) {
   .nav-more-chevron, .nav-more-toggle, a.nav-link { transition: none; }
-}
-
-/* ── Dynamic overflow ("More" only when space runs out) ────────── */
-.app-nav { position: relative; }
-
-/* Off-screen twin of the full link row: same classes, same metrics, so its
-   scrollWidth is the natural width of every link rendered flat. */
-.app-nav .nav-measure {
-  position: absolute;
-  top: 0;
-  left: 0;
-  height: 0;
-  visibility: hidden;
-  pointer-events: none;
-  overflow: hidden;
-  white-space: nowrap;
-  min-width: 0;
 }

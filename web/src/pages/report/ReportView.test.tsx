@@ -104,6 +104,20 @@ function rows(host: HTMLElement) {
   return [...host.querySelectorAll<HTMLTableRowElement>('tbody tr[data-index]')];
 }
 
+/** Opens a finding row's overflow menu the way a keyboard user does (Enter on its
+ *  trigger). Radix portals the items to document.body, so lookups leave the host. */
+async function openRowMenu(host: HTMLElement, index: number) {
+  const trigger = rows(host)[index].querySelector<HTMLButtonElement>('button[aria-label^="Actions for"]')!;
+  await press(trigger, 'Enter');
+  return [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
+}
+
+/** Opens a row menu and returns the one item whose label matches. */
+async function rowMenuItem(host: HTMLElement, index: number, label: string) {
+  const items = await openRowMenu(host, index);
+  return items.find((item) => item.textContent === label)!;
+}
+
 /** The foot carries two status spans ("Showing N of M" plus "End of list" when done) — the last one is the terminal state. */
 function footStatus(host: HTMLElement) {
   return [...host.querySelectorAll('.load-more-status')].at(-1)!.textContent;
@@ -144,7 +158,7 @@ describe('ReportView toolbar filters', () => {
     const host = await render();
     const high = chipIn(host, 'Severity', 'High');
     const medium = chipIn(host, 'Severity', 'Medium');
-    expect(high.querySelector('.count')!.textContent).toBe('2'); // chips double as the legend
+    expect(high.querySelector('.chip-count')!.textContent).toBe('2'); // chips double as the legend
     expect(high.getAttribute('aria-pressed')).toBe('false');
 
     await click(high);
@@ -165,7 +179,7 @@ describe('ReportView toolbar filters', () => {
     expect(chipIn(host, 'Severity', 'High').disabled).toBe(false);
   });
 
-  it('status chips replace Any status with one status at a time', async () => {
+  it('status chips are single-select and clicking the active chip clears it', async () => {
     const host = await render();
     await click(chipIn(host, 'Status', 'New'));
     expect(findingUrls().at(-1)).toContain('status=new');
@@ -191,9 +205,9 @@ describe('ReportView toolbar filters', () => {
       return Promise.resolve(json({ items: [] }));
     }, async () => {
       const host = await render();
-      expect(chipIn(host, 'Status', 'New').querySelector('.count')!.textContent).toBe('2');
-      expect(chipIn(host, 'Status', 'Still present').querySelector('.count')!.textContent).toBe('1'); // "persistent" value, human label
-      expect(chipIn(host, 'Status', 'Suppressed').querySelector('.count')!.textContent).toBe('1');
+      expect(chipIn(host, 'Status', 'New').querySelector('.chip-count')!.textContent).toBe('2');
+      expect(chipIn(host, 'Status', 'Still present').querySelector('.chip-count')!.textContent).toBe('1'); // "persistent" value, human label
+      expect(chipIn(host, 'Status', 'Suppressed').querySelector('.chip-count')!.textContent).toBe('1');
     });
   });
 
@@ -205,9 +219,9 @@ describe('ReportView toolbar filters', () => {
     }, async () => {
       const host = await render();
       const ruff = chipIn(host, 'Tool', 'Ruff');
-      expect(ruff.querySelector('.count')!.textContent).toBe('1'); // count from the report payload
+      expect(ruff.querySelector('.chip-count')!.textContent).toBe('1'); // count from the report payload
       expect(ruff.getAttribute('title')).toContain('1.5s'); // run duration rides along as hover context
-      expect(chipIn(host, 'Tool', 'Biome').querySelector('.count')!.textContent).toBe('2');
+      expect(chipIn(host, 'Tool', 'Biome').querySelector('.chip-count')!.textContent).toBe('2');
 
       await click(ruff);
       expect(findingUrls().at(-1)).toContain('analyzer=ruff');
@@ -226,7 +240,7 @@ describe('ReportView toolbar filters', () => {
       const host = await render();
       const rail = host.querySelector('fieldset[aria-label="Type"]')!;
       const chips = [...rail.querySelectorAll<HTMLButtonElement>('.chip')];
-      expect(chips.map((chip) => chip.querySelector('.count')!.textContent)).toEqual(['2', '1']); // correctness first
+      expect(chips.map((chip) => chip.querySelector('.chip-count')!.textContent)).toEqual(['2', '1']); // correctness first
       expect(chips[0].textContent).toContain('Correctness'); // finding categories get human labels, not raw ids
       expect(chips[1].textContent).toContain('Security');
 
@@ -580,9 +594,9 @@ describe('ReportView suppression actions', () => {
       return Promise.resolve(json({ fingerprint: FINGERPRINT, created_at: '2026-08-24T00:00:00Z' }, 201));
     }, async () => {
       const host = await render();
-      const rowButton = host.querySelector<HTMLButtonElement>('[aria-label="Suppress Example finding"]')!;
-      expect(rowButton.textContent).toBe('Suppress…');
-      await click(rowButton);
+      const suppressItem = await rowMenuItem(host, 0, 'Suppress…');
+      expect(suppressItem.textContent).toBe('Suppress…');
+      await click(suppressItem);
       expect(host.querySelector('dialog')!.textContent).toContain('Suppressing hides this finding — matched by its fingerprint — from all future scans, reports, and the CI gate for this workspace.');
 
       await click([...host.querySelectorAll('button')].find((button) => button.textContent === 'Suppress finding')!);
@@ -605,7 +619,7 @@ describe('ReportView suppression actions', () => {
       const host = await render();
       expect(host.querySelector('.status-text.suppressed')!.textContent).toBe('suppressed');
       expect(host.querySelector('[aria-label="Suppress Example finding"]')).toBeNull(); // suppressed rows restore instead
-      await click(host.querySelector<HTMLButtonElement>('[aria-label="Restore Example finding"]')!);
+      await click(await rowMenuItem(host, 0, 'Restore'));
       await flush();
       const deletes = callsFor('DELETE');
       expect(deletes).toHaveLength(1);
@@ -618,6 +632,8 @@ describe('ReportView suppression actions', () => {
     const host = await render();
     expect(host.querySelector('.suppress-finding')).toBeNull();
     expect(host.querySelector('.restore-finding')).toBeNull();
+    const items = await openRowMenu(host, 0);
+    expect(items.map((item) => item.textContent)).toEqual(['Copy details']); // copy survives; suppress/restore are fingerprint-gated
   });
 
   it('shows the recorded suppression reason inline on the suppressed row (IMP-14)', async () => {
@@ -648,7 +664,7 @@ describe('ReportView suppression actions', () => {
       root = createRoot(host);
       await act(async () => { root.render(<ReportView scanId="scan-1" notify={notify} go={go} />); });
       await settle();
-      await click(host.querySelector<HTMLButtonElement>('[aria-label="Suppress Example finding"]')!);
+      await click(await rowMenuItem(host, 0, 'Suppress…'));
       await click([...host.querySelectorAll('button')].find((button) => button.textContent === 'Suppress finding')!);
       await settle();
       const notice = notify.mock.calls.at(-1)![0];
@@ -673,7 +689,7 @@ describe('ReportView suppression actions', () => {
       root = createRoot(host);
       await act(async () => { root.render(<ReportView scanId="scan-1" notify={notify} />); });
       await settle();
-      await click(host.querySelector<HTMLButtonElement>('[aria-label="Suppress Example finding"]')!);
+      await click(await rowMenuItem(host, 0, 'Suppress…'));
       await click([...host.querySelectorAll('button')].find((button) => button.textContent === 'Suppress finding')!);
       await settle();
       const notice = notify.mock.calls.at(-1)![0];
@@ -786,15 +802,11 @@ describe('ReportView finding row copy', () => {
       const writeText = vi.fn(() => Promise.resolve());
       Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true }); // jsdom ships no clipboard API
       try {
-        const copyButton = host.querySelector<HTMLButtonElement>('[aria-label="Copy finding details"]')!;
-        await click(copyButton);
+        const copyItem = await rowMenuItem(host, 0, 'Copy details');
+        await click(copyItem);
         await settle();
         expect(writeText).toHaveBeenCalledTimes(1);
         expect(writeText).toHaveBeenCalledWith('[high] F821 — Undefined name\nsrc/main.py:4:7\nanalyzer: ruff\nremediation: Define the name before use.');
-        expect(copyButton.className).toContain('copied'); // brief check-mark swap instead of a toast
-
-        await advance(800);
-        expect(copyButton.className).not.toContain('copied');
       } finally {
         delete (navigator as { clipboard?: unknown }).clipboard;
       }
@@ -803,7 +815,7 @@ describe('ReportView finding row copy', () => {
 });
 
 describe('ReportView finding cells', () => {
-  function withFinding(row: typeof finding & { rule_id?: string }, body: (host: HTMLElement) => Promise<void>) {
+  function withFinding(row: typeof finding & { rule_id?: string; fingerprint?: string }, body: (host: HTMLElement) => Promise<void>) {
     return fetchMock.withImplementation((input: string) => {
       if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, warnings: [], findings: [row] }));
       if (input.includes('/preview')) return Promise.resolve(json(previewBody));
@@ -816,6 +828,32 @@ describe('ReportView finding cells', () => {
     await withFinding({ ...finding, analyzer_id: 'sonarqube', rule_id: 'typescript:S2699' }, async (host) => {
       const toolCell = host.querySelector('.findings-table tbody tr td:nth-child(4)')!;
       expect(toolCell.textContent).toBe('SonarQube');
+      expect(toolCell.querySelector('.tag')).not.toBeNull(); // analyzer id renders as neutral metadata, not a colored badge
+    });
+  });
+
+  it('rows never repeat the rule id: the message drops the prefix the title already carries', async () => {
+    await withFinding({ ...finding, analyzer_id: 'secrets', rule_id: 'aws-access-token', title: 'aws-access-token', message: 'aws-access-token: AWS Access Token detected in source' }, async (host) => {
+      const summary = host.querySelector('.findings-table tbody tr .finding-summary')!;
+      expect(summary.querySelector('strong')!.textContent).toBe('aws-access-token'); // the rule's own name stays the heading
+      expect(summary.querySelector('.finding-message')!.textContent).toBe('AWS Access Token detected in source'); // prefix stripped once
+      expect(summary.textContent!.toLowerCase().split('aws-access-token')).toHaveLength(2); // the id appears exactly once in the row
+    });
+  });
+
+  it('when the title is synthesized from the message, the row body keeps only the remainder', async () => {
+    await withFinding({ ...finding, analyzer_id: 'sonarqube', rule_id: 'typescript:S3776', title: 'typescript:S3776', message: 'Cognitive Complexity of functions should not be too high. Refactor.' }, async (host) => {
+      const summary = host.querySelector('.findings-table tbody tr .finding-summary')!;
+      expect(summary.querySelector('strong')!.textContent).toBe('Cognitive Complexity of functions should not be too high'); // heading, not the rule id
+      expect(summary.querySelector('.finding-message')!.textContent).toBe('Refactor.'); // no clause duplicated under the heading
+    });
+  });
+
+  it('a finding row carries exactly one visible control — the overflow menu', async () => {
+    await withFinding({ ...finding, fingerprint: 'f'.repeat(64) }, async (host) => {
+      expect(rows(host)[0].querySelectorAll('button')).toHaveLength(1); // the RowMenu trigger; no stray action buttons
+      const items = await openRowMenu(host, 0);
+      expect(items.map((item) => item.textContent)).toEqual(['Copy details', 'Suppress…']);
     });
   });
 
@@ -917,6 +955,7 @@ describe('ReportView states and guards', () => {
     expect(host.querySelector('.findings-table tbody tr.row-high')).not.toBeNull();
     expect(host.querySelector('.findings-table tbody tr.row-critical')).toBeNull();
     expect(host.querySelector('.findings-table tbody tr.row-medium')).toBeNull();
+    expect(host.querySelector('.findings-table tbody tr .severity')!.textContent).toBe('High'); // capitalized like the legend chips
   });
 
   it('names the findings table for screen readers', async () => {

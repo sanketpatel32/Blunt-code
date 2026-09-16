@@ -57,11 +57,42 @@ function dialogButton(host: HTMLElement, label: string): HTMLElement | undefined
   return [...host.querySelectorAll<HTMLElement>('dialog button')].find((button) => button.textContent === label);
 }
 
-/** Opens the confirm dialog for `operation` on `id`, then confirms it —
- *  the row buttons only arm the dialog; the POST fires on confirm. */
-async function confirmAction(host: HTMLElement, id: string, operation: string) {
+/** Arms the confirmation dialog from the row's visible Install button, then
+ *  confirms it — the visible control only arms the dialog; the POST fires on
+ *  confirm. */
+async function confirmVisibleAction(host: HTMLElement, id: string, operation: string) {
   await act(async () => { [...row(host, id).querySelectorAll('button')].find((button) => button.textContent === operation)!.click(); });
   await act(async () => { dialogButton(host, operation)!.click(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
+}
+
+/** Row actions live in a Radix overflow menu: open the row's menu (its trigger
+ *  is the kebab beside the row's single contextual control). */
+async function openToolMenu(host: HTMLElement, id: string) {
+  const trigger = row(host, id).querySelector<HTMLButtonElement>('button[aria-label^="Actions for"]');
+  expect(trigger, 'row exposes an actions menu').toBeDefined();
+  await act(async () => {
+    trigger!.dispatchEvent(new MouseEvent('pointerdown', { button: 0, bubbles: true, cancelable: true }));
+  });
+  await act(async () => {});
+  return [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+}
+
+/** Arms the confirmation dialog from an overflow-menu item, then confirms it. */
+async function confirmMenuAction(host: HTMLElement, id: string, operation: string) {
+  await openToolMenu(host, id);
+  const item = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((candidate) => candidate.textContent === operation);
+  expect(item, `no "${operation}" menu item`).toBeDefined();
+  await act(async () => {
+    item!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    item!.click();
+  });
+  await act(async () => { dialogButton(host, operation)!.click(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
+}
+
+/** Expands a row's details via the tool-name disclosure. */
+async function expandDetails(host: HTMLElement, id: string) {
+  await act(async () => { row(host, id).querySelector<HTMLButtonElement>('button.tools-name')!.click(); });
+  await act(async () => {});
 }
 
 afterEach(async () => {
@@ -70,80 +101,105 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-describe('ToolsPage readiness strip', () => {
-  it('counts managed tools only and chips every non-ready managed tool', async () => {
+describe('ToolsPage readiness summary', () => {
+  it('summarizes optional tools once in the toolbar meta and keeps readiness in the row, not as chip wallpaper', async () => {
     const { host } = await renderPage(analyzersMock());
-    const strip = host.querySelector('.tools-readiness')!;
-    expect(strip.textContent).toContain('optional tools 1 of 2 ready');
+    const meta = host.querySelector('.tools-readiness')!;
+    expect(meta.textContent).toContain('1 of 2 optional tools ready');
     expect(host.querySelector('.tools-all-ready')).toBeNull();
-    const chip = [...strip.querySelectorAll('.badge')].find((badge) => badge.textContent !== 'optional tools 1 of 2 ready')!;
-    expect(chip.querySelector('.dot.not-ready')).not.toBeNull();
-    expect(chip.querySelector('.spinner')).toBeNull();
-    expect(chip.textContent).toContain('Semgrep not installed');
-    expect(row(host, 'Ruff').querySelector('.tool-version')!.textContent).toBe('v0.6.9');
-    expect(row(host, 'Semgrep').querySelector('.tool-version')!.textContent).toBe('Managed version');
+    // Readiness shows in the row itself: quiet dot + plain text, no spinner yet.
+    const semgrep = row(host, 'Semgrep');
+    expect(semgrep.querySelector('.dot.not-ready')).not.toBeNull();
+    expect(semgrep.querySelector('.tools-state')!.textContent).toBe('Not installed');
+    expect(semgrep.querySelector('.spinner')).toBeNull();
+    expect(semgrep.querySelector('.tools-version')!.textContent).toBe('—');
+    expect(row(host, 'Ruff').querySelector('.tools-version')!.textContent).toBe('v0.6.9');
   });
 
-  it('marks an all-ready managed set with the success counter and no pending chips', async () => {
+  it('marks an all-ready managed set with the success counter', async () => {
     const allReady = { items: analyzersBody.items.map((a) => (a.managed_tool ? { ...a, ready: true } : a)) };
     const fetchMock = vi.fn((input: string) => (input.endsWith('/analyzers') ? Promise.resolve(json(allReady)) : Promise.resolve(json({}))));
     const { host } = await renderPage(fetchMock);
-    expect(host.querySelector('.tools-all-ready')!.textContent).toBe('optional tools 2 of 2 ready');
+    expect(host.querySelector('.tools-all-ready')!.textContent).toBe('2 of 2 optional tools ready');
     expect(host.querySelectorAll('.tools-readiness .dot').length).toBe(0);
   });
 
-  it('turns the non-ready chip into a spinner while that install is in flight', async () => {
+  it('shows the operation spinner in the row while that action is in flight', async () => {
     const pending = new Promise<Response>(() => {});
     const { host } = await renderPage(analyzersMock(() => pending));
-    await confirmAction(host, 'Semgrep', 'Install');
-    const chip = [...host.querySelectorAll('.tools-readiness .badge')].find((badge) => badge.textContent!.includes('Semgrep'))!;
-    expect(chip.querySelector('.spinner')).not.toBeNull();
-    expect(chip.textContent).toContain('Semgrep installing…');
+    await confirmVisibleAction(host, 'Semgrep', 'Install');
+    const busyCell = row(host, 'Semgrep').querySelector('.tools-busy')!;
+    expect(busyCell.querySelector('.spinner')).not.toBeNull();
+    expect(busyCell.textContent).toBe('Installing…');
     expect(row(host, 'Semgrep').querySelector('.table-actions')!.getAttribute('aria-busy')).toBe('true');
-    expect(host.querySelector('.tools-readiness')!.textContent).toContain('optional tools 1 of 2 ready');
+    expect(host.querySelector('.tools-readiness')!.textContent).toContain('1 of 2 optional tools ready');
   });
 });
 
 describe('ToolsPage inventory table', () => {
   it('lists every analyzer from the inventory in one table, built-ins with no install actions', async () => {
     const { host } = await renderPage(analyzersMock());
-    const rows = [...host.querySelectorAll('.tool-table tbody tr')];
+    const rows = [...host.querySelectorAll('.tool-table tbody tr:not(.tools-details-row)')];
     // Five inventory rows render: managed, built-in, and offline-withheld.
     expect(rows.length).toBe(5);
     expect(rows.map((r) => r.textContent)).toEqual(expect.arrayContaining([expect.stringContaining('Ruff'), expect.stringContaining('Secrets'), expect.stringContaining('Todo Scanner')]));
     const secrets = row(host, 'Secrets');
-    expect(secrets.querySelector('.state.ready')!.textContent).toBe('Built-in');
+    expect(secrets.querySelector('.tools-state')!.textContent).toBe('Ready');
+    expect(secrets.textContent).toContain('Built-in');
     const actions = [...secrets.querySelectorAll('button')].filter((button) => ['Install', 'Repair', 'Update'].includes(button.textContent!));
     expect(actions).toHaveLength(0);
     expect(secrets.textContent).not.toContain('Coming soon');
     expect(host.textContent).not.toContain('Secrets not installed');
   });
 
+  it('keeps one contextual control per row: Install visible when missing, overflow menu otherwise', async () => {
+    const { host } = await renderPage(analyzersMock());
+    const install = row(host, 'Semgrep').querySelector('.table-actions .button.secondary')!;
+    expect(install.textContent).toBe('Install');
+    // A ready managed tool needs no visible action — everything but the menu lives in overflow.
+    expect(row(host, 'Ruff').querySelectorAll('.table-actions button')).toHaveLength(1);
+    expect(row(host, 'Ruff').querySelector('.table-actions button')!.getAttribute('aria-label')).toBe('Actions for Ruff');
+    const menu = await openToolMenu(host, 'Ruff');
+    expect(menu.map((item) => item.textContent)).toEqual(['Update', 'Repair']);
+  });
+
   it('marks analyzers withheld by offline mode as unavailable instead of silently hiding them', async () => {
     const { host } = await renderPage(analyzersMock());
     const license = row(host, 'License Scanner');
-    expect(license.querySelector('.state.not-ready')!.textContent).toBe('Offline mode');
+    expect(license.querySelector('.tools-state.warn')!.textContent).toBe('Offline mode');
   });
 
-  it('shows scan tiers and network use from the inventory', async () => {
+  it('collapses secondary detail into an expandable row behind the tool name', async () => {
     const { host } = await renderPage(analyzersMock());
-    expect(row(host, 'Ruff').textContent).toContain('Quick, Standard, Deep, Pentest');
-    expect(row(host, 'Ruff').textContent).toContain('No network');
+    // Collapsed: the main table stays single-line — no profiles/network text.
+    expect(row(host, 'Ruff').textContent).not.toContain('Quick, Standard, Deep, Pentest');
+    await expandDetails(host, 'Ruff');
+    expect(row(host, 'Ruff').querySelector('button.tools-name')!.getAttribute('aria-expanded')).toBe('true');
+    const details = host.querySelector('.tools-details-row')!;
+    expect(details.textContent).toContain('Quick, Standard, Deep, Pentest');
+    expect(details.textContent).toContain('No network');
+    expect(details.textContent).toContain('Code quality');
+    await expandDetails(host, 'Ruff');
+    expect(host.querySelector('.tools-details-row')).toBeNull();
   });
 
   it('labels the category with the API inventory vocabulary, not frontend catalog labels', async () => {
     const { host } = await renderPage(analyzersMock());
-    expect(row(host, 'Ruff').textContent).toContain('Code quality');
-    expect(row(host, 'License Scanner').textContent).toContain('Compliance');
-    expect(row(host, 'Ruff').textContent).not.toContain('Lint');
+    await expandDetails(host, 'Ruff');
+    const ruff = host.querySelector('.tools-details-row')!.textContent;
+    expect(ruff).toContain('Code quality');
+    expect(ruff).not.toContain('Lint');
+    await expandDetails(host, 'License Scanner');
+    expect(host.querySelector('.tools-details-row')!.textContent).toContain('Compliance');
   });
 });
 
-describe('ToolsPage header badge', () => {
+describe('ToolsPage toolbar count', () => {
   it('shows an ellipsis count while the inventory loads instead of "0 analyzers"', async () => {
     const fetchMock = vi.fn((input: string) => (input.endsWith('/analyzers') ? new Promise<Response>(() => {}) : Promise.resolve(json({}))));
     const { host } = await renderPage(fetchMock);
-    expect(host.querySelector('.page-heading-badge')!.textContent).toBe('… analyzers');
+    expect(host.querySelector('.tools-readiness')!.textContent).toBe('… analyzers');
+    expect(host.querySelector('.segmented button[aria-pressed="true"]')).not.toBeNull();
   });
 });
 
@@ -151,7 +207,7 @@ describe('ToolsPage actions', () => {
   it('keeps install firing the same POST endpoint with a success notice naming the analyzer', async () => {
     const fetchMock = analyzersMock((input) => (input.endsWith('/tools/semgrep/install') ? json({ id: 'semgrep', ready: true, can_install: false }) : json({})));
     const { host, notify } = await renderPage(fetchMock);
-    await confirmAction(host, 'Semgrep', 'Install');
+    await confirmVisibleAction(host, 'Semgrep', 'Install');
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/tools/semgrep/install', expect.objectContaining({ method: 'POST' }));
     expect(notify).toHaveBeenCalledWith({ kind: 'info', text: 'Semgrep: installed.' });
     expect(notify).not.toHaveBeenCalledWith(expect.objectContaining({ kind: 'error' }));
@@ -160,7 +216,14 @@ describe('ToolsPage actions', () => {
   it('arms a confirmation dialog naming the tool + operation, and cancel fires no POST', async () => {
     const fetchMock = analyzersMock();
     const { host } = await renderPage(fetchMock);
-    await act(async () => { [...row(host, 'Semgrep').querySelectorAll('button')].find((button) => button.textContent === 'Repair')!.click(); });
+    await openToolMenu(host, 'Semgrep');
+    const item = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((candidate) => candidate.textContent === 'Repair');
+    expect(item, 'no "Repair" menu item').toBeDefined();
+    await act(async () => {
+      item!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      item!.click();
+    });
+    await act(async () => {});
     const dialog = host.querySelector('dialog[open]')!;
     expect(dialog).not.toBeNull();
     expect(dialog.textContent).toContain('Repair Semgrep');
@@ -174,9 +237,9 @@ describe('ToolsPage actions', () => {
   it('fires repair and update against their own endpoints', async () => {
     const fetchMock = analyzersMock((input) => (input.endsWith('/tools/ruff/update') || input.endsWith('/tools/ruff/repair') ? json({ id: 'ruff', ready: true }) : json({})));
     const { host } = await renderPage(fetchMock);
-    await confirmAction(host, 'Ruff', 'Update');
+    await confirmMenuAction(host, 'Ruff', 'Update');
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/tools/ruff/update', expect.objectContaining({ method: 'POST' }));
-    await confirmAction(host, 'Ruff', 'Repair');
+    await confirmMenuAction(host, 'Ruff', 'Repair');
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/tools/ruff/repair', expect.objectContaining({ method: 'POST' }));
   });
 
@@ -189,10 +252,10 @@ describe('ToolsPage actions', () => {
     const { host } = await renderPage(fetchMock);
     expect(host.querySelector('.error-panel')).not.toBeNull();
     expect(host.querySelector('.tools-readiness')).toBeNull();
-    expect(host.querySelector('.page-heading-badge')).toBeNull();
+    expect(host.querySelector('.tools-toolbar')).toBeNull();
     failing = false;
     await act(async () => { [...host.querySelectorAll('button')].find((button) => button.textContent === 'Try again')!.click(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
     expect(host.querySelector('.error-panel')).toBeNull();
-    expect(host.querySelector('.tools-readiness')!.textContent).toContain('optional tools 1 of 2 ready');
+    expect(host.querySelector('.tools-readiness')!.textContent).toContain('1 of 2 optional tools ready');
   });
 });

@@ -132,6 +132,19 @@ describe('WorkspaceDetailPage per-language coverage', () => {
   });
 });
 
+describe('WorkspaceDetailPage header language summary (D2 audit)', () => {
+  it('caps the language dots at three and folds the rest into a "+N more" tag', async () => {
+    const workspace = workspacePayload({ languages: ['TypeScript', 'Go', 'Python', 'Rust', 'Shell'] });
+    const host = await render(detailFetchMock({ scans: [scanRow()] }, workspace));
+
+    const badge = host.querySelector('[aria-label="Detected languages"]');
+    expect(badge).not.toBeNull();
+    expect(badge?.querySelectorAll('.ws-lang-dot')).toHaveLength(3); // color is signal: max three dots
+    expect(badge?.querySelector('.tag')?.textContent).toBe('+2 more');
+    expect(badge?.querySelector('.tag')?.getAttribute('title')).toContain('Rust'); // the full list survives on hover
+  });
+});
+
 describe('WorkspaceDetailPage cancelled-latest fallback (C2)', () => {
   it('grades the metric cards on the last completed scan and says so in plain words', async () => {
     const workspace = workspacePayload({
@@ -173,18 +186,23 @@ describe('WorkspaceDetailPage cancelled-latest fallback (C2)', () => {
   });
 });
 
-describe('RiskCard trend words (C8)', () => {
-  it('says "worsened" in the warning tone when the trend is up', async () => {
+describe('RiskCard trend words (C8, D2 audit: grade owns the color)', () => {
+  it('says "worsened" with a neutral delta note and a decorative arrow when the trend is up', async () => {
     const host = await renderElement(<RiskCard risk={{ available: true, score: 60, grade: 'C', trend: 'up', previous_score: 55 }} />);
     expect(host.textContent).toContain('worsened 5 pts');
-    expect(host.querySelector('.risk-trend')?.className).toContain('text-[var(--color-warning)]');
+    const note = host.querySelector('.risk-trend');
+    expect(note?.querySelector('svg[aria-hidden="true"]')).not.toBeNull(); // arrow icon, hidden from screen readers
+    expect(note?.className).not.toContain('text-[var(--color-success)]');
+    expect(note?.className).not.toContain('text-[var(--color-warning)]'); // neutral ink — no second verdict color beside the grade
     expect(host.textContent).not.toContain('▲');
   });
 
-  it('says "improved … since last scan" in the success tone when the trend is down', async () => {
+  it('says "improved … since last scan" with a neutral delta note when the trend is down', async () => {
     const host = await renderElement(<RiskCard risk={{ available: true, score: 950, grade: 'D', trend: 'down', previous_score: 954 }} />);
     expect(host.textContent).toContain('improved 4 pts since last scan');
-    expect(host.querySelector('.risk-trend')?.className).toContain('text-[var(--color-success)]');
+    const note = host.querySelector('.risk-trend');
+    expect(note?.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    expect(note?.className).not.toContain('text-[var(--color-success)]'); // neutral ink — a green note beside a red grade read as two verdicts
     expect(host.textContent).not.toContain('▼');
   });
 

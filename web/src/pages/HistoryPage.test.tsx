@@ -37,11 +37,45 @@ async function renderTable(scans: Scan[]) {
 }
 
 function dataRows(host: HTMLElement) {
-  return [...host.querySelectorAll('tbody tr')].filter((row) => !row.matches('.history-band-row, .history-detail-row'));
+  return [...host.querySelectorAll<HTMLElement>('tbody tr')].filter((row) => !row.matches('.history-band-row, .history-detail-row'));
 }
 
 function bandHeaders(host: HTMLElement) {
   return [...host.querySelectorAll<HTMLTableCellElement>('tbody tr.history-band-row th')];
+}
+
+/** Row actions live in a Radix overflow menu: open one row's menu (its trigger
+ *  is the only other visible control beside "Open report") and return its items. */
+async function openRowMenu(row: HTMLElement) {
+  const trigger = row.querySelector<HTMLButtonElement>('button[aria-label^="Actions for scan"]');
+  expect(trigger, 'row exposes an actions menu').toBeDefined();
+  await act(async () => {
+    trigger!.dispatchEvent(new MouseEvent('pointerdown', { button: 0, bubbles: true, cancelable: true }));
+  });
+  await act(async () => {});
+  return [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+}
+
+/** Pick one item from the currently open row menu (Radix selects on click/Enter). */
+async function pickMenuItem(label: string) {
+  const item = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((candidate) => candidate.textContent === label);
+  expect(item, `no "${label}" menu item`).toBeDefined();
+  await act(async () => {
+    item!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    item!.click();
+  });
+  await act(async () => {});
+}
+
+async function closeRowMenu() {
+  await act(async () => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  });
+  await act(async () => {});
+}
+
+function menuTrigger(row: HTMLElement) {
+  return row.querySelector('button[aria-label^="Actions for scan"]');
 }
 
 afterEach(async () => {
@@ -103,9 +137,25 @@ describe('HistoryTable date bands', () => {
     ]);
     const bands = bandHeaders(host);
     expect(bands.map((header) => header.textContent)).toEqual(['Today', 'Yesterday', 'This week', 'Earlier']);
-    expect(bands.map((header) => header.colSpan)).toEqual([6, 6, 6, 6]);
+    expect(bands.map((header) => header.colSpan)).toEqual([5, 5, 5, 5]);
     const sequence = [...host.querySelectorAll('tbody tr')].map((row) => row.classList.contains('history-band-row') ? `band:${row.textContent}` : `row:${row.querySelector('.profile-badge')?.textContent}`);
     expect(sequence).toEqual(['band:Today', 'row:now', 'band:Yesterday', 'row:yesterday', 'band:This week', 'row:week', 'band:Earlier', 'row:old']);
+  });
+
+  it('adds a faint absolute stamp beside recent relative dates', async () => {
+    const iso = (offsetHoursAgo: number) => new Date(new Date('2026-03-15T12:00:00').getTime() - offsetHoursAgo * 3_600_000).toISOString();
+    const { host } = await renderTable([
+      scan({ id: 'recent', state: 'completed', finished_at: iso(2) }),
+      scan({ id: 'ancient', state: 'completed', finished_at: iso(24 * 30) }),
+    ]);
+    const rows = dataRows(host);
+    const recentStamp = rows[0].querySelector('.history-when')!;
+    expect(recentStamp.querySelector('.history-relative')?.textContent).toContain('hours ago');
+    expect(recentStamp.querySelector('.history-abs')?.textContent).not.toBe(''); // "Sep 15, 10:00"-style stamp
+    expect(rows[0].querySelector('td')?.getAttribute('title')).toContain('2026'); // full timestamp in the tooltip
+    // Older scans: relativeTime already renders the absolute short date by itself.
+    expect(rows[1].querySelector('.history-abs')).toBeNull();
+    expect(rows[1].querySelector('.history-relative')?.textContent).toContain('2026');
   });
 });
 
@@ -131,7 +181,7 @@ describe('HistoryTable expandable rows', () => {
     expect(disclose.getAttribute('aria-expanded')).toBe('true');
     expect(host.querySelectorAll('.history-detail-row')).toHaveLength(1);
     const cell = host.querySelector<HTMLTableCellElement>('.history-detail-row td')!;
-    expect(cell.colSpan).toBe(6);
+    expect(cell.colSpan).toBe(5);
     const detail = cell.querySelector('.history-detail')!;
     const meta = detail.textContent!;
     expect(meta).toContain('Started');
@@ -203,7 +253,7 @@ describe('HistoryTable scan rows', () => {
     expect(headers).not.toContain('New');
     expect(headers).not.toContain('Fixed');
     expect(dataRows(host)[0]!.querySelectorAll('td')).toHaveLength(5);
-    expect((host.querySelector('.history-band') as HTMLTableCellElement | null)?.colSpan).toBe(6);
+    expect((host.querySelector('.history-band') as HTMLTableCellElement | null)?.colSpan).toBe(5);
   });
 
   it('shows the scan profile as a badge beside the state pill, only when present', async () => {
@@ -217,40 +267,60 @@ describe('HistoryTable scan rows', () => {
     expect(badges[0].closest('td')?.textContent).toContain('Completed');
   });
 
-  it('stacks the severity mini-bar with widths proportional to each severity count', async () => {
+  it('renders severity-composed counts inline, zero buckets omitted', async () => {
     const { host } = await renderTable([scan({ id: 'scan-1', state: 'completed', total_findings: 20, critical_count: 2, high_count: 5, medium_count: 10, low_count: 3 })]);
-    expect(host.querySelector('.findings-total')?.textContent).toBe('20');
-    const bar = host.querySelector<HTMLElement>('.severity-bar')!;
-    expect(bar.getAttribute('title')).toBe('2 critical · 5 high · 10 medium · 3 low');
-    const segments = [...bar.querySelectorAll<HTMLElement>('i')];
-    expect(segments.map((segment) => segment.className)).toEqual(['bar-critical', 'bar-high', 'bar-medium', 'bar-low']);
-    expect(segments.map((segment) => segment.style.width)).toEqual(['10%', '25%', '50%', '15%']);
-    expect(segments.map((segment) => segment.style.minWidth)).toEqual(['2px', '2px', '2px', '2px']); // nonzero segments stay visible at small counts
+    const cell = host.querySelector('.findings-inline')!;
+    expect(cell.getAttribute('title')).toBe('2 critical · 5 high · 10 medium · 3 low');
+    expect(cell.textContent).toContain('2 critical');
+    expect(cell.textContent).toContain('5 high');
+    expect(cell.textContent).toContain('10 medium');
+    expect(cell.textContent).toContain('3 low');
+    expect(cell.querySelectorAll('.findings-sev')).toHaveLength(4); // one colored figure per nonzero bucket
   });
 
-  it('gives tiny severity segments a 2px floor so they never round to invisible', async () => {
-    const { host } = await renderTable([scan({ id: 'scan-1', state: 'completed', total_findings: 11228, critical_count: 4, high_count: 11224 })]);
-    const bar = host.querySelector<HTMLElement>('.severity-bar')!;
-    const segments = [...bar.querySelectorAll<HTMLElement>('i')];
-    expect(segments.map((segment) => segment.style.width)).toEqual(['0%', '100%']); // 4 in 11228 rounds to 0%
-    expect(segments[0].style.minWidth).toBe('2px'); // …but the critical sliver stays on screen
+  it('omits zero-severity buckets instead of rendering "0 critical"', async () => {
+    const { host } = await renderTable([scan({ id: 'scan-1', state: 'completed', total_findings: 480, low_count: 480 })]);
+    const cell = host.querySelector('.findings-inline')!;
+    expect(cell.textContent).toBe('480 low');
+    expect(cell.querySelector('.sev-low')).not.toBeNull();
+    expect(cell.querySelector('.findings-total')).toBeNull(); // total equals the sum — no leading duplicate
   });
 
-  it('renders a muted zero instead of a bar when a scan found nothing', async () => {
+  it('leads with the full total when findings exceed the four categorized buckets', async () => {
+    const { host } = await renderTable([scan({ id: 'scan-1', state: 'completed', total_findings: 11230, critical_count: 4, high_count: 11224 })]);
+    const cell = host.querySelector('.findings-inline')!;
+    expect(cell.querySelector('.findings-total')?.textContent).toBe('11,230');
+    expect(cell.textContent).toContain('4 critical');
+    expect(cell.textContent).toContain('11,224 high');
+  });
+
+  it('renders a muted zero instead of counts when a scan found nothing', async () => {
     const { host } = await renderTable([scan({ id: 'scan-1', state: 'completed', total_findings: 0 })]);
     expect(host.querySelector('.findings-zero')?.textContent).toBe('0');
-    expect(host.querySelector('.severity-bar')).toBeNull();
+    expect(host.querySelector('.findings-inline')).toBeNull();
   });
 
-  it('offers the markdown export link only for terminal scans that reported findings', async () => {
+  it('keeps one visible control per row: Open report plus the overflow menu, exports inside the menu only for terminal scans with findings', async () => {
     const { host } = await renderTable([
       scan({ id: 'scan-1', state: 'completed', total_findings: 5 }),
       scan({ id: 'scan-2', state: 'running', total_findings: 5 }),
       scan({ id: 'scan-3', state: 'completed', total_findings: 0 }),
     ]);
-    const links = [...host.querySelectorAll<HTMLAnchorElement>('a')].filter((link) => link.textContent === 'Export .md');
-    expect(links).toHaveLength(1);
-    expect(links[0].getAttribute('href')).toBe('/api/v1/scans/scan-1/report.md');
+    const rows = dataRows(host);
+    for (const row of rows) {
+      expect([...row.querySelectorAll('button')].filter((button) => button.textContent === 'Open report')).toHaveLength(1);
+    }
+
+    const finishedMenu = await openRowMenu(rows[0]);
+    // Standalone table (no compare wiring from the page) — exports only; the
+    // page-level tests below cover the "Compare with…" items.
+    expect(finishedMenu.map((item) => item.textContent)).toEqual(['Export Markdown', 'Export JSON', 'Export SARIF', 'Export HTML']);
+    await closeRowMenu();
+
+    // A running scan offers neither exports nor compare — no menu at all…
+    expect(menuTrigger(rows[1])).toBeNull();
+    // …and neither does a clean scan with zero findings in the standalone table.
+    expect(menuTrigger(rows[2])).toBeNull();
   });
 
   it('marks only the newest warning or failed scan row with a status hint', async () => {
@@ -327,12 +397,22 @@ describe('HistoryTable server paging', () => {
     await act(async () => { root.render(<HistoryTable scans={scans} go={vi.fn()} paging={basePaging({ page: 2, total: 14, hasNext: true, onPage })} />); });
     expect(dataRows(host)).toHaveLength(6); // no double slicing of the served page
     expect(host.querySelector('output')!.textContent).toBe('Page 2 of 3');
-    expect(host.querySelector('.history-pagination span')?.textContent).toBe('Showing 7–12 of 14 scans');
+    // The toolbar owns the scan total when server paging is active — no duplicate "Showing x–y of n" line.
+    expect(host.querySelector('.history-pagination-count')).toBeNull();
     const [previous, next] = [...host.querySelectorAll<HTMLButtonElement>('.history-pagination button')];
     await act(async () => { previous.click(); });
     await act(async () => { next.click(); });
     expect(onPage).toHaveBeenNthCalledWith(1, 1);
     expect(onPage).toHaveBeenNthCalledWith(2, 3);
+  });
+
+  it('keeps the standalone "Showing x–y of n" line when no server paging is wired (embeds without a toolbar)', async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+    const scans = Array.from({ length: 6 }, (_, index) => scan({ id: `s${index}`, state: 'completed', finished_at: '2026-03-15T10:00:00Z' }));
+    await act(async () => { root.render(<HistoryTable scans={scans} go={vi.fn()} />); });
+    expect(host.querySelector('.history-pagination-count')?.textContent).toBe('Showing 1–6 of 6 scans');
   });
 
   it('disables Previous on the first page and Next when the server reports no further pages', async () => {
@@ -411,7 +491,7 @@ describe('HistoryPage', () => {
     expect(host.querySelector('output')!.textContent).toBe('Page 2 of 3');
   });
 
-  it('walks every server page while a date filter is active and totals reflect the filtered set', async () => {
+  it('walks every server page while a date filter is active; the toolbar count is the only place totals repeat', async () => {
     mockPages([
       [onAug29('a1'), offRange('x1', 10), onAug29('a2'), offRange('x2', 11), offRange('x3', 12), offRange('x4', 13)],
       [offRange('x5', 14), onAug29('a3')],
@@ -430,9 +510,8 @@ describe('HistoryPage', () => {
     // Match on page 2 was invisible before; the walk must have fetched it.
     expect(api.scansPage).toHaveBeenCalledWith('ws-1', 2, 6);
     expect(dataRows(host)).toHaveLength(3);
-    expect(host.querySelector('.history-filter-count')!.textContent).toBe('3 scans');
-    expect(host.querySelector('.history-pagination-count')!.textContent).toBe('Showing 1–3 of 8 scans');
-    expect(host.querySelector('.history-pagination button')).toBeNull(); // page controls hidden while filtered
+    expect(host.querySelector('.history-count')!.textContent).toBe('3 of 8 scans');
+    expect(host.querySelector('.history-pagination')).toBeNull(); // filtered mode shows every match, no page controls
   });
 
   it('clears the filter back to normal server paging', async () => {
@@ -440,6 +519,7 @@ describe('HistoryPage', () => {
     const host = await renderPage();
     const clear = host.querySelector<HTMLButtonElement>('.history-filter-clear');
     expect(clear).toBeNull(); // no filter yet, nothing to clear
+    expect(host.querySelector('.history-count')!.textContent).toBe('2 scans');
     const from = host.querySelector<HTMLInputElement>('input[aria-label="Filter from date"]')!;
     const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
     await act(async () => {
@@ -447,11 +527,11 @@ describe('HistoryPage', () => {
       from.dispatchEvent(new Event('input', { bubbles: true }));
     });
     await act(async () => {});
-    expect(host.querySelector('.history-pagination-count')!.textContent).toBe('Showing 1–1 of 2 scans');
+    expect(host.querySelector('.history-count')!.textContent).toBe('1 of 2 scans');
     await act(async () => { host.querySelector<HTMLButtonElement>('.history-filter-clear')!.click(); });
     await act(async () => {});
     expect(host.querySelector('.history-pagination button')).not.toBeNull(); // controls return
-    expect(host.querySelector('.history-pagination-count')!.textContent).toBe('Showing 1–2 of 2 scans'); // normal server paging again
+    expect(host.querySelector('.history-count')!.textContent).toBe('2 scans'); // full total again, once
   });
 
   describe('compare workflow', () => {
@@ -480,41 +560,57 @@ describe('HistoryPage', () => {
       await act(async () => {});
     }
 
-    it('walks selection: strip appears on Compare, other rows offer "with this", picking completes the pair', async () => {
+    it('walks selection: strip appears on compare pick, other rows offer "Compare with this", picking completes the pair', async () => {
       mockComparePages([[newerScan, olderScan]]);
       const host = await renderPage();
-      expect([...host.querySelectorAll('button')].filter((button) => button.textContent === 'Compare')).toHaveLength(2);
+      // One visible control per row: "Open report" + the row's overflow menu.
+      const rows = dataRows(host);
+      expect(rows).toHaveLength(2);
+      for (const row of rows) {
+        expect([...row.querySelectorAll('button')].filter((button) => button.textContent === 'Open report')).toHaveLength(1);
+        expect(menuTrigger(row)).not.toBeNull();
+      }
 
-      await clickButton(host, 'Compare'); // first row = newer
+      await openRowMenu(rows[0]);
+      await pickMenuItem('Compare with…'); // first row = newer
       const strip = host.querySelector('.compare-strip')!;
       expect(strip.getAttribute('role')).toBe('region');
       expect(strip.getAttribute('aria-label')).toBe('Scan comparison selection');
       expect(strip.textContent).toContain('Comparing the');
       expect(strip.textContent).toContain('35'); // the base scan's finding count
-      expect(strip.textContent).toContain('pick a second scan below');
+      expect(strip.textContent).toContain("pick a second scan from a row's actions menu");
       expect(window.location.search).toBe('?compare=newer');
       expect(host.querySelector('.compare-base-tag')?.textContent).toBe('Base scan');
-      expect([...host.querySelectorAll('button')].filter((button) => button.textContent === 'with this')).toHaveLength(1);
-
-      await clickButton(host, 'with this'); // second row = older
+      const secondMenu = await openRowMenu(dataRows(host)[1]);
+      expect(secondMenu.map((item) => item.textContent)).toContain('Compare with this');
+      await pickMenuItem('Compare with this'); // second row = older
       expect(api.compareScans).toHaveBeenCalledWith('newer', 'older'); // ordered (newer, older)
       expect(window.location.search).toBe('?compare=newer&with=older');
       expect(host.querySelector('.compare-panel')).not.toBeNull();
       expect(host.querySelector('.compare-headline')!.textContent).toContain('1 new');
       expect(host.querySelector('.compare-strip')).toBeNull();
+      // Pair complete: the row menus drop compare controls, exports remain.
+      const finalMenu = await openRowMenu(dataRows(host)[0]);
+      expect(finalMenu.map((item) => item.textContent)).toEqual(['Export Markdown', 'Export JSON', 'Export SARIF', 'Export HTML']);
+      await closeRowMenu();
     });
 
     it('exits via Cancel compare and via Escape', async () => {
       mockComparePages([[newerScan, olderScan]]);
       const host = await renderPage();
-      await clickButton(host, 'Compare');
+      const rows = dataRows(host);
+      await openRowMenu(rows[0]);
+      await pickMenuItem('Compare with…');
       expect(host.querySelector('.compare-strip')).not.toBeNull();
       await clickButton(host, 'Cancel compare');
       expect(host.querySelector('.compare-strip')).toBeNull();
       expect(window.location.search).toBe('');
-      expect([...host.querySelectorAll('button')].filter((button) => button.textContent === 'Compare')).toHaveLength(2);
+      const freshMenu = await openRowMenu(dataRows(host)[0]);
+      expect(freshMenu.map((item) => item.textContent)).toContain('Compare with…');
+      await closeRowMenu();
 
-      await clickButton(host, 'Compare'); // selection again…
+      await openRowMenu(dataRows(host)[0]); // selection again…
+      await pickMenuItem('Compare with…');
       await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); }); // …Esc is the keyboard way out
       await act(async () => {});
       expect(host.querySelector('.compare-strip')).toBeNull();
@@ -536,17 +632,22 @@ describe('HistoryPage', () => {
       const failed = scan({ id: 'bad', state: 'failed', finished_at: localIso(2026, 8, 27), total_findings: 2 });
       mockComparePages([[newerScan, cancelled, failed]]);
       const host = await renderPage();
-      // failed is terminal but never comparable — only completed + cancelled offer Compare
-      const compareButtons = [...host.querySelectorAll('button')].filter((button) => button.textContent === 'Compare');
-      expect(compareButtons).toHaveLength(2);
-      await act(async () => { compareButtons[1]!.click(); }); // the cancelled row's button (rows sort newest-first)
-      await act(async () => {});
+      const rows = dataRows(host);
+      expect(rows).toHaveLength(3);
+      // failed is terminal but never comparable — its menu carries exports only
+      const failedMenu = await openRowMenu(rows[2]);
+      expect(failedMenu.map((item) => item.textContent)).toEqual(['Export Markdown', 'Export JSON', 'Export SARIF', 'Export HTML']);
+      await closeRowMenu();
+      // cancelled is comparable, gated behind the explicit "compare anyway" strip
+      await openRowMenu(rows[1]);
+      await pickMenuItem('Compare with…');
       const strip = host.querySelector('.compare-strip--warning')!;
       expect(strip.textContent).toContain('partial scan');
       expect(window.location.search).toBe(''); // nothing committed yet
       await clickButton(host, 'Compare anyway');
       expect(window.location.search).toBe('?compare=part');
-      await clickButton(host, 'with this');
+      await openRowMenu(rows[0]);
+      await pickMenuItem('Compare with this');
       expect(api.compareScans).toHaveBeenCalledWith('newer', 'part'); // newer scan is still "current"
     });
   });

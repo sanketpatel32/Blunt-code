@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../../api';
 import type { Finding } from '../../types';
 import { message } from '../../lib/notice';
-import { analyzerName, findingLocation, friendlyFindingTitle, ruleDocsUrl } from '../../lib/format';
+import { SEVERITY_LABELS, analyzerName, findingLocation, friendlyFindingTitle, ruleDocsUrl } from '../../lib/format';
 import { copyToClipboard } from '../../lib/clipboard';
 import { useLoad } from '../../hooks/useLoad';
 import { SkeletonLines } from '../../components/skeletons';
@@ -90,7 +90,7 @@ export function SourcePane({
       <button type="button" className="icon-button" onClick={onPrev} disabled={!hasPrev} aria-label="Previous finding" title="Previous finding (↑ in the list)">↑</button>
       <button type="button" className="icon-button" onClick={onNext} disabled={!hasNext} aria-label="Next finding" title="Next finding (↓ in the list)">↓</button>
       <code title={findingLocation(finding)}>{findingLocation(finding)}</code>
-      <span className={`severity ${finding.severity}`}>{finding.severity}</span>
+      <span className={`severity ${finding.severity}`}>{SEVERITY_LABELS[finding.severity] ?? finding.severity}</span>
       <button type="button" className="icon-button" onClick={onClose} aria-label="Close source pane" title="Close (Esc)">×</button>
     </div>
     <div className="source-pane-body">
@@ -103,7 +103,7 @@ export function SourcePane({
       <div className="context-row"><strong>{title}</strong>{finding.rule_id && finding.rule_id !== title && <code>{finding.rule_id}</code>}<span className="badge">{analyzerName(finding.analyzer_id)}</span>{finding.status && <span className={`status-text${suppressed ? ' suppressed' : ''}`}>{finding.status}</span>}</div>
       <p className="pane-message">{finding.message}</p>
       <p className="remediation">{finding.remediation || 'No remediation provided for this rule.'}</p>
-      {docsUrl && <a href={docsUrl} target="_blank" rel="noreferrer" title="Opens the rule's documentation" style={{ color: 'var(--color-ink-soft)' } as never}>Rule docs</a>}
+      {docsUrl && <a href={docsUrl} target="_blank" rel="noreferrer" title="Opens the rule's documentation">Rule docs</a>}
     </div>
     <div className="source-pane-foot">
       <button type="button" className={`button secondary copy-location${copied ? ' copied' : ''}`} onClick={() => void copyLocation()}>{copied ? 'Copied' : 'Copy location'}</button>

@@ -1,15 +1,8 @@
-/* Hallmark · History — Stripe/Linear premium timeline bento · radius-card shadow-card · spring chevron · 14px severity pill */
+/* History — dense scan timeline. One toolbar row, one dense table, actions in
+   overflow menus. Tokens only; every rule must hold in light AND dark themes. */
 
-.history-filter-bar {
-  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-md);
-  border: var(--rule) solid var(--color-rule-faint);
-  border-radius: var(--radius-card);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-card);
-  will-change: box-shadow;
-}
-
+/* Toolbar row — filters left (date range), count right. The shared
+   .toolbar-row provides the layout; only the date inputs need local styling. */
 .history-filter-field {
   display: inline-flex; align-items: center; gap: var(--space-xs);
 }
@@ -58,25 +51,17 @@
 .history-filter-clear:hover { background: var(--color-surface-muted); color: var(--color-ink); border-color: var(--color-rule); }
 .history-filter-clear:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
 
-.history-filter-count {
-  margin-left: auto;
-  display: inline-flex; align-items: center;
-  min-height: 1.75rem; padding: 0 var(--space-sm);
-  border: var(--rule) solid var(--color-rule);
-  border-radius: var(--radius-pill);
-  background: var(--color-surface-muted);
-  color: var(--color-ink-faint);
-  font: 700 var(--text-xs) var(--font-mono);
-  font-variant-numeric: tabular-nums;
-}
-
-/* Outer table card — bento */
+/* Outer table card — dense rows via .table-dense; only vertical rhythm and
+   hover are tuned locally so rows land in the 40-48px band. */
 .history-table-wrap {
   overflow: hidden; border-radius: var(--radius-card); box-shadow: var(--shadow-card);
-  will-change: transform, box-shadow;
   position: relative;
 }
 .history-table-wrap table { border-collapse: collapse; }
+.history-table-wrap table th,
+.history-table-wrap table td {
+  padding-top: var(--space-sm); padding-bottom: var(--space-sm);
+}
 .history-table-wrap thead { position: sticky; top: 0; z-index: 1; background: var(--color-surface-muted); }
 .history-table-wrap thead th {
   font: 700 var(--text-2xs) var(--font-mono);
@@ -84,8 +69,6 @@
   color: var(--color-ink-faint);
 }
 .history-table-wrap tbody { position: relative; }
-.history-table-wrap tbody tr { transition: background var(--dur-fast) var(--ease-out); }
-.history-table-wrap tbody tr:hover { background: color-mix(in oklch, var(--color-accent) 5%, transparent); }
 .history-table-wrap tbody tr.is-expanded { background: color-mix(in oklch, var(--color-surface-muted) 50%, transparent); }
 
 /* Timeline: vertical line + dot on date cell */
@@ -98,7 +81,7 @@
   background: var(--color-rule-faint);
   pointer-events: none;
 }
-.history-date { display: inline-flex; align-items: center; gap: var(--space-xs); font-variant-numeric: tabular-nums; position: relative; padding-left: 0.35rem; }
+.history-date { display: inline-flex; align-items: center; gap: var(--space-xs); font-variant-numeric: tabular-nums; position: relative; padding-left: 0.35rem; min-width: 0; }
 .history-date::before {
   content: '';
   width: 0.5rem; height: 0.5rem;
@@ -110,16 +93,23 @@
 }
 tr.is-expanded .history-date::before { border-color: var(--color-accent); background: var(--color-accent); }
 
-/* Band header — sticky with count pill */
+/* Relative + absolute: "2 hours ago · Sep 15, 14:05" on one line. The absolute
+   stamp is faint; together with the full date in the cell's title tooltip the
+   chronology reads without a second row of chrome. */
+.history-when { display: inline-flex; align-items: baseline; gap: var(--space-xs); min-width: 0; white-space: nowrap; }
+.history-when .history-abs { color: var(--color-ink-faint); font-size: var(--text-xs); }
+
+/* Day band header — a real group boundary: strong weight, breathing room,
+   muted background, sticky under the column header. */
 .history-band-row > .history-band {
-  position: sticky; top: 2.15rem; z-index: 1;
-  padding: var(--space-xs) var(--space-md) var(--space-xs) 2.15rem;
-  color: var(--color-ink-faint);
-  font: 700 var(--text-2xs) var(--font-mono);
+  position: sticky; top: 2.05rem; z-index: 1;
+  padding: var(--space-sm) var(--space-md) var(--space-2xs) 2.15rem;
+  color: var(--color-ink-soft);
+  font: 700 var(--text-xs) var(--font-mono);
   letter-spacing: .08em; text-transform: uppercase;
   background: var(--color-surface-muted);
   user-select: none;
-  border-bottom: var(--rule) solid var(--color-rule-faint);
+  border-bottom: var(--rule) solid var(--color-rule-strong);
 }
 .history-band[data-count]::after {
   content: attr(data-count);
@@ -139,7 +129,6 @@ tr.is-expanded .history-date::before { border-color: var(--color-accent); backgr
   border: var(--rule) solid var(--color-rule); border-radius: 50%;
   background: var(--color-surface); color: var(--color-ink-faint); cursor: pointer;
   transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
-  will-change: transform, background, border-color;
 }
 .history-disclose:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
 .history-disclose:hover { border-color: var(--color-rule-strong); color: var(--color-ink); background: var(--color-surface-muted); }
@@ -147,26 +136,27 @@ tr.is-expanded .history-date::before { border-color: var(--color-accent); backgr
 .history-disclose .disclose-arrow {
   font-size: .62rem; line-height: 1;
   transition: transform var(--dur-base) var(--ease-spring);
-  will-change: transform;
   display: inline-block;
 }
 .history-disclose[aria-expanded='true'] .disclose-arrow { transform: rotate(90deg); }
 
-/* FindingsCell premium — 14px segmented pill */
-.findings-cell { display: flex; align-items: center; gap: var(--space-sm); min-width: 10rem; }
-.findings-total { color: var(--color-ink); font: 700 var(--text-sm) var(--font-display); font-variant-numeric: tabular-nums; }
+/* Findings cell — severity-composed counts. The number carries the severity
+   color; the label word stays faint, so chromatic ink is the signal. */
+.findings-inline { display: inline-flex; align-items: baseline; white-space: nowrap; min-width: 0; }
+.findings-inline > * + * { margin-left: var(--space-sm); }
+.findings-inline > * + *::before { content: '·'; margin-right: var(--space-sm); color: var(--color-ink-faint); font-weight: 400; }
+.findings-total { color: var(--color-ink); font-weight: 650; }
+.findings-sev em { font-style: normal; color: var(--color-ink-faint); font-weight: 500; }
+.findings-sev.sev-critical, .findings-sev.sev-high { color: var(--color-danger-text); }
+.findings-sev.sev-medium { color: var(--color-warning-text); }
+.findings-sev.sev-low { color: var(--color-accent-strong); }
 .findings-zero { color: var(--color-ink-faint); font-variant-numeric: tabular-nums; font-weight: 600; }
-.severity-bar.stacked,
-.severity-bar.severity-bar--pill.stacked { display: flex; gap: 2px; width: 8.5rem; height: 14px; overflow: hidden; border-radius: var(--radius-pill); background: var(--color-rule-faint); padding: 2px; }
-.severity-bar.severity-bar--pill { display: flex; gap: 2px; width: 8.5rem; height: 14px; overflow: hidden; border-radius: var(--radius-pill); background: var(--color-rule-faint); padding: 2px; }
-.severity-bar.stacked i, .severity-bar.severity-bar--pill i { display: block; min-width: 1px; border-radius: var(--radius-pill); flex: 1 1 auto; }
-.severity-bar.stacked i.bar-critical, .severity-bar.severity-bar--pill i.bar-critical { background: var(--color-danger); }
-.severity-bar.stacked i.bar-high, .severity-bar.severity-bar--pill i.bar-high { background: color-mix(in oklch, var(--color-danger) 62%, white); }
-.severity-bar.stacked i.bar-medium, .severity-bar.severity-bar--pill i.bar-medium { background: var(--color-warning); }
-.severity-bar.stacked i.bar-low, .severity-bar.severity-bar--pill i.bar-low { background: var(--color-accent-strong); }
 
-/* Detail bento inner card — 2-col dl + pills with 3px left accent */
-.history-detail-row > td { padding: var(--space-sm) var(--space-md) var(--space-md) 2.15rem !important; white-space: normal; background: color-mix(in oklch, var(--color-surface-muted) 50%, transparent); border-bottom: var(--rule) solid var(--color-rule-faint); }
+/* Row actions — one visible control ("Open report"), overflow menu right. */
+.history-actions { justify-content: flex-end; gap: var(--space-xs); }
+
+/* Detail inner card — 2-col dl + pills with 3px left accent */
+.history-detail-row > td { padding: var(--space-sm) var(--space-md) var(--space-md) 2.15rem !important; white-space: normal !important; background: color-mix(in oklch, var(--color-surface-muted) 50%, transparent); border-bottom: var(--rule) solid var(--color-rule-faint); }
 .history-detail {
   display: grid; gap: var(--space-sm);
   padding: var(--space-md);
@@ -175,7 +165,6 @@ tr.is-expanded .history-date::before { border-color: var(--color-accent); backgr
   background: var(--color-surface);
   box-shadow: var(--shadow-xs);
   animation: history-detail-in var(--dur-base) var(--ease-out);
-  will-change: opacity, transform;
 }
 @keyframes history-detail-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 .history-detail-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-sm) var(--space-xl); margin: 0; }
@@ -199,7 +188,9 @@ tr.is-expanded .history-date::before { border-color: var(--color-accent); backgr
   color: var(--color-ink-soft); font: 600 var(--text-xs) var(--font-mono);
 }
 
-/* Pagination — bento nav */
+/* Pagination — quiet footer. The scan total lives once, in the toolbar's
+   meta slot; this row only reports position ("Page 2 of 3"). Standalone
+   embeds (no toolbar) keep the "Showing x–y of n" line. */
 .history-pagination {
   display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); flex-wrap: wrap;
   margin-top: var(--space-md); padding: var(--space-sm) var(--space-md);
@@ -208,7 +199,6 @@ tr.is-expanded .history-date::before { border-color: var(--color-accent); backgr
   background: var(--color-surface);
   box-shadow: var(--shadow-card);
   color: var(--color-ink-soft); font-size: var(--text-sm);
-  will-change: transform;
 }
 .history-pagination-count { font-variant-numeric: tabular-nums; color: var(--color-ink-soft); }
 .history-pagination-count strong { color: var(--color-ink); font-weight: 700; }
@@ -265,7 +255,8 @@ tr.is-expanded .history-date::before { border-color: var(--color-accent); backgr
 .compare-panel-header h2 { margin: 0; font-family: var(--font-display); font-size: var(--text-xl); font-weight: 700; }
 .compare-headline { margin: 0; color: var(--color-ink-soft); font-size: var(--text-sm); }
 .compare-headline strong { color: var(--color-ink); }
-.compare-headline .compare-count { font-family: var(--font-display); font-size: var(--text-lg); }
+/* Counts stay body-size — number hierarchy without display-size inflation. */
+.compare-headline .compare-count { font-weight: 700; }
 .compare-sub { margin: 0; color: var(--color-ink-faint); font-size: var(--text-xs); }
 .compare-note { margin: var(--space-2xs) 0 0; color: var(--color-warning-text, var(--color-ink-soft)); font-size: var(--text-xs); }
 
@@ -284,24 +275,15 @@ tr.is-expanded .history-date::before { border-color: var(--color-accent); backgr
 .compare-section-toggle .disclose-arrow {
   font-size: .62rem; line-height: 1; color: var(--color-ink-faint);
   transition: transform var(--dur-base) var(--ease-spring);
-  will-change: transform; display: inline-block;
+  display: inline-block;
 }
 .compare-section-toggle[aria-expanded='true'] .disclose-arrow { transform: rotate(90deg); }
-.compare-section-count {
-  min-width: 1.35rem; padding: 0 var(--space-2xs);
-  display: inline-flex; align-items: center; justify-content: center;
-  border: var(--rule) solid var(--color-rule); border-radius: var(--radius-pill);
-  background: var(--color-surface-muted); color: var(--color-ink-faint);
-  font: 700 var(--text-2xs) var(--font-mono); font-variant-numeric: tabular-nums;
-}
 .compare-section .what-changed-list { margin-top: var(--space-xs); }
 
 @media (prefers-reduced-motion: reduce) {
   .history-detail { animation: none; }
   .history-disclose .disclose-arrow { transition: none; }
-  .history-table-wrap tbody tr { transition: none; }
-  .history-pagination { will-change: auto; }
-  .history-table-wrap { will-change: auto; }
+  .history-pagination { transition: none; }
   .compare-section-toggle { transition: none; }
-  .compare-section-toggle .disclose-arrow { transition: none; will-change: auto; }
+  .compare-section-toggle .disclose-arrow { transition: none; }
 }

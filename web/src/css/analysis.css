@@ -340,17 +340,10 @@
 
 .analysis-toolbar .chip-group { flex-wrap: wrap; }
 
-/* Severity chips double as legend: dot + count on the chip, pressed = filtered. */
+/* Severity chips double as legend: dot + count on the chip, pressed = filtered.
+   Counts inherit the shared neutral .chip-count treatment (styles.css) — normal
+   UI font, muted ink; no mono chip wall. */
 .sev-chip { display: inline-flex; align-items: center; gap: 6px; }
-
-.sev-chip .count { font-family: var(--font-mono); font-size: 10px; font-weight: 600; color: var(--color-ink-soft); }
-
-.sev-chip[aria-pressed='true'] .count { color: inherit; }
-
-/* Counts on status/tool/type chips share the severity chips' look. */
-.analysis-toolbar .chip .count { font-family: var(--font-mono); font-size: 10px; font-weight: 600; color: var(--color-ink-soft); }
-
-.analysis-toolbar .chip[aria-pressed='true'] .count { color: inherit; }
 
 /* A run that succeeded with degraded coverage flags its chip without hiding the count. */
 .analysis-toolbar .chip .chip-flag { font-family: var(--font-mono); font-size: 10px; font-weight: 700; color: var(--color-warning-ink, var(--color-warning)); }
@@ -434,32 +427,20 @@
   color: var(--color-ink);
 }
 
-/* Two-line message clamp: rows stay scannable while the actual issue text
-   survives instead of dying mid-sentence behind an ellipsis. */
+/* Title and message each hold one line: rows stay a fixed two lines tall and
+   scannable; the full text waits in the title attribute and the source pane. */
 .finding-summary .finding-message {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
   overflow: hidden;
-  white-space: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: var(--text-xs);
   line-height: 1.5;
   color: var(--color-ink-soft);
 }
 
-.finding-summary .finding-remediation {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--text-xs);
-  color: var(--color-ink-faint);
-}
-
-.finding-summary .finding-remediation::before {
-  content: '→ ';
-  color: var(--color-accent-strong);
-  font-weight: 700;
-}
+/* Compact density is truly single-line: the title carries the row and the
+   message waits in the source pane. */
+.finding-list.finding-dense .finding-summary .finding-message { display: none; }
 
 .analysis-list td:nth-child(3) code {
   display: block;
@@ -473,7 +454,8 @@
 
 .analysis-list td:nth-child(4) { overflow: hidden; }
 
-.analysis-list td:nth-child(4) .badge,
+/* Analyzer id is metadata: neutral .tag pill (mono only inside the tag itself). */
+.analysis-list td:nth-child(4) .tag,
 .analysis-list td:nth-child(4) code { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* The whole row opens the source pane; the path cell is the affordance users
@@ -485,17 +467,20 @@
 .scan-page .report { margin-top: var(--space-md); padding-top: 0; border-top: 0; }
 
 /* Severity edge tints: the three severities worth scanning for at a glance.
-   The active row's accent edge wins (defined after, same specificity). */
-.findings-table tbody tr.row-critical { box-shadow: inset 2px 0 0 var(--color-danger); }
+   The tint also washes the row area (color is signal, not decoration) — mixed
+   with the surface token so both themes stay legible. Low/info rows stay clean
+   to avoid rainbow tables. The active row's accent edge wins (defined after,
+   same specificity). */
+.findings-table tbody tr.row-critical { box-shadow: inset 2px 0 0 var(--color-danger); background: var(--color-danger-soft); }
 
-.findings-table tbody tr.row-high { box-shadow: inset 2px 0 0 color-mix(in oklch, var(--color-danger) 45%, var(--color-rule)); }
+.findings-table tbody tr.row-high { box-shadow: inset 2px 0 0 color-mix(in oklch, var(--color-danger) 45%, var(--color-rule)); background: color-mix(in oklch, var(--color-danger-soft) 55%, var(--color-surface)); }
 
-.findings-table tbody tr.row-medium { box-shadow: inset 2px 0 0 var(--color-warning); }
+.findings-table tbody tr.row-medium { box-shadow: inset 2px 0 0 var(--color-warning); background: color-mix(in oklch, var(--color-warning-soft) 40%, var(--color-surface)); }
 
 .findings-table tbody tr {
   content-visibility: auto;
-  /* Two-line summaries measure ~90px; the estimate only needs to be close so the scrollbar doesn't jump. */
-  contain-intrinsic-size: auto 84px;
+  /* Title + message lines measure ~68px; the estimate only needs to be close so the scrollbar doesn't jump. */
+  contain-intrinsic-size: auto 68px;
   cursor: pointer;
   transition: background var(--dur-fast) var(--ease-out);
 }
@@ -506,14 +491,18 @@
 .findings-table tbody tr.active { background: var(--color-accent-soft); box-shadow: inset 2px 0 0 var(--color-accent-strong); }
 
 /* The sticky severity cell paints an opaque background OVER the row's inset edge,
-   so the tint must live on that cell; --shadow-card keeps its sticky separation. */
-.findings-table tbody tr.row-critical td:first-child { box-shadow: inset 2px 0 0 var(--color-danger), var(--shadow-card); }
+   so the tint must live on that cell (same wash as its row); --shadow-card keeps
+   its sticky separation. Hover and the active selection repaint the wash — same
+   specificity, later rules win. */
+.findings-table tbody tr.row-critical td:first-child { box-shadow: inset 2px 0 0 var(--color-danger), var(--shadow-card); background: var(--color-danger-soft); }
 
-.findings-table tbody tr.row-high td:first-child { box-shadow: inset 2px 0 0 color-mix(in oklch, var(--color-danger) 45%, var(--color-rule)), var(--shadow-card); }
+.findings-table tbody tr.row-high td:first-child { box-shadow: inset 2px 0 0 color-mix(in oklch, var(--color-danger) 45%, var(--color-rule)), var(--shadow-card); background: color-mix(in oklch, var(--color-danger-soft) 55%, var(--color-surface)); }
 
-.findings-table tbody tr.row-medium td:first-child { box-shadow: inset 2px 0 0 var(--color-warning), var(--shadow-card); }
+.findings-table tbody tr.row-medium td:first-child { box-shadow: inset 2px 0 0 var(--color-warning), var(--shadow-card); background: color-mix(in oklch, var(--color-warning-soft) 40%, var(--color-surface)); }
 
-.findings-table tbody tr.active td:first-child { box-shadow: inset 2px 0 0 var(--color-accent-strong), var(--shadow-card); }
+.findings-table tbody tr:hover td:first-child { background: var(--color-surface-muted); }
+
+.findings-table tbody tr.active td:first-child { box-shadow: inset 2px 0 0 var(--color-accent-strong), var(--shadow-card); background: var(--color-accent-soft); }
 
 .findings-table tbody tr:focus-visible { outline: none; }
 

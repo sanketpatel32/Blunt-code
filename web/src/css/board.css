@@ -1,10 +1,12 @@
 /* ════════════════════════════════════════════════════════════════════
    BLUNT CODE — RISK BOARD
    The dashboard answers three questions in reading order:
-   how risky is the code right now (verdict) · where is the risk
-   (ledger) · what happened lately (feed). One canonical grade scale
-   (A/B/C/D, backend risk-profile bands) — no invented scores, no
-   fabricated trends. Tokens only, both themes, 0-slop layout.
+   how risky is the code right now (one summary strip: grade tile +
+   single hero finding-count with its severity composition) · where is
+   the risk (ledger) · what happened lately (feed). One canonical grade
+   scale (A/B/C/D, backend risk-profile bands) — no invented scores, no
+   fabricated trends. The grade owns the color; supporting numbers are
+   body-size tabular-nums. Tokens only, both themes, 0-slop layout.
    ════════════════════════════════════════════════════════════════════ */
 
 .board-page {
@@ -94,6 +96,21 @@
 
 .verdict-score strong { color: var(--color-ink); font-size: var(--text-sm); }
 
+/* The grade's label and band range travel with the tile in neutral ink —
+   the letter itself carries the only color in this column. */
+.verdict-bandlabel {
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.verdict-bandrange {
+  font: 500 var(--text-2xs) var(--font-mono);
+  letter-spacing: .04em;
+  color: var(--color-ink-faint);
+}
+
 /* Grade families reuse the badge combos the rest of the app already
    audits for contrast: soft fill + text-grade ink (the *-text tokens
    pass AA on the softs in light mode). D is the only solid
@@ -139,33 +156,29 @@
   cursor: help;
 }
 
-.verdict-bands {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 3px;
-}
-
-.verdict-band {
+/* Hero count: the page's single oversized number. Its composition is the
+   severity tally directly beneath it; every other number on the board is
+   body-size tabular-nums. */
+.verdict-hero {
+  margin: 0;
   display: flex;
   align-items: baseline;
-  justify-content: center;
-  gap: 6px;
-  padding: 4px 6px;
-  border-radius: var(--radius-xs);
-  border: var(--rule) solid var(--color-rule-faint);
-  background: var(--color-surface-muted);
-  color: var(--color-ink-faint);
+  gap: var(--space-2xs);
+  flex-wrap: wrap;
 }
 
-.verdict-band b { font-family: var(--font-display); font-weight: 700; font-size: var(--text-sm); }
-
-.verdict-band small { font: 500 10px var(--font-mono); letter-spacing: .03em; }
-
-.verdict-band[data-active='true'] {
-  border-color: var(--grade-edge);
-  background: var(--grade-bg);
-  color: var(--grade-ink);
+.verdict-hero-num {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 800;
+  line-height: .95;
+  letter-spacing: -.03em;
+  color: var(--color-ink);
 }
+
+.verdict-hero-unit { font-size: var(--text-md); font-weight: 600; color: var(--color-ink); }
+
+.verdict-hero-ctx { font-size: var(--text-sm); color: var(--color-ink-soft); }
 
 .verdict-tally { display: flex; flex-direction: column; gap: var(--space-2xs); min-width: 0; }
 
@@ -235,22 +248,13 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-family: var(--font-display);
-  font-size: var(--text-lg);
-  font-weight: 700;
+  /* Body-size, not display: the hero count is the page's only big number. */
+  font: 600 var(--text-md) var(--font-body);
+  font-variant-numeric: tabular-nums;
   color: var(--color-ink);
 }
 
 .rail-of { font: 500 var(--text-xs) var(--font-body); color: var(--color-ink-faint); }
-
-.verdict-rail .pulse-dot {
-  display: inline-block;
-  width: .5rem;
-  height: .5rem;
-  border-radius: 50%;
-  background: var(--color-success);
-  animation: board-pulse 2.2s var(--ease-in-out) infinite;
-}
 
 .board-verdict-loading { grid-column: 1 / -1; }
 
@@ -398,11 +402,26 @@
 
 .ledger-count { font-size: var(--text-2xs); font-weight: 600; color: var(--color-ink-soft); }
 
+/* Neutral ink on purpose: the row's grade tile owns the color, so the
+   fixed/new trajectory never competes with it (green-next-to-red incoherence). */
+.ledger-delta {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-muted);
+  color: var(--color-ink-soft);
+  font: 500 var(--text-2xs) var(--font-body);
+  font-variant-numeric: tabular-nums;
+}
+
 .ledger-never { font-size: var(--text-xs); color: var(--color-ink-faint); font-style: italic; }
 
 .ledger-meta { grid-area: meta; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
 
-.ledger-score { font-family: var(--font-display); font-weight: 700; font-size: var(--text-lg); color: var(--color-ink); }
+/* Row risk score: semibold body size — the board's hero count outranks it. */
+.ledger-score { font-family: var(--font-display); font-weight: 700; font-size: var(--text-md); color: var(--color-ink); }
 
 .ledger-score small { font: 500 var(--text-2xs) var(--font-body); color: var(--color-ink-faint); margin-left: 2px; }
 
@@ -592,8 +611,10 @@
 
   .verdict-grade {
     flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
     justify-content: flex-start;
-    gap: var(--space-md);
+    gap: var(--space-2xs) var(--space-md);
     border-right: none;
     border-bottom: var(--rule) solid var(--color-rule-faint);
     padding: 0 0 var(--space-sm);
@@ -618,7 +639,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .board-live-dot, .verdict-rail .pulse-dot { animation: none; }
+  .board-live-dot { animation: none; }
 
   .ledger-row { transition: none; }
 }

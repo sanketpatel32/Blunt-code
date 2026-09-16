@@ -15,8 +15,9 @@ import { WorkspaceTemplates } from '../components/WorkspaceTemplates';
 import { PageHeader } from '../components/PageHeader';
 import { PathCopy } from '../components/PathCopy';
 import { ScanActionDropdown } from '../components/ScanActionDropdown';
+import { RowMenu } from '../components/RowMenu';
 import { FolderIcon, ScanIcon } from '../components/icons';
-import { Activity, ChevronRight, FolderOpen, FolderPlus, Play } from 'lucide-react';
+import { Activity, ChevronRight, FolderOpen, FolderPlus } from 'lucide-react';
 
 import { SEVERITY_ORDER, trendPointsFromScans } from '../lib/chartData';
 import { GRADE_BANDS, bandFor, riskGrade, riskScore, severityCountsOf } from '../lib/risk';
@@ -72,15 +73,9 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
 
   const scans = recent.data?.scans ?? [];
   const summary = recent.data?.summary;
-  const latestWorkspaceId = scans[0]?.workspace_id;
-  const quickScanTarget = scans[0];
   const readyTools = tools.data?.filter((tool) => tool.ready).length ?? 0;
   const totalTools = tools.data?.length ?? 0;
 
-  const [quickScanning, setQuickScanning] = useState(false);
-  // Set when "Scan latest workspace" is clicked; the POST only fires after the
-  // confirmation dialog is accepted, so one misclick cannot start a minutes-long job.
-  const [confirmQuickScan, setConfirmQuickScan] = useState(false);
   const [pickingFolder, setPickingFolder] = useState(false);
   const [ledgerFilter, setLedgerFilter] = useState('');
   const [feedFilter, setFeedFilter] = useState<FeedFilter>('all');
@@ -153,17 +148,25 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
     });
   }, [scans, feedFilter]);
 
-  async function quickScan() {
-    if (!latestWorkspaceId || quickScanning) return;
-    setQuickScanning(true);
-    try {
-      const active = await api.startScan(latestWorkspaceId);
-      go({ page: 'scan', id: active.id });
-    } catch (e) {
-      notify({ kind: 'error', text: message(e) });
-      setQuickScanning(false);
-    }
-  }
+  // ── The header's single primary action ──
+  // "Run scan" targets the riskiest workspace we know about (top of the ledger
+  // ranking). When nothing is graded yet it falls back to the first workspace —
+  // an unscanned workspace is exactly the one that needs a scan — and when the
+  // workspace list itself is unavailable, to the most recently scanned one from
+  // the activity feed. ScanActionDropdown owns the confirm-first flow, the
+  // profile picker, and the pentest entries, so the old action wall collapses
+  // into one split button plus this page's real secondary, "Add workspace".
+  const scanTarget = useMemo(() => {
+    const scored = ledgerBase
+      .filter((row) => row.score !== null)
+      .sort((a, b) => (b.score! - a.score!) || (b.total - a.total) || a.workspace.name.localeCompare(b.workspace.name));
+    if (scored[0]) return { id: scored[0].workspace.id, name: scored[0].workspace.name, profile: scored[0].workspace.default_profile };
+    const first = workspaces.data?.[0];
+    if (first) return { id: first.id, name: first.name, profile: first.default_profile };
+    const latest = scans[0];
+    if (latest) return { id: latest.workspace_id, name: latest.workspace_name || undefined, profile: undefined };
+    return null;
+  }, [ledgerBase, workspaces.data, scans]);
 
   async function handlePickFolder() {
     if (pickingFolder) return;
@@ -195,7 +198,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
                 <FolderOpen className="mr-1.5 h-4 w-4" />
                 {pickingFolder ? 'Opening…' : 'Browse folder…'}
               </Button>
-              <Button onClick={onAdd}>+ Add workspace</Button>
+              <Button onClick={onAdd}>Add workspace</Button>
             </>
           }
         />
@@ -206,7 +209,8 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
           tone="positive"
           action={
             <div className="flex flex-wrap items-center justify-center gap-3">
-              <Button onClick={onAdd}>Add your first workspace</Button>
+              {/* Outline, not filled: the header already carries the page's one primary "Add workspace". */}
+              <Button variant="outline" onClick={onAdd}>Add your first workspace</Button>
               <Button variant="outline" onClick={() => void handlePickFolder()}>
                 Browse folder
               </Button>
@@ -239,7 +243,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
       <PageHeader
         eyebrow="Dashboard"
         title="Risk board"
-        description="Latest completed scan per workspace, ranked by weighted risk."
+        description="Every workspace's latest completed scan, graded and ranked by risk."
         badge={activeScans > 0 ? (
           <span className="board-live">
             <i className="board-live-dot" aria-hidden="true" />
@@ -247,21 +251,35 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
           </span>
         ) : undefined}
         actions={
-          <>
-            <Button
-              variant="outline"
-              onClick={() => setConfirmQuickScan(true)}
-              disabled={!latestWorkspaceId || quickScanning}
-              title={latestWorkspaceId ? 'Run a scan on the most recently scanned workspace' : undefined}
-            >
-              <Play className={`mr-1.5 h-3.5 w-3.5 ${quickScanning ? 'animate-spin' : ''}`} />
-              {quickScanning ? 'Starting scan…' : quickScanTarget?.workspace_name ? `Scan ${quickScanTarget.workspace_name}` : 'Scan latest workspace'}
-            </Button>
+          scanTarget ? (
+            <>
+              {/*
+                The page's ONE primary: run a scan on the riskiest workspace.
+                The split-button's overflow carries the profiles and pentest
+                entries; the confirm-first dialog survives inside it.
+              */}
+              <ScanActionDropdown
+                workspaceId={scanTarget.id}
+                workspaceName={scanTarget.name}
+                defaultProfile={scanTarget.profile}
+                size="default"
+                go={go}
+                notify={notify}
+                onScanStarted={workspaces.reload}
+              />
+              <Button variant="outline" onClick={onAdd}>
+                <FolderPlus className="mr-1.5 h-4 w-4" />
+                Add workspace
+              </Button>
+            </>
+          ) : (
+            // No scan target at all (workspace list failed with no feed history):
+            // adding a workspace becomes the forward action.
             <Button onClick={onAdd}>
               <FolderPlus className="mr-1.5 h-4 w-4" />
-              + Add workspace
+              Add workspace
             </Button>
-          </>
+          )
         }
       />
 
@@ -274,33 +292,48 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
             className="verdict-grade"
             data-grade={verdictTallied ? verdict.grade : 'none'}
             title="Weighted risk score: critical ×10, high ×5, medium ×2, low ×1"
+            role="img"
+            aria-label={verdictTallied
+              ? `Grade ${verdict.grade}, ${bandFor(verdict.grade).label.toLowerCase()}, score ${verdict.score}. Grade bands: ${GRADE_BANDS.map((band) => `${band.grade} ${band.range}`).join(', ')}.`
+              : 'Not graded yet: no completed scans.'}
           >
             <span className="verdict-letter" aria-hidden="true">{verdictTallied ? verdict.grade : '–'}</span>
-            <span className="verdict-score">
+            {/* The grade owns the color; its label and band range stay neutral ink. */}
+            {verdictTallied && <span className="verdict-bandlabel" aria-hidden="true">{bandFor(verdict.grade).label}.</span>}
+            <span className="verdict-score" aria-hidden="true">
               {verdictTallied ? (
                 <>score <strong className="tabular-nums">{verdict.score}</strong></>
               ) : (
                 'not graded yet'
               )}
             </span>
+            {verdictTallied && (
+              <span className="verdict-bandrange" aria-hidden="true">band {verdict.grade} · {bandFor(verdict.grade).range}</span>
+            )}
           </div>
 
           <div className="verdict-main">
-            <p className="verdict-line">
-              {verdictTallied ? (
-                <>
-                  <strong>{bandFor(verdict.grade).label}.</strong>{' '}
-                  {verdict.totalFindings} finding{verdict.totalFindings === 1 ? '' : 's'} across the latest completed{' '}
-                  scan{verdict.scanned === 1 ? '' : 's'} of {verdict.scanned} workspace{verdict.scanned === 1 ? '' : 's'}.
-                </>
-              ) : workspaces.error ? (
-                <>Couldn't load your workspaces. Nothing is lost — use "Try again" in the panel below to reload the board.</>
-              ) : workspaces.data?.length ? (
-                <>No completed scans yet — run a scan to grade your code.</>
-              ) : (
-                <>Add a workspace to start grading your code.</>
-              )}
-            </p>
+            {verdictTallied ? (
+              // The one hero number on the page; its composition is the severity
+              // tally directly beneath it.
+              <p className="verdict-hero">
+                <span className="verdict-hero-num tabular-nums">{verdict.totalFindings}</span>{' '}
+                <span className="verdict-hero-unit">finding{verdict.totalFindings === 1 ? '' : 's'}</span>{' '}
+                <span className="verdict-hero-ctx">
+                  across the latest completed scan{verdict.scanned === 1 ? '' : 's'} of {verdict.scanned} workspace{verdict.scanned === 1 ? '' : 's'}.
+                </span>
+              </p>
+            ) : (
+              <p className="verdict-line">
+                {workspaces.error ? (
+                  <>Couldn't load your workspaces. Nothing is lost — use "Try again" in the panel below to reload the board.</>
+                ) : workspaces.data?.length ? (
+                  <>No completed scans yet — run a scan to grade your code.</>
+                ) : (
+                  <>Add a workspace to start grading your code.</>
+                )}
+              </p>
+            )}
             {verdictTallied && verdict.partialScans > 0 && (
               <p className="verdict-caveat">
                 {verdict.partialScans} of {verdict.scanned} scanned workspace{verdict.partialScans === 1 ? '' : 's'} ran
@@ -308,30 +341,14 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
               </p>
             )}
 
-            <div
-              className="verdict-bands"
-              role="img"
-              aria-label={`Grade ${verdictTallied ? verdict.grade : 'none'} at score ${verdictTallied ? verdict.score : 0}. Bands: ${GRADE_BANDS.map((band) => `${band.grade} ${band.range}`).join(', ')}.`}
-            >
-              {GRADE_BANDS.map((band) => (
-                <span key={band.grade} className="verdict-band" data-grade={band.grade} data-active={verdictTallied && verdict.grade === band.grade || undefined} title={band.label}>
-                  <b>{band.grade}</b>
-                  <small>{band.range}</small>
-                </span>
-              ))}
-            </div>
-
-            <SeverityTally counts={verdict.counts} total={verdict.totalFindings} onExplore={() => go({ page: 'search' })} />
+            {verdictTallied && (
+              <SeverityTally counts={verdict.counts} total={verdict.totalFindings} onExplore={() => go({ page: 'search' })} />
+            )}
           </div>
 
           <dl className="verdict-rail" aria-label="Scan activity at a glance">
-            <div className="rail-stat">
-              <dt>Active scans</dt>
-              <dd className="tabular-nums">
-                {activeScans}
-                {activeScans > 0 && <i className="pulse-dot" aria-hidden="true" />}
-              </dd>
-            </div>
+            {/* Active scans deliberately absent: the header's live pill already
+                carries that count, and a count must never appear twice. */}
             <div className="rail-stat">
               <dt>Scans this week</dt>
               <dd className="tabular-nums">{summary?.scans_last_7d ?? 0}</dd>
@@ -363,7 +380,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
             <div>
               <h2 id="ledger-heading" className="board-panel-title">Where the risk is</h2>
               <p className="board-panel-sub">
-                Ranked by weighted risk — critical ×10, high ×5, medium ×2, low ×1.
+                Weighted: critical ×10 · high ×5 · medium ×2 · low ×1.
               </p>
             </div>
             {ledgerBase.length > 4 && (
@@ -387,7 +404,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
             <Empty
               title="No workspaces yet"
               icon={<FolderIcon />}
-              action={<Button onClick={onAdd}>Add workspace</Button>}
+              action={<Button variant="outline" onClick={onAdd}>Add workspace</Button>}
             >
               Choose a folder. Blunt Code never changes your source files.
             </Empty>
@@ -474,17 +491,6 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
 
       {/* ── Optional-tools strip: real tool readiness, nothing invented ── */}
       <ToolsFoot tools={tools.data ?? []} ready={readyTools} total={totalTools} loading={tools.loading} error={tools.error} retry={tools.reload} go={go} />
-
-      {confirmQuickScan && quickScanTarget && (
-        <ConfirmationDialog
-          title={`Run standard scan on ${quickScanTarget.workspace_name || 'your latest workspace'}?`}
-          description="A standard scan runs the enabled analyzers over that workspace and can take several minutes. You can cancel it from the scan page while it runs."
-          confirmLabel="Run scan"
-          busy={quickScanning}
-          onCancel={() => setConfirmQuickScan(false)}
-          onConfirm={() => { setConfirmQuickScan(false); void quickScan(); }}
-        />
-      )}
     </div>
   );
 }
@@ -557,7 +563,8 @@ function TrendBars({ scans }: { scans: RecentScanItem[] }) {
 function FeedRow({ scan, go }: { scan: RecentScanItem; go: (r: Route) => void }) {
   const timestamp = scan.finished_at ?? scan.started_at;
   // Scans that never finished have no real total — "0 findings" would read as
-  // scanned-and-clean, so only final states show a number and the rest an em dash.
+  // scanned-and-clean, so only final states show a number; unfinished rows carry
+  // the state pill alone (a bare "—" reads like lost data).
   const findings = findingsAreFinal(scan.state) ? scan.total_findings ?? 0 : null;
   const state = scanStateDisplay(scan.state);
 
@@ -581,9 +588,11 @@ function FeedRow({ scan, go }: { scan: RecentScanItem; go: (r: Route) => void })
         {scan.profile && <span className="feed-profile">{scan.profile}</span>}
         <span className="feed-findings">
           <SeverityDots scan={scan} />
-          <span className="feed-findings-text">
-            {findings === null ? '—' : `${findings} ${findings === 1 ? 'finding' : 'findings'}`}
-          </span>
+          {findings !== null && (
+            <span className="feed-findings-text">
+              {findings} {findings === 1 ? 'finding' : 'findings'}
+            </span>
+          )}
         </span>
         <span className="feed-time" title={timestamp ? date(timestamp) : undefined}>
           {relativeTime(timestamp)}
@@ -619,11 +628,11 @@ function SeverityDots({ scan }: { scan: RecentScanItem }) {
   );
 }
 
-/** Ledger rows cap language chips at four plus an overflow count; the full list stays available in the overflow tooltip. */
+/** Ledger rows cap language chips at three plus an overflow count; the full list stays available in the overflow tooltip. */
 function LedgerLanguages({ languages }: { languages?: string[] }) {
   if (!languages?.length) return <span className="muted">No languages detected</span>;
-  const shown = languages.slice(0, 4);
-  const rest = languages.slice(4);
+  const shown = languages.slice(0, 3);
+  const rest = languages.slice(3);
   return (
     <ul className="badges flex flex-wrap gap-1.5 ledger-languages" aria-label="Detected languages">
       {shown.map((language) => (
@@ -641,18 +650,16 @@ function LedgerLanguages({ languages }: { languages?: string[] }) {
   );
 }
 
-/** Trajectory chip from the scan's comparison with its predecessor: green when fixes
- *  outnumber new findings, amber otherwise, neutral on a tie; hidden when the scan
- *  recorded neither (older backends omit the counts). */
+/** Trajectory chip from the scan's comparison with its predecessor: neutral ink by
+ *  design — the row's grade tile owns the color, and a green "improved" beside a
+ *  red grade reads incoherent. The payload carries no predecessor severity
+ *  counts, so "crossed a grade boundary" (the only case that would earn color)
+ *  cannot be computed honestly; the chip stays monochrome and says what changed.
+ *  Hidden when the scan recorded neither count (older backends omit them). */
 function DeltaChip({ scan }: { scan: Scan }) {
   const fixed = scan.fixed_count ?? 0;
   const fresh = scan.new_count ?? 0;
   if (fixed === 0 && fresh === 0) return null;
-  const tone = fixed > fresh
-    ? 'bg-[var(--color-success-soft)] text-[var(--color-success-text)]'
-    : fresh > fixed
-      ? 'bg-[var(--color-warning-soft)] text-[var(--color-warning-text)]'
-      : 'bg-[var(--color-surface-muted)] text-[var(--color-ink-soft)]';
   const parts = [
     fixed > 0 ? `↓ ${fixed} fixed` : null,
     fresh > 0 ? `↑ ${fresh} new` : null,
@@ -660,7 +667,7 @@ function DeltaChip({ scan }: { scan: Scan }) {
 
   return (
     <span
-      className={`ledger-delta inline-flex items-center whitespace-nowrap rounded-full px-1.5 py-px text-[10px] font-medium tabular-nums ${tone}`}
+      className="ledger-delta"
       title="Since the previous completed scan"
     >
       {parts}
@@ -800,23 +807,22 @@ function LedgerRow({
       </div>
 
       <div className="ledger-actions">
+        {/* The row's one visible control: run a scan (profiles/pentest in its own
+            overflow). Remove is a destructive action, so it lives behind the
+            RowMenu trigger and its confirmation dialog — never as a bare button. */}
         <ScanActionDropdown
           workspaceId={workspace.id}
           workspaceName={workspace.name}
           defaultProfile={workspace.default_profile}
+          variant="outline"
           go={go}
           notify={notify}
           onScanStarted={onRemoved}
         />
-        <Button
-          variant="ghost"
-          size="sm"
-          className="row-remove"
-          onClick={() => setDeleteOpen(true)}
-          aria-label={`Remove ${workspace.name}`}
-        >
-          Remove
-        </Button>
+        <RowMenu
+          label={`More actions for ${workspace.name}`}
+          items={[{ label: 'Remove workspace', tone: 'danger', onSelect: () => setDeleteOpen(true) }]}
+        />
       </div>
 
       {deleteOpen && (

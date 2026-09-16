@@ -88,7 +88,7 @@ describe('hostile API fixtures', () => {
     ]);
     const host = await renderAt('/', fetchMock);
     expectClean(host);
-    expect(host.textContent).toContain('Active scans1');
+    expect(host.textContent).toContain('1 scan running');
     expect(host.textContent).toContain('Scans this week0');
     expect(host.textContent).toContain('Workspaces scanned0 of 0');
   });
@@ -216,7 +216,7 @@ describe('hostile API fixtures', () => {
     const host = await renderAt('/tools', fetchMock);
     expectClean(host);
     expect(host.textContent).toContain('ghost'); // missing display_name falls back to id
-    expect(host.textContent).toContain('Managed version');
+    expect(host.textContent).toContain('Managed'); // source column degrades without version/profiles fields
   });
 
   it('ToolsPage treats a null analyzers response as an empty list', async () => {
