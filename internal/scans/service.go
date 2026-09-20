@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"bluntcode/internal/analyzers"
+	"bluntcode/internal/config"
 	"bluntcode/internal/core"
 	"bluntcode/internal/database"
 	"bluntcode/internal/discovery"
@@ -366,6 +367,13 @@ func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, 
 			fallback += " " + incrementalNote
 		}
 		_ = s.db.UpdateScanState(context.Background(), scan.ID, state, fallback)
+	}
+	// Automated scan history retention: keep most recent scans per workspace to prevent database bloat.
+	// Pruning before emitting scan.completed ensures subscribers refreshing history immediately see the pruned state.
+	if s.db != nil {
+		if keep := config.MaxScansPerWorkspace(); keep > 0 {
+			_, _ = s.db.PruneOldScans(context.Background(), work.ID, keep)
+		}
 	}
 	s.emit(scan.ID, "scan.completed", map[string]any{"state": state})
 }

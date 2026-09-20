@@ -177,7 +177,7 @@
   --shadow-xl: 0 20px 48px oklch(17% 0.016 268 / 0.14), 0 8px 20px oklch(17% 0.016 268 / 0.10);
   --shadow-nav: 0 1px 0 oklch(17% 0.016 268 / 0.06);
   --shadow-dialog: 0 24px 64px oklch(17% 0.016 268 / 0.18), 0 8px 24px oklch(17% 0.016 268 / 0.12);
-  --shadow-accent: 0 6px 20px oklch(56% 0.22 268 / 0.28);
+  --shadow-accent: 0 1px 3px oklch(56% 0.22 268 / 0.18);
   --shadow-card: 0 1px 3px oklch(17% 0.016 268 / 0.06), 0 4px 16px oklch(17% 0.016 268 / 0.04);
   --shadow-card-hover: 0 4px 20px oklch(17% 0.016 268 / 0.08), 0 2px 8px oklch(17% 0.016 268 / 0.06);
   --shadow-inset-critical: inset 3px 0 0 var(--color-sev-critical);
@@ -308,7 +308,7 @@
   --shadow-xl: 0 20px 48px oklch(0% 0 0 / 0.54), 0 8px 20px oklch(0% 0 0 / 0.44);
   --shadow-nav: 0 1px 0 oklch(0% 0 0 / 0.22);
   --shadow-dialog: 0 24px 64px oklch(0% 0 0 / 0.62), 0 8px 24px oklch(0% 0 0 / 0.52);
-  --shadow-accent: 0 6px 20px oklch(64% 0.18 268 / 0.32);
+  --shadow-accent: 0 1px 3px oklch(0% 0 0 / 0.28);
   --shadow-card: 0 1px 3px oklch(0% 0 0 / 0.24), 0 4px 16px oklch(0% 0 0 / 0.18);
   --shadow-card-hover: 0 8px 24px oklch(0% 0 0 / 0.32), 0 4px 12px oklch(0% 0 0 / 0.24);
 }

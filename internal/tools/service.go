@@ -16,6 +16,7 @@ type Status struct {
 	Ready      bool   `json:"ready"`
 	Detail     string `json:"detail,omitempty"`
 	CanInstall bool   `json:"can_install"`
+	DiskBytes  int64  `json:"disk_bytes,omitempty"`
 }
 
 type Service struct {
@@ -34,13 +35,20 @@ func NewService(root string, manifest Manifest, offline bool) *Service {
 }
 func (s *Service) Offline() bool         { s.mu.RLock(); defer s.mu.RUnlock(); return s.offline }
 func (s *Service) SetOffline(value bool) { s.mu.Lock(); s.offline = value; s.mu.Unlock() }
+func (s *Service) SetDataDir(dataDir string) { s.Manager.DataDir = dataDir }
+func (s *Service) DiskUsage(id string) int64 { return s.Manager.DiskUsage(id) }
 
 // SweepStaging recovers the tools directory from interrupted updates (see
 // Manager.SweepStaging); run once at startup.
 func (s *Service) SweepStaging() { s.Manager.SweepStaging() }
 func platform() string           { return runtime.GOOS + "-" + runtime.GOARCH }
 func (s *Service) Status(id string) (status Status) {
-	defer func() { status.Name = toolName(id) }()
+	defer func() {
+		status.Name = toolName(id)
+		if status.Ready {
+			status.DiskBytes = s.Manager.DiskUsage(id)
+		}
+	}()
 	if id == "sonarqube" {
 		return s.sonarQubeStatus()
 	}
@@ -122,6 +130,15 @@ func (s *Service) Ensure(ctx context.Context, id string) error {
 		return s.installUvTool(ctx, artifact)
 	}
 	return s.Manager.InstallExecutable(ctx, artifact)
+}
+
+// Uninstall removes the tool's files and directories from disk.
+// For sonarqube, it cleans up all sonarqube-related tool directories (sonarqube,
+// sonarqube-server, sonar-scanner, java) as well as the sonarqube runtime/data directory in DataDir.
+func (s *Service) Uninstall(ctx context.Context, id string) error {
+	s.installMu.Lock()
+	defer s.installMu.Unlock()
+	return s.Manager.Uninstall(ctx, id)
 }
 
 func (s *Service) sonarQubeStatus() Status {

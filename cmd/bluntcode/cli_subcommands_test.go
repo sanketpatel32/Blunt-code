@@ -2,10 +2,15 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"bluntcode/internal/config"
+	"bluntcode/internal/core"
+	"bluntcode/internal/database"
 )
 
 func TestCLIDocs(t *testing.T) {
@@ -22,7 +27,7 @@ func TestCLIDocs(t *testing.T) {
 		t.Errorf("expected command categories, got:\n%s", out)
 	}
 
-	for _, cmd := range []string{"scan", "workspace", "findings", "history", "report", "suppress", "rules", "tools", "pentest", "stats", "doctor", "config", "agent"} {
+	for _, cmd := range []string{"scan", "workspace", "findings", "history", "report", "suppress", "rules", "tools", "pentest", "stats", "doctor", "config", "agent", "clean"} {
 		stdout.Reset()
 		code = runCLIDocs([]string{cmd}, &stdout, &stderr)
 		if code != 0 {
@@ -57,6 +62,7 @@ func TestCommandHelpOutputs(t *testing.T) {
 		{"pentest", func(args []string, o, e *bytes.Buffer) int { return runPentest(args, o, e) }, "Blunt Code dynamic pentest and DAST security probing"},
 		{"stats", func(args []string, o, e *bytes.Buffer) int { return runStats(args, o, e) }, "Blunt Code statistics, severity trends, and risk metrics"},
 		{"update", func(args []string, o, e *bytes.Buffer) int { return runUpdate(args, o, e) }, "Blunt Code update check"},
+		{"clean", func(args []string, o, e *bytes.Buffer) int { return runClean(args, o, e) }, "Blunt Code storage cleaner"},
 	}
 
 	for _, tc := range tests {
@@ -188,5 +194,209 @@ func TestCLISubcommandsIntegration(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "Deleted workspace") {
 		t.Errorf("workspace delete output: %s", stdout.String())
+	}
+}
+
+func TestCleanCommand(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("LOCALAPPDATA", tempDir)
+
+	var stdout, stderr bytes.Buffer
+	// Test help flags return 0
+	code := runClean([]string{"--help"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit 0 for clean --help, got %d", code)
+	}
+	stdout.Reset()
+	code = runClean([]string{"-help"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit 0 for clean -help, got %d", code)
+	}
+
+	// Test unexpected positional argument rejection
+	stdout.Reset()
+	stderr.Reset()
+	code = runClean([]string{"unexpected-arg"}, &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("expected exit 2 for unexpected arg to clean, got %d", code)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = runClean([]string{"--json"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("runClean failed (%d): %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"cache_cleared": true`) {
+		t.Errorf("clean output expected cache_cleared: true, got: %s", stdout.String())
+	}
+
+	// Test active scan guard on clean
+	paths, err := config.NewPaths(filepath.Join(tempDir, config.AppName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := database.Open(context.Background(), paths.DBPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ws, err := db.CreateWorkspace(context.Background(), core.Workspace{Name: "test-clean-ws", RootPath: tempDir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.CreateScan(context.Background(), core.Scan{WorkspaceID: ws.ID, Profile: "standard", State: "running"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+
+	stdout.Reset()
+	stderr.Reset()
+	code = runClean(nil, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("expected exit 1 for clean during active scan, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), "cannot clean storage while scans are running") {
+		t.Errorf("expected active scan message, got: %s", stderr.String())
+	}
+}
+
+func TestToolsUninstallCommand(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("LOCALAPPDATA", tempDir)
+
+	var stdout, stderr bytes.Buffer
+	// Test help flags return 0
+	code := runTools([]string{"list", "--help"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit 0 for tools list --help, got %d", code)
+	}
+	stdout.Reset()
+	code = runTools([]string{"uninstall", "--help"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit 0 for tools uninstall --help, got %d", code)
+	}
+
+	// Test missing tool ID
+	stdout.Reset()
+	stderr.Reset()
+	code = runTools([]string{"uninstall"}, &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("expected exit 2 for missing tool id, got %d", code)
+	}
+
+	// Test unknown tool ID
+	stdout.Reset()
+	stderr.Reset()
+	code = runTools([]string{"uninstall", "nonexistent-tool"}, &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("expected exit 2 for unknown tool id, got %d", code)
+	}
+
+	// Test valid tool uninstall
+	stdout.Reset()
+	stderr.Reset()
+	code = runTools([]string{"uninstall", "ruff"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit 0 for uninstall ruff, got %d: %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Successfully uninstalled Ruff") {
+		t.Errorf("unexpected output: %s", stdout.String())
+	}
+
+	// Test alias uninstall (trivy -> container-trivy)
+	stdout.Reset()
+	stderr.Reset()
+	code = runTools([]string{"uninstall", "trivy"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit 0 for uninstall trivy (alias), got %d: %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Successfully uninstalled Trivy") {
+		t.Errorf("unexpected output: %s", stdout.String())
+	}
+
+	// Test active scan guard on tools uninstall
+	paths, err := config.NewPaths(filepath.Join(tempDir, config.AppName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := database.Open(context.Background(), paths.DBPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ws, err := db.CreateWorkspace(context.Background(), core.Workspace{Name: "test-tools-ws", RootPath: tempDir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.CreateScan(context.Background(), core.Scan{WorkspaceID: ws.ID, Profile: "standard", State: "running"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+
+	stdout.Reset()
+	stderr.Reset()
+	code = runTools([]string{"uninstall", "ruff"}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("expected exit 1 for tools uninstall during active scan, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), "cannot uninstall ruff while scans are running") {
+		t.Errorf("expected active scan message, got: %s", stderr.String())
+	}
+}
+
+func TestCLIDocsToolsAndClean(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := runCLIDocs([]string{"tools"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("cli docs tools failed: %d", code)
+	}
+	if !strings.Contains(stdout.String(), "uninstall <id>") {
+		t.Errorf("cli docs tools missing uninstall: %s", stdout.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = runCLIDocs([]string{"clean"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("cli docs clean failed: %d", code)
+	}
+	if !strings.Contains(stdout.String(), "bluntcode clean") {
+		t.Errorf("cli docs clean missing title: %s", stdout.String())
+	}
+}
+
+func TestCleanUnknownFlagAndToolsUnknownID(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+
+	// clean --unknown must exit 2 and print clean help to stderr
+	code := runClean([]string{"--unknown"}, &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("expected exit 2 for clean --unknown, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), "Blunt Code storage cleaner") {
+		t.Errorf("expected clean help in stderr on unknown flag, got: %s", stderr.String())
+	}
+
+	// tools install with unknown ID
+	stdout.Reset()
+	stderr.Reset()
+	code = runTools([]string{"install", "unknown-tool"}, &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("expected exit 2 for install unknown-tool, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), "unknown tool ID \"unknown-tool\"") {
+		t.Errorf("expected unknown tool ID error, got: %s", stderr.String())
+	}
+
+	// tools uninstall with built-in non-installable tool (pentest)
+	stdout.Reset()
+	stderr.Reset()
+	code = runTools([]string{"uninstall", "pentest"}, &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("expected exit 2 for uninstall pentest, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), "unknown tool ID \"pentest\"") {
+		t.Errorf("expected unknown tool ID error for pentest, got: %s", stderr.String())
 	}
 }

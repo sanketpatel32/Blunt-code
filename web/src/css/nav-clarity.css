@@ -142,16 +142,6 @@
   letter-spacing: .06em;
 }
 
-.nav-lang-select {
-  max-width: 3.4rem;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: 700 var(--text-xs) var(--font-mono);
-  cursor: pointer;
-}
-.nav-lang-select:focus-visible { outline: var(--rule-focus) solid var(--color-focus); outline-offset: 2px; }
-
 /* ── Width bands ───────────────────────────────────────────────── */
 /* The flat rail shrank from eight links to four + "More" (~350px in the widest
    locale), so the row-one budget that forced the links onto their own full row
@@ -182,6 +172,17 @@
     border-top: var(--rule) solid var(--color-rule-faint);
   }
   .nav-actions { margin-left: auto; }
+}
+
+/* Touch targets occupy real space: invisible pads would overlap adjacent
+   utilities. The rail scrolls when translated labels need more width. */
+@media (pointer: coarse) {
+  .app-nav nav a.nav-link { display: inline-flex; align-items: center; min-height: var(--tap-min); }
+  .app-nav .nav-more-toggle,
+  .nav-utils .nav-util,
+  .nav-utils .nav-bell,
+  .nav-utils .theme-toggle { min-height: var(--tap-min); min-width: var(--tap-min); }
+  .app-nav .nav-primary, .app-nav .nav-more-toggle { flex-shrink: 0; }
 }
 
 /* ── Reduced motion (belt-and-braces with the global media query; the

@@ -1,4 +1,5 @@
 import { href, type Route } from '../lib/router';
+import { navigateFromLink } from '../lib/navigation';
 import type { Theme } from '../hooks/useTheme';
 import { Button } from './ui/button';
 import { Check, ChevronDown, FileCode, HelpCircle, Info, Languages, MoreHorizontal, Moon, Power, Settings, Sun, Terminal } from 'lucide-react';
@@ -75,7 +76,7 @@ export function AppShell({ route, onNavigate, onClose, theme, onToggleTheme, onS
       className={cn('nav-link', route.page === next.page ? 'active' : '')}
       aria-current={route.page === next.page ? 'page' : undefined}
       title={NAV_TITLES[next.page]}
-      onClick={(event) => { event.preventDefault(); onNavigate(next); }}
+      onClick={(event) => navigateFromLink(event, () => onNavigate(next))}
     >
       {label}
     </a>
@@ -83,7 +84,7 @@ export function AppShell({ route, onNavigate, onClose, theme, onToggleTheme, onS
 
   return (
     <header className={cn('app-nav', reduced && 'nav-no-motion')}>
-      <a className="brand group" href="/" onClick={(event) => { event.preventDefault(); onNavigate({ page: 'home' }); }}>
+      <a className="brand group" href="/" onClick={(event) => navigateFromLink(event, () => onNavigate({ page: 'home' }))}>
         <svg className="brand-mark transition-transform group-hover:scale-[1.02] group-active:scale-[0.99]" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
           <rect width="32" height="32" rx="8" fill="var(--color-brand-mark)" />
           <path d="M16 5.2 L23.6 9 L23.6 17.2 C23.6 21 20.2 24.5 16 26.8 C11.8 24.5 8.4 21 8.4 17.2 L8.4 9 Z" fill="none" stroke="var(--color-paper)" strokeOpacity="0.14" strokeWidth="1" strokeLinejoin="round"/>

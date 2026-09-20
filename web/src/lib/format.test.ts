@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SEVERITY_LABELS, analyzerName, compactDuration, date, elapsed, friendlyFindingTitle, relativeTime, ruleDocsUrl, scanStateDisplay, shortFindingLocation, shortPath } from './format';
+import { SEVERITY_LABELS, analyzerName, compactDuration, date, elapsed, formatBytes, friendlyFindingTitle, relativeTime, ruleDocsUrl, scanStateDisplay, shortFindingLocation, shortPath } from './format';
 
 const NOW = new Date('2026-08-22T12:00:00Z').getTime();
 
@@ -236,5 +236,17 @@ describe('friendlyFindingTitle', () => {
     expect(friendlyFindingTitle({ rule_id: 'S101', message: 'Exists' })).toBe('Exists');
     expect(friendlyFindingTitle({ message: 'Orphan finding' })).toBe('Finding');
     expect(friendlyFindingTitle({})).toBe('Finding');
+  });
+});
+
+describe('formatBytes', () => {
+  it('formats bytes, kilobytes, megabytes, and gigabytes accurately', () => {
+    expect(formatBytes(512)).toBe('512 B');
+    expect(formatBytes(1024)).toBe('1.0 KB');
+    expect(formatBytes(1536)).toBe('1.5 KB');
+    expect(formatBytes(1048576)).toBe('1.0 MB');
+    expect(formatBytes(52428800)).toBe('50.0 MB');
+    expect(formatBytes(1073741824)).toBe('1.0 GB');
+    expect(formatBytes(7301444403)).toBe('6.8 GB');
   });
 });

@@ -14,23 +14,27 @@ import { ConfirmationDialog } from '../components/dialogs';
 import { RowMenu } from '../components/RowMenu';
 import type { Route } from '../lib/router';
 import { PageHeader } from '../components/PageHeader';
+import { formatBytes } from '../lib/format';
 import { ChevronDown } from 'lucide-react';
 
-type ToolOperation = 'install' | 'repair' | 'update';
+type ToolOperation = 'install' | 'repair' | 'update' | 'uninstall';
 type BusyAction = { tool: string; operation: ToolOperation };
 type PendingAction = { analyzer: AnalyzerStatus; operation: ToolOperation };
 type StatusFilter = 'all' | 'ready' | 'setup';
 
-const operationLabels: Record<ToolOperation, string> = { install: 'Install', repair: 'Repair', update: 'Update' };
-const operationBusyLabels: Record<ToolOperation, string> = { install: 'Installing…', repair: 'Repairing…', update: 'Updating…' };
-const operationVerbs: Record<ToolOperation, string> = { install: 'installed', repair: 'repaired', update: 'updated' };
+const operationLabels: Record<ToolOperation, string> = { install: 'Install', repair: 'Repair', update: 'Update', uninstall: 'Uninstall' };
+const operationBusyLabels: Record<ToolOperation, string> = { install: 'Installing…', repair: 'Repairing…', update: 'Updating…', uninstall: 'Uninstalling…' };
+const operationVerbs: Record<ToolOperation, string> = { install: 'installed', repair: 'repaired', update: 'updated', uninstall: 'uninstalled' };
 
 /** Confirm-dialog copy naming the tool + operation, so a long re-download
  *  never starts from a single mis-click. */
-const operationConfirmCopy: Record<ToolOperation, (name: string) => string> = {
+const operationConfirmCopy: Record<ToolOperation, (name: string, diskBytes?: number) => string> = {
   install: (name) => `Install downloads and sets up ${name} on this machine.`,
   repair: (name) => `Repair re-runs setup for ${name}, re-downloading the managed tool if needed.`,
   update: (name) => `Update fetches and applies the latest managed ${name} release.`,
+  uninstall: (name, bytes) => bytes
+    ? `Uninstall removes ${name} and its downloaded files from this machine, freeing ${formatBytes(bytes)} of disk space. You can reinstall it anytime.`
+    : `Uninstall removes ${name} and its downloaded files from this machine, freeing disk space. You can reinstall it anytime.`,
 };
 
 /** The backend capability inventory's category vocabulary (internal/analyzers)
@@ -97,7 +101,19 @@ export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r
   async function action(analyzer: AnalyzerStatus, operation: ToolOperation) {
     if (!analyzer.managed_tool) return;
     setBusy({ tool: analyzer.managed_tool, operation });
-    try { await api.toolAction(analyzer.managed_tool, operation); await analyzers.reload(); notify({ kind: 'info', text: `${analyzer.display_name || analyzer.id}: ${operationVerbs[operation]}.` }); } catch (e) { notify({ kind: 'error', text: message(e) }); } finally { setBusy(undefined); }
+    try {
+      if (operation === 'uninstall') {
+        await api.uninstallTool(analyzer.managed_tool);
+      } else {
+        await api.toolAction(analyzer.managed_tool, operation);
+      }
+      await analyzers.reload();
+      notify({ kind: 'info', text: `${analyzer.display_name || analyzer.id}: ${operationVerbs[operation]}.` });
+    } catch (e) {
+      notify({ kind: 'error', text: message(e) });
+    } finally {
+      setBusy(undefined);
+    }
   }
 
   const rows = analyzers.data ?? [];
@@ -170,7 +186,10 @@ export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r
                             <RowMenu
                               label={`Actions for ${name}`}
                               items={[
-                                ...(analyzer.ready ? [{ label: operationLabels.update, onSelect: () => setPending({ analyzer, operation: 'update' }) }] : []),
+                                ...(analyzer.ready ? [
+                                  { label: operationLabels.update, onSelect: () => setPending({ analyzer, operation: 'update' }) },
+                                  { label: operationLabels.uninstall, onSelect: () => setPending({ analyzer, operation: 'uninstall' }) },
+                                ] : []),
                                 { label: operationLabels.repair, onSelect: () => setPending({ analyzer, operation: 'repair' }) },
                               ]}
                             />
@@ -184,6 +203,7 @@ export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r
                             <p className="tools-detail-desc">{analyzer.detail || analyzer.description}</p>
                             <dl className="tools-facts">
                               <div><dt>Category</dt><dd>{API_CATEGORY_LABELS[analyzer.category] ?? analyzer.category}</dd></div>
+                              {analyzer.disk_bytes ? <div><dt>Disk usage</dt><dd>{formatBytes(analyzer.disk_bytes)}</dd></div> : null}
                               <div><dt>Profiles</dt><dd>{(analyzer.profiles ?? []).map((p) => PROFILE_LABELS[p] ?? p).join(', ') || '—'}</dd></div>
                               <div><dt>Network</dt><dd>{NETWORK_LABELS[analyzer.network] ?? analyzer.network}{analyzer.network_note ? <small>{analyzer.network_note}</small> : null}</dd></div>
                               <div><dt>Languages</dt><dd>{languagesText(analyzer)}</dd></div>
@@ -200,9 +220,9 @@ export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r
         </div>}
         <LanguageCoverage />
         {pending && <ConfirmationDialog
-          tone="primary"
+          tone={pending.operation === 'uninstall' ? 'destructive' : 'primary'}
           title={`${operationLabels[pending.operation]} ${pendingName}`}
-          description={operationConfirmCopy[pending.operation](pendingName)}
+          description={operationConfirmCopy[pending.operation](pendingName, pending.analyzer.disk_bytes)}
           confirmLabel={operationLabels[pending.operation]}
           busy={false}
           onCancel={() => setPending(undefined)}

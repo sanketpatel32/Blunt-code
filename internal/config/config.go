@@ -4,9 +4,28 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 )
 
 const AppName = "BluntCode"
+
+// DefaultMaxScansPerWorkspace is the default retention policy limit: keep at most
+// 20 terminal scans per workspace to prevent indefinite SQLite database growth.
+const DefaultMaxScansPerWorkspace = 20
+
+// MaxScansPerWorkspace returns the configured retention limit, or 0 if auto-pruning is disabled.
+func MaxScansPerWorkspace() int {
+	if val := strings.TrimSpace(os.Getenv("BLUNTCODE_MAX_SCANS_PER_WORKSPACE")); val != "" {
+		if val == "0" || strings.EqualFold(val, "off") || strings.EqualFold(val, "none") || strings.EqualFold(val, "disable") || strings.EqualFold(val, "disabled") {
+			return 0
+		}
+		if n, err := strconv.Atoi(val); err == nil && n >= 1 {
+			return n
+		}
+	}
+	return DefaultMaxScansPerWorkspace
+}
 
 type Paths struct {
 	DataDir    string

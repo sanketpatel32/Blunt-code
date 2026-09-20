@@ -11,16 +11,23 @@ web/dist/
 *.prof
 
 # --- Web / frontend ----------------------------------------------------------
+node_modules/
 web/node_modules/
 # Incremental build cache from "tsc -b".
 *.tsbuildinfo
 coverage/
 *.lcov
+.vitest/
 
 # --- Secrets & environment ---------------------------------------------------
 .env
 .env.*
 !.env.example
+
+# --- Testing & diagnostics ---------------------------------------------------
+.playwright-cli/
+playwright-report/
+test-results/
 
 # --- Local app data & tooling state ------------------------------------------
 .bluntcode/
@@ -28,16 +35,27 @@ coverage/
 .bluntcode-backup-*
 bc-install-test-*
 graphify-out/
+.delta/
 .mimosa/
 .hallmark/
 blunt-work/
 .workbuddy-ai/
+**/.ruff_cache/
+**/__pycache__/
+*.pyc
 
 # --- OS / editor noise -------------------------------------------------------
 .DS_Store
 Thumbs.db
 desktop.ini
 ~$*
+*~
+*.bak
+*.orig
+*.swp
 *.log
 *.tmp
-*.swp
+*.dmp
+*.pdb
+.vscode/
+.idea/

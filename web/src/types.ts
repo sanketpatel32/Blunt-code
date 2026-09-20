@@ -308,6 +308,7 @@ export interface AnalyzerStatus {
   ready: boolean;
   detail?: string;
   registered: boolean;
+  disk_bytes?: number;
 }
 
 export interface Report {

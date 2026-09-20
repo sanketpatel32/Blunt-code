@@ -47,6 +47,28 @@ func sweepStrayServerProcesses(ctx context.Context, executable string, logger *s
 	return nil
 }
 
+// SweepStrayProcesses ends any stray managed SonarQube JVM processes
+// running from the managed Java installation under toolsDir.
+func SweepStrayProcesses(ctx context.Context, toolsDir string) error {
+	if toolsDir == "" {
+		return nil
+	}
+	javaPattern := filepath.Join(toolsDir, "java", "*", "bin", "java.exe")
+	matches, _ := filepath.Glob(javaPattern)
+	if len(matches) == 0 {
+		direct := filepath.Join(toolsDir, "java", "bin", "java.exe")
+		if _, err := os.Stat(direct); err == nil {
+			matches = append(matches, direct)
+		}
+	}
+	for _, javaExe := range matches {
+		if abs, err := filepath.Abs(javaExe); err == nil {
+			_ = sweepStrayServerProcesses(ctx, abs, nil)
+		}
+	}
+	return nil
+}
+
 // snapshotSystemProcesses lists every running process with its parent id and
 // full executable image path. Protected system processes whose image cannot
 // be opened resolve to an empty path and simply never match the managed

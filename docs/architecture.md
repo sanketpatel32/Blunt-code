@@ -22,3 +22,6 @@ without starting tools or making network requests. `bluntcode scan` does take
 the lock and reuses the same scan pipeline and services as the server — minus
 the HTTP server and UI — streaming progress to stderr and exiting with a
 CI-friendly status code.
+
+For a comprehensive deep dive into system architecture, subsystems, analyzers,
+and full feature capabilities, see [ARCHITECTURE_AND_FEATURES.md](ARCHITECTURE_AND_FEATURES.md).

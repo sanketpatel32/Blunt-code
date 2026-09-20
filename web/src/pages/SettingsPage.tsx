@@ -8,6 +8,7 @@ import { FolderIcon } from '../components/icons';
 import { LOCALES, useT } from '../lib/i18n';
 import { PageHeader } from '../components/PageHeader';
 import { ErrorPanel } from '../components/ui';
+import { formatBytes } from '../lib/format';
 
 /** Local folders the backend can reveal in the OS file browser, each with the notice for "not created yet". */
 const DATA_FOLDERS = [
@@ -26,7 +27,28 @@ export function SettingsPage({ notify }: { notify: (n: Notice) => void }) {
   const [saving, setSaving] = useState(false);
   const [stopOpen, setStopOpen] = useState(false);
   const [stopping, setStopping] = useState(false);
+  const [cleanOpen, setCleanOpen] = useState(false);
+  const [cleaning, setCleaning] = useState(false);
   const [opening, setOpening] = useState<DataFolder['kind'] | null>(null);
+
+  async function cleanStorage() {
+    setCleaning(true);
+    try {
+      const res = await api.cleanSystem({ all: true });
+      setCleanOpen(false);
+      const reclaimed = formatBytes(res.reclaimed_bytes);
+      notify({
+        kind: 'success',
+        text: res.reclaimed_bytes > 0
+          ? `Storage cleaned: reclaimed ${reclaimed} of disk space.`
+          : 'Storage cleaned: caches and logs were already lean.',
+      });
+    } catch (e) {
+      notify({ kind: 'error', text: message(e) });
+    } finally {
+      setCleaning(false);
+    }
+  }
 
   async function save(input: { offline?: boolean; open_browser?: boolean }) {
     setSaving(true);
@@ -187,6 +209,24 @@ export function SettingsPage({ notify }: { notify: (n: Notice) => void }) {
         </section>
 
         <section>
+          <h2>Storage & Cleanup</h2>
+          <div className="setting">
+            <div>
+              <h3>Clean caches and compact database</h3>
+              <p>Clear cached vulnerability databases (Trivy), prune logs older than 7 days, and compact the local SQLite database.</p>
+            </div>
+            <button
+              type="button"
+              className="button secondary"
+              disabled={cleaning}
+              onClick={() => setCleanOpen(true)}
+            >
+              {cleaning ? 'Cleaning…' : 'Clean & reclaim space'}
+            </button>
+          </div>
+        </section>
+
+        <section>
           <h2>Server</h2>
           <div className="setting danger-setting">
             <div>
@@ -199,6 +239,18 @@ export function SettingsPage({ notify }: { notify: (n: Notice) => void }) {
           </div>
         </section>
       </div>
+
+      {cleanOpen && (
+        <ConfirmationDialog
+          tone="primary"
+          title="Clean storage and caches?"
+          description="This will clear the Trivy vulnerability database cache (which re-downloads only if you run a deep scan), prune scan logs older than 7 days, and defragment the SQLite database. Your saved workspaces, findings, and scan history are completely safe."
+          confirmLabel="Clean storage"
+          busy={cleaning}
+          onCancel={() => setCleanOpen(false)}
+          onConfirm={() => void cleanStorage()}
+        />
+      )}
 
       {stopOpen && (
         <ConfirmationDialog

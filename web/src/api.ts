@@ -109,6 +109,12 @@ export const api = {
   /** Backend capability inventory: every analyzer with category, profiles, network use, and readiness. */
   analyzers: async () => list<AnalyzerStatus>(await request<AnalyzerStatus[] | { items?: AnalyzerStatus[] }>('/analyzers')),
   toolAction: (id: string, action: 'install' | 'repair' | 'update') => request<Tool>(`/tools/${encodeURIComponent(id)}/${action}`, { method: 'POST' }),
+  uninstallTool: (id: string) => request<Tool>(`/tools/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  cleanSystem: (options?: { logs?: boolean; cache?: boolean; vacuum?: boolean; all?: boolean }) =>
+    request<{ reclaimed_bytes: number; logs_removed: number; cache_cleared: boolean; db_vacuumed: boolean; details?: string[]; errors?: string[] }>(
+      '/system/clean',
+      { method: 'POST', body: JSON.stringify(options ?? {}) }
+    ),
   stopServer: () => request<{ state: string }>('/system/stop', { method: 'POST' }),
   /** In-app updater: check GitHub releases, then hand off to the staged installer. */
   checkUpdate: () => request<{ current: string; latest: string; available: boolean; release_url: string; release_notes: string }>('/update/check'),

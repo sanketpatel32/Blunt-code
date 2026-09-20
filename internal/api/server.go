@@ -2,6 +2,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/csv"
@@ -22,6 +23,7 @@ import (
 	"time"
 
 	"bluntcode/internal/analyzers"
+	"bluntcode/internal/cleaner"
 	"bluntcode/internal/config"
 	"bluntcode/internal/core"
 	"bluntcode/internal/database"
@@ -113,6 +115,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/v1/system/select-folder", s.selectFolder)
 	s.mux.HandleFunc("POST /api/v1/system/open-folder", s.openSystemFolder)
 	s.mux.HandleFunc("POST /api/v1/system/stop", s.stopServer)
+	s.mux.HandleFunc("POST /api/v1/system/clean", s.cleanSystem)
 	s.mux.HandleFunc("GET /api/v1/update/check", s.updateCheck)
 	s.mux.HandleFunc("POST /api/v1/update/apply", s.updateApply)
 	s.mux.HandleFunc("GET /api/v1/workspaces/{id}", s.getWorkspace)
@@ -160,6 +163,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/v1/tools/{id}/install", s.installTool)
 	s.mux.HandleFunc("POST /api/v1/tools/{id}/repair", s.installTool)
 	s.mux.HandleFunc("POST /api/v1/tools/{id}/update", s.installTool)
+	s.mux.HandleFunc("DELETE /api/v1/tools/{id}", s.uninstallTool)
+	s.mux.HandleFunc("POST /api/v1/tools/{id}/uninstall", s.uninstallTool)
 }
 func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -605,6 +610,56 @@ func (s *Server) openSystemFolder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) cleanSystem(w http.ResponseWriter, r *http.Request) {
+	if s.db != nil {
+		if summary, err := s.db.ScanSummary(r.Context()); err == nil && summary.ActiveScans > 0 {
+			fail(w, 409, "SCAN_IN_PROGRESS", "Cannot clean storage while scans are running. Please wait for active scans to finish.")
+			return
+		}
+	}
+
+	var input struct {
+		Logs   *bool `json:"logs,omitempty"`
+		Cache  *bool `json:"cache,omitempty"`
+		Vacuum *bool `json:"vacuum,omitempty"`
+		All    *bool `json:"all,omitempty"`
+	}
+	if r.Body != nil {
+		bodyBytes, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+		if len(strings.TrimSpace(string(bodyBytes))) > 0 {
+			d := json.NewDecoder(bytes.NewReader(bodyBytes))
+			d.DisallowUnknownFields()
+			if err := d.Decode(&input); err != nil {
+				fail(w, 400, "INVALID_REQUEST", "Malformed JSON request body.")
+				return
+			}
+		}
+	}
+	opts := cleaner.Options{}
+	if input.All != nil && *input.All {
+		opts.All = true
+	} else if input.Logs == nil && input.Cache == nil && input.Vacuum == nil {
+		opts.All = true
+	} else {
+		if input.Logs != nil {
+			opts.Logs = *input.Logs
+		}
+		if input.Cache != nil {
+			opts.Cache = *input.Cache
+		}
+		if input.Vacuum != nil {
+			opts.Vacuum = *input.Vacuum
+		}
+	}
+
+	result, err := cleaner.Clean(r.Context(), s.paths, s.db, opts)
+	if err != nil {
+		fail(w, 500, "CLEAN_FAILED", err.Error())
+		return
+	}
+	writeJSON(w, 200, result)
 }
 
 // folderForKind resolves the fixed folder enum to server-held config paths.
@@ -2468,7 +2523,7 @@ func (s *Server) installTool(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "TOOLS_UNAVAILABLE", "Tool service is unavailable.")
 		return
 	}
-	id := r.PathValue("id")
+	id := tools.CanonicalToolID(r.PathValue("id"))
 	if !analyzers.InstallableTool(id) {
 		fail(w, 404, "TOOL_NOT_FOUND", "Tool was not found.")
 		return
@@ -2476,6 +2531,38 @@ func (s *Server) installTool(w http.ResponseWriter, r *http.Request) {
 	if err := s.tools.Ensure(r.Context(), id); err != nil {
 		fail(w, 409, "TOOL_NOT_READY", err.Error())
 		return
+	}
+	if s.scans != nil {
+		s.scans.InvalidateStatusCache()
+	}
+	writeJSON(w, 200, s.tools.Status(id))
+}
+
+func (s *Server) uninstallTool(w http.ResponseWriter, r *http.Request) {
+	if s.tools == nil {
+		fail(w, 503, "TOOLS_UNAVAILABLE", "Tool service is unavailable.")
+		return
+	}
+	id := tools.CanonicalToolID(r.PathValue("id"))
+	if !analyzers.InstallableTool(id) {
+		fail(w, 404, "TOOL_NOT_FOUND", "Tool was not found.")
+		return
+	}
+	if s.db != nil {
+		if summary, err := s.db.ScanSummary(r.Context()); err == nil && summary.ActiveScans > 0 {
+			fail(w, 409, "SCAN_IN_PROGRESS", "Cannot uninstall tools while scans are running. Please wait for active scans to finish.")
+			return
+		}
+	}
+	if s.scans != nil {
+		_ = s.scans.StopAnalyzer(r.Context(), id)
+	}
+	if err := s.tools.Uninstall(r.Context(), id); err != nil {
+		fail(w, 500, "UNINSTALL_FAILED", err.Error())
+		return
+	}
+	if s.scans != nil {
+		s.scans.InvalidateStatusCache()
 	}
 	writeJSON(w, 200, s.tools.Status(id))
 }

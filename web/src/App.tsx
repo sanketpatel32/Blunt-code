@@ -27,12 +27,7 @@ import { SkeletonCards } from './components/skeletons';
 const PentestPage = lazy(() => import('./pages/PentestPage').then((m) => ({ default: m.PentestPage })));
 const RuleStudioPage = lazy(() => import('./pages/RuleStudioPage').then((m) => ({ default: m.RuleStudioPage })));
 
-// Preload heavy chunks in parallel (no waterfall): hints only. A failed chunk
-// (offline, stale deploy) must not log an unhandled rejection from every page
-// before it is ever visited; the ErrorBoundary handles a real navigation miss.
-void import('./pages/PentestPage').catch(() => {});
-void import('./pages/RuleStudioPage').catch(() => {});
-void import('./components/DependencyGraph').catch(() => {});
+
 import { AboutPage } from './pages/AboutPage';
 import { CLIPage } from './pages/CLIPage';
 import { NotFoundPage } from './pages/NotFoundPage';

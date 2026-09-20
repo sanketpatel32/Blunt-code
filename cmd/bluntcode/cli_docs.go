@@ -38,6 +38,8 @@ func runCLIDocs(args []string, stdout, stderr io.Writer) int {
 		printDoctorDoc(stdout)
 	case "config":
 		printConfigDoc(stdout)
+	case "clean":
+		printCleanDoc(stdout)
 	case "agent", "llm":
 		printAgentDoc(stdout)
 	default:
@@ -63,11 +65,11 @@ func printAllCLIDocs(w io.Writer) {
 	fmt.Fprintln(w, "  3. Findings & Inspection      `findings <search|list|preview>`")
 	fmt.Fprintln(w, "  4. Reports & Exports          `report <scan|path> [--format md|sarif|html|json]`")
 	fmt.Fprintln(w, "  5. History & Compare          `history [path]`, `history compare <id1> <id2>`")
-	fmt.Fprintln(w, "  6. Analyzer Toolchain         `tools <list|install|repair|update>`")
+	fmt.Fprintln(w, "  6. Analyzer Toolchain         `tools <list|install|uninstall|repair|update>`")
 	fmt.Fprintln(w, "  7. Rules & Suppressions       `suppress <list|add|remove|import>`, `rules`")
 	fmt.Fprintln(w, "  8. Dynamic Pentest & DAST     `pentest probe <url>`")
 	fmt.Fprintln(w, "  9. Stats, Trends & Risk       `stats`, `trends`, `risk`")
-	fmt.Fprintln(w, "  10. Diagnostics & Updates     `doctor`, `config`, `update`")
+	fmt.Fprintln(w, "  10. Diagnostics, Clean & Update `doctor`, `config`, `clean`, `update`")
 	fmt.Fprintln(w, "  11. AI Agents & Scripts       `agent docs`, `agent scan`, `llm`")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Run `bluntcode cli <command>` for detailed command manual and recipes.")
@@ -198,6 +200,7 @@ func printToolsDoc(w io.Writer) {
 	fmt.Fprintln(w, "SUBCOMMANDS:")
 	fmt.Fprintln(w, "  list                     List all managed tools and their install status")
 	fmt.Fprintln(w, "  install <id>             Download and verify managed analyzer binary")
+	fmt.Fprintln(w, "  uninstall <id>           Remove tool and reclaim disk space")
 	fmt.Fprintln(w, "  repair <id>              Reinstall and verify analyzer")
 	fmt.Fprintln(w, "  update <id>              Update analyzer to latest manifest version")
 	fmt.Fprintln(w)
@@ -256,4 +259,24 @@ func printAgentDoc(w io.Writer) {
 	fmt.Fprintln(w, "  bluntcode agent scan <path>    Run scan with automated --json --quiet defaults")
 	fmt.Fprintln(w, "  bluntcode llm                  Print llm.txt to stdout")
 	fmt.Fprintln(w)
+}
+
+func printCleanDoc(w io.Writer) {
+	fmt.Fprintln(w, "NAME:")
+	fmt.Fprintln(w, "  bluntcode clean - Reclaim disk space by purging old logs, vulnerability caches, and compacting the database")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "SYNOPSIS:")
+	fmt.Fprintln(w, "  bluntcode clean [options]")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "OPTIONS:")
+	fmt.Fprintln(w, "  --logs     Prune scan logs older than 7 days")
+	fmt.Fprintln(w, "  --cache    Clear Trivy vulnerability database cache (~1.3 GB)")
+	fmt.Fprintln(w, "  --vacuum   Compact SQLite database (VACUUM)")
+	fmt.Fprintln(w, "  --all      Perform all cleanup operations (default if no flags given)")
+	fmt.Fprintln(w, "  --json     Output cleanup summary in JSON format")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "EXAMPLES:")
+	fmt.Fprintln(w, "  bluntcode clean")
+	fmt.Fprintln(w, "  bluntcode clean --logs")
+	fmt.Fprintln(w, "  bluntcode clean --cache")
 }

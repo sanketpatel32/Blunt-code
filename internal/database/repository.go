@@ -1536,6 +1536,29 @@ func (d *DB) FixedFindings(ctx context.Context, scan core.Scan, limit int, selec
 	// capped at limit.
 	where := `findings.scan_id=? AND NOT EXISTS (SELECT 1 FROM findings AS current_scan WHERE current_scan.scan_id=? AND current_scan.fingerprint=findings.fingerprint) AND findings.analyzer_id IN (SELECT analyzer_id FROM analyzer_runs WHERE scan_id=? AND state='succeeded') AND findings.fingerprint NOT IN (SELECT fingerprint FROM suppressed_findings WHERE workspace_id=?)`
 	args := []any{previousID, scan.ID, scan.ID, scan.WorkspaceID}
+	if evaluatedFiles == nil {
+		var total int
+		if err := d.SQL.QueryRowContext(ctx, `SELECT COUNT(*) FROM findings WHERE `+where, args...).Scan(&total); err != nil {
+			return FixedFindingsResult{}, err
+		}
+		result.Total = total
+		rows, err := d.SQL.QueryContext(ctx, `SELECT `+findingColumns+`,'fixed' FROM findings WHERE `+where+` ORDER BY `+severityRankExpr+` DESC, findings.relative_path ASC, findings.start_line ASC, findings.analyzer_id ASC, findings.rule_id ASC LIMIT ?`, append(args, limit)...)
+		if err != nil {
+			return FixedFindingsResult{}, err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			f, err := scanFindingRow(rows)
+			if err != nil {
+				return FixedFindingsResult{}, err
+			}
+			result.Items = append(result.Items, f)
+		}
+		if err := rows.Err(); err != nil {
+			return FixedFindingsResult{}, err
+		}
+		return result, nil
+	}
 	rows, err := d.SQL.QueryContext(ctx, `SELECT `+findingColumns+`,'fixed' FROM findings WHERE `+where+` ORDER BY `+severityRankExpr+` DESC, findings.relative_path ASC, findings.start_line ASC, findings.analyzer_id ASC, findings.rule_id ASC`, args...)
 	if err != nil {
 		return FixedFindingsResult{}, err

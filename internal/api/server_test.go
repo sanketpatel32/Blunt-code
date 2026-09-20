@@ -26,6 +26,7 @@ import (
 	"bluntcode/internal/database"
 	"bluntcode/internal/events"
 	"bluntcode/internal/scans"
+	"bluntcode/internal/tools"
 )
 
 func testServer(t *testing.T) *Server {
@@ -2546,5 +2547,179 @@ func TestGetScanReturnsPersistedSeverityCounts(t *testing.T) {
 	}
 	if payload.CriticalCount != 2 || payload.HighCount != 1 || payload.MediumCount != 1 || payload.LowCount != 1 || payload.InfoCount != 1 || payload.TotalFindings != 6 {
 		t.Fatalf("scan detail severity split = %+v, want 2/1/1/1/1 with total 6", payload)
+	}
+}
+
+func TestSystemCleanEndpoint(t *testing.T) {
+	s := testServer(t)
+
+	// Create fake trivy-cache
+	cacheDir := filepath.Join(s.paths.DataDir, "trivy-cache")
+	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cacheDir, "test.db"), []byte("vulnerability-data"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// POST /api/v1/system/clean
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/v1/system/clean", bytes.NewReader([]byte(`{"all": true}`)))
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("clean returned %d: %s", w.Code, w.Body.String())
+	}
+
+	var res struct {
+		ReclaimedBytes int64 `json:"reclaimed_bytes"`
+		CacheCleared   bool  `json:"cache_cleared"`
+		DBVacuumed     bool  `json:"db_vacuumed"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatal(err)
+	}
+	if !res.CacheCleared || !res.DBVacuumed {
+		t.Fatalf("unexpected clean result: %+v", res)
+	}
+	if _, err := os.Stat(cacheDir); !os.IsNotExist(err) {
+		t.Fatal("expected trivy-cache to be removed")
+	}
+}
+
+func TestUninstallToolEndpoint(t *testing.T) {
+	paths, err := config.NewPaths(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := database.Open(context.Background(), paths.DBPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	manifest := tools.Manifest{
+		Artifacts: []tools.Artifact{
+			{ToolID: "ruff", Version: "0.16.0", Platform: runtime.GOOS + "-" + runtime.GOARCH, SourceURL: "https://example.test/ruff.zip", SHA256: "abc", ArchiveType: "exe", Executable: "ruff.exe"},
+			{ToolID: "container-trivy", Version: "0.74.0", Platform: runtime.GOOS + "-" + runtime.GOARCH, SourceURL: "https://example.test/trivy.zip", SHA256: "def", ArchiveType: "exe", Executable: "trivy.exe"},
+		},
+	}
+	toolSvc := tools.NewService(paths.ToolsDir, manifest, false)
+	ruffPath := toolSvc.Manager.Executable(manifest.Artifacts[0])
+	if err := os.MkdirAll(filepath.Dir(ruffPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(ruffPath, []byte("binary"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	trivyPath := toolSvc.Manager.Executable(manifest.Artifacts[1])
+	if err := os.MkdirAll(filepath.Dir(trivyPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(trivyPath, []byte("binary"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New(db, events.New(), nil, toolSvc, paths, "test", nil)
+
+	// DELETE unknown tool -> 404
+	reqUnknown := httptest.NewRequest(http.MethodDelete, "http://127.0.0.1/api/v1/tools/unknown-tool", nil)
+	wUnknown := httptest.NewRecorder()
+	s.Handler().ServeHTTP(wUnknown, reqUnknown)
+	if wUnknown.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for unknown tool, got %d", wUnknown.Code)
+	}
+
+	// DELETE /api/v1/tools/ruff -> 200
+	req := httptest.NewRequest(http.MethodDelete, "http://127.0.0.1/api/v1/tools/ruff", nil)
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("uninstall returned %d: %s", w.Code, w.Body.String())
+	}
+
+	var status tools.Status
+	if err := json.Unmarshal(w.Body.Bytes(), &status); err != nil {
+		t.Fatal(err)
+	}
+	if status.Ready {
+		t.Fatal("expected ruff to not be ready after uninstall")
+	}
+	if !status.CanInstall {
+		t.Fatal("expected ruff to be installable after uninstall")
+	}
+	if _, err := os.Stat(filepath.Join(paths.ToolsDir, "ruff")); !os.IsNotExist(err) {
+		t.Fatal("expected ruff dir to be removed")
+	}
+
+	// Test uninstall via alias "trivy" -> container-trivy
+	reqAlias := httptest.NewRequest(http.MethodDelete, "http://127.0.0.1/api/v1/tools/trivy", nil)
+	wAlias := httptest.NewRecorder()
+	s.Handler().ServeHTTP(wAlias, reqAlias)
+	if wAlias.Code != http.StatusOK {
+		t.Fatalf("uninstall alias trivy returned %d: %s", wAlias.Code, wAlias.Body.String())
+	}
+	if _, err := os.Stat(filepath.Join(paths.ToolsDir, "container-trivy")); !os.IsNotExist(err) {
+		t.Fatal("expected container-trivy dir to be removed via alias")
+	}
+}
+
+func TestSystemCleanAndUninstallRejectsWhileScanning(t *testing.T) {
+	paths, err := config.NewPaths(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := database.Open(context.Background(), paths.DBPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	manifest := tools.Manifest{
+		Artifacts: []tools.Artifact{
+			{ToolID: "ruff", Version: "0.16.0", Platform: runtime.GOOS + "-" + runtime.GOARCH, SourceURL: "https://example.test/ruff.zip", SHA256: "abc", ArchiveType: "exe", Executable: "ruff.exe"},
+		},
+	}
+	toolSvc := tools.NewService(paths.ToolsDir, manifest, false)
+	scanSvc := scans.New(db, analyzers.NewRegistry(), events.New(), paths.ReportsDir, paths.ToolsDir, toolSvc)
+	s := New(db, events.New(), scanSvc, toolSvc, paths, "test", nil)
+
+	// Create a workspace and an active scan in "running" state
+	ws, err := db.CreateWorkspace(context.Background(), core.Workspace{Name: "test-ws", RootPath: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scan, err := db.CreateScan(context.Background(), core.Scan{WorkspaceID: ws.ID, Profile: "standard", State: "running"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. POST /api/v1/system/clean while scan is running -> 409
+	reqClean := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/v1/system/clean", bytes.NewReader([]byte(`{"all": true}`)))
+	wClean := httptest.NewRecorder()
+	s.Handler().ServeHTTP(wClean, reqClean)
+	if wClean.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for clean during active scan, got %d: %s", wClean.Code, wClean.Body.String())
+	}
+
+	// 2. DELETE /api/v1/tools/ruff while scan is running -> 409
+	reqUninstall := httptest.NewRequest(http.MethodDelete, "http://127.0.0.1/api/v1/tools/ruff", nil)
+	wUninstall := httptest.NewRecorder()
+	s.Handler().ServeHTTP(wUninstall, reqUninstall)
+	if wUninstall.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for uninstall during active scan, got %d: %s", wUninstall.Code, wUninstall.Body.String())
+	}
+
+	// Now mark scan completed
+	if err := db.CompleteScan(context.Background(), scan.ID, "completed", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now clean should succeed
+	wClean2 := httptest.NewRecorder()
+	s.Handler().ServeHTTP(wClean2, reqClean)
+	if wClean2.Code != http.StatusOK {
+		t.Fatalf("expected 200 for clean after scan finished, got %d: %s", wClean2.Code, wClean2.Body.String())
 	}
 }

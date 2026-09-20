@@ -59,6 +59,24 @@ describe('navigation resilience', () => {
     expect(host.textContent).toContain('Local by default');
   });
 
+  it.each(['.brand', '.nav-primary a[href="/workspaces"]'])('preserves modified clicks on %s', async (selector) => {
+    window.history.replaceState({}, '', '/about');
+    const host = await renderApp();
+    const link = host.querySelector<HTMLAnchorElement>(selector)!;
+    for (const modifier of ['ctrlKey', 'metaKey', 'shiftKey', 'altKey']) {
+      let intercepted = true;
+      // Observe after React's delegated handler, then suppress jsdom's native
+      // navigation (it cannot open a new browser tab).
+      const observe = (event: MouseEvent) => { intercepted = event.defaultPrevented; event.preventDefault(); };
+      document.addEventListener('click', observe, { once: true });
+      await act(async () => { link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, [modifier]: true })); });
+      expect(intercepted).toBe(false);
+      expect(window.location.pathname).toBe('/about');
+    }
+    await act(async () => { link.click(); });
+    expect(window.location.pathname).toBe(link.getAttribute('href'));
+  });
+
   it('exposes a skip link to main content as the first link in the app', async () => {
     const host = await renderApp();
     const skip = host.querySelector<HTMLAnchorElement>('a.skip-link');

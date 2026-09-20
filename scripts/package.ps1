@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-  [string]$Version = '0.24.0',
+  [string]$Version = '0.25.0',
   # No $PSScriptRoot here: Windows PowerShell 5.1 leaves it empty inside
   # param() default expressions, so resolve after the body starts.
   [string]$OutputDir = '',
@@ -32,6 +32,12 @@ if (-not (Test-Path -LiteralPath $packagedExe)) {
 $versionLine = (& $packagedExe '--version' 2>$null | Select-Object -First 1)
 if ("$versionLine" -notmatch "(\d+\.\d+\.\d+)" -or $Matches[1] -ne $Version) {
   throw "Version mismatch: bluntcode.exe reports '$versionLine' but packaging $Version. The exe is stale - rebuild from the exact tagged commit."
+}
+
+# Size budget check: ensure binary was stripped (-ldflags="-s -w") and fits under 18 MB budget
+$exeSize = (Get-Item -LiteralPath $packagedExe).Length
+if ($exeSize -gt 18MB) {
+  throw "Binary size budget exceeded: bluntcode.exe is $([math]::Round($exeSize/1MB, 2)) MB (budget <= 18 MB). Rebuild with -ldflags='-s -w'."
 }
 
 $releaseName = "BluntCode-$Version-windows-amd64"

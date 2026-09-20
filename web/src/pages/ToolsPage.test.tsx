@@ -160,7 +160,7 @@ describe('ToolsPage inventory table', () => {
     expect(row(host, 'Ruff').querySelectorAll('.table-actions button')).toHaveLength(1);
     expect(row(host, 'Ruff').querySelector('.table-actions button')!.getAttribute('aria-label')).toBe('Actions for Ruff');
     const menu = await openToolMenu(host, 'Ruff');
-    expect(menu.map((item) => item.textContent)).toEqual(['Update', 'Repair']);
+    expect(menu.map((item) => item.textContent)).toEqual(['Update', 'Uninstall', 'Repair']);
   });
 
   it('marks analyzers withheld by offline mode as unavailable instead of silently hiding them', async () => {
@@ -241,6 +241,39 @@ describe('ToolsPage actions', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/tools/ruff/update', expect.objectContaining({ method: 'POST' }));
     await confirmMenuAction(host, 'Ruff', 'Repair');
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/tools/ruff/repair', expect.objectContaining({ method: 'POST' }));
+  });
+
+  it('fires uninstall against DELETE endpoint and shows success notice', async () => {
+    const fetchMock = analyzersMock((input) => (input.endsWith('/tools/ruff') ? json({ id: 'ruff', ready: false, can_install: true }) : json({})));
+    const { host, notify } = await renderPage(fetchMock);
+    await confirmMenuAction(host, 'Ruff', 'Uninstall');
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/tools/ruff', expect.objectContaining({ method: 'DELETE' }));
+    expect(notify).toHaveBeenCalledWith({ kind: 'info', text: 'Ruff: uninstalled.' });
+  });
+
+  it('displays disk usage in expanded details and uninstall confirmation dialog', async () => {
+    const withDisk = {
+      items: analyzersBody.items.map((a) =>
+        a.id === 'ruff' ? { ...a, disk_bytes: 52_428_800 } : a
+      ),
+    };
+    const fetchMock = vi.fn((input: string) =>
+      input.endsWith('/analyzers') ? Promise.resolve(json(withDisk)) : Promise.resolve(json({}))
+    );
+    const { host } = await renderPage(fetchMock);
+    await expandDetails(host, 'Ruff');
+    expect(host.textContent).toContain('Disk usage');
+    expect(host.textContent).toContain('50.0 MB');
+
+    await openToolMenu(host, 'Ruff');
+    const item = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+      (c) => c.textContent === 'Uninstall'
+    );
+    await act(async () => {
+      item!.click();
+    });
+    const dialog = host.querySelector('dialog[open]')!;
+    expect(dialog.textContent).toContain('freeing 50.0 MB of disk space');
   });
 
   it('retries the analyzers load from the error panel', async () => {

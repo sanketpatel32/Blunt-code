@@ -1086,3 +1086,57 @@ func TestConcurrentScansAcrossWorkspaces(t *testing.T) {
 		t.Fatal("canceling a finished scan must fail")
 	}
 }
+
+func TestAutomaticScanRetentionPrune(t *testing.T) {
+	t.Setenv("BLUNTCODE_MAX_SCANS_PER_WORKSPACE", "2")
+	paths, err := config.NewPaths(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := database.Open(context.Background(), paths.DBPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	registry := analyzers.NewRegistry()
+	if err := registry.Register(&scriptedAnalyzer{id: "fake", findings: nil}); err != nil {
+		t.Fatal(err)
+	}
+	service := New(db, registry, events.New(), filepath.Join(paths.DataDir, "reports"), paths.ToolsDir, nil)
+	ws, err := db.CreateWorkspace(context.Background(), core.Workspace{Name: "RetWS", RootPath: pythonWorkspace(t)})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for i := 0; i < 4; i++ {
+		scan, err := service.DiscoverAndStart(context.Background(), ws, "standard", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			cur, err := db.Scan(context.Background(), scan.ID)
+			if err == nil && terminal(cur.State) {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	var scans []core.Scan
+	for time.Now().Before(deadline) {
+		scans, err = db.Scans(context.Background(), ws.ID)
+		if err == nil && len(scans) <= 2 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(scans) > 2 {
+		t.Fatalf("expected at most 2 scans retained per policy, got %d", len(scans))
+	}
+}
+

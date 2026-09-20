@@ -19,7 +19,7 @@ Copy-Item -Path (Join-Path $web 'dist\*') -Destination $static -Recurse -Force
 
 Push-Location $root
 try {
-  go build -o bluntcode.exe ./cmd/bluntcode
+  go build -ldflags="-s -w" -o bluntcode.exe ./cmd/bluntcode
   if ($LASTEXITCODE -ne 0) { throw "go build failed with exit code $LASTEXITCODE" }
 } finally {
   Pop-Location

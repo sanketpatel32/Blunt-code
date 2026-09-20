@@ -1199,3 +1199,15 @@ func TestPruneKeepsComparisonAnchorAndSuppressionHistory(t *testing.T) {
 		t.Fatalf("suppression history lost after prune: %v %v", suppressed, err)
 	}
 }
+
+func TestVacuum(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "bluntcode.db")
+	db, err := Open(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := db.Vacuum(context.Background()); err != nil {
+		t.Fatalf("Vacuum failed: %v", err)
+	}
+}

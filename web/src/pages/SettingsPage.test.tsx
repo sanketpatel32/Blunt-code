@@ -120,3 +120,26 @@ describe('SettingsPage toggles', () => {
     expect(browser.getAttribute('aria-checked')).toBe('false');
   });
 });
+
+describe('SettingsPage storage cleanup', () => {
+  it('opens confirmation dialog and runs system clean', async () => {
+    const fetchMock = vi.fn((input: string) => {
+      if (input.endsWith('/meta')) return Promise.resolve(json({ data_directory: 'C:\\Users\\you\\BluntCode' }));
+      if (input.endsWith('/settings')) return Promise.resolve(json({ offline: false, open_browser: true }));
+      if (input.endsWith('/system/clean')) return Promise.resolve(json({ reclaimed_bytes: 104857600, logs_removed: 5, cache_cleared: true, db_vacuumed: true }));
+      return Promise.resolve(json({}));
+    });
+    const { host, notify } = await renderPage(fetchMock);
+    expect(host.textContent).toContain('Storage & Cleanup');
+    const cleanBtn = button(host, 'Clean & reclaim space')!;
+    expect(cleanBtn).toBeDefined();
+    await act(async () => { cleanBtn.click(); });
+    const dialog = host.querySelector('dialog[open]')!;
+    expect(dialog).not.toBeNull();
+    expect(dialog.textContent).toContain('Clean storage and caches?');
+    const confirmBtn = [...dialog.querySelectorAll('button')].find((b) => b.textContent === 'Clean storage')!;
+    await act(async () => { confirmBtn.click(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/system/clean', expect.objectContaining({ method: 'POST', body: JSON.stringify({ all: true }) }));
+    expect(notify).toHaveBeenCalledWith({ kind: 'success', text: expect.stringContaining('Storage cleaned: reclaimed 100.0 MB') });
+  });
+});

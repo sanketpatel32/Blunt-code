@@ -95,6 +95,7 @@ func openCore() (core *appCore, release func(), err error) {
 		return abort(fmt.Errorf("load embedded tool manifest: %w", err))
 	}
 	toolService := tools.NewService(paths.ToolsDir, manifest, false)
+	toolService.SetDataDir(paths.DataDir)
 	// Recover from interrupted updates before any readiness decision: drop
 	// stale download temps and staging directories, restore a version
 	// directory whose activation died between the two renames.

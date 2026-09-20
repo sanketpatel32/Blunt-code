@@ -216,4 +216,30 @@ describe('CLIPage', () => {
 
     document.documentElement.setAttribute('data-theme', 'light');
   });
+
+  it('documents the clean command and tools uninstall subcommand', async () => {
+    const host = await renderPage();
+    const input = host.querySelector('input[placeholder*="Search commands"]') as HTMLInputElement;
+
+    // Search for clean
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+      setter?.call(input, 'clean');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(host.textContent).toContain('bluntcode clean');
+    expect(host.textContent).toContain('--vacuum');
+    expect(host.textContent).toContain('--cache');
+
+    // Search for tools
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+      setter?.call(input, 'tools');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(host.textContent).toContain('bluntcode tools');
+    expect(host.textContent).toContain('uninstall');
+  });
 });

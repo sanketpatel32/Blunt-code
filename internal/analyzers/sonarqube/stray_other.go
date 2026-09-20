@@ -13,3 +13,4 @@ import (
 // here purely to keep the package compiling elsewhere.
 func sweepStrayServerProcesses(context.Context, string, *slog.Logger) error { return nil }
 func trackProcessInKillOnCloseJob(*os.Process) error                        { return nil }
+func SweepStrayProcesses(context.Context, string) error                     { return nil }

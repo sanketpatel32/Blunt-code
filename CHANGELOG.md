@@ -7,12 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-09-20
+
+### Added
+- **Tool Uninstaller & Disk Usage Visibility**: `bluntcode tools uninstall <tool>` CLI command, `DELETE /api/v1/tools/{id}` endpoint, and web UI Tools page uninstall action with confirmation dialog. Uninstalls optional analyzers and deletes their runtime/data directory (e.g. SonarQube data + binary), reclaiming gigabytes of disk space. Disk usage is tracked and reported per tool.
+- **Storage Cleaner**: `bluntcode clean [--logs] [--cache] [--database] [--all]` command and `POST /api/v1/system/clean` API endpoint. Prunes logs older than 7 days, empties Trivy vulnerability cache, and runs SQLite `VACUUM` on `bluntcode.db`. Exposed in web Settings page with itemized breakdown and one-click cleanup.
+- **Automatic Scan History Retention**: Automatically limits scans per workspace (capped at 20 scans by default) after scan completion, pruning aged findings and artifacts to prevent unbounded database growth.
+- **Packaging Binary Budget Guard**: Built-in <= 18 MB binary budget check in `scripts/package.ps1` to prevent bloated release binaries.
+
 ### Changed
+- **Binary Size Stripping**: Stripped Go binaries with `-ldflags="-s -w"` in release builds, reducing the `bluntcode.exe` executable footprint from 23.5 MB to 15.9 MB (~32% reduction).
+- **Frontend & CSS Diet**: Cleaned unused CSS across `styles.css`, `nav-clarity.css`, and `animations.css`; removed unused Vite manual chunk configurations; disabled eager preloading of non-critical route chunks.
 - **One design contract across every page**: each view exposes one primary action; table rows carry at most one visible control with the rest in a row overflow menu (destructive actions last, behind a confirmation); color is signal only — success dots no longer decorate every healthy row.
 - **Workspaces RISK column is alive**: grades (A–D) are computed client-side from each workspace's latest finished scan with the same weighting as the dashboard risk board, instead of waiting on a server field that no endpoint ever populated.
 - **Dense tables over card walls**: the workspaces list, history, tools, and search pages were rebuilt on shared table/toolbar primitives (new `RowMenu` component, one `.toolbar-row` pattern), with a single header per view.
 
 ### Fixed
+- **Repository & Workspace Hygiene**: Hardened `.gitignore` to prevent editor backups (`*~`, `*.bak`), dumps (`*.dmp`), Playwright artifacts, vitest cache, and ruff cache from polluting git tracking.
 - **Unfinished scans no longer claim a clean sheet**: home feed and history rows show no findings count (or an em dash) for cancelled/failed runs — "0 findings" now appears only on scans that actually finished.
 - **Tools page**: the pinned Actions column that split the table with a white seam is gone; long versions truncate with an ellipsis and full version in a tooltip instead of clipping mid-digit; "Ready" rows are quiet text, not a wall of green dots.
 - **Scan report**: a finished report no longer glows green — "Saved report" used the live-stream skin; the risk score carries its band inline ("950 band 50+").

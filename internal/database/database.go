@@ -57,6 +57,18 @@ func Open(ctx context.Context, path string) (*DB, error) {
 
 func (d *DB) Close() error { return d.SQL.Close() }
 
+// Vacuum defragments and compacts the SQLite database file on disk,
+// reclaiming unused pages left behind by deleted scans, findings, or migrations.
+// It checkpoints and truncates the WAL log before and after compaction to maximize reclaimed space.
+func (d *DB) Vacuum(ctx context.Context) error {
+	_, _ = d.SQL.ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)")
+	if _, err := d.SQL.ExecContext(ctx, "VACUUM"); err != nil {
+		return err
+	}
+	_, _ = d.SQL.ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)")
+	return nil
+}
+
 func (d *DB) Migrate(ctx context.Context) error {
 	// This is migration bookkeeping bootstrap only; schema changes stay in numbered files.
 	if _, err := d.SQL.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)`); err != nil {

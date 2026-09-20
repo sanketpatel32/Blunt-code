@@ -20,11 +20,11 @@ export function PageHeader({
   children,
 }: PageHeaderProps) {
   return (
-    <header className={`page-heading page-header flex flex-col md:flex-row md:items-start md:justify-between gap-3 pb-3.5 mb-4 border-b border-[var(--color-rule-faint)] ${className}`}>
+    <header className={`page-heading page-header ${className}`}>
       <div className="page-heading-main min-w-0 flex-1 space-y-1">
         {eyebrow && (
           <div className="page-heading-eyebrow flex items-center gap-2">
-            <span className="text-[10px] font-mono font-semibold uppercase tracking-wider text-[var(--color-accent-strong)] bg-[var(--color-accent-soft)] px-2 py-0.5 rounded-[var(--radius-xs)] border border-[var(--color-accent)]/20 inline-flex items-center leading-normal">
+            <span className="text-xs font-medium text-[var(--color-ink-soft)] inline-flex items-center gap-1.5 leading-normal">
               {eyebrow}
             </span>
           </div>

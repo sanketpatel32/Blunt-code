@@ -218,3 +218,16 @@ export function friendlyFindingTitle(finding: Partial<Pick<Finding, 'title' | 'r
   if (!title || title !== finding.rule_id) return title ?? 'Finding';
   return firstMessageClause(finding.message ?? '') || title;
 }
+
+/** Format a byte count into a human-friendly string (e.g. "1.3 GB", "42.5 MB", "512 B"). */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let val = bytes / 1024;
+  let i = 0;
+  while (val >= 1024 && i < units.length - 1) {
+    val /= 1024;
+    i++;
+  }
+  return `${val.toFixed(1)} ${units[i]}`;
+}

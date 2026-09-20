@@ -98,6 +98,9 @@ func main() {
 		case "update":
 			os.Exit(runUpdate(os.Args[2:], os.Stdout, os.Stderr))
 			return
+		case "clean":
+			os.Exit(runClean(os.Args[2:], os.Stdout, os.Stderr))
+			return
 		case "version", "--version", "-v":
 			fmt.Println(version)
 			return
@@ -468,10 +471,11 @@ func printHelp(w io.Writer) {
 	fmt.Fprintln(w, "  "+reportUsage)
 	fmt.Fprintln(w, "  bluntcode suppress <list|add|remove|import> <workspace> [args]")
 	fmt.Fprintln(w, "  bluntcode rules <list|disable|enable|overrides> <workspace> [args]")
-	fmt.Fprintln(w, "  bluntcode tools <list|install|repair|update> [tool-id]")
+	fmt.Fprintln(w, "  bluntcode tools <list|install|uninstall|repair|update> [tool-id]")
 	fmt.Fprintln(w, "  bluntcode pentest probe <url> [--auth-mode ...] [--scope ...]")
 	fmt.Fprintln(w, "  bluntcode stats [path] | bluntcode trends <path> | bluntcode risk <path>")
 	fmt.Fprintln(w, "  bluntcode update check [--json]")
+	fmt.Fprintln(w, "  bluntcode clean [--logs] [--cache] [--vacuum] [--all] [--json]")
 	fmt.Fprintln(w, "  bluntcode cli [command]   built-in reference manual and guides")
 	fmt.Fprintln(w, "  "+agentUsage+"   agent helper (docs + scan with --json --quiet)")
 	fmt.Fprintln(w, "  "+llmUsage)

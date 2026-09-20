@@ -4,8 +4,10 @@ import (
 	"archive/zip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
@@ -26,6 +28,7 @@ func buildVersion() string { return build.Version }
 
 type Manager struct {
 	Root       string
+	DataDir    string
 	Manifest   Manifest
 	Client     *http.Client
 	RunCommand func(context.Context, string, []string, string, []string) error
@@ -35,6 +38,160 @@ type Manager struct {
 	// the real child process.
 	SmokeRunner func(context.Context, string, []string) (string, error)
 }
+
+func (m Manager) dataDir() string {
+	if m.DataDir != "" {
+		return m.DataDir
+	}
+	if m.Root != "" {
+		return filepath.Dir(m.Root)
+	}
+	return ""
+}
+
+// CanonicalToolID normalizes short aliases (e.g. trivy -> container-trivy)
+// into the pinned manifest tool identifier.
+func CanonicalToolID(id string) string {
+	switch strings.ToLower(strings.TrimSpace(id)) {
+	case "trivy", "container-trivy":
+		return "container-trivy"
+	case "checkov", "iac-checkov":
+		return "iac-checkov"
+	case "gitleaks", "gitleaks-secrets":
+		return "gitleaks-secrets"
+	case "osv", "osv-scanner", "osv-dependencies":
+		return "osv-dependencies"
+	case "sonar", "sonarqube", "sonar-scanner", "sonarqube-server":
+		return "sonarqube"
+	default:
+		return strings.TrimSpace(id)
+	}
+}
+
+func canonicalToolID(id string) string {
+	return CanonicalToolID(id)
+}
+
+func dirSize(path string) int64 {
+	if strings.TrimSpace(path) == "" {
+		return 0
+	}
+	var size int64
+	_ = filepath.WalkDir(path, func(_ string, d fs.DirEntry, err error) error {
+		if err == nil && d != nil && !d.IsDir() {
+			if fi, fiErr := d.Info(); fiErr == nil {
+				size += fi.Size()
+			}
+		}
+		return nil
+	})
+	return size
+}
+
+// DiskUsage calculates the total disk space consumed by an installed tool in bytes.
+func (m Manager) DiskUsage(id string) int64 {
+	if m.Root == "" {
+		return 0
+	}
+	canonical := CanonicalToolID(id)
+	if canonical == "sonarqube" {
+		var total int64
+		for _, name := range []string{"sonarqube", "sonarqube-server", "sonar-scanner", "java"} {
+			total += dirSize(filepath.Join(m.Root, name))
+		}
+		if dataDir := m.dataDir(); dataDir != "" {
+			total += dirSize(filepath.Join(dataDir, "sonarqube"))
+		}
+		return total
+	}
+	return dirSize(filepath.Join(m.Root, canonical))
+}
+
+// removePathRobust attempts to remove a directory tree, clearing Windows read-only
+// flags and retrying with backoff if the initial deletion encounters permission or locking issues.
+func removePathRobust(path string) error {
+	if strings.TrimSpace(path) == "" {
+		return nil
+	}
+	var err error
+	for attempt := 0; attempt < 3; attempt++ {
+		err = os.RemoveAll(path)
+		if err == nil || os.IsNotExist(err) {
+			return nil
+		}
+		_ = filepath.WalkDir(path, func(p string, d fs.DirEntry, walkErr error) error {
+			if walkErr == nil {
+				_ = os.Chmod(p, 0o666)
+			}
+			return nil
+		})
+		time.Sleep(50 * time.Millisecond)
+	}
+	return os.RemoveAll(path)
+}
+
+// Uninstall removes the tool's files and directories from disk.
+// For sonarqube, it cleans up all sonarqube-related tool directories (sonarqube,
+// sonarqube-server, sonar-scanner, java) as well as the sonarqube runtime/data directory in DataDir.
+func (m Manager) Uninstall(ctx context.Context, id string) error {
+	if m.Root == "" {
+		return fmt.Errorf("tools root directory is not configured")
+	}
+	id = strings.TrimSpace(id)
+	if id == "" || strings.ContainsAny(id, `/\:`) || strings.Contains(id, "..") {
+		return fmt.Errorf("invalid tool id %q", id)
+	}
+
+	canonical := canonicalToolID(id)
+	if canonical == "sonarqube" {
+		var errs []error
+		for _, name := range []string{"sonarqube", "sonarqube-server", "sonar-scanner", "java"} {
+			p := filepath.Join(m.Root, name)
+			if err := removePathRobust(p); err != nil && !os.IsNotExist(err) {
+				errs = append(errs, fmt.Errorf("remove %s: %w", name, err))
+			}
+		}
+		if entries, err := os.ReadDir(m.Root); err == nil {
+			for _, entry := range entries {
+				lower := strings.ToLower(entry.Name())
+				if strings.HasPrefix(lower, "sonarqube") || strings.HasPrefix(lower, "sonar-") {
+					p := filepath.Join(m.Root, entry.Name())
+					if err := removePathRobust(p); err != nil && !os.IsNotExist(err) {
+						errs = append(errs, fmt.Errorf("remove %s: %w", entry.Name(), err))
+					}
+				}
+			}
+		}
+		if dataDir := m.dataDir(); dataDir != "" {
+			sonarDataDir := filepath.Join(dataDir, "sonarqube")
+			if err := removePathRobust(sonarDataDir); err != nil && !os.IsNotExist(err) {
+				errs = append(errs, fmt.Errorf("remove sonarqube data: %w", err))
+			}
+			// Also clean up any lingering sonar-* temp directories in DataDir/tmp
+			if entries, err := os.ReadDir(filepath.Join(dataDir, "tmp")); err == nil {
+				for _, entry := range entries {
+					if entry.IsDir() && strings.HasPrefix(entry.Name(), "sonar-") {
+						_ = removePathRobust(filepath.Join(dataDir, "tmp", entry.Name()))
+					}
+				}
+			}
+		}
+		if len(errs) > 0 {
+			return errors.Join(errs...)
+		}
+		return nil
+	}
+
+	if len(m.Manifest.Artifacts) > 0 {
+		if _, ok := m.Manifest.Find(canonical, platform()); !ok {
+			return fmt.Errorf("unknown tool %q", id)
+		}
+	}
+
+	toolDir := filepath.Join(m.Root, canonical)
+	return removePathRobust(toolDir)
+}
+
 
 func (m Manager) client() *http.Client {
 	if m.Client != nil {

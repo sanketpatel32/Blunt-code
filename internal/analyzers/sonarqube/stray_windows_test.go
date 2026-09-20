@@ -143,3 +143,13 @@ func TestKillOnCloseJobEndsTreeWhenHandleCloses(t *testing.T) {
 		t.Fatal("closing the job handle did not end the tracked process")
 	}
 }
+
+func TestSweepStrayProcessesEmptyDir(t *testing.T) {
+	if err := SweepStrayProcesses(context.Background(), t.TempDir()); err != nil {
+		t.Fatalf("SweepStrayProcesses failed on empty dir: %v", err)
+	}
+	if err := SweepStrayProcesses(context.Background(), ""); err != nil {
+		t.Fatalf("SweepStrayProcesses failed on empty string: %v", err)
+	}
+}
+

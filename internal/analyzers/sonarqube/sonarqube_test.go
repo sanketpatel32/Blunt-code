@@ -42,6 +42,27 @@ func TestEnsureRunningFailsImmediatelyWhenServerExits(t *testing.T) {
 	}
 }
 
+type trackingShutdownServer struct {
+	exitedServer
+	shutdownCalled bool
+}
+
+func (s *trackingShutdownServer) Shutdown(context.Context) error {
+	s.shutdownCalled = true
+	return nil
+}
+
+func TestAdapterShutdownCallsServerShutdown(t *testing.T) {
+	server := &trackingShutdownServer{}
+	adapter := &Adapter{Server: server}
+	if err := adapter.Shutdown(context.Background()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !server.shutdownCalled {
+		t.Fatal("expected server.Shutdown to be called")
+	}
+}
+
 func TestIssueFixture(t *testing.T) {
 	b, err := os.ReadFile(filepath.Join("..", "..", "..", "tests", "fixtures", "sonarqube", "issues.json"))
 	if err != nil {

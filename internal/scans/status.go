@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"bluntcode/internal/analyzers"
+	"bluntcode/internal/tools"
 )
 
 // AnalyzerStatus is the capability inventory entry of one analyzer merged with
@@ -20,6 +21,7 @@ type AnalyzerStatus struct {
 	Ready      bool     `json:"ready"`
 	Detail     string   `json:"detail,omitempty"`
 	Registered bool     `json:"registered"`
+	DiskBytes  int64    `json:"disk_bytes,omitempty"`
 }
 
 // analyzerStatusCacheTTL bounds how long one status snapshot is reused.
@@ -80,8 +82,38 @@ func (s *Service) probeAnalyzerStatuses(ctx context.Context) []AnalyzerStatus {
 			status.Version = tool.Version
 			status.Ready = tool.Ready
 			status.Detail = tool.Detail
+			if tool.Ready && s.tools != nil && status.ManagedTool != "" {
+				status.DiskBytes = s.tools.DiskUsage(status.ManagedTool)
+			}
 		}(status, adapter)
 	}
 	wg.Wait()
 	return out
+}
+
+// InvalidateStatusCache clears the memoized analyzer readiness cache, forcing
+// the next request to probe tool binaries fresh.
+func (s *Service) InvalidateStatusCache() {
+	s.statusMu.Lock()
+	s.statusCache = nil
+	s.statusMu.Unlock()
+}
+
+// StopAnalyzer halts any managed long-running analyzer process (e.g. SonarQube JVM)
+// before it is uninstalled or reconfigured.
+func (s *Service) StopAnalyzer(ctx context.Context, id string) error {
+	if s.registry == nil {
+		return nil
+	}
+	adapter, ok := s.registry.Get(id)
+	if !ok {
+		adapter, ok = s.registry.Get(tools.CanonicalToolID(id))
+		if !ok {
+			return nil
+		}
+	}
+	if shutdowner, ok := adapter.(interface{ Shutdown(context.Context) error }); ok {
+		return shutdowner.Shutdown(ctx)
+	}
+	return nil
 }
