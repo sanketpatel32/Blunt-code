@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.37.0] - 2026-09-28
+
+### Fixed
+- **A disabled button now reads as disabled.** The design-system `Button` had `disabled:opacity-50` in its base classes, which is right for every variant with a transparent or neutral background — halving the opacity of a ghost button just greys its text, which is exactly what "off" should look like. It was wrong for the two **filled** variants, because there the fill *is* the identity: halving a saturated accent does not yield a greyer accent, it yields a **lavender** one — a different hue that still reads as filled, prominent and clickable.
+
+  On the files page this made a disabled **"Save selection" look like the most important control on screen**, sitting beside a perfectly healthy "Reset" that read as the secondary. The filled variants (`default`, `destructive`) now shed their fill when disabled and opt back into full opacity, so they land as a neutral outlined button. Nothing about a disabled primary should still be shouting. Ghost, outline, secondary and link are untouched, because for those the fade is correct.
+
+- **The files page stopped printing the same number twice.** The tree panel head carried a `35 top-level` badge while `35 paths loaded` sat 340px below it. These are *different* numbers — entries in the root listing versus paths currently expanded into the tree — which coincide on first load and then diverge the moment you open a folder. Seeing the same figure twice in two different treatments read as a rendering bug rather than a design. The loaded count is the one that changes, and therefore the one worth watching, so it is the only one that stayed.
+
+### Notes
+- The disabled-button fix had to land in **two** places: the design-system `Button` (cva variants) and the legacy `.button.primary` in `styles.css`. The first attempt only touched the latter and the screenshot did not change at all — the files page uses the shadcn component, not `.button`. Worth remembering that this app has two parallel button systems.
+- A test now asserts the class contract on `buttonVariants`, because jsdom loads no CSS and computed styles cannot prove it. It also asserts `ghost` is *not* given the treatment, so the fix cannot spread to variants where fading is the right answer.
+- 506 tests passing.
+
 ## [0.36.0] - 2026-09-28
 
 ### Fixed

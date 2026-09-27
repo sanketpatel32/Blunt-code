@@ -8,8 +8,21 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: 'bg-[var(--color-accent)] text-[var(--color-accent-ink)] hover:bg-[var(--color-accent-strong)] shadow-[var(--shadow-accent)] hover:shadow-[var(--shadow-accent)]',
-        destructive: 'bg-[var(--color-danger)] text-[var(--color-danger-ink)] hover:bg-[var(--color-danger)]/90 shadow-sm',
+        /* The two FILLED variants shed their fill when disabled instead of
+           fading it. The base class's `disabled:opacity-50` is right for every
+           variant with a transparent or neutral background — halving the opacity
+           of a ghost button just greys its text, which is exactly what "off"
+           should look like. On a filled one it is wrong, because there the fill
+           IS the identity: halving a saturated accent does not yield a greyer
+           accent, it yields a LAVENDER one, a different hue that still reads as
+           filled, prominent and clickable.
+
+           That is how a disabled "Save selection" on the files page came to look
+           like the most important control on screen, beside a perfectly healthy
+           "Reset" that read as the secondary. Nothing about a disabled primary
+           should still be shouting, so the fill goes and the outline stays. */
+        default: 'bg-[var(--color-accent)] text-[var(--color-accent-ink)] hover:bg-[var(--color-accent-strong)] shadow-[var(--shadow-accent)] hover:shadow-[var(--shadow-accent)] disabled:opacity-100 disabled:bg-[var(--color-surface)] disabled:text-[var(--color-ink-faint)] disabled:border disabled:border-[var(--color-rule)] disabled:shadow-none',
+        destructive: 'bg-[var(--color-danger)] text-[var(--color-danger-ink)] hover:bg-[var(--color-danger)]/90 shadow-sm disabled:opacity-100 disabled:bg-[var(--color-surface)] disabled:text-[var(--color-ink-faint)] disabled:border disabled:border-[var(--color-rule)] disabled:shadow-none',
         outline: 'border border-[var(--color-rule)] bg-[var(--color-surface)] text-[var(--color-ink)] hover:bg-[var(--color-surface-muted)] hover:border-[var(--color-rule-strong)] shadow-xs',
         secondary: 'bg-[var(--color-surface-muted)] text-[var(--color-ink)] hover:bg-[var(--color-surface-subtle)] border border-[var(--color-rule-faint)]',
         ghost: 'hover:bg-[var(--color-accent-soft)] hover:text-[var(--color-accent-strong)] text-[var(--color-ink-soft)]',

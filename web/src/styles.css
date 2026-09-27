@@ -145,6 +145,29 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 .button.primary:hover { background: var(--color-accent-strong); border-color: var(--color-accent-strong); box-shadow: var(--shadow-accent); }
 :root[data-theme='dark'] .button.primary:hover { background: var(--color-accent-strong); }
+
+/* A disabled FILLED button must shed its fill, not fade it.
+
+   The global `button:disabled { opacity: .48 }` is right for every control
+   whose background is transparent — fading a ghost button just greys its text,
+   which is exactly what "off" should look like. It is wrong for a filled one,
+   because there the fill IS the identity. Fading a saturated accent by half
+   does not produce a greyer accent, it produces a LAVENDER one: a different
+   hue that still reads as a filled, prominent, clickable button. On the files
+   page that made a disabled "Save selection" look like the most important
+   control on screen, next to a perfectly healthy "Reset" that read as the
+   secondary.
+
+   So the fill goes and the outline stays. Nothing about a disabled primary
+   should still be shouting. */
+.button.primary:disabled,
+.button.danger:disabled {
+  opacity: 1;
+  background: var(--color-surface);
+  border-color: var(--color-rule);
+  color: var(--color-ink-faint);
+  box-shadow: none;
+}
 .button.secondary {
   border-color: var(--color-rule-strong); background: var(--color-surface); color: var(--color-ink);
   box-shadow: var(--shadow-xs);

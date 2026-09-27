@@ -2,6 +2,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Notice } from '../lib/notice';
+import { buttonVariants } from '../components/ui/button';
 import { FilesPage } from './FilesPage';
 
 declare global {
@@ -529,5 +530,25 @@ describe('FilesPage broken workspace', () => {
     const buttons = [...host.querySelectorAll<HTMLButtonElement>('button')];
     expect(buttons.find((button) => button.textContent?.includes('Save selection'))!.disabled).toBe(true);
     expect(buttons.find((button) => button.textContent?.includes('Reset'))!.disabled).toBe(true);
+  });
+});
+
+describe('disabled button treatment', () => {
+  it('a disabled primary sheds its accent fill rather than fading it', () => {
+    // jsdom loads no CSS, so computed styles cannot prove this. The class
+    // contract can: the FILLED variants must declare that they drop the fill,
+    // go neutral, and opt back into full opacity. Without `disabled:opacity-100`
+    // the base class's `disabled:opacity-50` would halve a saturated accent,
+    // which yields a LAVENDER button that still reads as filled and clickable —
+    // how a disabled "Save selection" came to look like the most important
+    // control on the files page, beside a healthy "Reset" that read as secondary.
+    const filled = buttonVariants({ variant: 'default' });
+    expect(filled).toContain('disabled:bg-[var(--color-surface)]');
+    expect(filled).toContain('disabled:text-[var(--color-ink-faint)]');
+    expect(filled).toContain('disabled:opacity-100');
+    expect(buttonVariants({ variant: 'destructive' })).toContain('disabled:opacity-100');
+    // The ghost variant is untouched: halving a transparent button's opacity
+    // correctly greys its text, which is what "off" should look like.
+    expect(buttonVariants({ variant: 'ghost' })).not.toContain('disabled:bg-');
   });
 });
