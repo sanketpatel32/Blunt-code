@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-09-27
+
+### Changed
+- **The board reads as a workbench, not a landing page**: the design tokens were rebuilt around density. The upper spacing steps came in ~25% (`xl` 30px → 22px, `2xl` 48px → 36px), the radius ramp was pulled down a notch (16px cards → 10px), and the page background moved from 98.6% to 97.2% lightness so cards sit a real ~3% step above it instead of dissolving into it at 1.4%.
+- **The verdict strip is half its height and reads left-to-right**: a three-column grid reserved a 90px bordered column for the grade alone and rendered ~350px tall for eight numbers. It is now a head line (grade, hero count, the single outbound action), the severity tally, and a hairline-separated stat strip — with the four stats as inline label/value pairs so each count stays attached to the label it belongs to instead of being pinned to the far corners of a 1400px card.
+- **Ledger rows are one line, not a five-line staircase**: the old two-row grid had a three-line identity cell with centre-aligned mid/meta cells, so every workspace rendered as a ragged ~190px block. Rows are now single rows of 2-line cells on a shared baseline — **six workspaces fit where three did**.
+- **Search results stopped spending rows on line numbers**: every occurrence of a grouped finding was its own full-width table row containing nothing but "Line 34", so a 4-occurrence group cost five rows. Occurrences are now one indented row of individually-clickable line links — **eleven findings visible where five were**.
+- **Page chrome tightened globally**: the shared page header cost 116px before any content on every route (three stacked lines at 8px gaps inside 28px of padding); board panel heads cost 73px each. Both are meaningfully shorter with the hierarchy intact.
+- **Scan report verdict**: severity bars capped at 44rem so they read as meters instead of 1200px ribbons, each count moved beside the label that names it (it sat ~1200px away at the far end of the row), and the five verdict stats run as one column so they pair with the five bars — which also stops "Analyzers 8/8" orphaning onto a row of its own.
+- **Detected languages are quiet text, not a wall of chips**: the ledger showed three bordered language chips plus an overflow chip in a column of their own — ~400px, the widest element in the row, which squeezed the workspace name into ellipsis. They are now plain text on the path line, capped at two, with the full set on hover.
+- **Scan states are dots, not repeated filled pills**: "Completed with warnings" was the widest string in the ledger and was printed in full down every row as an amber pill. Rows now show a coloured dot plus a short word; the full label stays in the tooltip and the screen-reader text.
+- **Feed status words left the monospace font**: they were set in IBM Plex Mono, which made a status word read like a line of terminal output next to the body's type.
+
+### Fixed
+- **Severity bars no longer hide criticals**: at 15 critical / 860 high / 1380 medium / 738 low, a proportional bar draws critical as half a percent of the ribbon — an invisible sliver beside solid amber — so a codebase *with criticals in it* rendered as "mostly fine". Board and ledger bars are now sqrt-scaled (the curve the trend chart already used) with a min-width floor. `aria-label` and `title` always carry the true counts, so the geometry is never the data. This was the single worst correctness problem in the UI: the rows a user opens the board to find were the ones that looked fine.
+- **Search facet says "analyzer"**: it still read "Engine · this page" and "All engines" while Home and the scan report both assert the word "analyzer". It was the last surface on the old terminology.
+- **Ledger row no longer loses its anchor**: with language chips in an `auto` column and the identity cell on `minmax(0, 1fr)`, the workspace name silently collapsed to zero width on some widths — the row degraded with nothing visibly broken. The identity column now has a real floor.
+- **"Explore findings" no longer strands itself**: an auto margin pushed the button alone against the right edge on its own wrapped line between roughly 60rem and 78rem. It is now positioned by flex distribution, so it stays inline at every width.
+
+### Notes
+- Contrast audit passes unchanged in both themes; the ink ramp still clears AA-normal on the new page colour (`ink-faint` 4.66:1 light, 5.91:1 dark).
+- Web suite: 497 tests passing. Three tests that asserted the old chip/pill presentation now assert the new intent; one search test now counts occurrence *links* rather than occurrence *rows*.
+
 ## [0.25.0] - 2026-09-20
 
 ### Added

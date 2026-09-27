@@ -74,15 +74,20 @@
   flex-wrap: wrap;
 }
 
-.verdict-main { min-width: 0; }
+/* The hero block absorbs the slack so the action is pushed to the far edge by
+   flex distribution rather than margin-left:auto — auto margins strand the
+   button alone against the right edge on its own wrapped line, which is what
+   happened between roughly 60rem and 78rem. */
+.verdict-main { flex: 1 1 14rem; min-width: 0; }
 
-.verdict-explore { margin-left: auto; }
+.verdict-explore { flex: none; align-self: center; }
 
 .verdict-grade {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
   min-width: 0;
+  flex: 0 0 auto;
 }
 
 .verdict-letter {
