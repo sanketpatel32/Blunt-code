@@ -288,63 +288,81 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
         <div className="board-verdict-loading"><SkeletonCards count={1} variant="metric" /></div>
       ) : (
         <section className="board-verdict" aria-label="Current risk across your workspaces">
-          <div
-            className="verdict-grade"
-            data-grade={verdictTallied ? verdict.grade : 'none'}
-            title="Weighted risk score: critical ×10, high ×5, medium ×2, low ×1"
-            role="img"
-            aria-label={verdictTallied
-              ? `Grade ${verdict.grade}, ${bandFor(verdict.grade).label.toLowerCase()}, score ${verdict.score}. Grade bands: ${GRADE_BANDS.map((band) => `${band.grade} ${band.range}`).join(', ')}.`
-              : 'Not graded yet: no completed scans.'}
-          >
-            <span className="verdict-letter" aria-hidden="true">{verdictTallied ? verdict.grade : '–'}</span>
-            {/* The grade owns the color; its label and band range stay neutral ink. */}
-            {verdictTallied && <span className="verdict-bandlabel" aria-hidden="true">{bandFor(verdict.grade).label}.</span>}
-            <span className="verdict-score" aria-hidden="true">
-              {verdictTallied ? (
-                <>score <strong className="tabular-nums">{verdict.score}</strong></>
-              ) : (
-                'not graded yet'
-              )}
-            </span>
-            {verdictTallied && (
-              <span className="verdict-bandrange" aria-hidden="true">band {verdict.grade} · {bandFor(verdict.grade).range}</span>
-            )}
-          </div>
-
-          <div className="verdict-main">
-            {verdictTallied ? (
-              // The one hero number on the page; its composition is the severity
-              // tally directly beneath it.
-              <p className="verdict-hero">
-                <span className="verdict-hero-num tabular-nums">{verdict.totalFindings}</span>{' '}
-                <span className="verdict-hero-unit">finding{verdict.totalFindings === 1 ? '' : 's'}</span>{' '}
-                <span className="verdict-hero-ctx">
-                  across the latest completed scan{verdict.scanned === 1 ? '' : 's'} of {verdict.scanned} workspace{verdict.scanned === 1 ? '' : 's'}.
+          {/* One head line answers "how bad is it" — grade tile, then the hero
+              count — instead of the old three-column strip where the grade
+              occupied its own 90px-tall bordered column and pushed the
+              composition bar into a card three times the height of its content. */}
+          <div className="verdict-head">
+            <div
+              className="verdict-grade"
+              data-grade={verdictTallied ? verdict.grade : 'none'}
+              title="Weighted risk score: critical ×10, high ×5, medium ×2, low ×1"
+              role="img"
+              aria-label={verdictTallied
+                ? `Grade ${verdict.grade}, ${bandFor(verdict.grade).label.toLowerCase()}, score ${verdict.score}. Grade bands: ${GRADE_BANDS.map((band) => `${band.grade} ${band.range}`).join(', ')}.`
+                : 'Not graded yet: no completed scans.'}
+            >
+              <span className="verdict-letter" aria-hidden="true">{verdictTallied ? verdict.grade : '–'}</span>
+              {/* The grade owns the color; its label and band range stay neutral ink. */}
+              <span className="verdict-grade-text" aria-hidden="true">
+                <span className="verdict-bandlabel">{verdictTallied && <>{bandFor(verdict.grade).label}.</>}</span>
+                <span className="verdict-score">
+                  {verdictTallied ? (
+                    <>score <strong className="tabular-nums">{verdict.score}</strong></>
+                  ) : (
+                    'not graded yet'
+                  )}
                 </span>
-              </p>
-            ) : (
-              <p className="verdict-line">
-                {workspaces.error ? (
-                  <>Couldn't load your workspaces. Nothing is lost — use "Try again" in the panel below to reload the board.</>
-                ) : workspaces.data?.length ? (
-                  <>No completed scans yet — run a scan to grade your code.</>
-                ) : (
-                  <>Add a workspace to start grading your code.</>
+                {verdictTallied && (
+                  <span className="verdict-bandrange">band {verdict.grade} · {bandFor(verdict.grade).range}</span>
                 )}
-              </p>
-            )}
-            {verdictTallied && verdict.partialScans > 0 && (
-              <p className="verdict-caveat">
-                {verdict.partialScans} of {verdict.scanned} scanned workspace{verdict.partialScans === 1 ? '' : 's'} ran
-                with partial analyzer coverage — their grades reflect only what completed.
-              </p>
-            )}
+              </span>
+            </div>
 
-            {verdictTallied && (
-              <SeverityTally counts={verdict.counts} total={verdict.totalFindings} onExplore={() => go({ page: 'search' })} />
+            <div className="verdict-main">
+              {verdictTallied ? (
+                // The one hero number on the page; its composition is the severity
+                // tally directly beneath it.
+                <p className="verdict-hero">
+                  <span className="verdict-hero-num tabular-nums">{verdict.totalFindings}</span>{' '}
+                  <span className="verdict-hero-unit">finding{verdict.totalFindings === 1 ? '' : 's'}</span>{' '}
+                  <span className="verdict-hero-ctx">
+                    across the latest completed scan{verdict.scanned === 1 ? '' : 's'} of {verdict.scanned} workspace{verdict.scanned === 1 ? '' : 's'}.
+                  </span>
+                </p>
+              ) : (
+                <p className="verdict-line">
+                  {workspaces.error ? (
+                    <>Couldn't load your workspaces. Nothing is lost — use "Try again" in the panel below to reload the board.</>
+                  ) : workspaces.data?.length ? (
+                    <>No completed scans yet — run a scan to grade your code.</>
+                  ) : (
+                    <>Add a workspace to start grading your code.</>
+                  )}
+                </p>
+              )}
+            </div>
+
+            {/* The page's one outbound action, on the head line. It used to sit
+                at the end of the legend row, 1900px below the number it
+                describes and hard against the card edge. */}
+            {verdictTallied && verdict.totalFindings > 0 && (
+              <button type="button" className="verdict-explore text-button" onClick={() => go({ page: 'search' })}>
+                Explore findings <ChevronRight className="h-3 w-3" />
+              </button>
             )}
           </div>
+
+          {verdictTallied && verdict.partialScans > 0 && (
+            <p className="verdict-caveat">
+              {verdict.partialScans} of {verdict.scanned} scanned workspace{verdict.partialScans === 1 ? '' : 's'} ran
+              with partial analyzer coverage — their grades reflect only what completed.
+            </p>
+          )}
+
+          {verdictTallied && (
+            <SeverityTally counts={verdict.counts} total={verdict.totalFindings} />
+          )}
 
           <dl className="verdict-rail" aria-label="Scan activity at a glance">
             {/* Active scans deliberately absent: the header's live pill already
@@ -495,39 +513,44 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
   );
 }
 
-/** Global severity tally with drill-down into findings search. */
-function SeverityTally({ counts, total, onExplore }: { counts: Record<Severity, number>; total: number; onExplore: () => void }) {
+/** Global severity tally with drill-down into findings search.
+ *
+ *  Segment widths are sqrt-scaled, not proportional. A real board here reads
+ *  15 critical / 860 high / 1380 medium / 738 low — proportional, critical is
+ *  half a percent of the ribbon, i.e. an invisible sliver beside a solid amber
+ *  block. The chart then says "mostly fine" about a codebase with criticals in
+ *  it, which is the one thing a risk board must never do. The sqrt curve (the
+ *  same one TrendBars uses so one outlier scan cannot flatten the rest) keeps
+ *  every non-zero band visible while still reading as composition, and the
+ *  exact counts stay spelled out in the legend below. aria-label and title
+ *  always carry the true numbers, so the geometry never becomes the data.
+ */
+function SeverityTally({ counts, total }: { counts: Record<Severity, number>; total: number }) {
   const present = SEVERITY_ORDER.filter((severity) => counts[severity] > 0);
   const label = `Current findings by severity: ${present.length ? present.map((severity) => `${counts[severity]} ${severity}`).join(', ') : 'none yet'}`;
 
   return (
     <div className="verdict-tally">
-      <div className="severity-stack verdict-bar" role="img" aria-label={label} title={label}>
-        {total > 0 &&
-          present.map((severity) => (
+      {total > 0 && (
+        <div className="severity-stack verdict-bar" role="img" aria-label={label} title={label}>
+          {present.map((severity) => (
             <i
               key={severity}
               className={`seg-${severity}`}
-              style={{ width: `${Math.round((counts[severity] * 1000) / total) / 10}%` }}
+              style={{ flexGrow: Math.sqrt(counts[severity]) }}
             />
           ))}
-      </div>
-      <div className="verdict-legend-row">
-        <ul className="verdict-legend">
-          {SEVERITY_ORDER.map((severity) => (
-            <li key={severity} className={counts[severity] > 0 ? severity : 'zero'}>
-              <i className={`seg-${severity}`} aria-hidden="true" />
-              <span className="capitalize">{severity}</span>
-              <span className="legend-count tabular-nums">{counts[severity]}</span>
-            </li>
-          ))}
-        </ul>
-        {total > 0 && (
-          <button type="button" className="verdict-explore text-button" onClick={onExplore}>
-            Explore findings <ChevronRight className="h-3 w-3" />
-          </button>
-        )}
-      </div>
+        </div>
+      )}
+      <ul className="verdict-legend">
+        {SEVERITY_ORDER.map((severity) => (
+          <li key={severity} className={counts[severity] > 0 ? severity : 'zero'}>
+            <i className={`seg-${severity}`} aria-hidden="true" />
+            <span className="capitalize">{severity}</span>
+            <span className="legend-count tabular-nums">{counts[severity]}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
