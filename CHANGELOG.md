@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-09-28
+
+### Fixed
+- **The file-tree search icon sat on top of its own placeholder.** Measured clearance was **-10px**. The shared input rule is `.search input` (one class plus an element) and the file search's own rule was a single class, so the shared rule won the `padding-left` that was supposed to clear the absolutely-positioned magnifier. The selector is now `.file-search .file-search-input`. This was invisible in a scaled screenshot and only appeared when zoomed to 4x and measured.
+- **The findings table printed the same sentence twice.** Every SonarQube cognitive-complexity row showed a bold title chopped at 80 chars with a literal `…`, then the full sentence again underneath. `friendlyFindingTitle` falls back to the message's opening clause capped at 80 chars; past that cap the title is a *prefix* of the message ending in `…` where the message ends in a real character, so the de-duplication check could never fire. Fixed by promoting the full message to the row title, so it prints once and prints whole — deliberately not by hiding the body, which would have traded a duplicate for a truncation.
+- **The workspace path was printed twice and looked editable.** The files page rendered the raw path *and* `PathCopy` beside it, and the raw copy carried a border plus a filled background — a read-only path that looked exactly like a text input you could type into. The pentest header had the same duplication.
+- **"Fix these first" showed two byte-identical rows.** Not a data duplicate: semgrep flagged a hardcoded secret at `auth-flows.ts:13:8` and the secrets detector the same rule family at `:13:33`, and both carry the same message. Locations rendered `file:line` with no column, so the list claimed three problems where there were two. Locations now include the column.
+- **The version appeared four times on the About page** — page title, "Local by default" card, "v0.26.0 installed" on the Updates card, and the footer. The card badge is gone; the title one line above carries it.
+- **The risk card printed the grade letter twice** — a large `D` tile and then "Risk D" beneath it, which read as two different facts. Now labels the number "Risk score".
+
+### Changed
+- **Severity chips no longer render in monospace.** `.badge, .severity, .state` shared one rule; mono suits an id or a version, but "high" set in IBM Plex Mono reads as a package name. `.severity` now uses the body face — the chip already carries a colour dot. `.badge` and `.state` keep mono.
+- **`Excluded: your rules` is quiet metadata again.** It was a filled amber pill on every excluded tree row; in a real tree most rows *are* excluded (`.git`, `.mimosa`, `.scannerwork`), so a column of identical warning-toned badges was the loudest thing in the panel while describing the expected state.
+- Empty states and the About at-a-glance list are width-capped, so short values stop stretching across the full content width.
+
+### Notes
+- Added two automated audits that run against the live app across all 13 routes: an **icon-overlap sweep** (which found the -10px file-search bug and now reports zero overlaps) and a **duplication sweep** (which covers the path, the twin pentest CTAs, and the doubled finding message; now clean). Three of the bugs in this release were found by measurement rather than by looking.
+- Suite: 498 tests passing. Contrast audit: 17 checks, 0 failures.
+
 ## [0.27.0] - 2026-09-27
 
 ### Fixed
