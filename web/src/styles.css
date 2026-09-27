@@ -372,6 +372,11 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .table-wrap tr:last-child td { border-bottom: 0; }
 .table-wrap tbody tr { transition: background var(--dur-fast) var(--ease-out); }
 .table-wrap tbody tr:hover { background: color-mix(in oklch, var(--color-accent) 5%, transparent); }
+/* This class MUST go on a div inside the cell, never on the <td> itself.
+   A <td> with display:flex stops being a table cell: it drops out of the row's
+   layout, so vertical-align stops centring it and it paints its own
+   border-bottom. The visible result is a table with TWO sets of row hairlines,
+   offset by half a row, running down the actions column. */
 .table-actions { display: flex; gap: var(--space-sm); align-items: center; }
 /* history-pagination bento — see css/history.css */
 
@@ -681,7 +686,9 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .tree-loaded-count { margin: 0 0 var(--space-md); color: var(--color-ink-faint); font: 600 var(--text-xs) var(--font-mono); }
 .history-status { display: flex; align-items: center; gap: var(--space-2xs); min-width: 11rem; flex-wrap: wrap; }
 .profile-badge { padding: var(--space-3xs) var(--space-2xs); color: var(--color-ink-faint); font-size: var(--text-2xs); background: var(--color-surface-muted); }
-.findings-cell { display: flex; align-items: center; gap: var(--space-sm); min-width: 10rem; }
+/* .findings-cell used to live here and was removed: it was never referenced by
+   any component, and a dead class that sets display:flex is how the
+   .table-actions bug below comes back - someone reuses the name on a <td>. */
 .findings-total { color: var(--color-ink); font: 700 var(--text-sm) var(--font-display); font-variant-numeric: tabular-nums; }
 .findings-zero { color: var(--color-ink-faint); font-variant-numeric: tabular-nums; font-weight: 600; }
 .severity-bar { display: flex; gap: 1px; width: 8.5rem; height: 4px; overflow: hidden; border-radius: var(--radius-pill); background: var(--color-rule-faint); }

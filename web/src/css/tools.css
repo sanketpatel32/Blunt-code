@@ -10,7 +10,28 @@
 }
 /* The separator lives on a pseudo-element so it is decoration, not content. */
 .tools-readiness > * + *::before { content: '·'; margin-right: var(--space-sm); }
-.tools-readiness .tools-all-ready { color: var(--color-success-text); }
+
+/* The one thing on this page worth an accent: tools that are not installed.
+   It is a button because it is an action - it pre-filters the table to exactly
+   the rows that need attention. Accent is spent here and nowhere else on the
+   page, which is what makes it read as "do this next" rather than decoration. */
+.tools-needs-setup {
+  display: inline-flex; align-items: center; gap: var(--space-3xs);
+  min-height: 1.5rem;
+  margin-left: var(--space-sm);
+  padding: 0 var(--space-2xs);
+  border: 0; border-radius: var(--radius-xs);
+  background: var(--color-warning-soft);
+  color: var(--color-warning-text);
+  font: 600 var(--text-xs) var(--font-body);
+  cursor: pointer;
+}
+
+.tools-needs-setup::before { content: none; }
+
+.tools-needs-setup:hover { background: color-mix(in oklch, var(--color-warning) 22%, var(--color-surface)); }
+
+.tools-needs-setup:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
 
 /* ── Table geometry ──────────────────────────────────────────────────── */
 /* Root cause of the old white band: the Actions column was a sticky pinned

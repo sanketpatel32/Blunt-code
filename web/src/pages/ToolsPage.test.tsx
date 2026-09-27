@@ -102,10 +102,20 @@ afterEach(async () => {
 });
 
 describe('ToolsPage readiness summary', () => {
-  it('summarizes optional tools once in the toolbar meta and keeps readiness in the row, not as chip wallpaper', async () => {
+  it('turns the not-ready tools into the one next action, and keeps readiness in the row', async () => {
     const { host } = await renderPage(analyzersMock());
     const meta = host.querySelector('.tools-readiness')!;
-    expect(meta.textContent).toContain('1 of 2 optional tools ready');
+    // One managed tool is not installed, so the toolbar offers it as the next
+    // step. It is a BUTTON because it is an action - it pre-filters the table to
+    // exactly the rows that need attention.
+    const next = meta.querySelector('.tools-needs-setup') as HTMLButtonElement;
+    expect(next).not.toBeNull();
+    expect(next.textContent).toBe('1 tool needs setup');
+    expect(next.getAttribute('type')).toBe('button');
+    // No fraction, no green counter: the numerator equalling the denominator
+    // carries nothing, and a saturated accent on a non-actionable fact violates
+    // the one rule this app has about colour.
+    expect(meta.textContent).not.toMatch(/\d+ of \d+/);
     expect(host.querySelector('.tools-all-ready')).toBeNull();
     // Readiness shows in the row itself: quiet dot + plain text, no spinner yet.
     const semgrep = row(host, 'Semgrep');
@@ -116,12 +126,42 @@ describe('ToolsPage readiness summary', () => {
     expect(row(host, 'Ruff').querySelector('.tools-version')!.textContent).toBe('v0.6.9');
   });
 
-  it('marks an all-ready managed set with the success counter', async () => {
+  it('clicking the needs-setup action pre-filters the table to the tools needing attention', async () => {
+    const { host } = await renderPage(analyzersMock());
+    const before = host.querySelectorAll('.tool-table tbody tr:not(.tools-details-row)').length;
+    await act(async () => { (host.querySelector('.tools-needs-setup') as HTMLButtonElement).click(); });
+    const after = [...host.querySelectorAll('.tool-table tbody tr:not(.tools-details-row)')];
+    expect(after.length).toBeLessThan(before);
+    // Every remaining row is one the user can act on: the not-installed managed
+    // tool and the built-in withheld by offline mode.
+    expect(after.map((r) => r.textContent)).toEqual(expect.arrayContaining([
+      expect.stringContaining('Semgrep'),
+      expect.stringContaining('License Scanner'),
+    ]));
+    expect(after.some((r) => r.textContent?.includes('Ruff'))).toBe(false);
+    // The count reflects the filter the action just applied.
+    expect(host.querySelector('.tools-count')!.textContent).toBe('2 of 5 analyzers');
+  });
+
+  it('says nothing about readiness when every managed tool is already installed', async () => {
     const allReady = { items: analyzersBody.items.map((a) => (a.managed_tool ? { ...a, ready: true } : a)) };
     const fetchMock = vi.fn((input: string) => (input.endsWith('/analyzers') ? Promise.resolve(json(allReady)) : Promise.resolve(json({}))));
     const { host } = await renderPage(fetchMock);
-    expect(host.querySelector('.tools-all-ready')!.textContent).toBe('2 of 2 optional tools ready');
+    const meta = host.querySelector('.tools-readiness')!;
+    // The absence IS the information. A green "2 of 2 optional tools ready" was
+    // a badge congratulating the user for the default state, and every row
+    // already says "Ready" in its own Status cell.
+    expect(host.querySelector('.tools-needs-setup')).toBeNull();
+    expect(host.querySelector('.tools-all-ready')).toBeNull();
+    expect(meta.textContent).toBe('5 analyzers');
     expect(host.querySelectorAll('.tools-readiness .dot').length).toBe(0);
+  });
+
+  it('uses the singular for exactly one tool', async () => {
+    const oneMissing = { items: analyzersBody.items.map((a) => (a.id === 'semgrep' ? { ...a, ready: false } : a.managed_tool ? { ...a, ready: true } : a)) };
+    const fetchMock = vi.fn((input: string) => (input.endsWith('/analyzers') ? Promise.resolve(json(oneMissing)) : Promise.resolve(json({}))));
+    const { host } = await renderPage(fetchMock);
+    expect(host.querySelector('.tools-needs-setup')!.textContent).toBe('1 tool needs setup');
   });
 
   it('shows the operation spinner in the row while that action is in flight', async () => {
@@ -131,8 +171,10 @@ describe('ToolsPage readiness summary', () => {
     const busyCell = row(host, 'Semgrep').querySelector('.tools-busy')!;
     expect(busyCell.querySelector('.spinner')).not.toBeNull();
     expect(busyCell.textContent).toBe('Installing…');
-    expect(row(host, 'Semgrep').querySelector('.table-actions')!.getAttribute('aria-busy')).toBe('true');
-    expect(host.querySelector('.tools-readiness')!.textContent).toContain('1 of 2 optional tools ready');
+    // aria-busy marks the CELL, not the flex box inside it - the cell is the
+    // region whose contents are changing.
+    expect(row(host, 'Semgrep').querySelector('td.tools-cell-actions')!.getAttribute('aria-busy')).toBe('true');
+    expect(host.querySelector('.tools-needs-setup')!.textContent).toBe('1 tool needs setup');
   });
 });
 
@@ -167,6 +209,25 @@ describe('ToolsPage inventory table', () => {
     const { host } = await renderPage(analyzersMock());
     const license = row(host, 'License Scanner');
     expect(license.querySelector('.tools-state.warn')!.textContent).toBe('Offline mode');
+  });
+
+  it('keeps the actions cell a table cell - the flex row lives on a div inside it', async () => {
+    const { host } = await renderPage(analyzersMock());
+    for (const tr of host.querySelectorAll('.tool-table tbody tr')) {
+      const cell = tr.querySelector('td.tools-cell-actions');
+      if (!cell) continue;
+      // .table-actions sets display:flex. If that class ever lands on the <td>
+      // itself the cell stops being a table cell: vertical-align stops
+      // centring it and it paints its own border-bottom, so the table grows a
+      // second set of row hairlines offset by half a row down the actions
+      // column. The other two call sites (HistoryPage, WorkspacesPage) already
+      // nest a div; this asserts the third one keeps doing the same.
+      expect(cell.tagName).toBe('TD');
+      expect(cell.classList.contains('table-actions')).toBe(false);
+      const flexBox = cell.querySelector('.table-actions');
+      expect(flexBox).not.toBeNull();
+      expect(flexBox!.tagName).not.toBe('TD');
+    }
   });
 
   it('collapses secondary detail into an expandable row behind the tool name', async () => {
@@ -289,6 +350,6 @@ describe('ToolsPage actions', () => {
     failing = false;
     await act(async () => { [...host.querySelectorAll('button')].find((button) => button.textContent === 'Try again')!.click(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
     expect(host.querySelector('.error-panel')).toBeNull();
-    expect(host.querySelector('.tools-readiness')!.textContent).toContain('1 of 2 optional tools ready');
+    expect(host.querySelector('.tools-readiness')!.textContent).toContain('1 tool needs setup');
   });
 });

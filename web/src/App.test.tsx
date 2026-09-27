@@ -166,7 +166,10 @@ describe('Blunt Code home', () => {
     await act(async () => { [...host.querySelectorAll<HTMLButtonElement>('dialog button')].find((button) => button.textContent === 'Install')!.click(); });
     const busyRow = host.querySelectorAll('.tool-table tbody tr')[0];
     expect(busyRow.textContent).toContain('Installing…');
-    expect(busyRow.querySelector('.table-actions')?.getAttribute('aria-busy')).toBe('true');
+    // aria-busy is on the cell; the flex box inside it is not a table cell and
+    // must never carry table-cell semantics.
+    expect(busyRow.querySelector('td.tools-cell-actions')?.getAttribute('aria-busy')).toBe('true');
+    expect(busyRow.querySelector('td.tools-cell-actions.table-actions')).toBeNull();
     // While busy the row offers no action controls (the name disclosure stays
     // usable — expanding details during an install is harmless).
     expect(busyRow.querySelector('.table-actions button')).toBeNull();

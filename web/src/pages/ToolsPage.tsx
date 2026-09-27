@@ -119,7 +119,7 @@ export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r
   const rows = analyzers.data ?? [];
   const managed = rows.filter((a) => a.managed_tool);
   const readyManaged = managed.filter((a) => a.ready).length;
-  const managedAllReady = managed.length > 0 && readyManaged === managed.length;
+  const managedNeedsSetup = managed.length - readyManaged;
   const filtered = rows.filter((a) => matchesFilter(a, filter));
   const pendingName = pending ? pending.analyzer.display_name || pending.analyzer.id : '';
 
@@ -142,7 +142,25 @@ export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r
           <span className="tools-readiness toolbar-meta" role="status">
             {analyzers.loading ? '… analyzers' : <>
               <span className="tools-count tabular-nums">{filter === 'all' ? `${rows.length} analyzers` : `${filtered.length} of ${rows.length} analyzers`}</span>
-              {managed.length > 0 && <span className={managedAllReady ? 'tools-all-ready' : undefined}>{readyManaged} of {managed.length} optional tools ready</span>}
+              {/* Only the not-ready tools are worth a sentence.
+
+                  "8 of 8 optional tools ready" was three problems at once: a
+                  fraction that reads as pure noise when the numerator equals the
+                  denominator, a green accent on a fact that is not actionable,
+                  and a second population glued to the first (12 analyzers, but
+                  only 8 of them are the optional kind) so the two numbers do not
+                  reconcile for a reader. Every row already states its own status,
+                  so when everything is installed the honest summary is nothing —
+                  the absence IS the information.
+
+                  When something IS missing it becomes the next action, which is
+                  the only thing on this page worth an accent: how many tools need
+                  setup, as a link that pre-filters the table to them. */}
+              {managedNeedsSetup > 0
+                ? <button type="button" className="tools-needs-setup" onClick={() => setFilter('setup')}>
+                    {managedNeedsSetup} tool{managedNeedsSetup === 1 ? '' : 's'} need{managedNeedsSetup === 1 ? 's' : ''} setup
+                  </button>
+                : null}
             </>}
           </span>
         </div>
@@ -178,22 +196,33 @@ export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r
                       <td className="tools-version" title={analyzer.version ? `v${analyzer.version}` : undefined}>{analyzer.version ? `v${analyzer.version}` : '—'}</td>
                       <td><span className={statusStateClass(status.tone)}>{status.tone !== 'ok' && <i className={statusDotClass(status.tone)} aria-hidden="true" />}{status.text}</span></td>
                       <td className="tools-source">{analyzer.execution === 'in-process' ? 'Built-in' : 'Managed'}</td>
-                      <td className="table-actions" aria-busy={activeOperation ? true : undefined}>
-                        {analyzer.managed_tool ? (activeOperation
-                          ? <span className="tools-busy"><span className="spinner" aria-hidden="true" />{operationBusyLabels[activeOperation]}</span>
-                          : <>
-                            {!analyzer.ready && <button type="button" className="button secondary tools-install" onClick={() => setPending({ analyzer, operation: 'install' })}>Install</button>}
-                            <RowMenu
-                              label={`Actions for ${name}`}
-                              items={[
-                                ...(analyzer.ready ? [
-                                  { label: operationLabels.update, onSelect: () => setPending({ analyzer, operation: 'update' }) },
-                                  { label: operationLabels.uninstall, onSelect: () => setPending({ analyzer, operation: 'uninstall' }) },
-                                ] : []),
-                                { label: operationLabels.repair, onSelect: () => setPending({ analyzer, operation: 'repair' }) },
-                              ]}
-                            />
-                          </>) : <span className="tools-none" aria-hidden="true">—</span>}
+                      <td className="tools-cell-actions" aria-busy={activeOperation ? true : undefined}>
+                        {/* The flex layout lives on a div INSIDE the cell, not on the
+                            cell itself. A <td> with display:flex stops being a
+                            table cell: it drops out of the row's layout, so
+                            vertical-align stops centring it and it paints its own
+                            border-bottom. The visible result is a table with two
+                            sets of row hairlines, offset by half a row, running
+                            down the actions column. The other two call sites
+                            (HistoryPage, WorkspacesPage) already nest a div; this
+                            one was the outlier. */}
+                        <div className="table-actions">
+                          {analyzer.managed_tool ? (activeOperation
+                            ? <span className="tools-busy"><span className="spinner" aria-hidden="true" />{operationBusyLabels[activeOperation]}</span>
+                            : <>
+                              {!analyzer.ready && <button type="button" className="button secondary tools-install" onClick={() => setPending({ analyzer, operation: 'install' })}>Install</button>}
+                              <RowMenu
+                                label={`Actions for ${name}`}
+                                items={[
+                                  ...(analyzer.ready ? [
+                                    { label: operationLabels.update, onSelect: () => setPending({ analyzer, operation: 'update' }) },
+                                    { label: operationLabels.uninstall, onSelect: () => setPending({ analyzer, operation: 'uninstall' }) },
+                                  ] : []),
+                                  { label: operationLabels.repair, onSelect: () => setPending({ analyzer, operation: 'repair' }) },
+                                ]}
+                              />
+                            </>) : <span className="tools-none" aria-hidden="true">—</span>}
+                        </div>
                       </td>
                     </tr>
                     {open && (

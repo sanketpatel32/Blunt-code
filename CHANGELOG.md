@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.34.0] - 2026-09-28
+
+### Fixed
+- **A table cell was not a table cell.** `.table-actions` sets `display: flex`, and the tools table put that class on the `<td>` itself. A `<td>` with `display: flex` drops out of the row's layout entirely: `vertical-align` stops centring it and it paints its own `border-bottom`. The visible result was the tools table showing **two sets of row hairlines offset by half a row**, running the full height of the Actions column — a seam that reads as a rendering glitch rather than a design choice. The flex box now lives on a `<div>` inside the cell, which is what the other two call sites (`HistoryPage`, `WorkspacesPage`) already did. Guarded by a test that asserts the structural invariant, and documented at the rule.
+- **One saturated blue pill in the product.** The language-family filter painted its selected state with a hand-rolled `bg-[var(--color-accent)]` fill — the only control in the app spending a full accent fill on a *filter state*, and it directly contradicted the status filter a few inches above it, which shows the same concept in quiet grey. Both now use the shared `.chip` treatment: accent border, soft fill, strong text. One page, one way to say "this filter is on".
+
+### Changed
+- **The readiness stat became an action, or disappeared.** `12 analyzers · 8 of 8 optional tools ready` was three problems at once. A fraction whose numerator equals its denominator carries no information. Green put an accent on a fact you cannot act on, which is the one thing this app's colour system reserves that accent against. And it glued two populations together that do not reconcile — 12 analyzers, but only 8 of them are the optional kind — so a reader could not make the numbers add up. Every row already states its own status, so **when everything is installed the summary now says nothing; the absence is the information.** When something is genuinely missing it becomes the next action: `1 tool needs setup`, in the warning tone, as a button that pre-filters the table to the rows that need attention. This is the only place on the page that spends an accent, and it is spending it on something clickable.
+
+### Removed
+- **`.findings-cell`** — defined in `styles.css` and referenced by nothing. A dead class that sets `display: flex` is precisely how the `.table-actions` bug above gets reintroduced, so it is gone rather than left as a trap.
+
+### Notes
+- Found by reading the rendered page rather than the stylesheet. The seam was invisible in a diff, and both `getBoundingClientRect` and `elementFromPoint` came back clean — only a 3x zoom of the hairline region showed the two misaligned border sets, which is what pointed at the cell losing table-cell layout.
+- Tests asserting the old presentation were rewritten to assert the new intent (no fraction, no green counter, an action that filters), not deleted. 503 tests passing.
+
 ## [0.33.0] - 2026-09-28
 
 ### Changed

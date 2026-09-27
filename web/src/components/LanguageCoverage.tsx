@@ -73,9 +73,16 @@ export function LanguageCoverage({ compact }: { compact?: boolean }) {
           />
         </label>
         <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Filter by family">
-          <button type="button" onClick={() => setFamilyFilter('all')} aria-pressed={familyFilter === 'all'} className={`rounded-full px-2 py-0.5 text-xs border ${familyFilter === 'all' ? 'bg-[var(--color-accent)] text-[var(--color-accent-ink)] border-[var(--color-accent)]' : 'bg-[var(--color-surface)] border-[var(--color-rule)]'}`}>All</button>
+          {/* Shared .chip, not a hand-rolled accent fill. A selected filter is
+              STATE, not an action, and the app already has one answer for that
+              state: accent border + soft fill + strong text (styles.css .chip).
+              This was the only control in the product that spent a saturated
+              accent fill on a toggle - and it contradicted the status filter
+              sitting a few inches above it, which shows the same concept in
+              quiet grey. One page, one way to say "this filter is on". */}
+          <button type="button" onClick={() => setFamilyFilter('all')} aria-pressed={familyFilter === 'all'} className="chip">All</button>
           {FAMILY_ORDER.map((fam) => (
-            <button key={fam} type="button" onClick={() => setFamilyFilter(fam)} aria-pressed={familyFilter === fam} className={`rounded-full px-2 py-0.5 text-xs border ${familyFilter === fam ? 'bg-[var(--color-accent)] text-[var(--color-accent-ink)] border-[var(--color-accent)]' : 'bg-[var(--color-surface)] border-[var(--color-rule)]'}`}>{fam}</button>
+            <button key={fam} type="button" onClick={() => setFamilyFilter(fam)} aria-pressed={familyFilter === fam} className="chip">{fam}</button>
           ))}
         </div>
         {q && <span className="text-xs text-[var(--color-ink-soft)]" aria-live="polite">{visibleLangs.length} match{q ? ` for "${filter}"` : ''}</span>}
