@@ -10,7 +10,6 @@ import { Empty, ErrorPanel } from '../components/ui';
 import { ScanIcon } from '../components/icons';
 import { SkeletonTable } from '../components/skeletons';
 import { ComparePanel } from '../components/ComparePanel';
-import { WorkspaceContextSidebar } from '../components/WorkspaceContext';
 import { PageHeader } from '../components/PageHeader';
 import { RowMenu, type RowMenuItem } from '../components/RowMenu';
 import { Badge } from '../components/ui/badge';
@@ -154,7 +153,8 @@ export function HistoryPage({ workspaceId, go }: { workspaceId: string; go: (r: 
   const tableCompareProps = pair.b ? {} : pair.a ? { compareBaseId: pair.a, onComparePick } : { onComparePick };
   return (
     <div className="page workspace-page">
-      <WorkspaceContextSidebar id={workspaceId} current={{ page: 'history', id: workspaceId }} onNavigate={go} />
+      {/* No workspace sub-nav: the app rail lists this workspace's pages while
+          you are inside it. */}
       <div className="workspace-page-body">
         <PageHeader title={workspace.data?.name ? `${workspace.data.name} — History` : 'Scan history'} />
         <div className="toolbar-row history-toolbar">

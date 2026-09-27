@@ -303,8 +303,10 @@ describe('closing the app', () => {
     expect(fetchMock.mock.calls.some(([input, init]) => String(input).endsWith('/system/stop') && (init as RequestInit | undefined)?.method === 'POST')).toBe(true);
     expect(host.textContent).toContain('Blunt Code has stopped');
     expect(host.textContent).toContain('stay saved on this computer');
-    // The dead app is gone: no nav, no clickable remnants, just the farewell card.
-    expect(host.querySelector('.app-nav')).toBeNull();
+    // The dead app is gone: no rail, no nav, no clickable remnants, just the
+    // farewell card.
+    expect(host.querySelector('.app-rail')).toBeNull();
+    expect(host.querySelector('.app-shell')).toBeNull();
     expect(host.textContent).toContain('Close this tab');
   });
 

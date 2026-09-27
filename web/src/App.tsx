@@ -210,12 +210,21 @@ export function App() {
   if (farewell) return <div className="app-frame"><AppClosedScreen mode={farewell.mode} version={farewell.mode === 'updating' ? farewell.version : undefined} /></div>;
   return <I18nProvider><div className="app-frame">
     <a href="#main-content" className="skip-link">Skip to main content</a>
-    <AppShell route={route} onNavigate={go} onAdd={() => setAddOpen(true)} onClose={() => setCloseOpen(true)} theme={theme} onToggleTheme={toggleTheme} onShowShortcuts={() => setShortcutsOpen(true)} seqArmed={seqArmed} />
+    {/* The shell is a grid: the rail is the first column and everything else
+        flows beside it. Previously the nav was a horizontal band and this
+        wrapper did not exist - which is exactly why the app read as a web page
+        rather than an application. */}
+    <div className="app-shell">
+      <AppShell route={route} onNavigate={go} onAdd={() => setAddOpen(true)} onClose={() => setCloseOpen(true)} theme={theme} onToggleTheme={toggleTheme} onShowShortcuts={() => setShortcutsOpen(true)} seqArmed={seqArmed} />
+      <div className="app-content">
     <main className="main" id="main-content" tabIndex={-1}>
       <ErrorBoundary resetKey={href(route)}>
         <Page route={route} go={go} notify={notify} onAdd={() => setAddOpen(true)} onUpdateHandoff={updateHandoff} />
       </ErrorBoundary>
     </main>
+    <AppFooter />
+      </div>
+    </div>
     {addOpen && <AddWorkspaceDialog onClose={() => setAddOpen(false)} onCreated={(workspace) => { setAddOpen(false); if (workspace.existing) notify({ kind: 'info', text: 'Workspace already registered — opening it' }); go({ page: 'workspace', id: workspace.id }); }} notify={notify} />}
     {closeOpen && <ConfirmationDialog title="Close Blunt Code?" description={activeScanWorkspaces.length ? `A scan is still running on ${activeScanWorkspaces.join(', ')} — closing now cancels it. Your workspaces and reports stay saved on this computer.` : 'This ends the local app. Any active scan will be cancelled; your workspaces and reports stay saved on this computer.'} confirmLabel="Close app" busy={closing} onCancel={() => setCloseOpen(false)} onConfirm={() => void closeApp()} />}
     {shortcutsOpen && <ShortcutsDialog onClose={() => setShortcutsOpen(false)} />}

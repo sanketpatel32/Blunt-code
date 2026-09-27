@@ -123,74 +123,278 @@
   letter-spacing: -.01em;
 }
 
-/* ── 3 · Nav declutter ─────────────────────────────────────────────────
-   The bar carried a notification bell, a Ctrl-K pill, a language menu, an
-   overflow menu and a theme toggle — five controls for four of which the
-   command palette already held a shortcut. The middle of the bar was dead
-   space. This puts one real affordance in that space and lets the utility
-   cluster get out of the way. */
+/* ════════════════════════════════════════════════════════════════════
+   THE SHELL — a left rail, not a top bar
+   ────────────────────────────────────────────────────────────────────
+   The single structural change. A horizontal nav over full-width content is
+   the most recognisable shape of a generic SaaS dashboard; no amount of type or
+   colour work makes that arrangement feel designed. The rail fixes that, and
+   it fixes two functional problems at the same time:
 
-/* The nav is the one place a search affordance belongs, and it is the only
-   thing in the app that reaches every workspace's findings. */
-.app-nav nav { justify-content: flex-start; }
+     - All eight top-level pages are visible. The old bar showed four and hid
+       Rules, CLI, Settings and About behind a "More" menu, so half the app was
+       invisible unless you happened to know it existed.
+     - A workspace's own pages (Overview / Pentest / Files / History) live in
+       the rail under its name, so there is exactly ONE navigation element on
+       screen at any time instead of a bar plus a second sub-bar.
+   ════════════════════════════════════════════════════════════════════ */
 
-.app-nav {
-  min-height: 3rem;
-  /* A hairline plus a whisper of tint, so the bar is a distinct plane
-     without becoming a heavy band across the top of every page. */
+.app-shell {
+  display: grid;
+  grid-template-columns: var(--rail-w) minmax(0, 1fr);
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+:root { --rail-w: 15.5rem; }
+
+.app-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ── The rail ────────────────────────────────────────────────────────
+   One plane, separated by a single hairline. No shadow, no border all round:
+   a rail that reads as a separate surface by shadow alone looks bolted on. */
+.app-rail {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-sm) var(--space-sm);
+  border-right: var(--rule) solid var(--color-rule);
   background: var(--color-surface);
-  border-bottom: var(--rule) solid var(--color-rule);
-  box-shadow: 0 1px 0 oklch(17% 0.016 268 / .02);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 
-/* The active nav item was a filled black pill — the loudest element on the
-   page, competing with the page's own primary action. A quiet underline
-   says "you are here" without shouting over the content. */
-.app-nav nav a {
-  position: relative;
-  padding: var(--space-xs) var(--space-sm);
-  border-radius: 0;
-  font-weight: 500;
-  color: var(--color-ink-soft);
-  background: none;
-  box-shadow: none;
-}
-
-.app-nav nav a:hover { background: none; color: var(--color-ink); }
-
-.app-nav nav a.active {
+.rail-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-2xs) var(--space-sm) var(--space-sm);
   color: var(--color-ink);
-  background: none;
-  box-shadow: none;
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 650;
+  letter-spacing: -.02em;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.rail-brand .brand-mark {
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 0.45rem;
+  flex: none;
+}
+
+.rail-nav { display: flex; flex-direction: column; gap: var(--space-md); flex: 1 1 auto; }
+
+.rail-group { display: flex; flex-direction: column; gap: 1px; margin: 0; padding: 0; list-style: none; }
+
+/* The one uppercase label in the whole app: a group heading in the rail is
+   genuine punctuation because there is exactly one per group and it carries
+   real structure. Everywhere else, uppercase was noise. */
+.rail-group-label {
+  margin: 0 0 var(--space-2xs);
+  padding: 0 var(--space-sm);
+  color: var(--color-ink-faint);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.rail-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0 0 var(--space-2xs);
+  padding: var(--space-sm) 0 0;
+  border-top: var(--rule) solid var(--color-rule-faint);
+}
+
+.rail-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 0.4rem var(--space-sm);
+  border-radius: var(--radius-button);
+  color: var(--color-ink-soft);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.rail-link-icon { width: 1rem; height: 1rem; flex: none; color: var(--color-ink-faint); transition: color var(--dur-fast) var(--ease-out); }
+.rail-link-icon > svg { width: 1rem; height: 1rem; display: block; }
+.rail-link-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.rail-link:hover { background: var(--color-surface-muted); color: var(--color-ink); }
+.rail-link:hover .rail-link-icon { color: var(--color-ink-soft); }
+.rail-link:focus-visible { outline: var(--rule-focus) solid var(--color-focus); outline-offset: -2px; }
+
+/* Active: a filled soft pill plus an accent bar on the leading edge. A rail is
+   read by position, so the marker has to be unambiguous and it must not
+   shout — the page's own content is the loudest thing on screen. */
+.rail-link.active {
+  background: var(--color-surface-muted);
+  color: var(--color-ink);
   font-weight: 600;
 }
 
-.app-nav nav a.active::after {
-  content: '';
-  position: absolute;
-  left: var(--space-sm);
-  right: var(--space-sm);
-  bottom: -0.55rem;
-  height: 2px;
-  border-radius: 2px;
-  background: var(--color-accent);
+.rail-link.active .rail-link-icon { color: var(--color-accent-strong); }
+
+.rail-link-button {
+  width: 100%;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
 }
 
-:root[data-theme='dark'] .app-nav nav a.active::after { background: var(--color-accent); }
+/* ── Rail foot: search, settings, utilities ───────────────────────── */
+.rail-foot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-top: auto;
+  padding-top: var(--space-sm);
+  border-top: var(--rule) solid var(--color-rule-faint);
+}
 
-/* Brand: the mark carries the identity, the wordmark does not need to shout
-   back at it. */
-.brand { font-size: 0.95rem; font-weight: 650; letter-spacing: -.02em; }
-.brand .brand-mark { width: 1.75rem; height: 1.75rem; border-radius: 0.5rem; }
+/* A real search affordance rather than a "Ctrl K" shortcut badge worn as
+   chrome. The shortcut still shows, because it is genuinely useful, but the
+   control now says what it does. */
+.rail-search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  padding: 0.4rem var(--space-sm);
+  border: var(--rule) solid var(--color-rule);
+  border-radius: var(--radius-button);
+  background: var(--color-surface-muted);
+  color: var(--color-ink-faint);
+  font: 500 var(--text-sm) var(--font-body);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.rail-search:hover { border-color: var(--color-rule-strong); color: var(--color-ink); }
+.rail-search:focus-visible { outline: var(--rule-focus) solid var(--color-focus); outline-offset: 1px; }
+.rail-search-icon { width: 0.95rem; height: 0.95rem; flex: none; }
+.rail-search span { flex: 1 1 auto; text-align: left; }
+
+.rail-util { display: flex; align-items: center; gap: var(--space-xs); padding-left: var(--space-xs); }
+.rail-util-btn { width: 2rem; height: 2rem; color: var(--color-ink-faint); }
+.rail-util-btn:hover { color: var(--color-ink); background: var(--color-surface-muted); }
+
+/* ── Mobile bar ──────────────────────────────────────────────────────
+   The rail collapses below 64rem. It is hidden outright rather than turned
+   into a drawer: a drawer that has to be opened before you can see what the app
+   contains is worse than a bar you can see, and this app is desktop-first. */
+.app-topbar { display: none; }
+
+@media (max-width: 64rem) {
+  :root { --rail-w: 0rem; }
+
+  .app-shell { grid-template-columns: minmax(0, 1fr); }
+
+  .app-rail { display: none; }
+
+  .app-topbar {
+    position: sticky;
+    z-index: var(--z-nav);
+    top: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    min-height: 3rem;
+    padding: 0 var(--space-md);
+    border-bottom: var(--rule) solid var(--color-rule);
+    background: var(--color-surface);
+  }
+
+  .app-topbar .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-sm);
+    color: var(--color-ink);
+    font-family: var(--font-display);
+    font-size: 0.95rem;
+    font-weight: 650;
+    letter-spacing: -.02em;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .app-topbar .brand-mark { width: 1.6rem; height: 1.6rem; border-radius: 0.45rem; }
+
+  .topbar-nav {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .topbar-nav::-webkit-scrollbar { display: none; }
+
+  .topbar-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: var(--space-2xs) var(--space-sm);
+    border-radius: var(--radius-button);
+    color: var(--color-ink-soft);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .topbar-link svg { width: 0.9rem; height: 0.9rem; }
+  .topbar-link:hover { background: var(--color-surface-muted); color: var(--color-ink); }
+  .topbar-link.active { background: var(--color-surface-muted); color: var(--color-ink); font-weight: 600; }
+}
+
+/* The rail replaced a full-width nav band, so the page gutter is now the rail
+   plus breathing room rather than a fixed band height. --nav-h stays for the
+   mobile bar, which is the only thing still pinned to the top. */
+:root { --nav-h: 3rem; }
+
+.page { padding-inline: var(--space-xl) var(--page-gutter); }
+.app-footer { padding-inline: var(--space-xl) var(--page-gutter); }
+
+.search-sidebar { top: var(--space-md); }
+[id] { scroll-margin-top: var(--space-lg); }
+
+@media (max-width: 64rem) {
+  .page, .app-footer { padding-inline: var(--page-gutter); }
+  [id] { scroll-margin-top: calc(var(--nav-h) + var(--space-lg)); }
+}
 
 /* ── 4 · Page header: less chrome, more identity ──────────────────────
-   A 116px header (now ~92px) sat above every route carrying a title, a
-   one-line description and a hairline. The hairline plus the generous
-   padding below it is doing the same job twice. */
+   A 116px header sat above every route carrying a title, a one-line
+   description and a hairline. The hairline plus the generous padding below it
+   was doing the same job twice. */
 .page-heading { margin-bottom: var(--space-lg); border-bottom: 0; padding-bottom: 0; }
 .page-header { padding-block: var(--space-md) 0; }
 
-/* ── 5 · Surfaces: make the layering legible ───────────────────────────
+
+/* ── 6 · Surfaces: make the layering legible ───────────────────────────
    The page and its cards sat ~3% apart, which reads, but the cards were all
    the same weight. Elevation now means something: the page is the ground,
    a card is one plane up, and only floating things cast a shadow. */
@@ -199,6 +403,40 @@
 .summary-card,
 .about-card,
 .workspace-section-card { border-color: var(--color-rule-faint); }
+
+/* Error and empty states share the empty-state geometry. An error was a
+   full-width saturated pink slab: 4xl padding, a danger fill and a hard
+   danger border, which made a recoverable "could not load" look like a
+   catastrophic failure and buried the retry button. It is now the same
+   composed, capped panel as every other empty state, with danger carried by
+   the icon and a hairline rather than a flood of colour. */
+.error-panel {
+  max-width: 34rem;
+  margin-inline: auto;
+  padding: var(--space-xl) var(--space-lg);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  border: var(--rule) solid color-mix(in oklch, var(--color-danger) 30%, var(--color-rule));
+  box-shadow: var(--shadow-card);
+  text-align: center;
+}
+
+.error-panel h2 { font-size: var(--text-lg); }
+
+.error-panel .empty-icon {
+  border-color: color-mix(in oklch, var(--color-danger) 32%, var(--color-rule));
+  background: var(--color-danger-soft);
+  color: var(--color-danger-text);
+}
+
+/* The raw code is a diagnostic detail, not a headline. */
+.error-panel p.code,
+.error-panel .code {
+  font: 500 var(--text-2xs) var(--font-mono);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--color-ink-faint);
+}
 
 /* ── 6 · Accent discipline ─────────────────────────────────────────────
    The accent is for things you can act on. It is not a decoration for

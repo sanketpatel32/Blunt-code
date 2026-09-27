@@ -14,7 +14,6 @@ import { SeverityTrendSection } from '../components/SeverityTrendChart';
 import { SuppressionsSection } from '../components/SuppressionsPanel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { ConfirmationDialog } from '../components/dialogs';
-import { WorkspaceContextSidebar } from '../components/WorkspaceContext';
 import { HistoryTable } from './HistoryPage';
 import { analyzerMeta, categoryColor, CATEGORY_LABELS } from '../lib/analyzerCatalog';
 import { languageCoverageFromSnapshot, severityCountsFromSummary, sparkSeries, trendPointsFromScans, type LanguageCoverage } from '../lib/chartData';
@@ -120,7 +119,10 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
     { label: 'Prune scan history…', icon: <Eraser className="h-4 w-4" />, onSelect: () => setPruneOpen(true) },
     { label: 'Remove workspace', icon: <Trash2 className="h-4 w-4" />, tone: 'danger', onSelect: () => setDeleteOpen(true) },
   ];
-  return <div className="page workspace-page"><WorkspaceContextSidebar id={id} current={{ page: 'workspace', id }} onNavigate={go} /><div className="workspace-page-body">
+  return <div className="page workspace-page">
+    {/* No workspace sub-nav: the app rail lists this workspace's pages while
+        you are inside it. */}
+    <div className="workspace-page-body">
     {/* 1 · Identify + Act — one PageHeader row: who this is on the left, the
         single primary (Run scan) and the overflow menu on the right. */}
     <PageHeader

@@ -122,14 +122,16 @@
   min-width: 0;
 }
 
+/* Body face, not mono. "not graded yet" and "score 7948" are words, not
+   identifiers — in IBM Plex Mono they read as terminal output sitting next to
+   the grade tile they describe. */
 .verdict-score {
-  font: 600 var(--text-2xs) var(--font-mono);
-  letter-spacing: .04em;
+  font: 600 var(--text-xs) var(--font-body);
   color: var(--color-ink-faint);
   white-space: nowrap;
 }
 
-.verdict-score strong { color: var(--color-ink); font-size: var(--text-xs); }
+.verdict-score strong { color: var(--color-ink); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
 
 /* The grade's label and band range travel with the tile in neutral ink —
    the letter itself carries the only color in this column. */
@@ -142,8 +144,7 @@
 }
 
 .verdict-bandrange {
-  font: 500 var(--text-2xs) var(--font-mono);
-  letter-spacing: .03em;
+  font: 500 var(--text-2xs) var(--font-body);
   color: var(--color-ink-faint);
   white-space: nowrap;
 }
@@ -307,9 +308,13 @@
 .board-verdict-loading { grid-column: 1 / -1; }
 
 /* ── Two panels side by side ─────────────────────────────────────── */
+/* The rail took ~248px off the available width, so the old 1.55/1 split left
+   the activity panel at ~445px — too narrow for its own title, subtitle and
+   four filter chips on one row, and the title wrapped to two lines. The ledger
+   carries the denser data so it gets the larger share. */
 .board-columns {
   display: grid;
-  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.85fr) minmax(0, 1fr);
   gap: var(--space-lg);
   align-items: start;
 }
@@ -332,7 +337,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-md);
+  gap: var(--space-sm) var(--space-md);
+  flex-wrap: wrap;
   padding: var(--space-sm) var(--space-md) var(--space-sm) var(--space-lg);
   border-bottom: var(--rule) solid var(--color-rule-faint);
   background: var(--color-surface-muted);
@@ -346,8 +352,9 @@
   font-family: var(--font-display);
   font-size: var(--text-md);
   font-weight: 700;
-  letter-spacing: -.01em;
+  letter-spacing: -.015em;
   color: var(--color-ink);
+  white-space: nowrap;
 }
 
 .board-panel-sub { margin: 1px 0 0; font-size: var(--text-2xs); color: var(--color-ink-faint); }

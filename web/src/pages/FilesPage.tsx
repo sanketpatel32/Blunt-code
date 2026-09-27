@@ -10,7 +10,6 @@ import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { Empty, ErrorPanel } from '../components/ui';
 import { MagnifierIcon } from '../components/icons';
 import { SkeletonLines } from '../components/skeletons';
-import { WorkspaceContextSidebar } from '../components/WorkspaceContext';
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { PathCopy } from '../components/PathCopy';
@@ -209,7 +208,8 @@ export function FilesPage({ id, go, notify }: { id: string; go?: (r: Route) => v
 
   return (
     <div className="page workspace-page">
-      {go && <WorkspaceContextSidebar id={id} current={{ page: 'files', id }} onNavigate={go} />}
+      {/* No workspace sub-nav: the app rail lists this workspace's pages while
+          you are inside it. */}
       <div className="workspace-page-body">
         <PageHeader
           eyebrow="File selection"

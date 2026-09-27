@@ -42,24 +42,38 @@ describe('navigation resilience', () => {
     expect(host.textContent).toContain('Point Blunt Code at a project');
   });
 
-  it('keeps the high-frequency pages flat and routes to About from the More menu', async () => {
+  it('shows every top-level page in the rail, with no page hidden behind a menu', async () => {
     const host = await renderApp();
-    const labels = [...host.querySelectorAll('.app-nav nav a')].map((link) => link.textContent);
-    expect(labels).toEqual(['Home', 'Workspaces', 'Search', 'Tools']);
-    // Rare pages (Rules, CLI docs, Settings, About) collapsed behind "More":
-    // the rail is chrome, not a link wall. About still routes from the menu.
-    const more = host.querySelector<HTMLButtonElement>('.nav-more-toggle');
-    expect(more).toBeDefined();
-    await act(async () => { more!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
-    const aboutItem = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent === 'About');
-    expect(aboutItem).toBeDefined();
-    await act(async () => { aboutItem!.click(); await Promise.resolve(); await Promise.resolve(); });
+    // The old shell showed four links and hid Rules, CLI docs, Settings and
+    // About behind a "More" menu, so half the app was invisible unless you
+    // happened to know it existed. A vertical rail has room for all of them.
+    const labels = [...host.querySelectorAll('.rail-nav .rail-link-label')].map((link) => link.textContent);
+    expect(labels).toEqual(expect.arrayContaining(['Home', 'Workspaces', 'Search', 'Tools', 'Rules', 'CLI Docs']));
+    // Settings/About sit in the rail's foot group, still one click away.
+    const foot = [...host.querySelectorAll('.rail-foot .rail-link-label')].map((link) => link.textContent);
+    expect(foot).toEqual(expect.arrayContaining(['Settings', 'About']));
+    // The desktop rail hides nothing, so it has no More menu. The mobile bar
+    // still carries one — below 64rem the rail is gone and the bar has to fit
+    // Settings and About into a scrollable strip.
+    expect(host.querySelector('.app-rail .nav-more-toggle')).toBeNull();
+
+    // And it routes.
+    const about = [...host.querySelectorAll<HTMLAnchorElement>('.rail-link')].find((a) => a.textContent === 'About')!;
+    await act(async () => { about.click(); await Promise.resolve(); await Promise.resolve(); });
     expect(window.location.pathname).toBe('/about');
     expect(document.title).toBe('About · Blunt Code'); // per-page tab title, no ids
     expect(host.textContent).toContain('Local by default');
   });
 
-  it.each(['.brand', '.nav-primary a[href="/workspaces"]'])('preserves modified clicks on %s', async (selector) => {
+  it('lists the open workspace’s own pages in the rail, so there is one nav on screen', async () => {
+    const host = await renderApp();
+    // No workspace open: the rail has no workspace section.
+    expect(host.querySelector('.rail-workspace')).toBeNull();
+    // And the second nav bar is gone from the page body entirely.
+    expect(host.querySelector('.workspace-context')).toBeNull();
+  });
+
+  it.each(['.brand', '.rail-nav .rail-link[href="/workspaces"]'])('preserves modified clicks on %s', async (selector) => {
     window.history.replaceState({}, '', '/about');
     const host = await renderApp();
     const link = host.querySelector<HTMLAnchorElement>(selector)!;
