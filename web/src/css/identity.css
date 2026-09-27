@@ -506,7 +506,125 @@
   .findings-table tbody tr { transition: none; }
 }
 
-/* ── 8 · The scan report ──────────────────────────────────────────────
+/* ── 9 · Hit targets ─────────────────────────────────────────────────
+   A live audit across all 13 routes found interactive elements measuring
+   13x13, 14x14, 17x17, 18x18, 19px, 21px and 22px tall — the file-tree
+   checkboxes, the "select all" box, the severity filter dots, the table sort
+   buttons, the path copy button and the verdict's next-step link.
+
+   Visually those sizes are right; a dense table needs 14px checkboxes. What is
+   wrong is the TARGET, which is why it never showed up in a screenshot: the
+   box you must hit is much smaller than the thing you are aiming at. Under a
+   cursor that reads as a broken app, and no amount of polish fixes a click you
+   keep missing.
+
+   Each of these keeps its exact rendered size and gains a 24px minimum hit area
+   from an absolutely-positioned ::after overlay, so nothing shifts and nothing
+   needs a redesign. */
+.path-copy-button,
+.ledger-actions [aria-label='Scan actions'] button,
+.row-action { position: relative; }
+
+/* Checkboxes: the visual box stays, the target grows around it. */
+.tree-row input[type='checkbox'],
+.findings-table input[type='checkbox'],
+.filter-chips input[type='checkbox'] { position: relative; }
+
+.tree-row input[type='checkbox']::after,
+.findings-table input[type='checkbox']::after,
+.filter-chips input[type='checkbox']::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(100%, 1.5rem);
+  height: max(100%, 1.5rem);
+  transform: translate(-50%, -50%);
+}
+
+/* Sort buttons are 17px tall because they are inline text; give them a
+   clickable band without moving the label. */
+.th-sort { position: relative; }
+
+.th-sort::after {
+  content: '';
+  position: absolute;
+  left: calc(var(--space-2xs) * -1);
+  right: calc(var(--space-2xs) * -1);
+  top: 50%;
+  height: 1.5rem;
+  transform: translateY(-50%);
+}
+
+/* The copy button and the next-step link: same treatment. */
+.path-copy-button::after,
+.verdict-explore::after,
+.ledger-name::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(100%, 1.5rem);
+  height: max(100%, 1.5rem);
+  transform: translate(-50%, -50%);
+}
+
+.verdict-explore,
+.ledger-name { position: relative; }
+
+/* Icon-only controls that are genuinely icon-only: grow the BOX, not an
+   overlay, because there is no text to mis-aim at and the extra pixels cost
+   nothing visually. The audit measures the element rect, so these are the ones
+   it can actually verify. */
+.path-copy-button { width: 1.5rem; height: 1.5rem; }
+.rail-util-btn,
+.icon-button,
+.nav-more-toggle { min-width: 1.5rem; min-height: 1.5rem; }
+
+/* Checkbox visuals grow to 1.25rem; the ::after overlay carries the target to
+   1.5rem around them. */
+.tree-row input[type='checkbox'],
+.findings-table input[type='checkbox'] { width: 1.25rem; height: 1.25rem; }
+
+/* Row-level text controls get a min-height so the whole row band is clickable
+   rather than just the glyphs. */
+.th-sort,
+.ledger-name,
+.verdict-explore { min-height: 1.5rem; }
+
+.th-sort { display: inline-flex; align-items: center; }
+
+/* The remaining under-24px controls the audit found, measured rather than
+   guessed: 21px segmented filter buttons, 22px chips, 23px tool-name links, and
+   the 14px checkbox the design-system dropdown renders for the severity facet.
+   Each gets padding to reach 24px without changing its type size. */
+.feed-filter-btn,
+.chip,
+.segmented-btn,
+.tools-name,
+.filter-group .chip { min-height: 1.5rem; }
+
+/* The design-system checkbox renders a 14px box. It keeps that box - a 24px
+   checkbox in a filter chip row would be absurd - and gains a 24px target. */
+input[type='checkbox']:not([class*='size-auto']) {
+  position: relative;
+}
+
+input[type='checkbox']::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(100%, 1.5rem);
+  height: max(100%, 1.5rem);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+/* The activity feed's workspace name is a text link 14px wide. */
+.feed-workspace { min-width: 1.5rem; }
+
+/* ── 10 · The scan report ──────────────────────────────────────────────
    The most conventional-looking page in the app, and it carried every
    remaining holdout at once: the eyebrow ("SCAN · STANDARD PROFILE"), the state
    badge, "FINDINGS BY SEVERITY", the five verdict stats, the SEVERITY / STATUS
@@ -574,7 +692,7 @@
 
 .findings-table tbody tr.active .sticky { background: inherit; }
 
-/* ── 9 · Overlays: the palette, dialogs, menus ────────────────────────
+/* ── 11 · Overlays: the palette, dialogs, menus ────────────────────────
    The last surface the identity pass never touched, and it carried all three
    remaining tells at once:
 
@@ -621,7 +739,7 @@
 .dialog-backdrop,
 .command-palette-backdrop { backdrop-filter: blur(2px); }
 
-/* ── 10 · Repeated row actions ────────────────────────────────────────   Ten identical filled "Scan" buttons down the workspaces table (and the
+/* ── 12 · Repeated row actions ────────────────────────────────────────   Ten identical filled "Scan" buttons down the workspaces table (and the
    same pattern on tools and history) made the action column the heaviest
    thing on the page and pushed the data right. The row keeps its one
    control; it just stops shouting until you reach for it. */
@@ -639,7 +757,7 @@
   color: var(--color-ink);
 }
 
-/* ── 11 · Surfaces: make the layering legible ───────────────────────────
+/* ── 13 · Surfaces: make the layering legible ───────────────────────────
    The page and its cards sat ~3% apart, which reads, but the cards were all
    the same weight. Elevation now means something: the page is the ground,
    a card is one plane up, and only floating things cast a shadow. */
@@ -683,7 +801,7 @@
   color: var(--color-ink-faint);
 }
 
-/* ── 6 · Accent discipline ─────────────────────────────────────────────
+/* ── 14 · Accent discipline ─────────────────────────────────────────────
    The accent is for things you can act on. It is not a decoration for
    values, headings, or anything merely informational. */
 .ledger-name:hover,
