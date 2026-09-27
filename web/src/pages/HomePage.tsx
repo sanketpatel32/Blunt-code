@@ -4,7 +4,7 @@ import type { RecentScanItem, Scan, Severity, Tool, Workspace } from '../types';
 import type { Route } from '../lib/router';
 import type { Notice } from '../lib/notice';
 import { message } from '../lib/notice';
-import { date, languageColor, languageNames, relativeTime, scanStateDisplay } from '../lib/format';
+import { count, date, languageColor, languageNames, relativeTime, scanStateDisplay } from '../lib/format';
 import { useLoad } from '../hooks/useLoad';
 import { Empty, ErrorPanel, PrivacyNotice } from '../components/ui';
 import { Button } from '../components/ui/button';
@@ -343,12 +343,21 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
               )}
             </div>
 
-            {/* The page's one outbound action, on the head line. It used to sit
-                at the end of the legend row, 1900px below the number it
-                describes and hard against the card edge. */}
+            {/* The page's one outbound action, and it names the SPECIFIC next
+                step rather than offering a place to go. "Explore findings"
+                told the user where the button was; "Fix the 15 criticals" tells
+                them what to do, and leads with the most severe band rather than
+                the total, which is the number they could not act on. Falls
+                through the bands in order so the wording always points at the
+                worst thing present. */}
             {verdictTallied && verdict.totalFindings > 0 && (
-              <button type="button" className="verdict-explore text-button" onClick={() => go({ page: 'search' })}>
-                Explore findings <ChevronRight className="h-3 w-3" />
+              <button
+                type="button"
+                className="verdict-explore"
+                onClick={() => go({ page: 'search', q: nextStepQuery(verdict.counts) })}
+              >
+                {nextStepLabel(verdict.counts)}
+                <ChevronRight className="h-3 w-3" aria-hidden="true" />
               </button>
             )}
           </div>
@@ -513,8 +522,41 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
   );
 }
 
+/** The most severe band actually present, and the wording for the board's one
+ *  outbound action. The user opened a risk board because something is wrong;
+ *  telling them "2999 findings" is a total they cannot act on, so the action
+ *  names the worst band and the action verb for it. Bands are walked in
+ *  severity order, so a clean codebase still gets a truthful prompt. */
+function worstBand(counts: Record<Severity, number>): Severity | null {
+  for (const severity of SEVERITY_ORDER) {
+    if ((counts[severity] ?? 0) > 0) return severity;
+  }
+  return null;
+}
+
+const BAND_VERB: Record<Severity, string> = {
+  critical: 'Fix the',
+  high: 'Review the',
+  medium: 'Triage the',
+  low: 'Skim the',
+  info: 'Read the',
+};
+
+function nextStepLabel(counts: Record<Severity, number>): string {
+  const worst = worstBand(counts);
+  if (!worst) return 'No findings yet';
+  const n = counts[worst] ?? 0;
+  return `${BAND_VERB[worst]} ${count(n)} ${worst}`;
+}
+
+/** Pre-filters the findings search to the band the action promises, so the
+ *  click lands on exactly what the label said it would. */
+function nextStepQuery(counts: Record<Severity, number>): string | undefined {
+  const worst = worstBand(counts);
+  return worst ? `severity=${worst}` : undefined;
+}
+
 /** Global severity tally with drill-down into findings search.
- *
  *  Segment widths are sqrt-scaled, not proportional. A real board here reads
  *  15 critical / 860 high / 1380 medium / 738 low — proportional, critical is
  *  half a percent of the ribbon, i.e. an invisible sliver beside a solid amber
@@ -607,7 +649,7 @@ function FeedRow({ scan, go }: { scan: RecentScanItem; go: (r: Route) => void })
         onClick={() => go({ page: 'scan', id: scan.id })}
         title={`View scan results for ${scan.workspace_name || 'Workspace'}`}
       >
-        <span className={`feed-state ${state.variant}`}>{state.label}</span>
+        <StateTag state={state} />
         {scan.profile && <span className="feed-profile">{scan.profile}</span>}
         <span className="feed-findings">
           <SeverityDots scan={scan} />
@@ -669,24 +711,27 @@ function LedgerLanguages({ languages }: { languages?: string[] }) {
   );
 }
 
-/** Short label for a scan state, used in the repeating per-row status slot.
- *  "Completed with warnings" is the widest string in the ledger and it was
- *  printed in full down every row, where it overtook the workspace name for
- *  attention. The dot keeps the variant's colour, the short word keeps the
- *  meaning, and the full label rides along in the title and the sr-only text
- *  so nothing is actually dropped. */
+/** Short label for a scan state, used wherever a state repeats down a column
+ *  of rows. "Completed with warnings" is the widest string in the feed and was
+ *  printed in full on three of eleven rows; the dot already carries the
+ *  variant, and the full label rides along in the title and the sr-only text so
+ *  nothing is actually dropped. */
 const SHORT_STATE: Record<string, string> = {
   completed_with_warnings: 'Warnings',
 };
 
 /** A status dot plus a compact label. Colour carries the variant, so a column
- *  of these reads as one quiet metadata strip instead of a stack of alarms. */
+ *  of these reads as one quiet metadata strip instead of a stack of alarms.
+ *
+ *  The full label lives in `title` and nowhere else. An sr-only copy alongside
+ *  the short word would make a screen reader announce the doubled
+ *  "Warnings Completed with warnings", which is worse than either alone - the
+ *  short word is already an accurate name for the state. */
 function StateTag({ state }: { state: { label: string; variant: string } }) {
   return (
     <span className={`state-tag state-${state.variant}`} title={state.label}>
       <i aria-hidden="true" />
-      <span aria-hidden="true">{SHORT_STATE[state.label.toLowerCase().replaceAll(' ', '_')] ?? state.label}</span>
-      <span className="sr-only">{state.label}</span>
+      {SHORT_STATE[state.label.toLowerCase().replaceAll(' ', '_')] ?? state.label}
     </span>
   );
 }

@@ -173,16 +173,20 @@
   color: var(--color-warning-text, var(--color-ink-soft));
 }
 
+/* Partial analyzer coverage. Four of these repeat down the ledger, each a
+   bordered uppercase chip in warning amber — the most attention-grabbing
+   thing per row, repeating, to describe a condition that is common and
+   already stated once in the caveat above. It is a caveat, not an alarm, so it
+   is now a quiet lowercase marker in faint ink that still carries the precise
+   breakdown in its tooltip. */
 .ledger-partial-badge {
   font-size: var(--text-2xs);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: .04em;
-  /* -text (not -ink): ink is an on-filled-chip color and goes dark-on-dark on the ledger surface. */
-  color: var(--color-warning-text, var(--color-ink-soft));
-  border: 1px solid currentColor;
-  border-radius: var(--radius-button);
-  padding: 0 4px;
+  font-weight: 500;
+  color: var(--color-ink-faint);
+  background: var(--color-surface-muted);
+  border-radius: var(--radius-pill);
+  padding: 0 6px;
+  white-space: nowrap;
   cursor: help;
 }
 
@@ -546,7 +550,38 @@
   white-space: nowrap;
 }
 
-.ledger-actions { grid-area: actions; display: inline-flex; align-items: center; gap: var(--space-2xs); }
+.ledger-actions { grid-area: actions; display: inline-flex; align-items: center; gap: var(--space-2xs); justify-self: end; }
+
+/* The per-row action. A full "Run scan" split button repeated down eight rows
+   is ~167px of bordered chrome each, which made the action column the heaviest
+   thing in the panel and left the risk numbers competing with it for attention.
+   Row height, quiet border, no fill until hover — the row still has exactly one
+   control and the verb is unchanged.
+   Selector targets the SplitButton group's own aria-label: these are shadcn
+   Buttons carrying Tailwind utilities, so a `.button` hook matches nothing. */
+.ledger-actions [aria-label='Scan actions'] button {
+  height: 1.75rem;
+  padding-inline: var(--space-sm);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  background: transparent;
+  border-color: var(--color-rule);
+  color: var(--color-ink-soft);
+  box-shadow: none;
+}
+
+.ledger-actions [aria-label='Scan actions'] button:hover:not(:disabled) {
+  background: var(--color-surface);
+  border-color: var(--color-rule-strong);
+  color: var(--color-ink);
+}
+
+/* The chevron half stays a square so the pair still reads as one control. */
+.ledger-actions [aria-label='Scan actions'] button.rounded-l-none {
+  padding-inline: 0.4rem;
+}
+
+.ledger-actions [aria-label='Scan actions'] button svg { width: 0.875rem; height: 0.875rem; }
 
 .ledger-confirm { grid-column: 1 / -1; }
 

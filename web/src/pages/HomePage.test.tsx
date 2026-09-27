@@ -219,12 +219,28 @@ describe('HomePage risk board — verdict', () => {
     expect(host.querySelector('.verdict-hero-num')).toBeNull();
   });
 
-  it('drills into findings search from the severity tally', async () => {
+  it('drills into findings search from the severity tally, pre-filtered to the worst band', async () => {
     const host = await render(homeFetchMock({ scans: [scanItem()], total: 1, summary }));
-    const explore = findButton(host, 'Explore findings');
+    // The action names the specific next step rather than a destination:
+    // "Explore findings" said where the button was, this says what to do, and
+    // it lands on exactly the band it promised.
+    const explore = findButton(host, 'Fix the');
     expect(explore).toBeDefined();
+    expect(explore!.textContent).toContain('critical');
     await act(async () => { explore!.click(); });
-    expect(go).toHaveBeenCalledWith({ page: 'search' });
+    expect(go).toHaveBeenCalledWith({ page: 'search', q: 'severity=critical' });
+  });
+
+  it('names the next step from the worst band present, not the largest count', async () => {
+    // A board whose only findings are low must not shout about high. The verb
+    // follows the band, so the prompt always points at the worst thing there is.
+    const lowOnly = workspaceItem({
+      id: 'ws-low', name: 'Mild',
+      latest_scan: latestScan({ critical_count: 0, high_count: 0, medium_count: 0, low_count: 7, total_findings: 7 }),
+    });
+    const host = await render(homeFetchMock({ scans: [], total: 0, summary }, { items: [lowOnly] }));
+    expect(findButton(host, 'Skim the')).toBeDefined();
+    expect(findButton(host, 'Fix the')).toBeUndefined();
   });
 });
 
@@ -402,7 +418,7 @@ describe('HomePage risk board — activity feed', () => {
 
     const row = host.querySelector('.feed-list .feed-row')!;
     expect(row.querySelector('.feed-workspace')?.textContent).toBe('Example API');
-    expect(row.querySelector('.feed-state.success')?.textContent).toBe('Completed');
+    expect(row.querySelector('.state-tag.state-success')?.textContent).toBe('Completed');
     expect(row.querySelector('.feed-profile')?.textContent).toBe('standard');
     expect(row.querySelector('.feed-findings')?.textContent).toContain('21 findings');
     expect(row.querySelectorAll('.severity-dots i')).toHaveLength(4); // critical, high, medium, low; info is zero
@@ -440,7 +456,7 @@ describe('HomePage risk board — activity feed', () => {
     await act(async () => { runningTab!.click(); });
     const rows = host.querySelectorAll('.feed-list .feed-row');
     expect(rows).toHaveLength(1);
-    expect(rows[0].querySelector('.feed-state.accent')?.textContent).toBe('Running');
+    expect(rows[0].querySelector('.state-tag.state-accent')?.textContent).toBe('Running');
   });
 
   it('navigates to the scan report and the workspace from a feed row', async () => {
@@ -485,7 +501,7 @@ describe('HomePage risk board — feed regressions', () => {
 
     const rows = host.querySelectorAll('.feed-list .feed-row');
     expect(rows).toHaveLength(1);
-    expect(rows[0].querySelector('.feed-state.danger')?.textContent).toBe('Interrupted');
+    expect(rows[0].querySelector('.state-tag.state-danger')?.textContent).toBe('Interrupted');
   });
 
   it('shows no findings count for scans that never finished', async () => {
@@ -669,7 +685,7 @@ describe('HomePage workspace paths and languages', () => {
     expect(langs.getAttribute('title')).toBe('Detected languages: Python, TypeScript, Go, Rust, Ruby, Haskell, Lua');
   });
 
-  it('tones completed_with_warnings as a warning, abbreviated for the row, with the full label still announced', async () => {
+  it('tones completed_with_warnings as a warning, abbreviated for the row, with the full label in the title', async () => {
     const warned = workspaceItem({
       name: 'Warned',
       latest_scan: latestScan({ state: 'completed_with_warnings', total_findings: 5, critical_count: 0, high_count: 0, medium_count: 2, low_count: 3 }),
@@ -677,10 +693,11 @@ describe('HomePage workspace paths and languages', () => {
     const host = await render(homeFetchMock({ scans: [], total: 0, summary }, { items: [warned] }));
     const tag = host.querySelector('.ledger-last .state-tag')!;
     // The long form was the widest string in the ledger and repeated down every
-    // row, so the row shows a short word — but the warning tone, the tooltip
-    // and the screen-reader text all still carry the full meaning.
+    // row, so the row shows a short word — with the full label in the title.
+    // Deliberately NOT an sr-only copy too: that made screen readers announce
+    // the doubled "Warnings Completed with warnings".
     expect(tag.className).toContain('state-warning');
     expect(tag.getAttribute('title')).toBe('Completed with warnings');
-    expect(tag.textContent).toBe('WarningsCompleted with warnings');
+    expect(tag.textContent).toBe('Warnings');
   });
 });
