@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-09-28
+
+### Changed
+- **The board's two panels are one surface, not two.** "Where the risk is" and "What happened lately" were separate bordered cards with a gap, which read as two widgets parked side by side. They answer two halves of one question, so they are now one surface split by a hairline — quieter than two frames, and the pair reads as a composed module. The divider becomes a horizontal rule when the columns stack.
+- **Table headers are readable.** Column headers were 11px monospace in caps at `ink-faint` — the last strong template tell, and functionally weak, because a header you cannot read is a table you have to decode. Body face at 12px in soft ink, with the sorted column promoted to full ink so the eye lands where the sort is. This is the shared primitive, so it fixes workspaces, tools, history and the findings report at once.
+- **Repeated row actions are quiet.** Ten identical filled "Scan" buttons down the workspaces table made the action column the heaviest thing on the page and pushed the data right. Rows keep their one control; it stops shouting until reached for. The data is now the loudest thing in each row, which is the correct order.
+- **Overlays finish the identity pass.** The palette, dialogs and menus carried all three remaining tells: the active command was a solid **black pill** — the heaviest object in the app, at the exact moment the user is only browsing; group headings were uppercase monospace; and the list cut a row in half at the scroll edge, reading as a broken panel rather than "more below". Selection is now a soft accent tint with a left accent bar, matching how the rail marks the current page, so one idea is expressed once. The scroll edge fades and the backdrop blur is softened.
+- **A motion layer**, which changes how the app feels in the hand rather than how it looks. The rules it encodes: motion confirms a cause and effect and never decorates. The rail's current-page marker scales in once, overlays settle downward from the top because they are anchored there, rows respond to hover as touch rather than repaint, and controls acknowledge a press by a single pixel instead of recoiling. Everything collapses to instant under `prefers-reduced-motion`, and the stagger is capped so a 30-row list does not spend a second making its last item appear.
+- **The ledger's findings column** was reserving 15rem for a bar that is mostly empty, squeezing the path into `..\Clai…` and `Certifica…`. Now 8.5rem, and the paths are readable.
+
+### Notes
+- 500 tests passing, contrast audit 17/17.
+- **Test flakiness worth knowing about:** the `ReportView` load-more pagination tests time out at 20s when the Vite dev server and a browser are also running, and their accumulated rows then leak into a later assertion. Observed 36 → 5 → 3 failures across three runs with only a stylesheet changed (which jsdom never loads), and 500/500 in 55s with nothing else running. Not caused by any change here, but it will keep producing false failures — raising those timeouts would be worth doing separately.
+
 ## [0.31.0] - 2026-09-28
 
 ### Changed

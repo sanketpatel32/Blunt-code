@@ -417,7 +417,96 @@
 
 .th-sort, .page-search .th-sort { font: inherit; color: inherit; letter-spacing: inherit; }
 
-/* ── 8 · Overlays: the palette, dialogs, menus ────────────────────────
+/* ── 8 · Motion: the layer that makes it feel alive ───────────────────
+   Everything above changes what the app LOOKS like. This changes how it
+   FEELS in the hand, and it is the cheapest remaining route to "premium".
+
+   The rules: motion confirms a cause and effect, it never decorates. A row
+   acknowledges, a panel arrives from the direction it belongs, nothing loops,
+   nothing bounces, and every duration collapses to near-zero when the user has
+   asked for reduced motion. The stagger is capped so a 30-row list does not
+   spend a second making the last item appear. */
+@media (prefers-reduced-motion: no-preference) {
+  /* The rail's current page indicator: a small, single, non-repeating cue. */
+  .rail-link.active::before {
+    content: '';
+    position: absolute;
+    left: -0.55rem;
+    top: 50%;
+    width: 2px;
+    height: 1.1rem;
+    margin-top: -0.55rem;
+    border-radius: 2px;
+    background: var(--color-accent);
+    animation: rail-marker 260ms var(--ease-out) both;
+  }
+
+  .rail-link { position: relative; }
+
+  @keyframes rail-marker {
+    from { transform: scaleY(0.2); opacity: 0; }
+    to { transform: scaleY(1); opacity: 1; }
+  }
+
+  /* Hovering a data row should feel like touching it, not like a repaint. */
+  .ledger-row,
+  .feed-row,
+  .ws-row,
+  .findings-table tbody tr {
+    transition: background var(--dur-fast) var(--ease-out);
+  }
+
+  /* The primary action: press it and it acknowledges. No bounce, no scale
+     past 1 - a control that recoils feels like a toy. */
+  .button:active:not(:disabled),
+  .rail-search:active {
+    transform: translateY(0.5px);
+  }
+
+  .button,
+  .rail-search,
+  .rail-link {
+    will-change: auto;
+  }
+
+  /* Overlays arrive from the top, because they are anchored to the top of the
+     viewport. A centred dialog scaling from 0.9 is a template habit; a small
+     downward settle reads as the surface being placed. */
+  .command-palette,
+  .confirmation-dialog {
+    animation: overlay-in 180ms var(--ease-out) both;
+  }
+
+  @keyframes overlay-in {
+    from { opacity: 0; transform: translateY(-6px) scale(0.995); }
+    to { opacity: 1; transform: none; }
+  }
+
+  /* The toast already slides; make sure it settles rather than snapping. */
+  .toast { animation: toast-in 220ms var(--ease-out-quart) both; }
+
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: none; }
+  }
+}
+
+/* Reduced motion is not "no animation" for content that teleports: it is
+   instant, correct, and never a fade into nothing. */
+@media (prefers-reduced-motion: reduce) {
+  .rail-link.active::before { animation: none; }
+
+  .command-palette,
+  .confirmation-dialog,
+  .toast { animation: none !important; }
+
+  .ledger-row,
+  .feed-row,
+  .ws-row,
+  .findings-table tbody tr { transition: none; }
+}
+
+/* ── 9 · Overlays: the palette, dialogs, menus ────────────────────────
    The last surface the identity pass never touched, and it carried all three
    remaining tells at once:
 
