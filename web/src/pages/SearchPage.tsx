@@ -358,6 +358,19 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
     }
   };
 
+  // One shared scale for the facet meters, computed once per render: the
+  // sqrt of every band's count, normalised against their total. Per-row
+  // flex-grow cannot express "these are comparable" - each row would fill its
+  // own track and every bar would read as 100%.
+  const facetTotal = severityCounts
+    ? SEVERITIES.reduce((sum, sev) => sum + Math.sqrt(severityCounts[sev] ?? 0), 0)
+    : 0;
+  const facetPct = (sev: string) => {
+    if (!severityCounts || facetTotal <= 0) return '0%';
+    const value = Math.sqrt(severityCounts[sev] ?? 0);
+    return value > 0 ? `${Math.max((value / facetTotal) * 100, 1.5)}%` : '0%';
+  };
+
   const facets = (
     <div className="search-facets space-y-5">
       {/* Severities */}
@@ -392,8 +405,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                       background:
                         sev === 'critical'
                           ? 'var(--color-danger)'
-                          : sev === 'high'
-                          ? 'var(--color-danger)'
+                          : sev === 'high'                          ? 'var(--color-danger)'
                           : sev === 'medium'
                           ? 'var(--color-warning)'
                           : 'var(--color-ink-faint)',
@@ -401,6 +413,23 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                   />
                   <span className="capitalize">{sev}</span>
                 </div>
+                {/* A proportion bar, so the facet shows the SHAPE of the result
+                    set and not just five numbers. Widths are explicit percentages
+                    of ONE shared scale (sqrt of each count, normalised across all
+                    bands) rather than flex-grow: each row has its own track, so a
+                    flex fill would always reach 100% and the bar would say
+                    nothing at all. Sqrt for the same reason as the board's bar —
+                    proportionally, 40 criticals against 55k highs draws critical
+                    as an invisible sliver, and that is the band a security user
+                    most needs to see. The exact count stays on the right. */}
+                {severityCounts && (
+                  <span className="facet-meter" aria-hidden="true">
+                    <span
+                      className={`facet-meter-fill sev-${sev}`}
+                      style={{ width: facetPct(sev) }}
+                    />
+                  </span>
+                )}
                 {severityCounts && (
                   <Badge variant={isSelected ? 'outline' : 'secondary'} className="text-[10px] tabular-nums px-1.5 py-0">
                     {severityCounts[sev] ?? 0}

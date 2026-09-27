@@ -2,6 +2,51 @@
    Scoped under .page-search; imported after styles.css. */
 
 /* ---- Result table: dense single-line rows (one line, ellipsis, full width) ---- */
+/* ---- Severity facet: label, proportion meter, count ----
+   The facet was five rows of a dot, a word and a number with no relationship
+   between them — 250px of list that told you nothing about the shape of the
+   result set. The meter carries that, sqrt-scaled for the same reason the
+   board's bar is: proportionally, 40 criticals against 55k highs draws critical
+   as an invisible sliver, which is the one band a security user most needs to
+   see. The count stays exact on the right. */
+.page-search .severity-pill {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(2.5rem, 1fr) auto;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  padding: 0.3rem 0.5rem;
+  border-radius: var(--radius-button);
+  border: var(--rule) solid transparent;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.page-search .severity-pill:hover { background: var(--color-surface-muted); }
+.page-search .severity-pill[aria-pressed='true'] { border-color: var(--color-accent); background: var(--color-surface-subtle); }
+.page-search .severity-pill:focus-visible { outline: var(--rule-focus) solid var(--color-focus); outline-offset: 1px; }
+
+.facet-meter {
+  display: flex;
+  height: .3rem;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-muted);
+  overflow: hidden;
+}
+
+.facet-meter-fill { display: block; height: 100%; border-radius: inherit; }
+.facet-meter-fill.sev-critical { background: var(--color-sev-critical); }
+.facet-meter-fill.sev-high { background: var(--color-sev-high); }
+.facet-meter-fill.sev-medium { background: var(--color-sev-medium); }
+.facet-meter-fill.sev-low { background: var(--color-sev-low); }
+.facet-meter-fill.sev-info { background: var(--color-sev-info); }
+
+/* The last uppercase-monospace holdout in the app. "Columns" is a word. */
+.page-search .search-columns,
+.search-columns > summary { font-family: var(--font-body); text-transform: none; letter-spacing: 0; font-weight: 600; }
+
 .page-search .search-results {
   table-layout: fixed;
 }

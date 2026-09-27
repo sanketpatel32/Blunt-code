@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-09-28
+
+### Changed
+- **The app shell is rebuilt: a left rail replaces the top bar.** This is the structural overhaul. A horizontal nav over full-width content is the most recognisable shape of a generic SaaS dashboard; every previous pass re-dressed that shell, and none of them could make it feel designed, because the shell *was* the template. A vertical rail is also what serious developer tools use, and it fixes two functional problems at the same time:
+  - **All eight top-level pages are now visible.** The old bar showed four and hid Rules, CLI docs, Settings and About behind a "More" menu, so half the app was invisible unless you happened to know it existed.
+  - **A workspace's own pages moved into the rail**, under its name. Overview / Pentest / Files / History previously occupied a *second* horizontal bar with a monospace "IN THIS WORKSPACE" label on top of every one of those pages — so those screens had two stacked navigation elements. There is now exactly one nav on screen at any time, and `WorkspaceContextSidebar` is removed from all four pages.
+- **The rail is grouped by frequency, not alphabetically**: the pages you live in at the top, reference material (Rules, CLI) in the middle, Settings/About and app utilities closing the rail.
+- **The "Ctrl K" shortcut badge is replaced by a real search affordance** that says what it does and still shows the shortcut. A keyboard hint worn as chrome is a template tell.
+- **Below 64rem the rail is hidden and a compact top bar takes over** — not a drawer, because a drawer you must open before you can see what the app contains is worse than a bar you can see.
+- **The severity facet shows the shape of the result set.** It was five rows of a dot, a word and a number with no relationship between them — 250px of list that told you nothing. Each band now carries a proportion meter on one shared sqrt scale with a 1.5% floor, so High reads as dominant, Medium and Low follow, and **40 criticals stay visible instead of vanishing next to 55k highs**. The exact count is still on the right.
+- **The board's two columns rebalance to 1.85/1.** The rail took 248px, leaving the activity panel at ~445px where its own title wrapped onto two lines.
+- **Error states are no longer full-width saturated pink slabs.** A recoverable "could not load" is now the same composed, capped panel as every empty state, with danger carried by the icon and a hairline instead of a flood of colour that buried the retry button.
+- `"score 7948"` and `"band D · 50+"` left monospace — they are words, not identifiers. "Columns" left uppercase monospace for the same reason.
+
+### Notes
+- Nav tests rewritten to assert the new guarantee rather than the old arrangement: the desktop rail hides nothing, and the page body carries no second nav.
+- The mobile bar keeps a "More" menu, because below 64rem the rail is gone and Settings/About have to fit a scrollable strip.
+- 500 tests passing. Contrast audit 17/17. Verified at 1440, 820 and 700, both themes.
+
 ## [0.30.0] - 2026-09-28
 
 ### Changed
