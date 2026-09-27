@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-09-28
+
+### Changed
+- **Risk is now the protagonist of the board.** Every earlier pass was subtractive — remove noise, fix defects, tighten type. That makes something *less bad*; it does not make it interesting, and "boring" is the honest complaint. The diagnosis is that the page had no focal point and no voice: the risk grade, the single most important fact in a security tool, was a **44px square in one corner of a 1398px row of grey text** — about 3% of the width. That is furniture, not a headline.
+- The verdict is now a full-width band that owns the top of the page. The grade is a 96px statement and the first thing on screen; the finding count is the largest number in the app (36px, now up to 72px); and the severity distribution is a **20px meter that reads as a shape** instead of an 8px hairline that read as texture. The band carries no top border, so it reads as continuous with the page header rather than as one more widget in a card wall.
+
+### Fixed
+- **Ledger rows overlapped below 60rem.** The score cell was parked in the `identity` grid area, stacking "4682 risk" on top of the workspace name. It never showed at desktop widths, which is exactly why it survived — the same blind spot as the icon overlap found by measurement in v0.28.0. The score now gets its own row and lays out inline with the status.
+
+### Notes
+- The grade steps down to 60px below 48rem so it does not crowd the count on a phone.
+- 499 tests passing. Verified at 1440, 820 and 760 in both themes.
+
 ## [0.29.0] - 2026-09-28
 
 ### Changed
