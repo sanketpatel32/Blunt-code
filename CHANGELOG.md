@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.33.0] - 2026-09-28
+
+### Changed
+- **The scan report stops shouting.** It was the most conventional-looking page left in the app and carried every remaining holdout at once — ten uppercase-monospace labels on one screen: the state badge ("COMPLETED WITH WARNINGS"), "FINDINGS BY SEVERITY", the five verdict stats (RISK SCORE / NEW / FIXED / PERSISTENT / ANALYZERS), the SEVERITY / STATUS / TOOL / TYPE filter labels, and the table headers. The eyebrows ("SCAN · STANDARD PROFILE", "FINDINGS BY SEVERITY") *keep* their caps, because an eyebrow is exactly the one thing that should be punctuation — one per section, above the content it labels. Everything else is a label and reads as one.
+- **The findings table's severity rows stopped flooding.** The table sorts by severity, so a block of consecutive same-severity rows is the *normal* case — and at 55% the high tint turned six ordinary rows into a pink block that fought the text. Severity was already encoded twice on each row (the left edge and the pill in the severity column), so the fill only ever had to be perceptible as a band, not legible as colour. Now a whisper, with the edges carrying the signal and a 3px critical edge.
+- **A sticky-cell seam is gone.** The severity column is sticky so it stays put when the table scrolls sideways, which needs an opaque background — and it was pinned to a fixed `--color-surface`, which became visible as a lighter vertical band running the length of the table the moment the row fills got fainter. It now inherits the row's own (already opaque) background, so the cell stays pinned and the band disappears.
+
+### Notes
+- `.findings-table` sits outside `.table-wrap`, which is why the shared table-header rule added in v0.32.0 never reached it. It is now covered explicitly.
+- 500 tests passing, contrast audit 17/17.
+
 ## [0.32.0] - 2026-09-28
 
 ### Changed

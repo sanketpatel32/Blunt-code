@@ -506,6 +506,74 @@
   .findings-table tbody tr { transition: none; }
 }
 
+/* ── 8 · The scan report ──────────────────────────────────────────────
+   The most conventional-looking page in the app, and it carried every
+   remaining holdout at once: the eyebrow ("SCAN · STANDARD PROFILE"), the state
+   badge, "FINDINGS BY SEVERITY", the five verdict stats, the SEVERITY / STATUS
+   / TOOL / TYPE filter labels, and the table headers were all uppercase
+   monospace. Ten of them on one screen, which is exactly the density that
+   reads as generated.
+
+   `.findings-table` sits outside `.table-wrap`, which is why the shared table
+   header rule in section 5 never reached it. */
+.scan-hero .eyebrow,
+.scan-state-badge,
+.verdict-distro .eyebrow,
+.verdict-stat dt,
+.findings-table thead th,
+.findings-col thead th,
+.analysis-toolbar .facet-title,
+.export-inline {
+  font-family: var(--font-body);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.scan-hero .eyebrow,
+.verdict-distro .eyebrow {
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+/* The state badge is a status, not a shout. Body face, small, quiet. */
+.scan-state-badge {
+  font: 600 var(--text-xs) var(--font-body);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* Verdict stat labels sit in a narrow right-hand column beside big numbers;
+   caps made them compete with the numbers they label. */
+.verdict-stat dt {
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  color: var(--color-ink-faint);
+}
+
+/* Filter group labels: "Severity", "Status", "Tool", "Type". Four more
+   uppercase-monospace labels above the filter rows, and they were the last of
+   that habit left in the app. */
+.filter-group-label {
+  font-family: var(--font-body);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--color-ink-faint);
+}
+
+/* The severity cell is sticky so it stays put when the table scrolls sideways,
+   which needs an opaque background. It was pinned to a fixed --color-surface,
+   which became visible as a lighter vertical band the moment the row fills got
+   fainter — a seam running the length of the table. Inheriting the row's own
+   (already opaque) background keeps the cell pinned AND keeps the band gone. */
+.findings-table tbody td[style*='sticky'],
+.findings-table .sticky { background: inherit; }
+
+.findings-table tbody tr.active .sticky { background: inherit; }
+
 /* ── 9 · Overlays: the palette, dialogs, menus ────────────────────────
    The last surface the identity pass never touched, and it carried all three
    remaining tells at once:
@@ -553,8 +621,7 @@
 .dialog-backdrop,
 .command-palette-backdrop { backdrop-filter: blur(2px); }
 
-/* ── 10 · Repeated row actions ────────────────────────────────────────
-   Ten identical filled "Scan" buttons down the workspaces table (and the
+/* ── 10 · Repeated row actions ────────────────────────────────────────   Ten identical filled "Scan" buttons down the workspaces table (and the
    same pattern on tools and history) made the action column the heaviest
    thing on the page and pushed the data right. The row keeps its one
    control; it just stops shouting until you reach for it. */

@@ -484,12 +484,19 @@
    The tint also washes the row area (color is signal, not decoration) — mixed
    with the surface token so both themes stay legible. Low/info rows stay clean
    to avoid rainbow tables. The active row's accent edge wins (defined after,
-   same specificity). */
-.findings-table tbody tr.row-critical { box-shadow: inset 2px 0 0 var(--color-danger); background: var(--color-danger-soft); }
+   same specificity).
 
-.findings-table tbody tr.row-high { box-shadow: inset 2px 0 0 color-mix(in oklch, var(--color-danger) 45%, var(--color-rule)); background: color-mix(in oklch, var(--color-danger-soft) 55%, var(--color-surface)); }
+   The fills are deliberately a whisper. This table sorts by severity, so a
+   block of consecutive same-severity rows is the NORMAL case — and at 55% the
+   high tint turned six ordinary rows into a pink block that fought the text.
+   Severity was already encoded twice on the row (the left edge and the pill in
+   the severity column), so the fill only has to be perceptible as a band, not
+   legible as colour. The edges carry the signal. */
+.findings-table tbody tr.row-critical { box-shadow: inset 3px 0 0 var(--color-danger); background: color-mix(in oklch, var(--color-danger-soft) 34%, var(--color-surface)); }
 
-.findings-table tbody tr.row-medium { box-shadow: inset 2px 0 0 var(--color-warning); background: color-mix(in oklch, var(--color-warning-soft) 40%, var(--color-surface)); }
+.findings-table tbody tr.row-high { box-shadow: inset 2px 0 0 color-mix(in oklch, var(--color-danger) 45%, var(--color-rule)); background: color-mix(in oklch, var(--color-danger-soft) 14%, var(--color-surface)); }
+
+.findings-table tbody tr.row-medium { box-shadow: inset 2px 0 0 var(--color-warning); background: color-mix(in oklch, var(--color-warning-soft) 16%, var(--color-surface)); }
 
 .findings-table tbody tr {
   content-visibility: auto;
