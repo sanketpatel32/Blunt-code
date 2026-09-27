@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-09-28
+
+### Changed
+- **The UI stops looking like a generated admin template.** Three releases of correctness fixes had left the app reading as a scaffolded dashboard, and the cause was measurable: **107 rules set `var(--font-mono)` and 30 set `text-transform: uppercase`**, and almost none of them were printing code. Monospaced uppercase micro-labels on every card, counter, axis and legend is the loudest single signal of a generated UI — and it flattens the type system, because when every label is the same size in the same face, nothing has hierarchy and the page reads as one grey mass.
+- **New `css/identity.css`, loaded last.** Kept as a single removable layer rather than 30 scattered edits, so the system can be reworked as a unit. The rules it encodes: mono is for code (paths, commands, fingerprints, line numbers, versions, hashes) and never a label; labels are labels, with weight and colour carrying the hierarchy that size and letter-spacing were faking; uppercase is punctuation used at most once per view; colour means severity or state, and the single accent is reserved for "you can act here"; structure comes from hairlines and space, and shadows only for things that genuinely float.
+- **The nav's active item is an accent underline** instead of a filled black pill that was the loudest element on the page and outranked the page's own primary action. The bar is a little shorter and its border is a true hairline.
+- **Page titles are genuinely the largest thing on a page.** They sat at 26px in a field of 14px; the clamp now runs to 40px, tight-tracked. Section headers are led by weight and colour instead of competing on size.
+- **Repeated chrome is quieter.** Eight full "Run scan" split buttons were ~167px of bordered chrome per ledger row, which made the action column the heaviest thing in the panel; they are now row-height with a quiet border that fills on hover.
+- **"PARTIAL" is a caveat, not an alarm.** A bordered uppercase chip in warning amber, repeated on four of eight rows, describing a condition already stated once in the caveat above the card. Now a quiet lowercase marker, with the precise analyzer breakdown still in its tooltip.
+- **The activity feed uses the same short status word** the ledger already used, so three rows say "Warnings" instead of "Completed with warnings" and the column aligns.
+
+### Added
+- **The board's one outbound action now names the next step.** It said "Explore findings", which told the user where the button was. It now reads "Fix the 15 critical" — or "Review", "Triage", "Skim", "Read" depending on the worst band actually present — and lands on a search **pre-filtered to exactly the band it promised**. Walking the bands in severity order means a clean codebase gets a truthful prompt and a low-only board never shouts about high.
+
+### Notes
+- The full status label lives in the `title` only. An earlier draft also carried an `sr-only` copy beside the visible short word, which made a screen reader announce the doubled "Warnings Completed with warnings" — worse than either alone, since the short word is already an accurate name for the state.
+- Verified on home, workspaces, search and findings report; both themes. 499 tests passing, contrast audit 17/17.
+
 ## [0.28.0] - 2026-09-28
 
 ### Fixed
