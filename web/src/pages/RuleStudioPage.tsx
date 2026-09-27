@@ -317,11 +317,17 @@ export function RuleStudioPage() {
         eyebrow="Rules"
         title="Custom rules"
         badge={
-          <span className="inline-flex flex-wrap items-center gap-2">
-            <Badge variant="secondary" className="text-xs font-mono tabular-nums">{enabledCount} saved locally</Badge>
-            <span className="text-[11px] text-[var(--color-ink-soft)]">Local scratchpad — not sent to the backend.</span>
-          </span>
+          <Badge variant="secondary" className="text-xs font-mono tabular-nums">
+            {enabledCount} saved locally
+          </Badge>
         }
+        /* The header used to say "not sent to the backend" in the badge, again
+           in the description ("save locally"), and a third time in the editor's
+           CardDescription. Three statements of one fact inside 400px is noise,
+           not reassurance. The privacy claim is real and worth making — so it
+           is made once, where the user is about to do the thing: on the editor
+           itself. The header keeps the count and the shortcut, which are
+           different facts. */
         description="Create YAML rules, preview matched findings, and save locally."
         actions={
           <span className="text-[11px] text-[var(--color-ink-soft)] font-mono hidden sm:inline-flex items-center gap-1">
@@ -336,7 +342,10 @@ export function RuleStudioPage() {
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <CardTitle>Rule editor</CardTitle>
-                <CardDescription>Fields: id, languages, pattern, severity, message. Saved to localStorage <code className="font-mono text-xs">bluntcode.customRules</code>.</CardDescription>
+                <CardDescription>
+          Fields: id, languages, pattern, severity, message. Saved to localStorage{' '}
+          <code className="font-mono text-xs">bluntcode.customRules</code> — a local scratchpad, never sent to the backend.
+        </CardDescription>
               </div>
               <div className="flex items-center gap-2">
                 <label htmlFor="rule-language" className="text-xs font-medium text-[var(--color-ink-soft)]">Language</label>

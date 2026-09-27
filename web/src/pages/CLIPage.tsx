@@ -36,7 +36,7 @@ const COMMANDS: CLICommand[] = [
     category: 'Scans & CI Gates',
     synopsis: 'bluntcode scan <path> [options]',
     description:
-      'Runs an automated, headless quality and security scan on any folder. CI exit codes: 0 = clean, 1 = gate tripped, 2 = flag error, 3 = operational failure or incomplete coverage, 4 = cancelled, 130 = double Ctrl+C.',
+      'Runs an automated, headless quality and security scan on any folder. Exits 0 when clean and 1 when the gate trips; see Standard Exit Codes for the rest.',
     badge: 'Core / CI Gate',
     flags: [
       { flag: '--profile', type: 'string', desc: 'Profile: quick, standard, deep, or pentest', def: 'standard' },
@@ -526,7 +526,12 @@ export function CLIPage() {
           <div className="cli-fact-tile">
             <div className="cli-fact-title">Standard Exit Codes</div>
             <div className="cli-fact-desc">
-              <code>0</code> = Clean / success, <code>1</code> = Gate tripped or issues found, <code>2</code> = Flag syntax or usage error, <code>3</code> = Operational failure or incomplete coverage, <code>4</code> = Cancelled, <code>130</code> = Double Ctrl+C.
+              {/* The full table of meanings lives here, once. The scan command
+                  used to repeat all six in its own summary line, so a reader
+                  scrolling the page met the same enumeration twice within
+                  500px. Per-command text now says only what that command
+                  adds. */}
+              <code>0</code> clean, <code>1</code> gate tripped, <code>2</code> usage error, <code>3</code> operational failure, <code>4</code> cancelled, <code>130</code> double Ctrl+C.
             </div>
           </div>
           <div className="cli-fact-tile">

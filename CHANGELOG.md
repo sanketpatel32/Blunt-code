@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.35.0] - 2026-09-28
+
+### Changed
+- **The rules page stopped saying the same thing three times.** The header carried "Local scratchpad — not sent to the backend", the description said "save locally", and the editor's own description said "Saved to localStorage". Three statements of one fact inside 400px reads as anxiety, not reassurance — as if the page were not sure you had understood. The privacy claim is real and worth making, so it is now made **once, where the user is about to do the thing**: on the editor itself, next to the storage key. The header keeps the count and the `Ctrl+S` shortcut, which are different facts.
+- **The CLI page stopped enumerating the exit codes twice.** A "Standard Exit Codes" card listed all six, and the `bluntcode scan` description repeated all six in a run-on sentence roughly 400px below. A reader scrolling the page met the same enumeration twice. The full table of meanings now lives in exactly one place; per-command text says only what that command adds — that it exits 0 when clean and 1 when the gate trips, and points at the card for the rest.
+- **The exit-code legend is more scannable.** The card read `0 = Clean / success, 1 = Gate tripped or issues found, …` with a repeated `= <adjective>` between every pair, which made a six-item list read as a sentence. It is now `0 clean, 1 gate tripped, 2 usage error, …` — same information, set as a list instead of prose.
+
+### Notes
+- Found by reading the rendered pages rather than the source. Both were invisible in a diff: the repetition was spread across three sibling elements, and each instance was individually reasonable.
+- The CLI page was also showing a **stale v0.31.0** while the footer read v0.34.0. That was a leftover dev process holding port 8787 from three versions back, not a product bug — the version comes from `/api/v1` and was correct once the stale process was killed. Worth knowing if a version ever looks wrong here: check for an orphaned `bluntcode.exe` first.
+- 503 tests passing.
+
 ## [0.34.0] - 2026-09-28
 
 ### Fixed
