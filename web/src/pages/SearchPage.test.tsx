@@ -91,7 +91,12 @@ describe('SearchPage', () => {
     expect(group!.textContent).toContain('Identified a pattern that may indicate AWS credentials');
     expect(group!.textContent!.split('aws-access-token')).toHaveLength(2); // id appears exactly once
     // Occurrence lines are deduped by line number (34 appears twice upstream).
-    expect(host.querySelectorAll('.search-occurrence-row')).toHaveLength(2);
+    // They share ONE indented row under the header rather than taking a
+    // full-width table row each, so the count that matters is the number of
+    // line links, not the number of <tr>s.
+    expect(host.querySelectorAll('.search-occurrence-row')).toHaveLength(1);
+    const lines2 = [...host.querySelectorAll('.search-occurrence')];
+    expect(lines2.map((el) => el.textContent)).toEqual(['Line 34', 'Line 37']);
     // Toggling the chip ungroups back to flat per-occurrence rows.
     const toggle = [...host.querySelectorAll<HTMLButtonElement>('.toolbar-filters .chip')].find((b) => b.textContent === 'Group by rule + file')!;
     expect(toggle.getAttribute('aria-pressed')).toBe('true');

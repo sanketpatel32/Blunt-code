@@ -81,19 +81,45 @@
 }
 .page-search .search-group-line .search-row-open { margin-left: var(--space-sm); }
 
-/* Occurrence lines: one mono line number per collapsed row, indented under the header. */
-.page-search .search-occurrence-row > td { color: var(--color-ink-soft); }
+/* Occurrence lines: one indented row of line links under the group header,
+   instead of one full-width table row per line. Each link still opens quick
+   look at its own line, so nothing became less reachable. */
+.page-search .search-occurrence-row > td { color: var(--color-ink-soft); padding-top: 0; }
+
+.page-search .search-occurrence-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  padding-left: calc(0.55rem + var(--space-2xs) + var(--space-xs));
+}
+
 .page-search .search-occurrence {
   display: inline-block;
-  padding-left: calc(0.55rem + var(--space-2xs) + var(--space-xs));
+  padding: 1px 6px;
+  border: var(--rule) solid var(--color-rule-faint);
+  border-radius: var(--radius-xs);
+  background: var(--color-surface);
   font-family: var(--font-mono);
   font-size: var(--text-2xs);
   font-variant-numeric: tabular-nums;
+  color: var(--color-ink-soft);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.page-search .search-occurrence:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent-strong);
+}
+
+.page-search .search-occurrence:focus-visible {
+  outline: var(--rule-focus) solid var(--color-focus);
+  outline-offset: 1px;
 }
 
 /* ---- Analyzer facet: shared .chip styling + page-local counts ---- */
-.page-search .search-engine-chip { font-family: inherit; }
-.page-search .search-engine-chip .chip-count { font-variant-numeric: tabular-nums; }
+.page-search .search-analyzer-chip { font-family: inherit; }
+.page-search .search-analyzer-chip .chip-count { font-variant-numeric: tabular-nums; }
 .page-search .search-facet-hint {
   color: inherit;
   opacity: 0.7;

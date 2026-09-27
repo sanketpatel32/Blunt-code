@@ -438,13 +438,16 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
         </div>
       </div>
 
-      {/* Analyzer engines — shared .chip styling (state via aria-pressed), page-local
-          counts. Zero-count engines are omitted, not dimmed: a page-local "0" chip is
-          an unusable filter presented as noise; the facet hint keeps counts honest. */}
+      {/* Analyzers — shared .chip styling (state via aria-pressed), page-local
+          counts. Zero-count analyzers are omitted, not dimmed: a page-local "0"
+          chip is an unusable filter presented as noise; the facet hint keeps
+          counts honest. Labelled "analyzer" to match every other surface —
+          Home and the scan report both assert the word, and this facet was the
+          last place still saying "engine". */}
       <div className="facet-section">
         <div className="flex items-center justify-between">
           <p className="facet-title text-xs font-semibold uppercase tracking-wider text-[var(--color-ink-faint)]">
-            Engine <span className="search-facet-hint">· this page</span>
+            Analyzer <span className="search-facet-hint">· this page</span>
           </p>
           {analyzer && (
             <button type="button" onClick={() => setAnalyzer('')} className="text-[11px] text-[var(--color-accent-strong)] hover:underline">
@@ -454,7 +457,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
         </div>
         <fieldset className="chip-group mt-2" aria-label="Filter by analyzer">
           <button type="button" className="chip" aria-pressed={analyzer === ''} onClick={() => setAnalyzer('')}>
-            All engines
+            All analyzers
           </button>
           {/* The active selection stays visible even at zero so the current filter
               is always legible. */}
@@ -465,7 +468,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
               <button
                 key={id}
                 type="button"
-                className="chip search-engine-chip"
+                className="chip search-analyzer-chip"
                 aria-pressed={analyzer === id}
                 onClick={() => setAnalyzer(id)}
               >
@@ -938,21 +941,31 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                             </span>
                           </td>
                         </tr>
-                        {lines.map((finding) => (
-                          <tr
-                            key={`${finding.scan_id}:${finding.id}`}
-                            className="search-occurrence-row"
-                            tabIndex={0}
-                            aria-label={findingActionLabel(finding)}
-                            title={stripMessagePrefix(finding)}
-                            onClick={() => setSelectedFinding(finding)}
-                            onKeyDown={(event) => openFromKeyboard(event, finding)}
-                          >
+                        {/* Every occurrence of one rule in one file used to be its
+                            own full-width table row holding nothing but "Line 34",
+                            so a 4-occurrence group cost five rows and pushed real
+                            findings off screen. The lines are now one indented row
+                            of individually-clickable line links under the header. */}
+                        {lines.length > 0 && (
+                          <tr className="search-occurrence-row">
                             <td colSpan={visibleColCount}>
-                              <span className="search-occurrence">{finding.start_line ? `Line ${finding.start_line}` : findingLocation(finding)}</span>
+                              <span className="search-occurrence-line">
+                                {lines.map((finding) => (
+                                  <button
+                                    key={`${finding.scan_id}:${finding.id}`}
+                                    type="button"
+                                    className="search-occurrence"
+                                    aria-label={findingActionLabel(finding)}
+                                    title={stripMessagePrefix(finding)}
+                                    onClick={(event) => { event.stopPropagation(); setSelectedFinding(finding); }}
+                                  >
+                                    {finding.start_line ? `Line ${finding.start_line}` : findingLocation(finding)}
+                                  </button>
+                                ))}
+                              </span>
                             </td>
                           </tr>
-                        ))}
+                        )}
                       </Fragment>
                     );
                   })}

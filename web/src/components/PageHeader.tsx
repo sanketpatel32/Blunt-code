@@ -21,7 +21,7 @@ export function PageHeader({
 }: PageHeaderProps) {
   return (
     <header className={`page-heading page-header ${className}`}>
-      <div className="page-heading-main min-w-0 flex-1 space-y-1">
+      <div className="page-heading-main min-w-0 flex-1">
         {eyebrow && (
           <div className="page-heading-eyebrow flex items-center gap-2">
             <span className="text-xs font-medium text-[var(--color-ink-soft)] inline-flex items-center gap-1.5 leading-normal">
@@ -29,7 +29,7 @@ export function PageHeader({
             </span>
           </div>
         )}
-        <div className="page-heading-title-row flex items-center gap-2.5 flex-wrap">
+        <div className="page-heading-title-row flex items-center gap-2.5 flex-wrap mt-0.5">
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--color-ink)] m-0 leading-tight font-[var(--font-display)]">
             {title}
           </h1>
@@ -38,7 +38,7 @@ export function PageHeader({
           {badge && <div className="page-heading-badge min-w-0 flex items-center">{badge}</div>}
         </div>
         {description && (
-          <div className="page-heading-description text-xs sm:text-sm text-[var(--color-ink-soft)] leading-relaxed max-w-3xl">
+          <div className="page-heading-description text-xs sm:text-sm text-[var(--color-ink-soft)] leading-relaxed max-w-3xl mt-1">
             {description}
           </div>
         )}

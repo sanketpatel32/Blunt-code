@@ -206,10 +206,10 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
             const pct = total > 0 ? Math.max(value > 0 ? 2 : 0, Math.round((value / total) * 100)) : 0;
             return <li key={sev} className={`verdict-bar-row ${value === 0 ? 'is-zero' : ''}`}>
               <span className="verdict-bar-label"><i className={`sev-dot sev-${sev}`} aria-hidden="true" />{SEVERITY_LABELS[sev]}</span>
+              <span className="verdict-bar-count">{count(value)}</span>
               <span className="verdict-bar-track" role="img" aria-label={`${value} ${sev} ${value === 1 ? 'finding' : 'findings'}`}>
                 <i className={`verdict-bar-fill sev-${sev}`} aria-hidden="true" style={{ width: `${pct}%` }} />
               </span>
-              <span className="verdict-bar-count">{count(value)}</span>
             </li>;
           })}
         </ul>
