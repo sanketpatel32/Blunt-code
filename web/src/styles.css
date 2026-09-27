@@ -214,12 +214,23 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 /* Per-language color dot (lib/format.ts languageColor) — also used by .ws-lang-dot on cards. */
 .lang-dot { flex: none; width: .55rem; height: .55rem; border-radius: 50%; box-shadow: 0 0 0 1px var(--color-rule-faint); }
 .badges .badge { gap: var(--space-3xs); }
-.badge, .severity, .state {
+.badge, .state {
   display: inline-flex; align-items: center; width: max-content;
   padding: var(--space-3xs) var(--space-sm);
   border: var(--rule) solid var(--color-rule); border-radius: var(--radius-pill);
   background: var(--color-surface-muted);
   color: var(--color-ink-soft); font: 600 var(--text-xs) var(--font-mono); letter-spacing: .02em; line-height: 1.4;
+}
+/* Severity is a word that labels a category, not an identifier, so it takes the
+   body face. In mono it read as a code tag — 'high' set in IBM Plex Mono looked
+   like a package name. The leading dot already carries the colour, and the
+   chip's own dot means the label never has to shout. */
+.severity {
+  display: inline-flex; align-items: center; gap: var(--space-2xs); width: max-content;
+  padding: var(--space-3xs) var(--space-sm);
+  border: var(--rule) solid var(--color-rule); border-radius: var(--radius-pill);
+  background: var(--color-surface-muted);
+  color: var(--color-ink-soft); font: 600 var(--text-xs) var(--font-body); letter-spacing: 0; line-height: 1.4; white-space: nowrap;
 }
 .severity-counts { display: flex; flex-wrap: wrap; gap: var(--space-lg); margin: var(--space-md) 0; }
 /* Live scans show the chips before any analyzer has reported; muted zeros

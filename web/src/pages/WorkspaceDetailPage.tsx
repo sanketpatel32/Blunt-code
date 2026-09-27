@@ -299,7 +299,18 @@ function TopFindingsStrip({ scanId, go }: { scanId: string; go: (r: Route) => vo
             <button type="button" className="workspace-top-findings-row" onClick={() => go({ page: 'scan', id: scanId })} title="Open the full report">
               <span className={`severity ${finding.severity}`}>{finding.severity}</span>
               <span className="workspace-top-findings-message">{finding.message}</span>
-              {finding.relative_path && <code>{finding.relative_path}{finding.start_line ? `:${finding.start_line}` : ''}</code>}
+              {/* Column included on purpose. Two analyzers can flag the same rule
+                  family on the same line at different columns (here semgrep at
+                  :8 and the secrets detector at :33) and share a message, so a
+                  bare file:line rendered the two rows byte-identical and the
+                  list claimed three problems where there were two. */}
+              {finding.relative_path && (
+                <code title={finding.relative_path + (finding.start_line ? `:${finding.start_line}` : '')}>
+                  {finding.relative_path}
+                  {finding.start_line ? `:${finding.start_line}` : ''}
+                  {finding.start_column ? `:${finding.start_column}` : ''}
+                </code>
+              )}
             </button>
           </li>
         ))}
@@ -484,7 +495,11 @@ export function RiskCard({ risk, unscanned }: { risk?: RiskProfile | null; /** t
     <span className="premium-card-icon"><ShieldAlert className="h-4 w-4" /></span>
     <span className="risk-grade">{risk.grade}</span>
     <strong className="risk-score" title={RISK_SCORE_EXPLAINER}>{Math.round(risk.score)}</strong>
-    <span>Risk {risk.grade}</span>
+    {/* "Risk score", not "Risk D". The grade letter is already the tile beside
+        it, so repeating it here printed the same D twice on one card and read
+        as two different facts. Matches the board's score/band wording and the
+        card's own unscanned label. */}
+    <span>Risk score</span>
     {trendNote && <small role="note" className="risk-trend">{trendNote.arrow}{trendNote.text}</small>}
     {coverageNote && <span className="risk-coverage-note" data-partial="true">{coverageNote}</span>}
   </div>;
