@@ -1,0 +1,208 @@
+/* ════════════════════════════════════════════════════════════════════
+   IDENTITY — "the instrument panel"
+   ────────────────────────────────────────────────────────────────────
+   Loaded last so it wins over styles.css and the feature sheets.
+
+   The problem this layer exists to solve: the UI read as a generated admin
+   template. The tells were measurable — 107 rules set var(--font-mono) and 30
+   set text-transform: uppercase, and almost none of them were printing code.
+   Monospaced uppercase micro-labels on every card, counter, axis and legend
+   is the single loudest signal of a scaffolded dashboard, and it flattens the
+   type system: when every label is the same size in the same face, nothing has
+   hierarchy and the page reads as one grey mass.
+
+   The rules of the identity, in order of importance:
+
+     1. Mono is for CODE. Paths, commands, fingerprints, line numbers,
+        versions, hashes, regexes. Never a label, a count, an axis, or a
+        heading. A word set in mono reads as a package name.
+     2. Labels are labels. Body face, weight and colour carry the hierarchy
+        that size and letter-spacing were faking.
+     3. Uppercase is punctuation, not vocabulary. It appears on at most one
+        thing per view — the section eyebrow — and never in mono.
+     4. Colour means severity or state. The single accent is reserved for
+        "you can act here" and nothing else.
+     5. Structure comes from hairlines and space. Shadows are for things
+        that genuinely float above the page.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* ── 1 · Mono discipline ───────────────────────────────────────────────
+   Each of these printed a LABEL in monospace. They keep their size, weight
+   and colour — only the face changes — so hierarchy survives while the
+   scaffolded look does not. */
+
+.toolbar-row,
+.table-dense thead th,
+.severity-pill,
+.severity-counts small,
+.severity-legend,
+.tree-count-badge,
+.tree-lang-badge,
+.tree-loaded-count,
+.tree-toggle,
+.tree-summary-bar,
+.workspace-context-hint,
+.workspace-filter-count,
+.workspace-sortbar,
+.board-foot-more,
+.board-trend-label,
+.board-panel-sub,
+.ledger-languages,
+.state-tag,
+.finding-message,
+.facets .facet-title,
+.facet-title,
+.about-card dt,
+.settings-list h2,
+.rail-stat dt,
+.history-detail-meta,
+.history-filter-label,
+.tree-toolbar,
+.profile-picker,
+.stream-state,
+.local-signal,
+.seq-hint,
+.shortcut-group,
+.stage-list,
+.switch-state,
+.toolbar-meta,
+.summary-card small,
+.tools-facts,
+.suppressions-count,
+.what-changed-more,
+.workspace-page-body .eyebrow,
+.export-inline { font-family: var(--font-body); letter-spacing: 0; }
+
+/* The uppercase that travelled with those monospace shorthands goes with
+   them. A section label reads as a label because of its weight and the
+   space above it, not because it is shouting in capitals. */
+.severity-counts small,
+.severity-legend,
+.tree-count-badge,
+.tree-lang-badge,
+.tree-loaded-count,
+.board-foot-more,
+.board-trend-label,
+.board-panel-sub,
+.facet-title,
+.about-card dt,
+.rail-stat dt,
+.history-filter-label,
+.tools-facts,
+.suppressions-count,
+.table-dense thead th { text-transform: none; }
+
+/* ── 2 · Real scale contrast ───────────────────────────────────────────
+   Everything sat between 13px and 16px, so the page had no focal point. The
+   page title is now unmistakably the largest thing on a page, and section
+   headers sit clearly below body copy instead of drifting into it. */
+.page-header h1 {
+  font-size: clamp(1.75rem, 1.3rem + 1.5vw, 2.5rem);
+  line-height: 1.05;
+  letter-spacing: -.035em;
+  font-weight: 700;
+}
+
+.page-heading-eyebrow {
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--color-ink-faint);
+}
+
+/* Section headers: the step directly below body copy, never competing with
+   the title. weight + colour, not size. */
+.board-panel-title,
+.tree-panel-title,
+.workspace-section-card h2,
+.settings-list h2,
+.about-card h2 {
+  font-size: var(--text-md);
+  font-weight: 650;
+  letter-spacing: -.01em;
+}
+
+/* ── 3 · Nav declutter ─────────────────────────────────────────────────
+   The bar carried a notification bell, a Ctrl-K pill, a language menu, an
+   overflow menu and a theme toggle — five controls for four of which the
+   command palette already held a shortcut. The middle of the bar was dead
+   space. This puts one real affordance in that space and lets the utility
+   cluster get out of the way. */
+
+/* The nav is the one place a search affordance belongs, and it is the only
+   thing in the app that reaches every workspace's findings. */
+.app-nav nav { justify-content: flex-start; }
+
+.app-nav {
+  min-height: 3rem;
+  /* A hairline plus a whisper of tint, so the bar is a distinct plane
+     without becoming a heavy band across the top of every page. */
+  background: var(--color-surface);
+  border-bottom: var(--rule) solid var(--color-rule);
+  box-shadow: 0 1px 0 oklch(17% 0.016 268 / .02);
+}
+
+/* The active nav item was a filled black pill — the loudest element on the
+   page, competing with the page's own primary action. A quiet underline
+   says "you are here" without shouting over the content. */
+.app-nav nav a {
+  position: relative;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: 0;
+  font-weight: 500;
+  color: var(--color-ink-soft);
+  background: none;
+  box-shadow: none;
+}
+
+.app-nav nav a:hover { background: none; color: var(--color-ink); }
+
+.app-nav nav a.active {
+  color: var(--color-ink);
+  background: none;
+  box-shadow: none;
+  font-weight: 600;
+}
+
+.app-nav nav a.active::after {
+  content: '';
+  position: absolute;
+  left: var(--space-sm);
+  right: var(--space-sm);
+  bottom: -0.55rem;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--color-accent);
+}
+
+:root[data-theme='dark'] .app-nav nav a.active::after { background: var(--color-accent); }
+
+/* Brand: the mark carries the identity, the wordmark does not need to shout
+   back at it. */
+.brand { font-size: 0.95rem; font-weight: 650; letter-spacing: -.02em; }
+.brand .brand-mark { width: 1.75rem; height: 1.75rem; border-radius: 0.5rem; }
+
+/* ── 4 · Page header: less chrome, more identity ──────────────────────
+   A 116px header (now ~92px) sat above every route carrying a title, a
+   one-line description and a hairline. The hairline plus the generous
+   padding below it is doing the same job twice. */
+.page-heading { margin-bottom: var(--space-lg); border-bottom: 0; padding-bottom: 0; }
+.page-header { padding-block: var(--space-md) 0; }
+
+/* ── 5 · Surfaces: make the layering legible ───────────────────────────
+   The page and its cards sat ~3% apart, which reads, but the cards were all
+   the same weight. Elevation now means something: the page is the ground,
+   a card is one plane up, and only floating things cast a shadow. */
+.card,
+.board-panel,
+.summary-card,
+.about-card,
+.workspace-section-card { border-color: var(--color-rule-faint); }
+
+/* ── 6 · Accent discipline ─────────────────────────────────────────────
+   The accent is for things you can act on. It is not a decoration for
+   values, headings, or anything merely informational. */
+.ledger-name:hover,
+.verdict-explore,
+.text-button { color: var(--color-accent-strong); }

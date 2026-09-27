@@ -8,8 +8,12 @@ import './css/animations.css';
 import './css/nav-clarity.css';
 import './css/board.css';
 import './css/workspace-clarity.css';
-// Analysis story — verdict header, filter toolbar, split list/source layout.
+// Analysis story - verdict header, filter toolbar, split list/source layout.
 import './css/analysis.css';
+// Identity - the instrument-panel layer. Imported LAST so it wins over both
+// styles.css and the feature sheets: it decides type voice, the nav, and
+// accent discipline, and everything above it is free to stay pragmatic.
+import './css/identity.css';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
