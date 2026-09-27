@@ -47,21 +47,28 @@
   70%, 100% { box-shadow: 0 0 0 .45rem transparent; }
 }
 
-/* ── Verdict: grade + hero count + severity tally + stat strip ──
-   Was a 3-column grid (grade tile | main | 4-stat rail) at xl padding that
-   rendered ~350px tall to carry eight numbers. It is now a single stacked
-   card: one head line, the tally, then a hairline-separated stat strip. The
-   grade keeps its own colour and its scale context; it just stops reserving a
-   whole column to do it. */
+/* ── The verdict, as a hero rather than a widget ────────────────────
+   This was a bordered card like every other box on the page, with the grade a
+   44px square sitting in one corner of 1398px - about 3% of the width. The
+   single most important fact in a security tool was furniture.
+
+   It is now a full-width band that owns the top of the page: the grade is a
+   real 96px statement, the count is the largest number in the app, and the
+   severity distribution is a meter with enough height to read as a shape
+   rather than a hairline. Everything below is secondary to this, which is the
+   correct hierarchy for a risk board. */
 .board-verdict {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: var(--space-md);
-  padding: var(--space-lg);
+  gap: var(--space-lg);
+  margin-top: calc(var(--space-md) * -1);
+  padding: var(--space-xl) var(--space-lg) var(--space-lg);
   border: var(--rule) solid var(--color-rule);
-  border-radius: var(--radius-card);
+  border-top: none;
+  border-radius: 0 0 var(--radius-card) var(--radius-card);
   background: var(--color-surface);
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-sm);
 }
 
 /* Grade and hero count sit adjacent, and the single outbound action takes the
@@ -70,7 +77,7 @@
 .verdict-head {
   display: flex;
   align-items: center;
-  gap: var(--space-lg);
+  gap: var(--space-xl);
   flex-wrap: wrap;
 }
 
@@ -78,14 +85,14 @@
    flex distribution rather than margin-left:auto — auto margins strand the
    button alone against the right edge on its own wrapped line, which is what
    happened between roughly 60rem and 78rem. */
-.verdict-main { flex: 1 1 14rem; min-width: 0; }
+.verdict-main { flex: 1 1 16rem; min-width: 0; }
 
 .verdict-explore { flex: none; align-self: center; }
 
 .verdict-grade {
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
+  gap: var(--space-lg);
   min-width: 0;
   flex: 0 0 auto;
 }
@@ -94,14 +101,14 @@
   display: grid;
   place-items: center;
   flex: none;
-  width: 2.75rem;
-  height: 2.75rem;
-  border-radius: var(--radius-md);
+  width: 6rem;
+  height: 6rem;
+  border-radius: var(--radius-lg);
   font-family: var(--font-display);
-  font-size: 1.625rem;
+  font-size: 3.75rem;
   font-weight: 800;
   line-height: 1;
-  letter-spacing: -.03em;
+  letter-spacing: -.05em;
   background: var(--grade-bg);
   color: var(--grade-ink);
 }
@@ -203,20 +210,26 @@
 
 .verdict-hero-num {
   font-family: var(--font-display);
-  font-size: var(--text-2xl);
+  /* The largest number in the app, and it should be: this is the answer to
+     "how much is wrong". At 36px it was only 2.6x body copy and read as a
+     value in a table rather than a headline. */
+  font-size: clamp(3rem, 2rem + 3vw, 4.5rem);
   font-weight: 800;
-  line-height: .95;
-  letter-spacing: -.035em;
+  line-height: .9;
+  letter-spacing: -.045em;
   color: var(--color-ink);
 }
 
-.verdict-hero-unit { font-size: var(--text-lg); font-weight: 600; color: var(--color-ink); }
+.verdict-hero-unit { font-size: var(--text-xl); font-weight: 600; color: var(--color-ink); letter-spacing: -.02em; }
 
-.verdict-hero-ctx { font-size: var(--text-sm); color: var(--color-ink-soft); }
+.verdict-hero-ctx { font-size: var(--text-md); color: var(--color-ink-soft); }
 
-.verdict-tally { display: flex; flex-direction: column; gap: var(--space-xs); min-width: 0; }
+.verdict-tally { display: flex; flex-direction: column; gap: var(--space-md); min-width: 0; }
 
-.verdict-bar { height: .5rem; background: var(--color-surface-muted); border-radius: var(--radius-button); overflow: hidden; }
+/* A meter with real height. At 8px across 1364px this was a hairline - a
+   texture, not a shape. 20px is enough for the sqrt segments to read as
+   distinct bands at a glance. */
+.verdict-bar { height: 1.25rem; background: var(--color-surface-muted); border-radius: var(--radius-button); overflow: hidden; }
 
 /* Segment layout is board-scoped: styles.css carries only the container track and seg-* colors.
    flex-grow (not width) drives the sqrt scale, so the segments share the bar
@@ -776,13 +789,25 @@
 @media (max-width: 60rem) {
   .ledger-row {
     grid-template-columns: 1.625rem minmax(0, 1fr) auto;
+    /* meta gets its own row. It used to be parked in the `identity` area, which
+       stacked the risk score on top of the workspace name at this width — an
+       overlap that never showed at desktop sizes and so was never caught. */
     grid-template-areas:
       "grade identity actions"
-      "grade mid      actions";
+      "grade mid      actions"
+      "grade meta     actions";
   }
 
-  .ledger-meta { grid-area: identity; justify-self: end; align-items: flex-end; }
-  .ledger-meta .ledger-last { display: none; }
+  .ledger-meta {
+    grid-area: meta;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: var(--space-sm);
+  }
+
+  /* The date is the least load-bearing thing in the cell once the row wraps. */
+  .ledger-last small { display: none; }
 }
 
 @media (max-width: 48rem) {
@@ -795,13 +820,23 @@
     grid-template-areas:
       "grade identity"
       "grade mid"
+      "grade meta"
       "grade actions";
     row-gap: var(--space-xs);
   }
 
-  .ledger-meta { grid-area: identity; justify-self: start; }
+  .ledger-meta { grid-area: meta; }
 
-  .ledger-actions { justify-self: start; }
+  .ledger-actions { grid-area: actions; justify-self: start; }
+
+  /* The grade statement steps down rather than eating the whole column: at
+     phone widths a 96px tile left no room for the count beside it. */
+  .verdict-letter { width: 3.75rem; height: 3.75rem; font-size: 2.25rem; border-radius: var(--radius-md); }
+
+  .verdict-grade { gap: var(--space-md); }
+
+  .verdict-hero-num { font-size: clamp(2.5rem, 1.8rem + 5vw, 3.25rem); }
+  .verdict-hero-unit { font-size: var(--text-lg); }
 
   .feed-detail { grid-template-columns: 1fr auto; }
 }
