@@ -108,6 +108,18 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .page-header .page-heading-main { flex-basis: auto; }
   .page-header .page-heading-actions { align-self: flex-start; }
 }
+/* Page-level loading shape (ui.tsx <Loading/>). Mirrors the real page rhythm —
+   header block, metric strip, table — so the wait has structure and the content
+   lands into a frame that already exists. */
+.load-page { gap: var(--space-lg); }
+.load-head { display: flex; flex-direction: column; gap: var(--space-sm); padding-bottom: var(--space-md); border-bottom: var(--rule) solid var(--color-rule-faint); }
+.load-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-md); }
+.load-metrics > span { height: 3.25rem; border-radius: var(--radius-card); }
+@media (max-width: 48rem) { .load-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.skeleton-status { display: block; }
+.loading { padding: var(--space-lg) 0; color: var(--color-ink-faint); font-size: var(--text-sm); }
+
 .narrow { max-width: none; width: 100%; }
 .hero { margin-bottom: var(--space-2xl); }
 .workspace-path-row { display: flex; align-items: center; gap: var(--space-xs); min-width: 0; max-width: 100%; }
@@ -233,7 +245,6 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .empty h2, .error-panel h2 { margin: 0 0 var(--space-xs); color: var(--color-ink); font-family: var(--font-display); font-size: var(--text-xl); font-weight: 600; }
 .empty p, .error-panel p { margin: 0 0 var(--space-md); line-height: 1.6; }
 .error-panel { border-color: var(--color-danger); background: var(--color-danger-soft); border-style: solid; }
-.loading { padding: var(--space-xl) 0; color: var(--color-ink-soft); }
 .empty-icon { position: relative; display: grid; place-items: center; width: 3.75rem; height: 3.75rem; margin: 0 auto var(--space-lg); border: var(--rule) solid var(--color-rule); border-radius: 50%; background: var(--color-surface-muted); color: var(--color-ink-soft); box-shadow: var(--shadow-xs); }
 .empty-icon svg { width: 1.5rem; height: 1.5rem; }
 .empty.positive .empty-icon { border-color: color-mix(in oklch, var(--color-success) 40%, var(--color-rule)); background: var(--color-success-soft); color: var(--color-success); }
@@ -559,13 +570,31 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 
 
 /* ── Settings ──────────────────────────────────────────────────── */
-.settings-list { display: grid; gap: var(--space-xl); }
+/* Settings is a label-left / control-right list, so it needs width — but capped.
+   At the full 1400px the label and its toggle were ~1200px apart with nothing
+   between them, which is a long way to travel to pair a name with a control. */
+.settings-list { display: grid; gap: var(--space-xl); max-width: 64rem; }
 .settings-list section { border-top: var(--rule) solid var(--color-rule-faint); }
-.settings-list h2 { margin: var(--space-lg) 0 0; font-family: var(--font-display); font-size: var(--text-xl); font-weight: 700; }
-.setting { display: flex; align-items: center; justify-content: space-between; gap: var(--space-lg); padding: var(--space-lg) 0; border-bottom: var(--rule) solid var(--color-rule-faint); }
+/* Section headings were 24px against a 22-28px page title — measurably LARGER
+   than the h1 they sit under, which inverts the page's hierarchy. A section
+   label steps down from the page title; it does not compete with it. */
+.settings-list h2 {
+  margin: var(--space-lg) 0 0;
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+  font-weight: 700;
+  letter-spacing: -.005em;
+  color: var(--color-ink);
+}
+.setting { display: flex; align-items: center; justify-content: space-between; gap: var(--space-lg); padding: var(--space-md) 0; border-bottom: var(--rule) solid var(--color-rule-faint); }
 .setting h3 { margin: 0 0 var(--space-2xs); font-size: var(--text-sm); font-weight: 700; }
 .setting p { max-width: 36rem; margin: 0; color: var(--color-ink-soft); font-size: var(--text-sm); line-height: 1.5; }
-.setting > span { max-width: 18rem; color: var(--color-accent-strong); font: var(--text-xs) var(--font-mono); text-align: right; overflow-wrap: anywhere; }
+/* Read-only values, not links. This was accent-coloured, so "Workspace
+   managed" and "Loading…" looked clickable and were not — an affordance lie on
+   every dead-end state in the page. A value that IS actionable (a path, a
+   button) opts back in explicitly via .setting-value-action. */
+.setting > span { max-width: 22rem; color: var(--color-ink-soft); font-size: var(--text-xs); text-align: right; overflow-wrap: anywhere; }
+.setting > span.setting-value-mono { font-family: var(--font-mono); }
 /* Loop 122 · control slot for non-switch settings (language picker). */
 .setting-control { flex: none; }
 .setting-control select { min-height: 2.25rem; padding: 0 var(--space-sm); border: var(--rule) solid var(--color-rule-strong); border-radius: var(--radius-button); background: var(--color-surface); color: var(--color-ink); font: 600 var(--text-sm) var(--font-body); }

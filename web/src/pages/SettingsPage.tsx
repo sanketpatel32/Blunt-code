@@ -180,6 +180,7 @@ export function SettingsPage({ notify }: { notify: (n: Notice) => void }) {
             label="Data directory"
             description="Application state, tool installs, and scan history are kept on this computer."
             value={meta.data?.data_directory ?? (meta.loading ? 'Loading…' : 'Available from local metadata')}
+            mono
           />
         </section>
 
@@ -266,14 +267,14 @@ export function SettingsPage({ notify }: { notify: (n: Notice) => void }) {
   );
 }
 
-function Setting({ label, description, value }: { label: string; description: string; value: string }) {
+function Setting({ label, description, value, mono }: { label: string; description: string; value: string; /** Paths and ids read better in mono; prose values do not. */ mono?: boolean }) {
   return (
     <div className="setting">
       <div>
         <h3>{label}</h3>
         <p>{description}</p>
       </div>
-      <span>{value}</span>
+      <span className={mono ? 'setting-value-mono' : undefined}>{value}</span>
     </div>
   );
 }

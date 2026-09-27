@@ -5,6 +5,7 @@ import { useCountUp } from '../hooks/useCountUp';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
+import { SkeletonTable } from './skeletons';
 import { ShieldCheck, AlertTriangle } from 'lucide-react';
 
 /** Friendly sentences for the API error codes people actually hit; the raw code
@@ -43,8 +44,36 @@ export function ErrorPanel({ error, retry }: { error: string; retry?: () => void
   );
 }
 
-export function Loading() {
-  return <div className="loading" aria-live="polite">Loading…</div>;
+/** Page-level loading state.
+ *
+ *  This used to render the single word "Loading…" and nothing else, so the scan
+ *  report and pentest pages replaced their entire layout with one bare string
+ *  while the request was in flight — on a cold or busy machine that is several
+ *  seconds of a near-empty page, which reads as broken rather than busy. It now
+ *  paints the shape of the view that is coming (a header, then a metric strip,
+ *  then a table) so the page has structure while it waits and the content does
+ *  not jump when it lands.
+ *
+ *  `inline` keeps the old one-line treatment for dialogs, where a full-page
+ *  skeleton would be absurd. */
+export function Loading({ inline = false, rows = 6 }: { inline?: boolean; rows?: number }) {
+  if (inline) return <div className="loading" aria-live="polite">Loading…</div>;
+  return (
+    <div className="page load-page" role="status" aria-busy="true" aria-live="polite">
+      <span className="sr-only">Loading…</span>
+      <div className="load-head" aria-hidden="true">
+        <span className="skeleton skeleton-anim" style={{ width: '5rem' }} />
+        <span className="skeleton skeleton-anim" style={{ width: '13rem', height: '1.75rem' }} />
+        <span className="skeleton skeleton-anim" style={{ width: '22rem' }} />
+      </div>
+      <div className="load-metrics" aria-hidden="true">
+        {Array.from({ length: 4 }, (_, i) => (
+          <span key={i} className="skeleton skeleton-anim" style={{ animationDelay: `${i * 40}ms` }} />
+        ))}
+      </div>
+      <SkeletonTable rows={rows} cols={5} />
+    </div>
+  );
 }
 
 /** Shared empty-state panel. `icon` renders inside a circular medallion; `tone: 'positive'` switches the medallion to the success tokens (used for the all-clear scan state). */
