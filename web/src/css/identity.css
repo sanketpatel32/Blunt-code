@@ -417,7 +417,54 @@
 
 .th-sort, .page-search .th-sort { font: inherit; color: inherit; letter-spacing: inherit; }
 
-/* ── 6 · Repeated row actions ────────────────────────────────────────
+/* ── 8 · Overlays: the palette, dialogs, menus ────────────────────────
+   The last surface the identity pass never touched, and it carried all three
+   remaining tells at once:
+
+   - the active command was a solid BLACK pill, the heaviest thing in the app
+     at a moment when the user is only browsing;
+   - group headings were uppercase monospace, again;
+   - the list cut a row in half at the scroll edge, which read as a broken
+     panel rather than as "there is more below".
+
+   The selection is now a soft accent tint with a left accent bar, matching how
+   the rail marks the current page, so one idea is expressed once. */
+.command-palette .palette-option[data-active='true'] {
+  background: var(--color-accent-soft);
+  color: var(--color-ink);
+  box-shadow: inset 2px 0 0 var(--color-accent);
+}
+
+:root[data-theme='dark'] .command-palette .palette-option[data-active='true'] { background: var(--color-surface-muted); }
+
+/* A fade at the scroll edge so a half-visible row reads as more content. */
+.command-palette [role='listbox'] {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5rem), transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5rem), transparent 100%);
+}
+
+:root[data-theme='dark'] .command-palette .palette-option[data-active='true'] { box-shadow: inset 2px 0 0 var(--color-accent); }
+
+/* Group headings: quiet, body face, sentence case. The one uppercase label in
+   the whole app is the rail's group heading; a menu section does not need
+   another one shouting over the commands themselves. */
+.palette-group-title {
+  color: var(--color-ink-faint);
+  font: 600 var(--text-2xs) var(--font-body);
+  letter-spacing: 0;
+  text-transform: none;
+  padding: 0 var(--space-2xs);
+}
+
+.palette-group { margin-top: var(--space-sm); }
+.palette-group:first-child { margin-top: 0; }
+
+/* The backdrop was blurring the page hard enough that the app behind became
+   noise. Softer, so the palette reads as the only object in focus. */
+.dialog-backdrop,
+.command-palette-backdrop { backdrop-filter: blur(2px); }
+
+/* ── 10 · Repeated row actions ────────────────────────────────────────
    Ten identical filled "Scan" buttons down the workspaces table (and the
    same pattern on tools and history) made the action column the heaviest
    thing on the page and pushed the data right. The row keeps its one
@@ -436,7 +483,7 @@
   color: var(--color-ink);
 }
 
-/* ── 7 · Surfaces: make the layering legible ───────────────────────────
+/* ── 11 · Surfaces: make the layering legible ───────────────────────────
    The page and its cards sat ~3% apart, which reads, but the cards were all
    the same weight. Elevation now means something: the page is the ground,
    a card is one plane up, and only floating things cast a shadow. */
