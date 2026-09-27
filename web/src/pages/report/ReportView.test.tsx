@@ -849,6 +849,26 @@ describe('ReportView finding cells', () => {
     });
   });
 
+  it('when the message is too long to summarize, the row prints it once and in full', async () => {
+    // The regression: a synthesized title is the message's opening clause capped
+    // at 80 chars with a literal "…". Past that cap the title is a PREFIX of the
+    // message ending in "…" where the message ends in a real character, so the
+    // body's startsWith de-duplication could never fire and the row printed the
+    // same sentence twice - once bold and chopped mid-word, once underneath.
+    // SonarQube cognitive-complexity findings hit this on every row.
+    const long = 'Refactor this function to reduce its Cognitive Complexity from 37 to the 15 allowed.';
+    expect(long.length).toBeGreaterThan(80);
+    await withFinding({ ...finding, analyzer_id: 'sonarqube', rule_id: 'typescript:S3776', title: 'typescript:S3776', message: long }, async (host) => {
+      const summary = host.querySelector('.findings-table tbody tr .finding-summary')!;
+      const heading = summary.querySelector('strong')!.textContent!;
+      // Nothing is lost to the 80-char cap...
+      expect(heading).toBe(long);
+      expect(heading).not.toContain('…');
+      // ...and the message is not echoed underneath itself.
+      expect(summary.querySelector('.finding-message')).toBeNull();
+    });
+  });
+
   it('a finding row carries exactly one visible control — the overflow menu', async () => {
     await withFinding({ ...finding, fingerprint: 'f'.repeat(64) }, async (host) => {
       expect(rows(host)[0].querySelectorAll('button')).toHaveLength(1); // the RowMenu trigger; no stray action buttons
