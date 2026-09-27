@@ -56,7 +56,11 @@ function EyeOffIcon(props: SVGProps<SVGSVGElement>) {
         description="A local-first static analysis and security auditing application for Windows."
       />
       <section className="about-card">
-        <h2>Local by default <span className="badge">{meta.data?.version ? `v${meta.data.version}` : 'Version unknown'}</span></h2>
+        {/* No version badge here. The page title right above already carries it,
+            and the Updates card below says "v0.26.0 installed" - the same
+            number was on screen three times plus the footer. This card is about
+            what Blunt Code does locally, not what version it is. */}
+        <h2>Local by default</h2>
         <p>Analyzes selected files on this computer and combines results from local analysis tools.</p>
         <ul className="about-points" style={{ display: 'grid', gap: 'var(--space-xs)', margin: 'var(--space-lg) 0 0', padding: 0, listStyle: 'none' }}>
           <li className="local-signal"><MonitorIcon />Local-only analysis</li>

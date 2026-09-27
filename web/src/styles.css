@@ -619,9 +619,12 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .about-card { max-width: none; width: 100%; padding: var(--space-xl); }
 .about-card h2 { margin-top: 0; font-family: var(--font-display); font-weight: 700; display: flex; align-items: center; gap: var(--space-sm); }
 .about-card p { color: var(--color-ink-soft); line-height: 1.6; }
-.about-card dl { display: grid; grid-template-columns: 10rem 1fr; gap: var(--space-sm) var(--space-md); margin: var(--space-xl) 0 0; padding: var(--space-md); background: var(--color-surface-muted); border-radius: var(--radius-md); }
+/* At-a-glance facts. Capped with an explicit label column so three short values
+   ("ready", "v1", "windows / amd64") do not stretch into ~1900px of empty track
+   behind a full-width grey slab. */
+.about-card dl { display: grid; grid-template-columns: minmax(6rem, 9rem) minmax(0, 1fr); gap: var(--space-xs) var(--space-lg); margin: var(--space-lg) 0 0; padding: var(--space-md); max-width: 34rem; background: var(--color-surface-muted); border-radius: var(--radius-md); }
 .about-card dt { color: var(--color-ink-faint); font: 600 var(--text-xs) var(--font-mono); }
-.about-card dd { margin: 0; color: var(--color-ink); font-size: var(--text-sm); }
+.about-card dd { margin: 0; color: var(--color-ink); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
 
 /* ── Toggles ───────────────────────────────────────────────────── */
 .toggle-cell { display: inline-flex; align-items: center; gap: var(--space-sm); }

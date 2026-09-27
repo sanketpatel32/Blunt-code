@@ -55,7 +55,11 @@ afterEach(async () => {
 describe('AboutPage at-a-glance card', () => {
   it('renders the version line, privacy bullets, and server details', async () => {
     const host = await renderPage(aboutMock());
-    expect(host.querySelector('.about-card .badge')!.textContent).toBe('v1.2.3');
+    // The version is stated once, in the page title. It used to appear there,
+    // again beside "Local by default", again as "v1.2.3 installed" on the
+    // Updates card, and once more in the footer.
+    expect(host.querySelector('.page-heading-badge')!.textContent).toBe('v1.2.3');
+    expect(host.querySelectorAll('.page-heading-badge')).toHaveLength(1);
     expect(host.textContent).toContain('Local-only analysis');
     expect(host.textContent).toContain('No account required');
     expect(host.textContent).toContain('No telemetry');
