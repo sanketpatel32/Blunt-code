@@ -216,10 +216,13 @@ export function FilesPage({ id, go, notify }: { id: string; go?: (r: Route) => v
           title={workspace.data?.name ? `${workspace.data.name} — Files` : 'Workspace files'}
           description={
             workspace.data?.root_path ? (
-              <span className="flex items-center gap-1.5 font-mono text-xs">
-                <span className="workspace-root truncate max-w-md sm:max-w-xl text-[var(--color-ink-faint)]" title={workspace.data.root_path}>{workspace.data.root_path}</span>
-                <PathCopy path={workspace.data.root_path} />
-              </span>
+              // PathCopy alone. This printed the raw path AND PathCopy beside
+              // it, so the same folder appeared twice in two forms; and the
+              // raw copy carried a border plus a filled background, which made
+              // a read-only path look exactly like a text input you could type
+              // into. PathCopy already renders the path, the full path in its
+              // title, and the copy button.
+              <span className="workspace-root"><PathCopy path={workspace.data.root_path} /></span>
             ) : 'Include or ignore source files and directories for analysis.'
           }
           actions={

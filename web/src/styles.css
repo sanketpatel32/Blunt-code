@@ -383,8 +383,13 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .file-search { display: grid; gap: var(--space-xs); margin: 0; color: var(--color-ink-soft); font-size: var(--text-xs); font-weight: 700; letter-spacing: .02em; }
 .file-search-wrap { position: relative; display: flex; align-items: center; }
 .file-search-icon { position: absolute; left: var(--space-sm); color: var(--color-ink-faint); pointer-events: none; }
-.file-search-input { width: 100%; min-width: 0; min-height: 2.5rem; padding: var(--space-sm) 2.2rem var(--space-sm) 2rem; border: var(--rule) solid var(--color-rule-strong); border-radius: var(--radius-md); outline: 2px solid transparent; outline-offset: 1px; background: var(--color-surface); color: var(--color-ink); font-size: var(--text-sm); font-weight: 500; transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out); }
-.file-search-input:focus { border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-glow); }
+/* Selector is deliberately `.file-search .file-search-input`, not the bare
+   `.file-search-input`. The shared input rule above is `.search input` — one
+   class plus an element, so it outranks a lone class and silently won the
+   padding-left this control needs to clear its own absolutely-positioned
+   magnifier. The icon then overlapped the placeholder by 10px. */
+.file-search .file-search-input { width: 100%; min-width: 0; min-height: 2.5rem; padding: var(--space-sm) 2.2rem var(--space-sm) 2rem; border: var(--rule) solid var(--color-rule-strong); border-radius: var(--radius-md); outline: 2px solid transparent; outline-offset: 1px; background: var(--color-surface); color: var(--color-ink); font-size: var(--text-sm); font-weight: 500; transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out); }
+.file-search .file-search-input:focus { border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-glow); }
 .file-search-wrap .kbd-hint { position: absolute; right: var(--space-xs); }
 /* Loop 117 · this rule was declared again ~300 lines below with different
    alignment, so the later one silently won. One definition, both intents. */
@@ -419,7 +424,12 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .tree-bulkbar-btn { min-height: 2rem; padding: 0 var(--space-sm); font-size: var(--text-xs); }
 .tree-name { min-width: 6rem; display: inline-flex; align-items: center; gap: var(--space-xs); font-weight: 550; letter-spacing: -.005em; }
 .tree-lang-badge { display: inline-flex; align-items: center; padding: 1px 6px; border-radius: var(--radius-xs); background: var(--color-surface-muted); color: var(--color-ink-faint); font: 600 var(--text-2xs) var(--font-mono); letter-spacing: .02em; }
-.tree-excluded { display: inline-flex; align-items: center; padding: 1px var(--space-xs); border-radius: var(--radius-pill); background: var(--color-warning-soft); color: var(--color-warning-text, var(--color-warning)); font-size: 11px; font-weight: 600; overflow-wrap: anywhere; }
+/* Was a filled amber pill on every excluded row. In a real tree most rows ARE
+   excluded — .git, .mimosa, .scannerwork, node_modules — so a column of
+   identical warning-toned badges was the loudest thing in the panel while
+   describing the expected state. This is metadata, not an alarm: a quiet
+   surface pill in faint ink, still naming the reason. */
+.tree-excluded { display: inline-flex; align-items: center; flex: none; padding: 0 6px; border-radius: var(--radius-pill); background: var(--color-surface-muted); color: var(--color-ink-faint); font-size: var(--text-2xs); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 12rem; }
 .tree-hit { padding: 0 4px; border-radius: var(--radius-pill); background: var(--color-accent-soft); color: var(--color-accent-strong); font-weight: 700; }
 .tree-children { margin-left: var(--space-md); border-left: 1px solid var(--color-rule-faint); padding-left: var(--space-md); margin-top: 2px; overflow: hidden; transition: height 200ms var(--ease-out); will-change: height; }
 .rule-editor-head { display: flex; align-items: flex-start; justify-content: space-between; }
@@ -648,7 +658,12 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .scan-flow li.current .flow-marker { border-color: var(--color-accent); background: var(--color-paper); }
 .scan-flow li.current .flow-marker::after { width: .5rem; height: .5rem; border: 2px solid var(--color-accent); border-top-color: transparent; border-radius: 50%; content: ''; animation: spin var(--dur-slow) linear infinite; }
 .scan-flow li.failed .flow-marker, .scan-flow li.interrupted .flow-marker { border-color: var(--color-danger); background: var(--color-danger-soft); }
-.workspace-root { display: inline-block; max-width: 100%; margin: var(--space-xs) 0 0; padding: var(--space-2xs) var(--space-sm); overflow: hidden; border: var(--rule) solid var(--color-rule); border-radius: var(--radius-button); background: var(--color-surface-muted); color: var(--color-ink-faint); font: 500 var(--text-xs) var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
+/* A read-only path, not a field. This carried a border and a filled background,
+   so on the files page the workspace root looked exactly like a text input you
+   could type into. It now only constrains the width of the copy control inside
+   it; the path, the full-path tooltip and the copy button all come from
+   PathCopy. */
+.workspace-root { display: inline-block; max-width: 100%; }
 .tree-loaded-count { margin: 0 0 var(--space-md); color: var(--color-ink-faint); font: 600 var(--text-xs) var(--font-mono); }
 .history-status { display: flex; align-items: center; gap: var(--space-2xs); min-width: 11rem; flex-wrap: wrap; }
 .profile-badge { padding: var(--space-3xs) var(--space-2xs); color: var(--color-ink-faint); font-size: var(--text-2xs); background: var(--color-surface-muted); }

@@ -284,11 +284,19 @@ describe('FilesPage save', () => {
 });
 
 describe('FilesPage tree helpers', () => {
-  it('shows the workspace root path and a loaded-path count', async () => {
+  it('shows the workspace root path once, with the full path reachable, and a loaded-path count', async () => {
     enqueueChild('src', [{ path: 'src/main.py', name: 'main.py', type: 'file', included: true }]);
     const host = await render();
-    expect(host.querySelector('.workspace-root')?.textContent).toContain('code');
-    expect(host.querySelector('.workspace-root')?.getAttribute('title')).toBeTruthy();
+    // The path is rendered once, by PathCopy, which also carries the full path
+    // in a title and the copy button. It used to be printed twice — once raw in
+    // a bordered box that read as an editable field, once by PathCopy.
+    const roots = host.querySelectorAll('.workspace-root');
+    expect(roots).toHaveLength(1);
+    const code = roots[0].querySelector('code');
+    expect(code).not.toBeNull();
+    // The truncated tail is shown; the full absolute path stays in the title.
+    expect(code!.getAttribute('title')).toBeTruthy();
+    expect(host.querySelector('.path-copy-button')).not.toBeNull();
     await act(async () => { toggle(host, 'Expand src')!.click(); await flush(); });
     expect(host.textContent).toContain('3 paths loaded'); // 2 top-level + 1 fetched child
     expect(host.textContent).toContain('Collapse all');
