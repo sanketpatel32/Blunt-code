@@ -394,7 +394,49 @@
 .page-header { padding-block: var(--space-md) 0; }
 
 
-/* ── 6 · Surfaces: make the layering legible ───────────────────────────
+/* ── 5 · Tables: the shared primitive every list in the app uses ──────
+   Column headers were 11px monospace at --color-ink-faint in caps - the last
+   strong template tell, and functionally weak: a table header you cannot read
+   is a table you have to decode. Body face at 12px in soft ink reads as a
+   label, which is what it is, and sits at a weight that survives on a busy
+   screen. The sort affordance is a real element, not a glyph artefact. */
+.table-wrap th,
+.page-search .search-results thead th {
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--color-ink-soft);
+  background: var(--color-surface-muted);
+}
+
+/* A sorted column is the one the eye should land on first. */
+.table-wrap th[aria-sort]:not([aria-sort='none']),
+.page-search .search-results th[aria-sort]:not([aria-sort='none']) { color: var(--color-ink); }
+
+.th-sort, .page-search .th-sort { font: inherit; color: inherit; letter-spacing: inherit; }
+
+/* ── 6 · Repeated row actions ────────────────────────────────────────
+   Ten identical filled "Scan" buttons down the workspaces table (and the
+   same pattern on tools and history) made the action column the heaviest
+   thing on the page and pushed the data right. The row keeps its one
+   control; it just stops shouting until you reach for it. */
+.table-wrap .row-action {
+  background: transparent;
+  border-color: transparent;
+  color: var(--color-ink-soft);
+  box-shadow: none;
+  font-weight: 600;
+}
+
+.table-wrap .row-action:hover:not(:disabled) {
+  background: var(--color-surface);
+  border-color: var(--color-rule);
+  color: var(--color-ink);
+}
+
+/* ── 7 · Surfaces: make the layering legible ───────────────────────────
    The page and its cards sat ~3% apart, which reads, but the cards were all
    the same weight. Elevation now means something: the page is the ground,
    a card is one plane up, and only floating things cast a shadow. */

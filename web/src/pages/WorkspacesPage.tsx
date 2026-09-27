@@ -303,7 +303,7 @@ function WorkspaceRow({ workspace, go, onScan, onRemove }: { workspace: Workspac
       {/* Buttons inside must not double-fire the row's open-on-click. */}
       <td className="ws-cell-actions" onClick={(event) => event.stopPropagation()}>
         <div className="table-actions ws-actions">
-          <Button variant="secondary" size="sm" title={`Run ${workspace.default_profile ?? 'standard'} scan`} onClick={(event) => { event.stopPropagation(); onScan(workspace, workspace.default_profile ?? 'standard'); }}>Scan</Button>
+          <Button className="row-action" variant="secondary" size="sm" title={`Run ${workspace.default_profile ?? 'standard'} scan`} onClick={(event) => { event.stopPropagation(); onScan(workspace, workspace.default_profile ?? 'standard'); }}>Scan</Button>
           <RowMenu items={menuItems} label={`Actions for ${workspace.name || 'workspace'}`} />
         </div>
       </td>

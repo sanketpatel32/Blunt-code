@@ -308,27 +308,35 @@
 .board-verdict-loading { grid-column: 1 / -1; }
 
 /* ── Two panels side by side ─────────────────────────────────────── */
-/* The rail took ~248px off the available width, so the old 1.55/1 split left
-   the activity panel at ~445px — too narrow for its own title, subtitle and
-   four filter chips on one row, and the title wrapped to two lines. The ledger
-   carries the denser data so it gets the larger share. */
+/* The two board panels were separate bordered cards with a gap, which read as
+   two widgets parked side by side. They answer two halves of one question - where
+   is the risk, what happened lately - so they are now ONE surface split by a
+   hairline. The gap is gone; a vertical rule carries the division, which is
+   quieter than two frames and makes the pair read as a single composed module. */
 .board-columns {
   display: grid;
   grid-template-columns: minmax(0, 1.85fr) minmax(0, 1fr);
-  gap: var(--space-lg);
   align-items: start;
+  border: var(--rule) solid var(--color-rule);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
 }
 
 .board-panel {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  border: var(--rule) solid var(--color-rule);
-  border-radius: var(--radius-card);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-xs);
+  background: none;
+  box-shadow: none;
+  border: none;
+  border-radius: 0;
   overflow: hidden;
 }
+
+/* The divider, not a gap. */
+.board-panel + .board-panel { border-left: var(--rule) solid var(--color-rule); }
 
 /* Was 73px for a title and a one-line subtitle. Both lines stay, but on one
    baseline group at md padding so the panel head costs ~48px — the two board
@@ -401,7 +409,9 @@
   grid-template-columns:
     1.625rem                    /* grade    */
     minmax(8rem, 1fr)            /* identity — a real floor, see below */
-    minmax(9rem, 15rem)          /* findings */
+    minmax(6rem, 8.5rem)         /* findings — was 15rem, which squeezed the
+                                     path column into "..\Clai…" and "Certifica…".
+                                     The bar is short; the space was not. */
     minmax(5.5rem, auto)         /* score + state */
     auto;                        /* actions  */
   grid-template-areas: "grade identity mid meta actions";
@@ -782,13 +792,19 @@
    dropped that the row cannot be understood without. */
 @media (max-width: 78rem) {
   .ledger-row {
-    grid-template-columns: 1.625rem minmax(7rem, 1fr) minmax(8rem, 12rem) minmax(5.5rem, auto) auto;
+    grid-template-columns: 1.625rem minmax(7rem, 1fr) minmax(6rem, 8.5rem) minmax(5.5rem, auto) auto;
     grid-template-areas: "grade identity mid meta actions";
   }
 }
 
 @media (max-width: 72rem) {
+  /* Stacked, the divider becomes a horizontal rule between the two halves. */
   .board-columns { grid-template-columns: minmax(0, 1fr); }
+
+  .board-panel + .board-panel {
+    border-left: none;
+    border-top: var(--rule) solid var(--color-rule);
+  }
 
   .feed-profile { display: inline-block; }
 }
