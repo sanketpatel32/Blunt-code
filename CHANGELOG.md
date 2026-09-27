@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-09-27
+
+### Fixed
+- **Loading a page no longer means staring at one word.** `<Loading/>` rendered the single string "Loading…" and nothing else, so the workspace, scan-report and pentest pages replaced their *entire* layout with a bare sentence while the request was in flight. On a cold start that is several seconds of a near-empty page, which reads as broken rather than busy — and the workspace overview is the second-most-visited screen in the app. It now paints the shape of the view that is coming (header, metric strip, table) so the page has structure while it waits and the content lands into a frame that already exists. Dialogs keep the one-line treatment through an explicit `inline` prop.
+- **The settings page no longer inverts its own hierarchy.** Section headings measured 38px against a 34px page title, so "General" and "Privacy" outranked "Settings". Sections are now a clear step below the title.
+- **Read-only settings stopped looking clickable.** Every value in the right-hand column was accent-blue and monospaced, so "Workspace managed", "Loading…" and "Disabled" all read as links and none of them were. Values are muted; a genuinely actionable value opts back in explicitly, and paths keep their mono via an explicit flag.
+- **Empty states read as deliberate.** The shared `Empty` panel stretched the full 1400px content width, so a three-line message sat inside a box the width of the screen and looked like a page that failed to load. It is now capped at 34rem and centred. This is the 404, and also every no-workspaces, no-results and no-tools state in the app.
+- **The pentest page runs one pentest.** The same operation was offered by two buttons in two colours with two different names — "Run Pentest Scan" in danger red in the page header and "Run Workspace Pentest" in accent blue in the suite section. The header keeps it as the view's single primary action; Target Config stays, because configuring is not the same thing as running. The now-dead `onRunPentest` prop is removed rather than left as a second way in.
+- **The workspace path is shown once.** The pentest header printed the raw path *and* `PathCopy` beside it, so the same folder appeared twice in two forms, both truncated — `PathCopy` already renders the path and its copy button.
+
+### Changed
+- **Settings stops stretching.** The list is capped at 64rem instead of pushing a label and its toggle 1200px apart with nothing between them.
+- Removed a duplicate `.loading` rule from `styles.css` while consolidating the loading styles.
+
+### Notes
+- Verified across both themes and at 700px / 820px / 1440px viewports.
+- Keyboard focus audited: every focusable paints a visible ring (2px, 3px on inputs); the skip link, nav, toolbar, and facet chips are all reachable in order.
+- Contrast audit: 17 checks, 0 failures. Web suite: 497 tests passing.
+
 ## [0.26.0] - 2026-09-27
 
 ### Changed
