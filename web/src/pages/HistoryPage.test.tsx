@@ -514,6 +514,20 @@ describe('HistoryPage', () => {
     expect(host.querySelector('.history-pagination')).toBeNull(); // filtered mode shows every match, no page controls
   });
 
+  it('reports the reader\'s position in the history, not just its size', async () => {
+    mockPages([Array.from({ length: 6 }, (_, i) => onAug29(`s${i}`))], 17);
+    const host = await renderPage();
+    // "17 scans" alone never reconciled with "Page 1 of 3" and six rows on
+    // screen - the reader had to do the subtraction. The range rides along.
+    expect(host.querySelector('.history-count')!.textContent).toBe('17 scans · 1–6');
+  });
+
+  it('omits the range when everything fits on one page - "1-6 of 6" is arithmetic with no payoff', async () => {
+    mockPages([Array.from({ length: 4 }, (_, i) => onAug29(`s${i}`))], 4);
+    const host = await renderPage();
+    expect(host.querySelector('.history-count')!.textContent).toBe('4 scans');
+  });
+
   it('clears the filter back to normal server paging', async () => {
     mockPages([[onAug29('a1'), offRange('x1', 10)]], 2);
     const host = await renderPage();

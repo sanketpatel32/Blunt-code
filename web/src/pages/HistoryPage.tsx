@@ -99,7 +99,22 @@ export function HistoryPage({ workspaceId, go }: { workspaceId: string; go: (r: 
   // scans"); without one, the workspace total. No badge, no repeated chips.
   const fullTotal = state.data?.total ?? state.data?.items?.length ?? 0;
   const filteredTotal = filtering ? (allPages.data?.items ?? []).filter((s) => scanMatchesDateRange(s, dateFilter.from, dateFilter.to)).length : fullTotal;
-  const countLine = !view.data ? '' : filtering && fullTotal !== filteredTotal ? `${count(filteredTotal)} of ${count(fullTotal)} scans` : `${count(filteredTotal)} ${filteredTotal === 1 ? 'scan' : 'scans'}`;
+  /* "17 scans" told the user the size of the history but nothing about where
+     they were standing in it — with six rows on screen and "Page 1 of 3" in the
+     footer, the two facts never reconciled, and the reader had to do the
+     subtraction. The position now rides along with the total, which is the same
+     information the workspaces table already showed and the same reason.
+
+     The range only appears when there is more than one page. On a single page
+     "1-6 of 6" is arithmetic with no payoff, and the footer already says
+     "Page 1 of 1". */
+  const pageCount = Math.max(1, Math.ceil(filteredTotal / historyPageSize));
+  const rangeLine = !view.data || pageCount < 2 ? '' : ` · ${count((page - 1) * historyPageSize + 1)}–${count(Math.min(page * historyPageSize, filteredTotal))}`;
+  const countLine = !view.data
+    ? ''
+    : (filtering && fullTotal !== filteredTotal
+      ? `${count(filteredTotal)} of ${count(fullTotal)} scans`
+      : `${count(filteredTotal)} ${filteredTotal === 1 ? 'scan' : 'scans'}`) + rangeLine;
   const gotoPage = (next: number) => { setPage(next); syncPageParam(next); };
   useEffect(() => {
     if (state.data && state.data.items.length === 0 && state.data.total > 0 && page > 1) { setPage(1); syncPageParam(1); }

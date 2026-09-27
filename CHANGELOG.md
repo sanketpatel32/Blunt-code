@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.36.0] - 2026-09-28
+
+### Fixed
+- **Six identical blue "Open report" links stopped shouting.** The history table repeated one action down an entire column, and every instance wore the accent. An action repeated once per row cannot also be the page's emphasis — by the sixth row it is furniture, and accent spent on furniture is accent spent on nothing. The links are quiet ink by default and lift to accent on hover, which is the same treatment the workspaces table got in v0.32.0.
+
+  Worth recording *why* it survived two versions: that pass caught `.row-action` and the history table uses `.text-button` for the same job. The fix was right, the sweep was incomplete. The new rule is scoped to `.table-actions` on purpose — a text-button that appears **once**, like the cancel in a comparison prompt, is a real one-off call to action and keeps its accent. Only the repeated column goes quiet.
+- **The history count told you the size but not your position.** `17 scans` sat at the top right while six rows were on screen and the footer said `Page 1 of 3` — two true numbers that never reconciled, leaving the reader to do the subtraction. The count now reads `17 scans · 1–6`, the same information the workspaces table already showed for the same reason. The range appears only when there is more than one page: on a single page `1–6 of 6` is arithmetic with no payoff, and the footer already says `Page 1 of 1`.
+
+### Notes
+- Both fixes were found by reading the rendered page top to bottom, not from the source. Neither would be visible in a diff.
+- The net effect on that page is that the data now carries the colour. `61 high · 214 medium · 217 low` was always the most useful thing in the row, and until the action links went quiet the eye had to get past six blue links to reach it.
+- Two new tests: the range appears when paginated, and is correctly absent when not. 505 tests passing.
+
 ## [0.35.0] - 2026-09-28
 
 ### Changed

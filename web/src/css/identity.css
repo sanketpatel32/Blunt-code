@@ -757,6 +757,29 @@ input[type='checkbox']::after {
   color: var(--color-ink);
 }
 
+/* The history table has the same problem under a different class name: six
+   identical accent-blue "Open report" links down one column. The v0.32 pass
+   caught `.row-action` and missed `.text-button`, so this one went uncaught for
+   two versions.
+
+   The fix is the same and the reasoning is the same — an action repeated once
+   per row cannot also be the page's emphasis, because by the sixth row it is
+   furniture. Accent is spent where it means "this one", and in a list of
+   identical rows that is nowhere.
+
+   Scoped to .table-actions on purpose. A text-button that appears ONCE — the
+   cancel in a comparison prompt — is a real one-off call to action and keeps
+   its accent. Only the repeated column goes quiet. */
+.table-wrap .table-actions .text-button {
+  color: var(--color-ink-soft);
+  font-weight: 600;
+}
+
+.table-wrap .table-actions .text-button:hover {
+  color: var(--color-accent-strong);
+  background: var(--color-accent-soft);
+}
+
 /* ── 13 · Surfaces: make the layering legible ───────────────────────────
    The page and its cards sat ~3% apart, which reads, but the cards were all
    the same weight. Elevation now means something: the page is the ground,
