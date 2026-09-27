@@ -642,39 +642,45 @@ describe('HomePage workspace paths and languages', () => {
     Reflect.deleteProperty(window.navigator, 'clipboard');
   });
 
-  it('renders one colored-dot badge per detected language', async () => {
+  it('summarises detected languages on the path line and keeps the full list reachable', async () => {
+    // The languages used to be three bordered chips in a column of their own,
+    // which was the widest thing in the row and pushed the workspace name into
+    // ellipsis. They are quiet text on the path line now — capped for width,
+    // with the complete set still reachable on hover.
     const host = await render(homeFetchMock(
       { scans: [], total: 0, summary },
       { items: [workspaceItem({ name: 'Polyglot', root_path: 'C:\\code\\poly', languages: ['python', 'dockerfile', 'exoticlang'] })] },
     ));
-    const badges = [...host.querySelectorAll('.ledger-identity .badges li')];
-    expect(badges.map((badge) => badge.textContent)).toEqual(['Python', 'Dockerfile', 'exoticlang']);
-    const dots = [...host.querySelectorAll('.ledger-identity .badges .lang-dot')] as HTMLElement[];
-    expect(dots).toHaveLength(3);
-    expect(dots[0].style.background).toBe('rgb(53, 114, 165)'); // python #3572A5
-    expect(dots[2].style.background).not.toContain('#'); // unknown language falls back to the accent token
+    const langs = host.querySelector('.ledger-languages')!;
+    expect(langs.textContent).toBe('Python, Dockerfile +1');
+    expect(langs.getAttribute('title')).toBe('Detected languages: Python, Dockerfile, exoticlang');
+    // Human-readable names, raw ids only for languages the catalog does not know.
+    expect(langs.getAttribute('title')).not.toContain('python');
   });
 
-  it('caps ledger language chips at three plus an overflow count', async () => {
+  it('caps the language summary at two plus an overflow count', async () => {
     const many = ['python', 'typescript', 'go', 'rust', 'ruby', 'haskell', 'lua'];
     const host = await render(homeFetchMock(
       { scans: [], total: 0, summary },
       { items: [workspaceItem({ name: 'Polyglot', root_path: 'C:\\code\\poly', languages: many })] },
     ));
-    const badges = [...host.querySelectorAll('.ledger-identity .badges li')];
-    expect(badges.map((badge) => badge.textContent)).toEqual(['Python', 'TypeScript', 'Go', '+4']);
-    const overflow = badges[3] as HTMLElement;
-    expect(overflow.title).toContain('Also detected: Rust, Ruby, Haskell, Lua');
+    const langs = host.querySelector('.ledger-languages')!;
+    expect(langs.textContent).toBe('Python, TypeScript +5');
+    expect(langs.getAttribute('title')).toBe('Detected languages: Python, TypeScript, Go, Rust, Ruby, Haskell, Lua');
   });
 
-  it('tones completed_with_warnings as a warning and labels it in sentence case', async () => {
+  it('tones completed_with_warnings as a warning, abbreviated for the row, with the full label still announced', async () => {
     const warned = workspaceItem({
       name: 'Warned',
       latest_scan: latestScan({ state: 'completed_with_warnings', total_findings: 5, critical_count: 0, high_count: 0, medium_count: 2, low_count: 3 }),
     });
     const host = await render(homeFetchMock({ scans: [], total: 0, summary }, { items: [warned] }));
-    const badge = host.querySelector('.ledger-last > div');
-    expect(badge?.textContent).toBe('Completed with warnings');
-    expect(badge?.className).toContain('text-[var(--color-warning-text)]');
+    const tag = host.querySelector('.ledger-last .state-tag')!;
+    // The long form was the widest string in the ledger and repeated down every
+    // row, so the row shows a short word — but the warning tone, the tooltip
+    // and the screen-reader text all still carry the full meaning.
+    expect(tag.className).toContain('state-warning');
+    expect(tag.getAttribute('title')).toBe('Completed with warnings');
+    expect(tag.textContent).toBe('WarningsCompleted with warnings');
   });
 });

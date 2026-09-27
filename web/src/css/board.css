@@ -355,18 +355,25 @@
 
 .board-empty-filter p { margin: 0; font-size: var(--text-sm); color: var(--color-ink-soft); }
 
-/* ── Ledger: ranked workspace rows ───────────────────────────────── */
+/* ── Ledger: ranked workspace rows ─────────────────────────────────
+   Was a two-row grid ("grade identity identity actions" / "grade mid meta
+   actions") where identity ran three lines tall and mid/meta were centre-
+   aligned inside it. Every row came out as a five-line staircase - name, path,
+   chips, then a floating score, then a badge on a sixth offset - about 190px
+   to carry eight facts. This is one row of 2-line cells sharing a baseline, so
+   a workspace reads as a single scannable line. */
 .ledger-list { margin: 0; padding: 0; list-style: none; }
 
 .ledger-row {
   display: grid;
-  /* Two-line rows: the identity block needs the panel's full middle width or language chips
-     collapse one-per-line; the bar and score share the second line. */
-  grid-template-columns: 2.1rem minmax(0, 1fr) minmax(8.5rem, auto) auto;
-  grid-template-areas:
-    "grade identity identity actions"
-    "grade mid      meta     actions";
-  gap: var(--space-2xs) var(--space-md);
+  grid-template-columns:
+    1.625rem                    /* grade    */
+    minmax(8rem, 1fr)            /* identity — a real floor, see below */
+    minmax(9rem, 15rem)          /* findings */
+    minmax(5.5rem, auto)         /* score + state */
+    auto;                        /* actions  */
+  grid-template-areas: "grade identity mid meta actions";
+  gap: var(--space-sm) var(--space-md);
   align-items: center;
   padding: var(--space-sm) var(--space-lg);
   border-bottom: var(--rule) solid var(--color-rule-faint);
@@ -383,18 +390,18 @@
   grid-area: grade;
   display: grid;
   place-items: center;
-  width: 2.1rem;
-  height: 2.1rem;
+  width: 1.625rem;
+  height: 1.625rem;
   border-radius: var(--radius-xs);
   border: var(--rule) solid var(--grade-edge);
   background: var(--grade-bg);
   color: var(--grade-ink);
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: var(--text-md);
+  font-size: var(--text-sm);
 }
 
-.ledger-identity { grid-area: identity; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ledger-identity { grid-area: identity; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 
 .ledger-name {
   padding: 0;
@@ -416,17 +423,41 @@
   border-radius: var(--radius-xs);
 }
 
+/* Second line: the path, then the detected languages as quiet text. Keeping
+   them here rather than in a column of chips costs no width, and the path row
+   was already the row's second line. */
+.ledger-sub {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+  font-size: var(--text-2xs);
+  color: var(--color-ink-faint);
+}
+
 .ledger-identity .path-copy code { font-size: 10px; }
 
-.ledger-identity .badges { margin-top: 1px; }
+.ledger-languages {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-ink-faint);
+}
 
-.ledger-mid { grid-area: mid; display: flex; flex-direction: row; align-items: center; gap: var(--space-2xs); min-width: 0; }
+.ledger-languages::before { content: '·'; margin-right: var(--space-xs); color: var(--color-ink-ghost); }
 
-.ledger-mid .ledger-bar { flex: 1; }
+.ledger-lang-more { color: var(--color-ink-ghost); }
 
-.ledger-bar { height: .5rem; background: var(--color-surface-muted); border-radius: var(--radius-button); }
+.ledger-mid { grid-area: mid; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 
-.ledger-count { font-size: var(--text-2xs); font-weight: 600; color: var(--color-ink-soft); }
+.ledger-mid .ledger-bar { width: 100%; }
+
+.ledger-mid-meta { display: flex; align-items: center; gap: var(--space-xs); min-width: 0; overflow: hidden; }
+
+.ledger-bar { height: .375rem; background: var(--color-surface-muted); border-radius: var(--radius-button); overflow: hidden; }
+
+.ledger-count { font-size: var(--text-2xs); font-weight: 600; color: var(--color-ink-soft); white-space: nowrap; }
 
 /* Neutral ink on purpose: the row's grade tile owns the color, so the
    fixed/new trajectory never competes with it (green-next-to-red incoherence). */
@@ -444,22 +475,68 @@
 
 .ledger-never { font-size: var(--text-xs); color: var(--color-ink-faint); font-style: italic; }
 
-.ledger-meta { grid-area: meta; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+/* Score and scan state share one right-aligned column: the score is the number
+   you compare across rows, the state badge is the caveat on it. Side by side
+   with the date they fit one 2-line cell, where stacked they forced a third
+   line and a staircase against the taller identity cell. */
+.ledger-meta {
+  grid-area: meta;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  min-width: 0;
+}
 
 /* Row risk score: semibold body size — the board's hero count outranks it. */
-.ledger-score { font-family: var(--font-display); font-weight: 700; font-size: var(--text-md); color: var(--color-ink); }
+.ledger-score { font-family: var(--font-display); font-weight: 700; font-size: var(--text-md); color: var(--color-ink); white-space: nowrap; }
 
 .ledger-score small { font: 500 var(--text-2xs) var(--font-body); color: var(--color-ink-faint); margin-left: 2px; }
 
 .ledger-score-none { color: var(--color-ink-ghost); font-weight: 500; }
 
-.ledger-last { display: inline-flex; align-items: center; gap: 5px 8px; flex-wrap: wrap; }
+/* The state badge repeated in full ("Completed with warnings") down every row
+   was the loudest thing in the ledger. StateTag reduces it to a coloured dot
+   plus a short word, so a column of them reads as metadata. */
+.ledger-last { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
 
-.ledger-languages { margin-top: 2px; }
+.state-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  color: var(--color-ink-soft);
+  white-space: nowrap;
+}
 
-.ledger-lang-more { background: var(--color-surface-muted); color: var(--color-ink-faint); font-weight: 600; }
+.state-tag > i {
+  width: .4rem;
+  height: .4rem;
+  flex: none;
+  border-radius: 50%;
+  background: currentColor;
+}
 
-.ledger-last small { font-size: var(--text-2xs); color: var(--color-ink-faint); }
+.state-tag.state-success { color: var(--color-success-text); }
+.state-tag.state-warning { color: var(--color-warning-text); }
+.state-tag.state-danger { color: var(--color-danger-text); }
+.state-tag.state-accent { color: var(--color-accent-strong); }
+.state-tag.state-outline { color: var(--color-ink-ghost); }
+
+.ledger-last small { font-size: var(--text-2xs); color: var(--color-ink-faint); white-space: nowrap; }
+
+/* The "latest scan was cancelled" honesty note. It is a third line in the
+   identity cell by design — it only appears on rows whose newest run did not
+   finish — but it is capped and ellipsised so it can never stretch the row. */
+.ledger-fallback-note {
+  font-size: var(--text-2xs);
+  color: var(--color-ink-faint);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .ledger-actions { grid-area: actions; display: inline-flex; align-items: center; gap: var(--space-2xs); }
 
@@ -544,7 +621,29 @@
 
 .feed-detail:hover { background: var(--color-surface-muted); }
 
-.feed-state { font: 600 var(--text-2xs) var(--font-mono); letter-spacing: .02em; white-space: nowrap; max-width: 11rem; overflow: hidden; text-overflow: ellipsis; }
+/* The feed state was set in IBM Plex Mono, which made a status word read like
+   a line of terminal output next to the rest of the UI's body type. Body font,
+   plus a leading dot so the variant's colour is carried by a shape rather than
+   by tinting a long string of text. */
+.feed-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font: 600 var(--text-2xs) var(--font-body);
+  white-space: nowrap;
+  max-width: 11rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.feed-state::before {
+  content: '';
+  width: .4rem;
+  height: .4rem;
+  flex: none;
+  border-radius: 50%;
+  background: currentColor;
+}
 
 .feed-state.success { color: var(--color-success-text); }
 .feed-state.warning { color: var(--color-warning-text); }
@@ -613,11 +712,34 @@
 
 .board-foot-more { font: 500 10px var(--font-mono); color: var(--color-ink-faint); }
 
-/* ── Responsive ──────────────────────────────────────────────────── */
+/* ── Responsive ────────────────────────────────────────────────────
+   The row sheds columns in reverse order of importance: language chips go
+   first (they are a nice-to-have summary, and the full list stays in the
+   overflow tooltip), then the findings bar, then the state badge. Nothing is
+   dropped that the row cannot be understood without. */
+@media (max-width: 78rem) {
+  .ledger-row {
+    grid-template-columns: 1.625rem minmax(7rem, 1fr) minmax(8rem, 12rem) minmax(5.5rem, auto) auto;
+    grid-template-areas: "grade identity mid meta actions";
+  }
+}
+
 @media (max-width: 72rem) {
   .board-columns { grid-template-columns: minmax(0, 1fr); }
 
   .feed-profile { display: inline-block; }
+}
+
+@media (max-width: 60rem) {
+  .ledger-row {
+    grid-template-columns: 1.625rem minmax(0, 1fr) auto;
+    grid-template-areas:
+      "grade identity actions"
+      "grade mid      actions";
+  }
+
+  .ledger-meta { grid-area: identity; justify-self: end; align-items: flex-end; }
+  .ledger-meta .ledger-last { display: none; }
 }
 
 @media (max-width: 48rem) {
@@ -626,13 +748,15 @@
   .verdict-rail { gap: var(--space-xs) var(--space-lg); }
 
   .ledger-row {
-    grid-template-columns: 2.1rem minmax(0, 1fr);
+    grid-template-columns: 1.625rem minmax(0, 1fr);
     grid-template-areas:
       "grade identity"
       "grade mid"
-      "grade meta"
       "grade actions";
+    row-gap: var(--space-xs);
   }
+
+  .ledger-meta { grid-area: identity; justify-self: start; }
 
   .ledger-actions { justify-self: start; }
 

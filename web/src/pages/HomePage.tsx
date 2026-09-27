@@ -651,25 +651,43 @@ function SeverityDots({ scan }: { scan: RecentScanItem }) {
   );
 }
 
-/** Ledger rows cap language chips at three plus an overflow count; the full list stays available in the overflow tooltip. */
+/** Ledger rows summarise detected languages as quiet text on the path line.
+ *  They used to be three bordered chips (plus an overflow chip) in a column of
+ *  their own — ~400px of pills, the widest thing in the row, sitting above the
+ *  findings bar they were competing with. As plain text on the second line they
+ *  cost nothing, and the full list stays in the title. */
 function LedgerLanguages({ languages }: { languages?: string[] }) {
   if (!languages?.length) return <span className="muted">No languages detected</span>;
-  const shown = languages.slice(0, 3);
-  const rest = languages.slice(3);
+  const shown = languages.slice(0, 2);
+  const rest = languages.slice(2);
+  const all = languages.map((language) => languageNames[language] ?? language).join(', ');
   return (
-    <ul className="badges flex flex-wrap gap-1.5 ledger-languages" aria-label="Detected languages">
-      {shown.map((language) => (
-        <li key={language} className="badge">
-          <i className="lang-dot" aria-hidden="true" style={{ background: languageColor(language) }} />
-          {languageNames[language] ?? language}
-        </li>
-      ))}
-      {rest.length > 0 && (
-        <li className="badge ledger-lang-more" title={`Also detected: ${rest.map((language) => languageNames[language] ?? language).join(', ')}`}>
-          +{rest.length}
-        </li>
-      )}
-    </ul>
+    <span className="ledger-languages" title={`Detected languages: ${all}`}>
+      {shown.map((language) => languageNames[language] ?? language).join(', ')}
+      {rest.length > 0 && <span className="ledger-lang-more"> +{rest.length}</span>}
+    </span>
+  );
+}
+
+/** Short label for a scan state, used in the repeating per-row status slot.
+ *  "Completed with warnings" is the widest string in the ledger and it was
+ *  printed in full down every row, where it overtook the workspace name for
+ *  attention. The dot keeps the variant's colour, the short word keeps the
+ *  meaning, and the full label rides along in the title and the sr-only text
+ *  so nothing is actually dropped. */
+const SHORT_STATE: Record<string, string> = {
+  completed_with_warnings: 'Warnings',
+};
+
+/** A status dot plus a compact label. Colour carries the variant, so a column
+ *  of these reads as one quiet metadata strip instead of a stack of alarms. */
+function StateTag({ state }: { state: { label: string; variant: string } }) {
+  return (
+    <span className={`state-tag state-${state.variant}`} title={state.label}>
+      <i aria-hidden="true" />
+      <span aria-hidden="true">{SHORT_STATE[state.label.toLowerCase().replaceAll(' ', '_')] ?? state.label}</span>
+      <span className="sr-only">{state.label}</span>
+    </span>
   );
 }
 
@@ -767,8 +785,10 @@ function LedgerRow({
         >
           {workspace.name}
         </button>
-        <PathCopy path={workspace.root_path} />
-        <LedgerLanguages languages={workspace.languages} />
+        <span className="ledger-sub">
+          <PathCopy path={workspace.root_path} />
+          <LedgerLanguages languages={workspace.languages} />
+        </span>
         {superseded && current && scan && (
           <small
             className="muted ledger-fallback-note"
@@ -782,23 +802,33 @@ function LedgerRow({
       <div className="ledger-mid">
         {current ? (
           <>
+            {/* Bar on its own line, provenance underneath. They used to share
+                one flex row with the count and the trajectory chip, which
+                forced the whole cell wide enough for four inline items and
+                pushed the row to three ragged lines. */}
+            {/* Same sqrt scale as the board tally above: a workspace with 3
+                criticals out of 1358 findings would draw critical as a
+                2px sliver on a 330px track, so the row's one glance would say
+                "fine" about the exact rows a user opens this board to find. */}
             <span className="severity-stack ledger-bar" role="img" aria-label={`Findings by severity: ${breakdown}`} title={breakdown}>
               {present.map(([severity, count]) => (
-                <i key={severity} className={`seg-${severity}`} style={{ width: `${Math.round(((count ?? 0) * 1000) / Math.max(total, 1)) / 10}%` }} />
+                <i key={severity} className={`seg-${severity}`} style={{ flexGrow: Math.sqrt(count ?? 0) }} />
               ))}
             </span>
-            <span className="ledger-count tabular-nums">
-              {total} {total === 1 ? 'finding' : 'findings'}
-            </span>
-            <DeltaChip scan={current} />
-            {partialCoverage && coverage && (
-              <span
-                className="ledger-partial-badge"
-                title={`Partial analyzer coverage: ${coverage.succeeded}/${coverage.total} clean${coverage.failed > 0 ? `, ${coverage.failed} failed` : ''}${coverage.warned > 0 ? `, ${coverage.warned} degraded` : ''}`}
-              >
-                partial
+            <span className="ledger-mid-meta">
+              <span className="ledger-count tabular-nums">
+                {total} {total === 1 ? 'finding' : 'findings'}
               </span>
-            )}
+              <DeltaChip scan={current} />
+              {partialCoverage && coverage && (
+                <span
+                  className="ledger-partial-badge"
+                  title={`Partial analyzer coverage: ${coverage.succeeded}/${coverage.total} clean${coverage.failed > 0 ? `, ${coverage.failed} failed` : ''}${coverage.warned > 0 ? `, ${coverage.warned} degraded` : ''}`}
+                >
+                  partial
+                </span>
+              )}
+            </span>
           </>
         ) : (
           <span className="ledger-never">
@@ -818,7 +848,7 @@ function LedgerRow({
         <span className="ledger-last">
           {scan ? (
             <>
-              <Badge variant={state.variant} className="whitespace-nowrap">{state.label}</Badge>
+              <StateTag state={state} />
               <small title={scan.finished_at ? date(scan.finished_at) : undefined}>
                 {scan.finished_at ? relativeTime(scan.finished_at) : 'In progress'}
               </small>
