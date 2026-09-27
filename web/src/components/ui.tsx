@@ -76,15 +76,19 @@ export function Loading({ inline = false, rows = 6 }: { inline?: boolean; rows?:
   );
 }
 
-/** Shared empty-state panel. `icon` renders inside a circular medallion; `tone: 'positive'` switches the medallion to the success tokens (used for the all-clear scan state). */
+/** Shared empty-state panel. `icon` renders inside a circular medallion; `tone: 'positive'` switches the medallion to the success tokens (used for the all-clear scan state).
+ *
+ *  Width-capped and centred: this card used to stretch the full content width,
+ *  so a three-line message sat inside a 1400px box and read as a layout that
+ *  failed to load rather than a deliberate empty state. */
 export function Empty({ title, children, action, icon, tone = 'neutral' }: { title: string; children: ReactNode; action?: ReactNode; icon?: ReactNode; tone?: 'neutral' | 'positive' }) {
   return (
-    <Card className={`empty${tone === 'positive' ? ' positive' : ''} border-dashed bg-[var(--color-surface)] p-10 text-center`}>
+    <Card className={`empty${tone === 'positive' ? ' positive' : ''} border-dashed bg-[var(--color-surface)] p-8 text-center`}>
       <CardContent className="p-0 flex flex-col items-center">
         {icon && <span className={`empty-icon ${tone === 'positive' ? 'border-[color-mix(in_oklch,var(--color-success)_40%,var(--color-rule))] bg-[var(--color-success-soft)] text-[var(--color-success)]' : ''}`}>{icon}</span>}
-        <h2 className="font-display text-xl font-bold mt-2">{title}</h2>
-        <p className="mt-2 text-sm text-[var(--color-ink-soft)] max-w-prose">{children}</p>
-        {action && <div className="mt-6">{action}</div>}
+        <h2 className="font-display text-lg font-bold mt-2">{title}</h2>
+        <p className="mt-1.5 text-sm text-[var(--color-ink-soft)] max-w-[38rem]">{children}</p>
+        {action && <div className="mt-5">{action}</div>}
       </CardContent>
     </Card>
   );

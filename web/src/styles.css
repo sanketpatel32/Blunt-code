@@ -243,10 +243,14 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 /* ── Empty & error ─────────────────────────────────────────────── */
 .empty, .error-panel { padding: var(--space-3xl) var(--space-xl); border: var(--rule) solid var(--color-rule-faint); border-radius: var(--radius-xl); color: var(--color-ink-soft); text-align: center; background: var(--color-surface); box-shadow: var(--shadow-card); }
 .empty h2, .error-panel h2 { margin: 0 0 var(--space-xs); color: var(--color-ink); font-family: var(--font-display); font-size: var(--text-xl); font-weight: 600; }
+/* Empty states are centred and width-capped. A dashed panel stretched the full
+   1400px content width made a three-line message look like a half-loaded page;
+   at 34rem it reads as a deliberate, composed state. */
+.empty { max-width: 34rem; margin-inline: auto; }
 .empty p, .error-panel p { margin: 0 0 var(--space-md); line-height: 1.6; }
 .error-panel { border-color: var(--color-danger); background: var(--color-danger-soft); border-style: solid; }
-.empty-icon { position: relative; display: grid; place-items: center; width: 3.75rem; height: 3.75rem; margin: 0 auto var(--space-lg); border: var(--rule) solid var(--color-rule); border-radius: 50%; background: var(--color-surface-muted); color: var(--color-ink-soft); box-shadow: var(--shadow-xs); }
-.empty-icon svg { width: 1.5rem; height: 1.5rem; }
+.empty-icon { position: relative; display: grid; place-items: center; width: 3rem; height: 3rem; margin: 0 auto var(--space-md); border: var(--rule) solid var(--color-rule); border-radius: 50%; background: var(--color-surface-muted); color: var(--color-ink-soft); box-shadow: var(--shadow-xs); }
+.empty-icon svg { width: 1.25rem; height: 1.25rem; }
 .empty.positive .empty-icon { border-color: color-mix(in oklch, var(--color-success) 40%, var(--color-rule)); background: var(--color-success-soft); color: var(--color-success); }
 .empty-sparkle { position: absolute; color: inherit; }
 .empty-sparkle svg { width: .8rem; height: .8rem; }
