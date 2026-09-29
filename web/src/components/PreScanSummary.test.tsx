@@ -28,8 +28,8 @@ async function render(props: Parameters<typeof PreScanSummary>[0]) {
   return host;
 }
 
-afterEach(() => {
-  root?.unmount();
+afterEach(async () => {
+  await act(async () => { root?.unmount(); });
   document.body.replaceChildren();
 });
 
