@@ -152,4 +152,3 @@ func TestSweepStrayProcessesEmptyDir(t *testing.T) {
 		t.Fatalf("SweepStrayProcesses failed on empty string: %v", err)
 	}
 }
-

@@ -192,7 +192,6 @@ func (m Manager) Uninstall(ctx context.Context, id string) error {
 	return removePathRobust(toolDir)
 }
 
-
 func (m Manager) client() *http.Client {
 	if m.Client != nil {
 		return m.Client

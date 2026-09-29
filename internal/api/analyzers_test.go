@@ -41,15 +41,17 @@ func analyzersEndpointServer(t *testing.T, adapters ...analyzers.Analyzer) *Serv
 
 type stubCapabilityAnalyzer struct{ id string }
 
-func (a stubCapabilityAnalyzer) ID() string                    { return a.id }
-func (a stubCapabilityAnalyzer) DisplayName() string           { return "Stub " + a.id }
+func (a stubCapabilityAnalyzer) ID() string          { return a.id }
+func (a stubCapabilityAnalyzer) DisplayName() string { return "Stub " + a.id }
 func (a stubCapabilityAnalyzer) SupportedLanguages() []analyzers.Language {
 	return []analyzers.Language{analyzers.LanguagePython}
 }
 func (a stubCapabilityAnalyzer) Check(context.Context, analyzers.ToolEnvironment) analyzers.ToolStatus {
 	return analyzers.ToolStatus{Ready: true, Version: "9.9"}
 }
-func (a stubCapabilityAnalyzer) EnsureInstalled(context.Context, analyzers.ToolEnvironment) error { return nil }
+func (a stubCapabilityAnalyzer) EnsureInstalled(context.Context, analyzers.ToolEnvironment) error {
+	return nil
+}
 func (a stubCapabilityAnalyzer) Plan(context.Context, analyzers.ScanRequest) (analyzers.AnalyzerPlan, error) {
 	return analyzers.AnalyzerPlan{AnalyzerID: a.id}, nil
 }

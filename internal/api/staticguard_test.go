@@ -27,9 +27,9 @@ func TestStaticGuardBlocksNonLoopbackHosts(t *testing.T) {
 		t.Fatal("loopback request never reached the wrapped handler")
 	}
 	for header, want := range map[string]string{
-		"X-Content-Type-Options": "nosniff",
-		"X-Frame-Options":        "DENY",
-		"Referrer-Policy":        "no-referrer",
+		"X-Content-Type-Options":  "nosniff",
+		"X-Frame-Options":         "DENY",
+		"Referrer-Policy":         "no-referrer",
 		"Content-Security-Policy": "default-src 'self'; frame-ancestors 'none'",
 	} {
 		if got := rec.Header().Get(header); got != want {

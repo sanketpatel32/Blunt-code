@@ -33,8 +33,8 @@ type Service struct {
 func NewService(root string, manifest Manifest, offline bool) *Service {
 	return &Service{Manager: Manager{Root: root, Manifest: manifest}, offline: offline}
 }
-func (s *Service) Offline() bool         { s.mu.RLock(); defer s.mu.RUnlock(); return s.offline }
-func (s *Service) SetOffline(value bool) { s.mu.Lock(); s.offline = value; s.mu.Unlock() }
+func (s *Service) Offline() bool             { s.mu.RLock(); defer s.mu.RUnlock(); return s.offline }
+func (s *Service) SetOffline(value bool)     { s.mu.Lock(); s.offline = value; s.mu.Unlock() }
 func (s *Service) SetDataDir(dataDir string) { s.Manager.DataDir = dataDir }
 func (s *Service) DiskUsage(id string) int64 { return s.Manager.DiskUsage(id) }
 

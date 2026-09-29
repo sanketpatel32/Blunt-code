@@ -78,10 +78,10 @@ type scanDetail struct {
 // cannot erase a workspace's last good numbers.
 type workspaceView struct {
 	core.Workspace
-	Languages          []string               `json:"languages,omitempty"`
-	LatestScan         *scanDetail            `json:"latest_scan,omitempty"`
-	LatestScanCov      *database.ScanCoverage `json:"latest_scan_coverage,omitempty"`
-	LastCompletedScan  *scanDetail            `json:"last_completed_scan,omitempty"`
+	Languages         []string               `json:"languages,omitempty"`
+	LatestScan        *scanDetail            `json:"latest_scan,omitempty"`
+	LatestScanCov     *database.ScanCoverage `json:"latest_scan_coverage,omitempty"`
+	LastCompletedScan *scanDetail            `json:"last_completed_scan,omitempty"`
 }
 
 func New(db *database.DB, bus *events.Bus, scanService *scans.Service, toolService *tools.Service, paths config.Paths, version string, logger *slog.Logger) *Server {

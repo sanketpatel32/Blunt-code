@@ -22,7 +22,8 @@ import (
 //
 // 1: classification before 0.22.0.
 // 2: terraform extensions, license basenames, dependency inputs, skip
-//    reasons, and the generated-content smart-skip layer.
+//
+//	reasons, and the generated-content smart-skip layer.
 const PolicyVersion = 2
 
 // DefaultExcluded reports whether a path is excluded from scanning without

@@ -113,7 +113,7 @@ func TestInlineIgnoreWrongRuleKeepsSurvivingFinding(t *testing.T) {
 
 func TestInlineIgnoreBlankLineBreaksPreviousLine(t *testing.T) {
 	dir := t.TempDir()
-	path := writeFile(t, dir, "cfg.py", "# bluntcode:ignore\n\naws_key = \"AKIA" + "1234567890ABCDEF\"\n")
+	path := writeFile(t, dir, "cfg.py", "# bluntcode:ignore\n\naws_key = \"AKIA"+"1234567890ABCDEF\"\n")
 	plan := analyzers.AnalyzerPlan{AnalyzerID: ID, Metadata: map[string]any{planKeyFiles: []string{path}, planKeyRoot: dir}}
 	result, err := New().Run(context.Background(), plan, nil)
 	if err != nil {
@@ -139,8 +139,8 @@ func TestInlineIgnoreSuppressesOnlyTargetedFinding(t *testing.T) {
 	dir := t.TempDir()
 	path := writeFile(t, dir, "two.py",
 		"# bluntcode:ignore secrets.aws-access-key-id\n"+
-			"aws_key = \"AKIA" + "1234567890ABCDEF\"\n"+
-			"github_key = \"ghp_" + "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\"\n")
+			"aws_key = \"AKIA"+"1234567890ABCDEF\"\n"+
+			"github_key = \"ghp_"+"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\"\n")
 	plan := analyzers.AnalyzerPlan{AnalyzerID: ID, Metadata: map[string]any{planKeyFiles: []string{path}, planKeyRoot: dir}}
 	result, err := New().Run(context.Background(), plan, nil)
 	if err != nil {
@@ -163,13 +163,13 @@ func TestInlineIgnoreSuppressesOnlyTargetedFinding(t *testing.T) {
 // cannot smuggle the reported secret back into Stdout.
 func TestInlineIgnoreLeavesEnvelopeRedacted(t *testing.T) {
 	dir := t.TempDir()
-	path := writeFile(t, dir, "redact.py", "# bluntcode:ignore secrets.jwt\naws_key = \"AKIA" + "1234567890ABCDEF\"\n")
+	path := writeFile(t, dir, "redact.py", "# bluntcode:ignore secrets.jwt\naws_key = \"AKIA"+"1234567890ABCDEF\"\n")
 	plan := analyzers.AnalyzerPlan{AnalyzerID: ID, Metadata: map[string]any{planKeyFiles: []string{path}, planKeyRoot: dir}}
 	result, err := New().Run(context.Background(), plan, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stdout := string(result.Stdout); strings.Contains(stdout, "AKIA" + "1234567890ABCDEF") {
+	if stdout := string(result.Stdout); strings.Contains(stdout, "AKIA"+"1234567890ABCDEF") {
 		t.Fatalf("envelope leaks the full secret: %q", stdout)
 	}
 	findings, _, err := New().Normalize(context.Background(), result)

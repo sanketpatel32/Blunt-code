@@ -218,4 +218,3 @@ func runToolsUninstall(ctx context.Context, db *database.DB, svc *tools.Service,
 	fmt.Fprintf(stdout, "Successfully uninstalled %s.\n", updatedStatus.Name)
 	return 0
 }
-

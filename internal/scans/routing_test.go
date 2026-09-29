@@ -26,7 +26,9 @@ func (dependencyOnlyAnalyzer) SupportedLanguages() []analyzers.Language {
 func (dependencyOnlyAnalyzer) Check(context.Context, analyzers.ToolEnvironment) analyzers.ToolStatus {
 	return analyzers.ToolStatus{Ready: true, Version: "test"}
 }
-func (dependencyOnlyAnalyzer) EnsureInstalled(context.Context, analyzers.ToolEnvironment) error { return nil }
+func (dependencyOnlyAnalyzer) EnsureInstalled(context.Context, analyzers.ToolEnvironment) error {
+	return nil
+}
 func (dependencyOnlyAnalyzer) Plan(context.Context, analyzers.ScanRequest) (analyzers.AnalyzerPlan, error) {
 	return analyzers.AnalyzerPlan{AnalyzerID: "osv-dependencies", Version: "test"}, nil
 }

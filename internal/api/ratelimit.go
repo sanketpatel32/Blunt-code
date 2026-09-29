@@ -72,7 +72,9 @@ var apiMutationTokenBucket = newTokenBucket(rateLimitCapacity, rateLimitRefillPe
 
 // ResetRateLimiter restores a full bucket. It exists for tests so rate-limit
 // state never leaks between test cases that share the package-level bucket.
-func ResetRateLimiter() { apiMutationTokenBucket = newTokenBucket(rateLimitCapacity, rateLimitRefillPerMinute) }
+func ResetRateLimiter() {
+	apiMutationTokenBucket = newTokenBucket(rateLimitCapacity, rateLimitRefillPerMinute)
+}
 
 // rateLimitMiddleware rejects state-changing requests once the bucket is
 // empty, answering 429 with a Retry-After hint. Read-only methods are never

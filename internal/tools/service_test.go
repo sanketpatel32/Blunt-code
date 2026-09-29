@@ -374,4 +374,3 @@ func TestDiskUsageAndCanonicalToolID(t *testing.T) {
 		t.Fatalf("expected 0 disk usage for unconfigured manager, got %d", usage)
 	}
 }
-

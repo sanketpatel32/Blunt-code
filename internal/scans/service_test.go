@@ -1139,4 +1139,3 @@ func TestAutomaticScanRetentionPrune(t *testing.T) {
 		t.Fatalf("expected at most 2 scans retained per policy, got %d", len(scans))
 	}
 }
-

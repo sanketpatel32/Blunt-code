@@ -187,7 +187,7 @@ func TestGenericMatchPointsAtValue(t *testing.T) {
 	if want := strings.Index(input, "hV9k"); m.start != want {
 		t.Fatalf("match start = %d, want %d (the value, not the key)", m.start, want)
 	}
-	if m.secret != "hV9k" + "Lm2Qr7StZx" {
+	if m.secret != "hV9k"+"Lm2Qr7StZx" {
 		t.Fatalf("match secret = %q, want the assigned value", m.secret)
 	}
 	if m.key != "password" {

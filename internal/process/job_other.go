@@ -10,6 +10,6 @@ import "os"
 // here. The type exists so Run's supervision path stays single-shaped.
 type killOnCloseJob struct{}
 
-func newKillOnCloseJob() (*killOnCloseJob, error) { return &killOnCloseJob{}, nil }
+func newKillOnCloseJob() (*killOnCloseJob, error)  { return &killOnCloseJob{}, nil }
 func (j *killOnCloseJob) assign(*os.Process) error { return nil }
-func (j *killOnCloseJob) close()                    {}
+func (j *killOnCloseJob) close()                   {}

@@ -633,7 +633,9 @@ func (a *walkerAnalyzer) Check(context.Context, analyzers.ToolEnvironment) analy
 	defer a.mu.Unlock()
 	return analyzers.ToolStatus{Ready: true, Version: a.version}
 }
-func (a *walkerAnalyzer) EnsureInstalled(context.Context, analyzers.ToolEnvironment) error { return nil }
+func (a *walkerAnalyzer) EnsureInstalled(context.Context, analyzers.ToolEnvironment) error {
+	return nil
+}
 func (a *walkerAnalyzer) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.AnalyzerPlan, error) {
 	rels := make([]string, 0, len(req.Files))
 	for _, abs := range req.Files {
