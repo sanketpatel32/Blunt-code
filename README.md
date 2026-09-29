@@ -84,14 +84,14 @@ curl -fsSL -o "%TEMP%\install-bluntcode.cmd" https://github.com/sanketpatel32/Bl
 ```
 Installs to `%LOCALAPPDATA%\Programs\BluntCode`, verifies SHA-256, creates Start Menu shortcut, launches app. No admin.
 
-**Options** `install-latest.ps1 -Version 0.24.0 -Silent -DesktopShortcut -WhatIf -WaitForCloseSeconds 30`
+**Options** `install-latest.ps1 -Version 0.37.0 -Silent -DesktopShortcut -WhatIf -WaitForCloseSeconds 30`
 
 **Portable ZIP**
 
-1. Download `BluntCode-0.24.0-windows-amd64.zip` + `.sha256` from [Releases](https://github.com/sanketpatel32/Blunt-code/releases/latest)
+1. Download `BluntCode-0.37.0-windows-amd64.zip` + `.sha256` from [Releases](https://github.com/sanketpatel32/Blunt-code/releases/latest)
 2. Verify & run:
 ```powershell
-$pkg='.\BluntCode-0.24.0-windows-amd64.zip'
+$pkg='.\BluntCode-0.37.0-windows-amd64.zip'
 if((Get-FileHash $pkg -Algorithm SHA256).Hash -ne (Get-Content "$pkg.sha256").Split()[0]){throw 'checksum mismatch'}
 Expand-Archive $pkg -DestinationPath .\BluntCode -Force; .\BluntCode\BluntCode*\bluntcode.exe
 ```
@@ -128,7 +128,7 @@ Keyboard: `g h/w/t/s/a` navigate · `n` add workspace · `/` search · `?` help 
 | **Workspaces that scale** | Tag chips with `+N` overflow, debounced tag filter, sort by Name / Last scan / Findings, 51→2 queries at 50 workspaces |
 | **Reports you can use** | Sticky filter toolbar, severity-tinted row edges, removable chips, `page`/`page_size` toggles (25/50/100/200 rows), hostile-corpus HTML-escaped |
 | **CI-grade CLI** | Profiles, gates, baselines, watch mode — see [CLI](#-cli) |
-| **Tested** | 1,600+ automated tests (Go + web) |
+| **Tested** | 1,100+ automated tests (Go + web) |
 
 <details><summary><strong>What's new in 0.23.x</strong> — provenance, coverage-aware baselines, hardened exports</summary>
 
@@ -329,9 +329,8 @@ Installer auto-cleans Start Menu shortcut and refuses while app is running.
 ## 🤝 Contributing
 
 ```powershell
-go test ./...                # Go vet/build/tests
-cd web; npm test; npm run build
-.\scripts\package.ps1 -Version 0.24.0
+.\scripts\verify.ps1          # gofmt + vet + build + tests + web gates
+.\scripts\package.ps1 -Version 0.37.0
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) · [docs/architecture.md](docs/architecture.md) — shadcn tokens live in `web/src/tokens.css` (`--color-paper/ink/accent`, `--radius-*`, `--shadow-*`), components in `web/src/components/ui/*`.
