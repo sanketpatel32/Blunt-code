@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **The agent docs quote the version they ship with again.** The agent guide rides in seven copies (repo-root canon, the go:embed copy behind `bluntcode llm`, the static-embed pair behind `/llm.txt` and `/llms.txt`, and the Vite sources they are rebuilt from) and they had drifted to three different versions — an agent asking the binary for its own docs read `0.23.0` on a `0.37.0` build, with a release-ZIP name to match. All copies now say 0.37.0, and `cmd/bluntcode/agentdocs_test.go` holds the whole set to the canon: any version bump that misses a copy, CHANGELOG or `web/package.json` now fails `go test` instead of shipping.
+
 ## [0.37.0] - 2026-09-28
 
 ### Fixed

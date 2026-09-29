@@ -11,8 +11,9 @@ import (
 //go:embed llm.txt
 var llmText string
 
-// llms.txt is alias — embed same content via root file if present, else fallback to llmText
-// We embed llm.txt only; llms.txt at repo root is byte-identical by convention.
+// llm.txt is embedded here for `bluntcode llm`; the llms.txt flavor (shorter
+// intro, same body) is served from the static embed FS. Both mirror the
+// repo-root canon — agentdocs_test.go fails when any copy drifts.
 
 const agentUsage = "usage: bluntcode agent [--help] | bluntcode agent docs | bluntcode agent scan <path> [scan flags]"
 
