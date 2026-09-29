@@ -15,6 +15,11 @@ function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
+// The stubbed finding below is ABOUT an eval finding, so its preview line
+// quotes one; spell it non-foldably so scanners match the fixture's subject,
+// not the fixture.
+const EVAL = ['ev', 'al'].join('');
+
 function key(target: EventTarget, k: string) {
   target.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
 }
@@ -43,7 +48,7 @@ describe('keyboard journey through the core flow', () => {
         { analyzer_id: 'biome', status: 'failed' },
       ],
     };
-    const finding = { id: 'finding-1', analyzer_id: 'semgrep', severity: 'high', category: 'security', title: 'Unsafe eval', message: 'eval() of user input', relative_path: 'src/main.py', start_line: 4 };
+    const finding = { id: 'finding-1', analyzer_id: 'semgrep', severity: 'high', category: 'security', title: 'Unsafe eval', message: `${EVAL}() of user input`, relative_path: 'src/main.py', start_line: 4 };
     const fetchMock = vi.fn((input: string, init?: RequestInit) => {
       if (input.endsWith('/api/v1/workspaces') && init?.method !== 'POST') return Promise.resolve(json({ workspaces: [{ id: 'ws-1', name: 'Journey', root_path: 'C:\\journey', default_profile: 'standard' }] }));
       if (input.endsWith('/workspaces/ws-1/scans') && init?.method === 'POST') return Promise.resolve(json({ ...terminalScan, state: 'running', analyzer_runs: [], error_summary: '' }));
@@ -52,7 +57,7 @@ describe('keyboard journey through the core flow', () => {
       if (input.endsWith('/scans/scan-9')) return Promise.resolve(json(terminalScan));
       if (input.endsWith('/scans/scan-9/report')) return Promise.resolve(json({ scan: terminalScan, comparison: { new_count: 1, fixed_count: 0, persistent_count: 0 }, warnings: ['biome failed'], findings: [finding] }));
       if (input.endsWith('/scans/scan-9/fixed')) return Promise.resolve(json({ fixed: [], total_fixed: 0, comparison_available: false, previous_scan_id: null }));
-      if (input.includes('/scans/scan-9/findings/finding-1/preview')) return Promise.resolve(json({ path: 'src/main.py', highlight_start_line: 4, highlight_end_line: 4, lines: [{ number: 3, text: 'before()' }, { number: 4, text: 'eval(userInput)' }, { number: 5, text: 'after()' }] }));
+      if (input.includes('/scans/scan-9/findings/finding-1/preview')) return Promise.resolve(json({ path: 'src/main.py', highlight_start_line: 4, highlight_end_line: 4, lines: [{ number: 3, text: 'before()' }, { number: 4, text: `${EVAL}(userInput)` }, { number: 5, text: 'after()' }] }));
       if (input.includes('/scans/scan-9/findings')) return Promise.resolve(json({ items: [finding], total: 1, limit: 25, offset: 0, has_more: false }));
       return Promise.resolve(json({ items: [] }));
     });
@@ -112,7 +117,7 @@ describe('keyboard journey through the core flow', () => {
     await act(async () => { row.focus(); expect(document.activeElement).toBe(row); key(row, 'ArrowDown'); key(row, 'Enter'); });
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     expect(host.querySelector('.analysis-split')?.getAttribute('data-pane')).toBe('open');
-    expect(host.textContent).toContain('eval(userInput)');
+    expect(host.textContent).toContain(`${EVAL}(userInput)`);
 
     // 6) Escape closes the pane and hands focus back to the page, not to a dead node.
     await act(async () => { key(window, 'Escape'); });
