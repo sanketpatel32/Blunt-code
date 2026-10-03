@@ -20,6 +20,7 @@ import { FolderIcon, ScanIcon } from '../components/icons';
 import { Activity, ChevronRight, FolderOpen, FolderPlus } from 'lucide-react';
 
 import { SEVERITY_ORDER, trendPointsFromScans } from '../lib/chartData';
+import { isActiveScanState } from '../lib/scanEvents';
 import { GRADE_BANDS, bandFor, gradeDepth, riskGrade, riskScore, severityCountsOf } from '../lib/risk';
 
 const FEED_LIMIT = 10;
@@ -141,7 +142,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
 
   const feedRows = useMemo(() => {
     return scans.filter((scan) => {
-      if (feedFilter === 'running') return scan.state === 'running' || scan.state === 'queued';
+      if (feedFilter === 'running') return isActiveScanState(scan.state);
       if (feedFilter === 'completed') return scan.state === 'completed';
       if (feedFilter === 'warnings') return scan.state === 'completed_with_warnings' || scan.state === 'failed' || scan.state === 'cancelled' || scan.state === 'interrupted';
       return true;

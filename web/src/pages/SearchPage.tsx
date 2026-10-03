@@ -181,6 +181,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
 
   const debouncedQuery = useDebouncedValue(query, query ? SEARCH_DEBOUNCE_MS : 0);
   const workspacesList = useLoad(api.workspaces, []);
+  const analyzerInventory = useLoad(api.analyzers, []);
   const workspaceOptions = workspacesList.data ?? [];
 
   const params = useMemo(() => {
@@ -313,6 +314,24 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
     return counts;
   }, [items]);
 
+  /** Facet chips come from the served page itself (plus the active selection),
+   *  not a hand-maintained id list: a backend that grows a new analyzer gets
+   *  its chip the moment it returns a hit, and a list that forgot an analyzer
+   *  can no longer make it unfilterable. Counts stay page-local by design. */
+  const facetAnalyzers = useMemo(() => {
+    const present = new Set(Object.keys(analyzerPageCounts));
+    if (analyzer) present.add(analyzer);
+    return [...present].sort((a, b) => (analyzerPageCounts[b] ?? 0) - (analyzerPageCounts[a] ?? 0) || analyzerName(a).localeCompare(analyzerName(b)));
+  }, [analyzerPageCounts, analyzer]);
+  /** The advanced builder's option list: the curated bootstrap list plus the
+   *  backend's live capability inventory and anything the served page carries,
+   *  so a new analyzer is selectable before its first hit renders. */
+  const knownAnalyzers = useMemo(() => {
+    const ids = new Set<string>([...ANALYZERS]);
+    for (const item of analyzerInventory.data ?? []) ids.add(item.id);
+    for (const id of Object.keys(analyzerPageCounts)) ids.add(id);
+    return [...ids].sort((a, b) => analyzerName(a).localeCompare(analyzerName(b)));
+  }, [analyzerInventory.data, analyzerPageCounts]);
   // Rule+file grouping: defaults on when this page holds consecutive duplicates;
   // null means "follow the default" so a fresh result set re-decides.
   const [grouping, setGrouping] = useState<boolean | null>(null);
@@ -491,7 +510,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
           </button>
           {/* The active selection stays visible even at zero so the current filter
               is always legible. */}
-          {ANALYZERS.filter((id) => (analyzerPageCounts[id] ?? 0) > 0 || analyzer === id).map((id) => {
+          {facetAnalyzers.map((id) => {
             const meta = analyzerMeta(id);
             const count = analyzerPageCounts[id] ?? 0;
             return (
@@ -678,7 +697,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                 setAdvancedOpen(false);
               }}
               facetCounts={severityCounts ? { severity: severityCounts } : undefined}
-              analyzers={[...ANALYZERS]}
+              analyzers={knownAnalyzers}
             />
           </div>
         </SheetContent>

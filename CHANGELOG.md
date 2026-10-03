@@ -5,6 +5,41 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.39.1] - 2026-10-03
+
+### Fixed
+- Navigating between two running scans (a "View scan" toast, a workspace link)
+  carried the first scan's live events into the second scan's "Results so far"
+  totals, progress bar, and stage list until the new stream replayed — the live
+  state now resets the moment the scan id changes.
+- "Is anything running" checks (the close-app warning, the Home activity feed's
+  Running filter) matched a hand-picked subset of scan states and went quiet
+  through `preparing`/`discovering`/`normalizing`/`generating_report` — exactly
+  the minutes a big scan spends mid-flight. Both now treat every non-terminal
+  state as active (`isActiveScanState`).
+- The Suppressions panel's Export CSV stayed an enabled link pointing at a
+  revoked blob URL after the last suppression was restored; with nothing left
+  to export it is a disabled button again.
+- The report's bulk "Export selected CSV" quoted only the message column, so a
+  path or rule id containing a comma shifted every later column. It now builds
+  the file through the shared `toCsv` helper, which quotes any field that needs
+  it (and adds the BOM Excel needs).
+- Removing a workspace while one of its scans was mid-flight cascaded the scan
+  row out from under the running engine — its writes then landed against
+  deleted rows and the scan page polled a vanished scan. The delete is now a
+  409 `SCAN_IN_PROGRESS` until the scan is terminal, the same contract
+  `DELETE /scans/{id}` already had.
+- `PATCH /workspaces/{id}` accepted and stored any `default_profile` string,
+  which then failed every later one-click default scan with `INVALID_PROFILE`.
+  The boundary now validates the four profiles and resets an empty value to
+  `standard`, the same default `CreateWorkspace` applies.
+- The search page's analyzer facet was a hardcoded twelve-id list; chips now
+  derive from the analyzers actually present in the served results, and the
+  advanced query builder merges the backend's live analyzer inventory, so a
+  new analyzer becomes filterable the moment it returns a hit.
+- `DataTable` printed "Showing 1–0 of 0" above dead pager buttons for a
+  zero-total page; the pager now renders only when there is something to page.
+
 ## [0.39.0] - 2026-10-03
 
 The UI had a good palette and a good type ramp and still read as flat, because

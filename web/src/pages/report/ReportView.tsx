@@ -16,6 +16,7 @@ import { RowMenu } from '../../components/RowMenu';
 import { SkeletonTable } from '../../components/skeletons';
 import { SuppressFindingDialog } from '../../components/dialogs';
 import { downloadJiraCsv } from '../../components/JiraExport';
+import { toCsv } from '../../lib/csv';
 import { SourcePane } from './SourcePane';
 
 /**
@@ -671,9 +672,9 @@ function FindingsTable({ findings, sort, onSort, activeKey, onSelect, canSuppres
   const handleBulkExport = () => {
     const sel = findings.filter((finding, index) => selectedIds.has(findingKey(finding, index)));
     if (!sel.length) return;
-    const header = ['severity','rule_id','message','path','analyzer_id'].join(',');
-    const rows = sel.map((f) => [f.severity, f.rule_id ?? '', `"${(f.message ?? '').replace(/"/g, '""')}"`, f.relative_path ?? '', f.analyzer_id].join(',')).join('\n');
-    const blob = new Blob([header + '\n' + rows], { type: 'text/csv' });
+    const header = ['severity','rule_id','message','path','analyzer_id'];
+    const rows = sel.map((f) => [f.severity, f.rule_id ?? '', f.message ?? '', f.relative_path ?? '', f.analyzer_id]);
+    const blob = new Blob([toCsv(header, rows)], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = 'findings-selected.csv'; a.click(); URL.revokeObjectURL(url);
   };

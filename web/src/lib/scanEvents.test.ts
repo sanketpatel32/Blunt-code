@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyzerStatusLabels, eventCopy, latestAnalyzerCompletions, severityTotalsSoFar, stageLabels, type ScanEvent } from './scanEvents';
+import { analyzerStatusLabels, eventCopy, isActiveScanState, latestAnalyzerCompletions, severityTotalsSoFar, stageLabels, type ScanEvent } from './scanEvents';
 
 const completed = (analyzer_id: string, findings: number, severities?: Record<string, number>): ScanEvent =>
   ({ type: 'analyzer.completed', analyzer_id, findings, severities, at: 0 });
@@ -53,5 +53,27 @@ describe('copy tables', () => {
 
   it('labels analyzer run states for humans while the CSS class keeps the raw status', () => {
     expect(analyzerStatusLabels).toEqual({ succeeded: 'done', failed: 'failed', running: 'running', skipped: 'not needed' });
+  });
+});
+
+describe('isActiveScanState', () => {
+  it('counts every mid-lifecycle state as active, not just "running"', () => {
+    // The full progression a scan walks before it finishes; a hand-picked
+    // subset of these is exactly how the close dialog and the Running feed
+    // filter used to go quiet mid-scan.
+    for (const state of ['queued', 'preparing', 'installing_tools', 'discovering', 'running', 'normalizing', 'generating_report']) {
+      expect(isActiveScanState(state)).toBe(true);
+    }
+  });
+
+  it('counts exactly the terminal states as finished', () => {
+    for (const state of ['completed', 'completed_with_warnings', 'failed', 'cancelled', 'interrupted']) {
+      expect(isActiveScanState(state)).toBe(false);
+    }
+  });
+
+  it('treats an unknown state as active rather than silently finished', () => {
+    expect(isActiveScanState('archiving_artifacts')).toBe(true);
+    expect(isActiveScanState('')).toBe(true);
   });
 });

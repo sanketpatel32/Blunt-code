@@ -253,6 +253,36 @@ const liveFixture = (): Scan => ({
 const digits = (text: string | null | undefined) => (text ?? '').replace(/[^\d]/g, '');
 
 describe('ScanPage live results panel', () => {
+  it("clears the previous scan's live events when navigating to another scan", async () => {
+    const fetchMock = vi.fn((input: string) => {
+      if (input.endsWith('/scans/scan-1')) return Promise.resolve(json(liveFixture()));
+      if (input.endsWith('/scans/scan-2')) return Promise.resolve(json({ ...liveFixture(), id: 'scan-2' }));
+      return Promise.resolve(json({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('EventSource', DispatchingEventSource);
+    DispatchingEventSource.instances = [];
+    const host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+    const notify = vi.fn<(notice: Notice) => void>();
+    await act(async () => { root.render(<ScanPage id="scan-1" go={vi.fn<(route: Route) => void>()} notify={notify} />); });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => { replayHistory(DispatchingEventSource.instances[0]!); });
+    expect(digits(host.querySelector('.scan-metric-value')?.textContent)).toBe('10771'); // scan-1's replayed totals are live
+    // Same component instance, new id — the in-app jump between two running scans
+    // (a "View scan" toast, a workspace link) must not carry the old events over.
+    await act(async () => { root.render(<ScanPage id="scan-2" go={vi.fn<(route: Route) => void>()} notify={notify} />); });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(digits(host.querySelector('.scan-metric-value')?.textContent)).toBe('0'); // scan-1's totals must not bleed into scan-2's panels
+    expect([...host.querySelectorAll('.scan-flow li strong')].some((node) => node.textContent?.includes('biome finished'))).toBe(false);
+    // The new scan's own stream still lands once it replays.
+    const sourceB = DispatchingEventSource.instances.at(-1)!;
+    expect(sourceB.url).toContain('/scans/scan-2/events');
+    await act(async () => { replayHistory(sourceB); });
+    expect(digits(host.querySelector('.scan-metric-value')?.textContent)).toBe('10771');
+  });
+
   it('counts replayed history once even though both connections are replayed it', async () => {
     const { host } = await renderLiveScanPage(liveFixture());
     const [first, second] = DispatchingEventSource.instances;

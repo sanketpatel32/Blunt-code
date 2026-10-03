@@ -375,7 +375,9 @@ export function DataTable<T>({
         </TableBody>
       </Table>
 
-      {(page != null && pageCount != null) && (
+      {/* Nothing to page when the total is zero: the empty-state row already
+          said it, and "Showing 1–0 of 0" is arithmetic noise. */}
+      {(page != null && pageCount != null && (total ?? 0) > 0) && (
         <nav className="flex flex-wrap items-center justify-between gap-3 py-2 text-sm text-[var(--color-ink-soft)]" aria-label="Pagination">
           <span className="tabular-nums">
             {total != null

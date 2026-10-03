@@ -54,7 +54,11 @@ export function SuppressionsSection({ workspaceId, notify }: { workspaceId: stri
   const rows = suppressions.data;
   const blobUrlsSupported = typeof URL.createObjectURL === 'function' && typeof URL.revokeObjectURL === 'function';
   useEffect(() => {
-    if (!rows?.length || !blobUrlsSupported) return;
+    if (!blobUrlsSupported) return;
+    // An emptied list (the last suppression was restored) must also drop the
+    // stale export URL: the previous run's cleanup already revoked it, so the
+    // button would otherwise stay enabled pointing at a dead blob.
+    if (!rows?.length) { setCsvUrl(undefined); return; }
     const url = URL.createObjectURL(new Blob([suppressionsCsv(rows)], { type: 'text/csv;charset=utf-8' }));
     setCsvUrl(url);
     return () => {

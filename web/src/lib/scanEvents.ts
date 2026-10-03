@@ -12,6 +12,17 @@ export function isTerminalScanState(state: string) {
   return ['completed', 'completed_with_warnings', 'failed', 'cancelled', 'interrupted'].includes(state);
 }
 
+/** A scan still in flight: every lifecycle state that is not terminal. Screens
+ *  that ask "is anything running" must use this, not a hand-picked list — the
+ *  scan lifecycle passes through queued, preparing, installing_tools,
+ *  discovering, normalizing, and generating_report, and a list that names only
+ *  some of them goes quiet for minutes exactly when a scan is deepest in
+ *  discovery. Unknown/hostile states read as active: an unrecognized state is
+ *  not proof the scan finished. */
+export function isActiveScanState(state: string) {
+  return !isTerminalScanState(state);
+}
+
 export function liveHeadline(events: ScanEvent[], state: string) {
   const latest = events.at(-1);
   if (latest?.type === 'analyzer.started') return `${latest.name ?? latest.analyzer_id ?? 'Analyzer'} is checking your code`;

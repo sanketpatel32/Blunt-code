@@ -528,7 +528,20 @@ func (s *Server) updateWorkspace(w http.ResponseWriter, r *http.Request) {
 		current.Name = strings.TrimSpace(*input.Name)
 	}
 	if input.DefaultProfile != nil {
-		current.DefaultProfile = *input.DefaultProfile
+		// The stored default feeds the workspaces list's one-click Scan button
+		// and POST /workspaces/{id}/scans already validates the profile, so a
+		// bogus value must die at this boundary instead of persisting and
+		// failing every later default scan. Empty resets to the same default
+		// CreateWorkspace applies.
+		profile := *input.DefaultProfile
+		if profile == "" {
+			profile = "standard"
+		}
+		if !oneOf(profile, "quick", "standard", "deep", "pentest") {
+			fail(w, 400, "INVALID_PROFILE", "default_profile must be quick, standard, deep, or pentest.")
+			return
+		}
+		current.DefaultProfile = profile
 	}
 	if current.Name == "" {
 		fail(w, 400, "INVALID_WORKSPACE", "Name is required.")
@@ -546,6 +559,21 @@ func (s *Server) deleteWorkspace(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		fail(w, 404, "WORKSPACE_NOT_FOUND", "Workspace was not found.")
 		return
+	}
+	// Deleting mid-scan would cascade the scan row out from under a running
+	// engine: its writes would land against deleted rows and the scan page
+	// would poll a vanished scan. Same contract as DELETE /scans/{id} — cancel
+	// the scan first.
+	scans, err := s.db.Scans(r.Context(), workspace.ID)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not check active scans.")
+		return
+	}
+	for _, scan := range scans {
+		if !terminalScanState(scan.State) {
+			fail(w, 409, "SCAN_IN_PROGRESS", "A scan is still running on this workspace. Cancel it before removing the workspace.")
+			return
+		}
 	}
 	if err := s.db.DeleteWorkspace(r.Context(), workspace.ID); err != nil {
 		fail(w, 500, "DATABASE_ERROR", "Could not delete workspace.")

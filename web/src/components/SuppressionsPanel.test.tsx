@@ -68,6 +68,38 @@ afterEach(async () => {
 });
 
 describe('SuppressionsSection', () => {
+  it('drops the CSV export when the last suppression is restored', async () => {
+    // jsdom ships no blob URL support; the panel renders its export anchor from
+    // whatever the globals advertise, so the test supplies fakes.
+    const originalCreate = URL.createObjectURL;
+    const originalRevoke = URL.revokeObjectURL;
+    const revoked: string[] = [];
+    URL.createObjectURL = vi.fn(() => 'blob:support-1');
+    URL.revokeObjectURL = vi.fn((url: string) => { revoked.push(url); });
+    try {
+      const host = await render();
+      const before = host.querySelector('.suppressions-export')!;
+      expect(before.tagName).toBe('A'); // a loaded list exports through a live blob URL
+      // Restoring clears the list: the DELETE succeeds and the refetch is empty.
+      await fetchMock.withImplementation((input: string, init?: RequestInit) => {
+        if ((init?.method ?? 'GET') === 'DELETE') return Promise.resolve(new Response(null, { status: 204 }));
+        return Promise.resolve(json({ items: [] }));
+      }, async () => {
+        await click(host.querySelector<HTMLButtonElement>('[aria-label^="Restore"]')!);
+        await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+      });
+      // The revoked URL must not survive as a clickable dead link: with nothing
+      // left to export the control is a disabled button again.
+      const after = host.querySelector('.suppressions-export')!;
+      expect(after.tagName).toBe('BUTTON');
+      expect((after as HTMLButtonElement).disabled).toBe(true);
+      expect(revoked).toContain('blob:support-1');
+    } finally {
+      URL.createObjectURL = originalCreate;
+      URL.revokeObjectURL = originalRevoke;
+    }
+  });
+
   it('lists suppressions with a shortened fingerprint, the reason, and the created date', async () => {
     const host = await render();
     const rows = [...host.querySelectorAll('.suppression-row')];

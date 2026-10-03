@@ -3,6 +3,7 @@ import { api } from './api';
 import type { Workspace } from './types';
 import { href, parseRoute, type Route } from './lib/router';
 import { isTextEntryTarget, parseShortcut } from './lib/shortcuts';
+import { isActiveScanState } from './lib/scanEvents';
 import type { Notice } from './lib/notice';
 import { AppShell, AppFooter } from './components/AppShell';
 import { AppClosedScreen } from './components/AppClosedScreen';
@@ -105,7 +106,7 @@ export function App() {
     let cancelled = false;
     api.recentScans().then((recent) => {
       if (cancelled) return;
-      const active = (recent.scans ?? []).filter((scan) => scan.state === 'running' || scan.state === 'queued' || scan.state === 'pending');
+      const active = (recent.scans ?? []).filter((scan) => isActiveScanState(scan.state));
       setActiveScanWorkspaces([...new Set(active.map((scan) => scan.workspace_name).filter(Boolean))]);
     }).catch(() => { if (!cancelled) setActiveScanWorkspaces([]); });
     return () => { cancelled = true; };

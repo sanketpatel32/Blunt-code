@@ -34,6 +34,17 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
   // the live stream and its scanReload loop must stop instead of retrying forever.
   // useLoad errors are strings like "SCAN_NOT_FOUND: Scan was not found."
   const scanMissing = !!scan.error && scan.error.includes('NOT_FOUND');
+  // Navigating between scans reuses this component (the route switch has no
+  // remount key), so the previous scan's events, stream status, and retry
+  // count would otherwise keep feeding the new scan's live panels — its
+  // "Results so far" totals, its progress bar, its stage list — until the new
+  // stream's first replay replaces them. Clear them the moment the id changes.
+  useEffect(() => {
+    setEvents([]);
+    setStreamState('connecting');
+    setStreamAttempts(0);
+    eventSeq.current = 0;
+  }, [id]);
   useEffect(() => {
     if (scanMissing) return;
     if (scanState && isTerminalScanState(scanState)) {

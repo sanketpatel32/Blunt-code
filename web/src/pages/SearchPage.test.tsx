@@ -68,6 +68,26 @@ describe('SearchPage', () => {
     expect(host.querySelector('table caption')?.textContent).toBe('Global search results'); // Loop W6
   });
 
+  it('derives analyzer facet chips from the served results, not a fixed list', async () => {
+    const fetchMock = searchMock([
+      ['/api/v1/findings/search', {
+        items: [{ ...hit('f1', 'scan-9', 'high', 'sql-injection'), analyzer_id: 'codeql-scanner' }],
+        total: 1, page: 1, page_size: 25, has_next: false,
+      }],
+    ]);
+    const host = await renderPage(fetchMock);
+    // 'codeql-scanner' is in no curated list — the chip exists because the
+    // served page says the analyzer produced a hit, and it filters on click.
+    const fieldset = host.querySelector('fieldset[aria-label="Filter by analyzer"]')!;
+    const chip = [...fieldset.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.includes('codeql-scanner'));
+    expect(chip).toBeDefined();
+    expect(chip!.querySelector('.chip-count')?.textContent).toBe('1');
+    await act(async () => { chip!.click(); });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    const asked = fetchMock.mock.calls.map(([input]) => String(input));
+    expect(asked.some((url) => url.includes('analyzer=codeql-scanner'))).toBe(true);
+  });
+
   it('groups consecutive same rule+file results into one header with deduped occurrence lines', async () => {
     const secret = (id: string, line: number) => ({
       ...hit(id, 'scan-9', 'critical', 'aws-access-token'),
