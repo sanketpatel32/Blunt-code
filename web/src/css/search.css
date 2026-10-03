@@ -178,7 +178,7 @@
 
 .page-search .search-occurrence {
   display: inline-block;
-  padding: 1px 6px;
+  padding: 3px 6px;
   border: var(--rule) solid var(--color-rule-faint);
   border-radius: var(--radius-xs);
   background: var(--color-surface);

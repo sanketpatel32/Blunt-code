@@ -23,7 +23,8 @@ button { cursor: pointer; }
 button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: not-allowed; opacity: .48; }
 a { color: inherit; text-underline-offset: .2em; }
 a:active { color: var(--color-accent-strong); }
-code { color: var(--color-ink-soft); font: .82em/1.5 var(--font-mono); overflow-wrap: anywhere; }
+code { color: var(--color-ink-soft); font-family: var(--font-mono); font-size: max(.85em, 12px); line-height: 1.5; overflow-wrap: anywhere; }
+small { font-size: max(.85em, 12px); }
 /* Keep focus visible without changing a control's shape or elevation. */
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
 
@@ -348,7 +349,7 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .summary-grid.premium { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .summary-card { display: flex; flex-direction: column; gap: var(--space-2xs); padding: var(--space-lg); border-radius: var(--radius-card); background: var(--color-surface); border: var(--rule) solid var(--color-rule-faint); box-shadow: var(--shadow-card); transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out); }
 .summary-card strong { color: var(--color-ink); font-family: var(--font-display); font-size: clamp(1.75rem, 3vw, 2.25rem); font-variant-numeric: tabular-nums; font-weight: 700; letter-spacing: -.04em; line-height: 1; }
-.summary-card span { color: var(--color-ink-faint); font: 600 0.68rem var(--font-mono); letter-spacing: .06em; text-transform: uppercase; }
+.summary-card span { color: var(--color-ink-faint); font: 600 var(--text-2xs) var(--font-mono); letter-spacing: .06em; text-transform: uppercase; }
 .summary-card:hover{ border-color: color-mix(in oklch, var(--color-accent) 14%, transparent); background: color-mix(in oklch, var(--color-accent) 4%, var(--color-surface)); } .summary-card.high strong { color: var(--color-danger); }
 .summary-card.medium strong { color: var(--color-warning); }
 .premium-card { position: relative; gap: var(--space-xs); padding: var(--space-lg); overflow: hidden; animation: premium-fadeInUp 420ms var(--ease-out-quart) both; will-change: transform, opacity; }
@@ -613,7 +614,7 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .live-category-label { display: inline-flex; align-items: center; padding-left: var(--space-sm); border-left: 3px solid var(--color-accent); margin-left: calc(-1 * var(--space-sm)); color: var(--color-ink-soft); font: 700 var(--text-xs) var(--font-mono); letter-spacing: .06em; text-transform: uppercase; }
 .live-analyzers { display: flex; flex-wrap: wrap; gap: var(--space-2xs); margin: 0; padding: 0; list-style: none; }
 .live-analyzers li { display: inline-flex; align-items: center; gap: var(--space-2xs); }
-.pill-count { color: var(--color-ink-soft); font: 600 .68rem var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: .02em; white-space: nowrap; }
+.pill-count { color: var(--color-ink-soft); font: 600 var(--text-2xs) var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: .02em; white-space: nowrap; }
 .live-pill-enter { animation: scan-fadeInUp 320ms var(--ease-out-quart) both; }
 .category-dots { display: flex; gap: var(--space-xs); margin-top: var(--space-xs); }
 .category-dot { width: .5rem; height: .5rem; border-radius: 50%; display: inline-block; }
@@ -635,7 +636,7 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .table-wrap tbody tr.row-medium > td:first-child { box-shadow: var(--shadow-inset-medium); }
 .th-sort { display: inline-flex; align-items: center; gap: var(--space-3xs); padding: 0; border: 0; background: transparent; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; border-radius: var(--radius-xs); }
 .th-sort:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
-.th-sort .sort-arrow { color: var(--color-ink-faint); font-size: .7em; }
+.th-sort .sort-arrow { color: var(--color-ink-faint); font-size: var(--text-2xs); }
 .th-sort.active { color: var(--color-ink); background: var(--color-surface-muted); border-radius: var(--radius-xs); padding: 0 var(--space-2xs); }
 .th-sort.active .sort-arrow { color: var(--color-accent-strong); }
 .finding-summary strong { font-weight: 700; color: var(--color-ink); letter-spacing: -.01em; }

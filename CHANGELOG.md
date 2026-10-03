@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **A 12px reading floor for UI text.** The type scale shipped with an
+  11px step (`--text-2xs`), a global `code { .82em }`, bare `<small>` at the
+  browser's 0.8em, and 55 hand-written `text-[9|10|11px]`/`text-[0.65rem]`
+  utilities on top — measured live, the app rendered **103 elements below 12px
+  on Home, 252 on the CLI page, 113 on Pentest, 62 on Tools, 51 on Search**
+  (10px truncated paths, 10.7px line numbers, 9.1px sort arrows). The floor is
+  now enforced at the sources: `--text-2xs` is 12px, `code`/`small` use
+  `max(.85em, 12px)`, every sub-12 utility is gone, and the summary-card /
+  pill-count labels moved onto the token. After: **zero** sub-12px text on
+  every route at 1440 and 390 widths, no wrapping or truncation introduced
+  (before/after plates in `.playwright-cli/compare/`), all 16 rendered-loop
+  claims still PASS, 553/553 vitest, contrast audit PASS.
+- Hit targets under 24px fixed where people click most: the Pentest suite's
+  per-test enable checkboxes were 16px (now 20px inside a padded label), the
+  search column-picker checkboxes were 14px, the view-mode toggle 22px, and
+  the per-line occurrence links 23px.
+
 ### Fixed
 - The generated `sonar-project.properties` carried only the user's excludes,
   so SonarQube (`sonar.sources=.`) walked the entire workspace and read every

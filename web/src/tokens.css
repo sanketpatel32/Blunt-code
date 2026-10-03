@@ -129,7 +129,7 @@
 
   /* --text-micro was removed: it duplicated --text-2xs at the same 0.6875rem and
      had zero usages anywhere in src/. Use --text-2xs. */
-  --text-2xs: 0.6875rem;
+  --text-2xs: 0.75rem;
   --text-xs: 0.8125rem;
   --text-sm: 0.875rem;
   --text-md: 1rem;

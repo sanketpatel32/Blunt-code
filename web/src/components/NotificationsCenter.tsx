@@ -95,7 +95,7 @@ export function NotificationsCenter({ routeKey = '' }: { routeKey?: string }) {
         <Button variant="ghost" size="icon" className="nav-bell relative" aria-label={unread ? `Notifications, ${unread} unread` : 'Notifications'}>
           <Bell className="h-4 w-4" aria-hidden="true" />
           {unread > 0 && (
-            <span className="absolute -right-0.5 -top-0.5 flex h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-full bg-[var(--color-danger-strong)] px-1 text-[10px] font-bold leading-none text-[var(--color-on-accent)] ring-2 ring-[var(--color-surface-muted)]">
+            <span className="absolute -right-0.5 -top-0.5 flex h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-full bg-[var(--color-danger-strong)] px-1 text-xs font-bold leading-none text-[var(--color-on-accent)] ring-2 ring-[var(--color-surface-muted)]">
               {unread > 99 ? '99+' : unread}
             </span>
           )}
@@ -143,7 +143,7 @@ export function NotificationsCenter({ routeKey = '' }: { routeKey?: string }) {
             <div className="flex flex-col">
               {Array.from(grouped.entries()).map(([day, list]) => (
                 <div key={day}>
-                  <div className="sticky top-0 z-10 bg-[var(--color-surface-muted)] px-3 py-1 text-[10px] font-mono font-semibold uppercase tracking-widest text-[var(--color-ink-faint)] border-b border-[var(--color-rule-faint)]">{day}</div>
+                  <div className="sticky top-0 z-10 bg-[var(--color-surface-muted)] px-3 py-1 text-xs font-mono font-semibold uppercase tracking-widest text-[var(--color-ink-faint)] border-b border-[var(--color-rule-faint)]">{day}</div>
                   <ul className="flex flex-col" role="list" aria-label={day}>
                     {list.map((n) => (
                       <li
@@ -157,7 +157,7 @@ export function NotificationsCenter({ routeKey = '' }: { routeKey?: string }) {
                             {!n.read && <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-accent)]" aria-label="Unread" />}
                           </span>
                           {n.message && <span className="block text-xs leading-4 text-[var(--color-ink-soft)]">{n.message}</span>}
-                          <span className="mt-0.5 block text-[11px] text-[var(--color-ink-faint)]">{relativeTime(n.createdAt)}</span>
+                          <span className="mt-0.5 block text-xs text-[var(--color-ink-faint)]">{relativeTime(n.createdAt)}</span>
                         </span>
                         <span className="flex shrink-0 flex-col gap-1 self-start">
                           {!n.read && (

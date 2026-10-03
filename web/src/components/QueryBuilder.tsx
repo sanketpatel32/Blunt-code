@@ -209,17 +209,17 @@ export function QueryBuilder({ group, onChange, onApply, facetCounts, analyzers 
             );
           })}
         </div>
-        <p className="pl-6 pt-2 text-[10px] font-mono text-[var(--color-ink-faint)]">{group.rows.length} condition(s) grouped with {group.logic}</p>
+        <p className="pl-6 pt-2 text-xs font-mono text-[var(--color-ink-faint)]">{group.rows.length} condition(s) grouped with {group.logic}</p>
       </div>
 
       <div className="rounded-[var(--radius-lg)] border border-[var(--color-rule-faint)] bg-[var(--color-surface-muted)] p-3">
-        <p className="text-[10px] font-mono font-semibold uppercase tracking-widest text-[var(--color-ink-faint)]">Preview</p>
+        <p className="text-xs font-mono font-semibold uppercase tracking-widest text-[var(--color-ink-faint)]">Preview</p>
         <p className="mt-1 font-mono text-xs text-[var(--color-ink)] break-all" aria-live="polite">
           {preview}
         </p>
         {urlSearch ? (
           <div className="mt-2 flex flex-wrap gap-1.5" aria-label="URL preview">
-            <Badge variant="outline" className="font-mono text-[10px] max-w-full truncate">
+            <Badge variant="outline" className="font-mono text-xs max-w-full truncate">
               ?{urlSearch}
             </Badge>
           </div>

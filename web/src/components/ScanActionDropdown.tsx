@@ -114,21 +114,21 @@ export function ScanActionDropdown({
             <Play className="h-4 w-4 text-[var(--color-accent-strong)]" />
             <div className="flex flex-col">
               <span className="font-medium">Standard scan</span>
-              <span className="text-[11px] text-[var(--color-ink-faint)]">Recommended — full analyzers · a few minutes</span>
+              <span className="text-xs text-[var(--color-ink-faint)]">Recommended — full analyzers · a few minutes</span>
             </div>
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setPendingProfile('quick')} className="gap-2 cursor-pointer">
             <Zap className="h-4 w-4 text-[var(--color-warning)]" />
             <div className="flex flex-col">
               <span className="font-medium">Quick scan</span>
-              <span className="text-[11px] text-[var(--color-ink-faint)]">Lint and secret check · usually under a minute</span>
+              <span className="text-xs text-[var(--color-ink-faint)]">Lint and secret check · usually under a minute</span>
             </div>
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setPendingProfile('deep')} className="gap-2 cursor-pointer">
             <Layers className="h-4 w-4 text-[var(--color-accent)]" />
             <div className="flex flex-col">
               <span className="font-medium">Deep scan</span>
-              <span className="text-[11px] text-[var(--color-ink-faint)]">Every analyzer incl. dependencies and containers · can take 10+ minutes</span>
+              <span className="text-xs text-[var(--color-ink-faint)]">Every analyzer incl. dependencies and containers · can take 10+ minutes</span>
             </div>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
@@ -137,14 +137,14 @@ export function ScanActionDropdown({
             <ShieldAlert className="h-4 w-4" />
             <div className="flex flex-col">
               <span className="font-medium font-semibold">Run pentest scan</span>
-              <span className="text-[11px] text-[var(--color-ink-faint)]">OWASP Top 10 security checks</span>
+              <span className="text-xs text-[var(--color-ink-faint)]">OWASP Top 10 security checks</span>
             </div>
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => go({ page: 'pentest', id: workspaceId })} className="gap-2 cursor-pointer">
             <ShieldCheck className="h-4 w-4 text-[var(--color-accent)]" />
             <div className="flex flex-col">
               <span className="font-medium">Open pentest suite</span>
-              <span className="text-[11px] text-[var(--color-ink-faint)]">Interactive security tests &amp; live HTTP probing (DAST)</span>
+              <span className="text-xs text-[var(--color-ink-faint)]">Interactive security tests &amp; live HTTP probing (DAST)</span>
             </div>
           </DropdownMenuItem>
         </DropdownMenuContent>

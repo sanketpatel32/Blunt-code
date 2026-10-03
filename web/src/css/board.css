@@ -576,7 +576,7 @@
   color: var(--color-ink-faint);
 }
 
-.ledger-identity .path-copy code { font-size: 10px; }
+.ledger-identity .path-copy code { font-size: 12px; }
 
 .ledger-languages {
   min-width: 0;
@@ -831,7 +831,7 @@
   border-radius: var(--radius-pill);
   border: var(--rule) solid var(--color-rule);
   background: var(--color-surface-muted);
-  font: 500 10px var(--font-mono);
+  font: 500 12px var(--font-mono);
   color: var(--color-ink-faint);
   white-space: nowrap;
   max-width: 4.5rem;
@@ -874,7 +874,7 @@
   padding: 1px 8px;
   border-radius: var(--radius-pill);
   border: var(--rule) solid var(--color-rule-faint);
-  font: 500 10px var(--font-mono);
+  font: 500 12px var(--font-mono);
   letter-spacing: .02em;
 }
 
@@ -882,7 +882,7 @@
 
 .board-foot-chip.pending { background: var(--color-surface-muted); color: var(--color-ink-faint); }
 
-.board-foot-more { font: 500 10px var(--font-mono); color: var(--color-ink-faint); }
+.board-foot-more { font: 500 12px var(--font-mono); color: var(--color-ink-faint); }
 
 /* ── Responsive ────────────────────────────────────────────────────
    The row sheds columns in reverse order of importance: language chips go

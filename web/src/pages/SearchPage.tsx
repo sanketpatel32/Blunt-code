@@ -398,7 +398,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
         <div className="flex items-center justify-between">
           <p className="facet-title text-xs font-semibold uppercase tracking-wider text-[var(--color-ink-faint)]">Severity</p>
           {severities.size > 0 && (
-            <button type="button" onClick={() => setSeverities(new Set())} className="text-[11px] text-[var(--color-accent-strong)] hover:underline">
+            <button type="button" onClick={() => setSeverities(new Set())} className="text-xs text-[var(--color-accent-strong)] hover:underline">
               Reset
             </button>
           )}
@@ -451,7 +451,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                   </span>
                 )}
                 {severityCounts && (
-                  <Badge variant={isSelected ? 'outline' : 'secondary'} className="facet-count-slot text-[10px] tabular-nums px-1.5 py-0">
+                  <Badge variant={isSelected ? 'outline' : 'secondary'} className="facet-count-slot text-xs tabular-nums px-1.5 py-0">
                     {severityCounts[sev] ?? 0}
                   </Badge>
                 )}
@@ -499,7 +499,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
             Analyzer <span className="search-facet-hint">· this page</span>
           </p>
           {analyzer && (
-            <button type="button" onClick={() => setAnalyzer('')} className="text-[11px] text-[var(--color-accent-strong)] hover:underline">
+            <button type="button" onClick={() => setAnalyzer('')} className="text-xs text-[var(--color-accent-strong)] hover:underline">
               All
             </button>
           )}
@@ -538,7 +538,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
           {query.trim() && (
             <button
               type="button"
-              className="text-[11px] text-[var(--color-accent-strong)] hover:underline flex items-center gap-0.5"
+              className="text-xs text-[var(--color-accent-strong)] hover:underline flex items-center gap-0.5"
               onClick={() => saved.add(query)}
             >
               <Plus className="h-3 w-3" /> Save current
@@ -753,7 +753,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                   type="button"
                   onClick={() => setViewMode('table')}
                   aria-pressed={viewMode === 'table'}
-                  className={`p-1 rounded-[calc(var(--radius-button)-2px)] transition-colors ${
+                  className={`min-h-6 p-1.5 rounded-[calc(var(--radius-button)-2px)] transition-colors ${
                     viewMode === 'table' ? 'bg-[var(--color-surface)] text-[var(--color-ink)] shadow-xs' : 'text-[var(--color-ink-faint)] hover:text-[var(--color-ink)]'
                   }`}
                   title="Dense table view"
@@ -764,7 +764,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                   type="button"
                   onClick={() => setViewMode('cards')}
                   aria-pressed={viewMode === 'cards'}
-                  className={`p-1 rounded-[calc(var(--radius-button)-2px)] transition-colors ${
+                  className={`min-h-6 p-1.5 rounded-[calc(var(--radius-button)-2px)] transition-colors ${
                     viewMode === 'cards' ? 'bg-[var(--color-surface)] text-[var(--color-ink)] shadow-xs' : 'text-[var(--color-ink-faint)] hover:text-[var(--color-ink)]'
                   }`}
                   title="Card list view"
@@ -792,7 +792,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                               [key]: !v[key as keyof typeof visibleCols],
                             }))
                           }
-                          className="h-3.5 w-3.5 rounded border-[var(--color-rule-strong)] text-[var(--color-accent)]"
+                          className="h-5 w-5 rounded border-[var(--color-rule-strong)] text-[var(--color-accent)]"
                         />
                         <span>{label}</span>
                       </label>
@@ -859,7 +859,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                     <div className="flex items-start justify-between gap-3">
                       <div className="space-y-1.5 min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className={`severity ${finding.severity} text-[10px] uppercase font-mono px-2 py-0.5 rounded font-semibold`}>
+                          <span className={`severity ${finding.severity} text-xs uppercase font-mono px-2 py-0.5 rounded font-semibold`}>
                             {finding.severity}
                           </span>
                           <span className="tag">
@@ -877,7 +877,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                           <p className="text-xs text-[var(--color-ink-soft)] leading-relaxed line-clamp-2">{message}</p>
                         )}
                         {finding.remediation && (
-                          <p className="text-[11px] text-[var(--color-ink-soft)] bg-[var(--color-surface-muted)] p-2 rounded-[var(--radius-sm)] font-mono truncate">
+                          <p className="text-xs text-[var(--color-ink-soft)] bg-[var(--color-surface-muted)] p-2 rounded-[var(--radius-sm)] font-mono truncate">
                             <span className="font-semibold text-[var(--color-ink)]">Fix: </span>
                             {finding.remediation}
                           </p>
@@ -946,7 +946,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                           )}
                           {visibleCols.severity && (
                             <td className="search-cell-severity">
-                              <span className={`severity ${finding.severity} text-[10px] uppercase font-mono px-2 py-0.5 rounded font-semibold`}>
+                              <span className={`severity ${finding.severity} text-xs uppercase font-mono px-2 py-0.5 rounded font-semibold`}>
                                 {finding.severity}
                               </span>
                             </td>
@@ -1062,11 +1062,11 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
             <>
               <SheetHeader>
                 <div className="flex items-center gap-2">
-                  <span className={`severity ${selectedFinding.severity} text-[10px] uppercase font-mono px-2 py-0.5 rounded font-semibold`}>
+                  <span className={`severity ${selectedFinding.severity} text-xs uppercase font-mono px-2 py-0.5 rounded font-semibold`}>
                     {selectedFinding.severity}
                   </span>
                   {selectedFinding.rule_id && selectedFinding.rule_id !== findingDisplayTitle(selectedFinding) && (
-                    <Badge variant="outline" className="text-[10px] font-mono">
+                    <Badge variant="outline" className="text-xs font-mono">
                       {selectedFinding.rule_id}
                     </Badge>
                   )}

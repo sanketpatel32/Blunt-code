@@ -55,7 +55,7 @@ function FindingsLineArea({ data }: { data: TrendPoint[]; reduced: boolean }) {
           <circle key={i} cx={p.x} cy={p.y} r={3} fill="var(--color-accent)" stroke="var(--color-surface)" strokeWidth={1.2} />
         ))}
       </svg>
-      <div className="flex justify-between tabular-nums text-[0.68rem] font-mono text-[var(--color-ink-faint)]" aria-hidden="true">
+      <div className="flex justify-between tabular-nums text-xs font-mono text-[var(--color-ink-faint)]" aria-hidden="true">
         <span>{min}</span>
         <span>{max} {max === 1 ? 'finding' : 'findings'}</span>
       </div>
@@ -114,7 +114,7 @@ function SeverityDonut({ counts }: { counts: SeverityCounts; reduced: boolean })
             <i aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: SEVERITY_COLOR[sev], opacity: sev === 'high' ? 0.82 : 1 }} />
             <span className="min-w-[4.2rem] capitalize text-[var(--color-ink-soft)]">{sev}</span>
             <span className="font-mono font-semibold text-[var(--color-ink)]">{counts[sev] ?? 0}</span>
-            <span className="ml-auto inline-flex rounded-full border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-1.5 py-0.5 font-mono text-[0.68rem] leading-none text-[var(--color-ink-faint)]">{total ? `${Math.round(((counts[sev] ?? 0) * 1000) / total) / 10}%` : '0%'}</span>
+            <span className="ml-auto inline-flex rounded-full border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-1.5 py-0.5 font-mono text-xs leading-none text-[var(--color-ink-faint)]">{total ? `${Math.round(((counts[sev] ?? 0) * 1000) / total) / 10}%` : '0%'}</span>
           </li>
         ))}
       </ul>
@@ -158,7 +158,7 @@ export function AnalyticsCharts({ trends, severityCounts, languages }: Props) {
       <Card label="Findings over time" delay="0ms" reduced={reduced}>
         <header className="flex items-center justify-between gap-2">
           <h3 className="font-display text-sm font-semibold tracking-tight">Findings over time</h3>
-          <span className="rounded-full border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-2 py-0.5 font-mono text-[0.65rem] font-semibold uppercase tracking-widest text-[var(--color-ink-faint)]">sparklines per workspace</span>
+          <span className="rounded-full border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-2 py-0.5 font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-ink-faint)]">sparklines per workspace</span>
         </header>
         <FindingsLineArea data={lineData} reduced={reduced} />
         <p className="text-xs leading-relaxed text-[var(--color-ink-soft)]">Area shows total findings across recent scans.</p>
@@ -167,7 +167,7 @@ export function AnalyticsCharts({ trends, severityCounts, languages }: Props) {
       <Card label="Severity breakdown" delay="40ms" reduced={reduced}>
         <header className="flex items-center justify-between gap-2">
           <h3 className="font-display text-sm font-semibold tracking-tight">Severity</h3>
-          <span className="rounded-full bg-[var(--color-accent-soft)] px-2 py-0.5 font-mono text-[0.65rem] font-semibold uppercase tracking-widest text-[var(--color-accent-strong)]">donut</span>
+          <span className="rounded-full bg-[var(--color-accent-soft)] px-2 py-0.5 font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-accent-strong)]">donut</span>
         </header>
         <SeverityDonut counts={counts} reduced={reduced} />
       </Card>
@@ -175,7 +175,7 @@ export function AnalyticsCharts({ trends, severityCounts, languages }: Props) {
       <Card label="Language coverage" delay="80ms" reduced={reduced}>
         <header className="flex items-center justify-between gap-2">
           <h3 className="font-display text-sm font-semibold tracking-tight">Language coverage</h3>
-          <span className="rounded-full border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-2 py-0.5 font-mono text-[0.65rem] font-semibold uppercase tracking-widest text-[var(--color-ink-faint)]">files per language</span>
+          <span className="rounded-full border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-2 py-0.5 font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-ink-faint)]">files per language</span>
         </header>
         <LanguageBars items={langs} />
       </Card>

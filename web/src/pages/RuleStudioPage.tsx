@@ -338,8 +338,8 @@ export function RuleStudioPage() {
            different facts. */
         description="Create YAML rules, preview matched findings, and save locally."
         actions={
-          <span className="text-[11px] text-[var(--color-ink-soft)] font-mono hidden sm:inline-flex items-center gap-1">
-            <kbd className="px-1.5 py-0.5 bg-[var(--color-surface-muted)] border border-[var(--color-rule)] rounded-[var(--radius-xs)] text-[10px]">Ctrl+S</kbd> inside the editor saves
+          <span className="text-xs text-[var(--color-ink-soft)] font-mono hidden sm:inline-flex items-center gap-1">
+            <kbd className="px-1.5 py-0.5 bg-[var(--color-surface-muted)] border border-[var(--color-rule)] rounded-[var(--radius-xs)] text-xs">Ctrl+S</kbd> inside the editor saves
           </span>
         }
       />

@@ -372,7 +372,7 @@ function LanguageDistributionDonut({ names, coverage, workspaceId, go }: { names
       <section aria-label="Language distribution" className="workspace-section-card lang-donut-card">
         <div className="mb-3 flex items-center justify-between">
           <h3 className="font-display text-sm font-semibold tracking-tight">Language distribution</h3>
-          <span className="rounded-full border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-2 py-0.5 font-mono text-[0.65rem] font-semibold uppercase tracking-widest text-[var(--color-ink-faint)]">click to filter files</span>
+          <span className="rounded-full border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-2 py-0.5 font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-ink-faint)]">click to filter files</span>
         </div>
         <ul className="lang-pill-legend" aria-label="Languages, select to filter files">
           {names.map((language) => (
@@ -409,7 +409,7 @@ function LanguageDistributionDonut({ names, coverage, workspaceId, go }: { names
     <section aria-label="Language distribution" className="workspace-section-card lang-donut-card">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="font-display text-sm font-semibold tracking-tight">Language distribution</h3>
-        <span className="rounded-full border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-2 py-0.5 font-mono text-[0.65rem] font-semibold uppercase tracking-widest text-[var(--color-ink-faint)]">click to filter files</span>
+        <span className="rounded-full border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-2 py-0.5 font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-ink-faint)]">click to filter files</span>
       </div>
       <div className="flex flex-wrap items-center gap-6">
         <svg viewBox="0 0 120 120" width={180} height={180} role="img" aria-label={`Language distribution: ${coverage.map((l) => `${l.language} ${l.files}`).join(', ')}`} className="shrink-0">
@@ -555,17 +555,17 @@ function WorkspacePentestInsight({ workspaceId, scanId, go }: { workspaceId: str
         <div className="p-3 rounded-[var(--radius-md)] border border-[var(--color-rule-faint)] bg-[var(--color-surface)]">
           <span className="text-xs font-semibold text-[var(--color-danger)]">Critical Flaws</span>
           <p className="font-display text-2xl font-bold mt-1 text-[var(--color-danger)]">{critical}</p>
-          <span className="text-[11px] text-[var(--color-ink-faint)]">RCE, SQLi, Hardcoded JWT, XXE</span>
+          <span className="text-xs text-[var(--color-ink-faint)]">RCE, SQLi, Hardcoded JWT, XXE</span>
         </div>
         <div className="p-3 rounded-[var(--radius-md)] border border-[var(--color-rule-faint)] bg-[var(--color-surface)]">
           <span className="text-xs font-semibold text-[var(--color-warning)]">High Severity</span>
           <p className="font-display text-2xl font-bold mt-1 text-[var(--color-warning)]">{high}</p>
-          <span className="text-[11px] text-[var(--color-ink-faint)]">SSRF, XSS, Path Traversal, CORS</span>
+          <span className="text-xs text-[var(--color-ink-faint)]">SSRF, XSS, Path Traversal, CORS</span>
         </div>
         <div className="p-3 rounded-[var(--radius-md)] border border-[var(--color-rule-faint)] bg-[var(--color-surface)]">
           <span className="text-xs font-semibold text-[var(--color-ink-soft)]">Medium / Warnings</span>
           <p className="font-display text-2xl font-bold mt-1 text-[var(--color-ink)]">{medium}</p>
-          <span className="text-[11px] text-[var(--color-ink-faint)]">Weak Hashes, Missing Headers, Debug</span>
+          <span className="text-xs text-[var(--color-ink-faint)]">Weak Hashes, Missing Headers, Debug</span>
         </div>
       </div>
 
@@ -579,7 +579,7 @@ function WorkspacePentestInsight({ workspaceId, scanId, go }: { workspaceId: str
                   <span className="font-semibold text-[var(--color-ink)]">{f.relative_path}:{f.start_line}</span>
                   <span className="text-[var(--color-ink-soft)] ml-2">{f.message}</span>
                 </div>
-                <span className={`state ${f.severity} text-[10px] uppercase font-mono px-2 py-0.5 rounded`}>{f.severity}</span>
+                <span className={`state ${f.severity} text-xs uppercase font-mono px-2 py-0.5 rounded`}>{f.severity}</span>
               </div>
             ))}
           </div>

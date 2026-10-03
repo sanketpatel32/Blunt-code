@@ -108,7 +108,7 @@ export function CommentsPanel({ fingerprint, title }: { fingerprint: string; tit
                   <span className="min-w-0 flex-1">
                     <span className="flex flex-wrap items-baseline gap-1.5">
                       <strong className="text-xs font-semibold text-[var(--color-ink)]">{c.author}</strong>
-                      <span className="text-[11px] text-[var(--color-ink-faint)]">{relativeTime(c.createdAt)}</span>
+                      <span className="text-xs text-[var(--color-ink-faint)]">{relativeTime(c.createdAt)}</span>
                     </span>
                     <span className="mt-0.5 block whitespace-pre-wrap break-words text-sm leading-5 text-[var(--color-ink)]">{c.text}</span>
                   </span>

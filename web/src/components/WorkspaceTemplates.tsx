@@ -48,13 +48,13 @@ export function WorkspaceTemplates({ onUseTemplate }: { onUseTemplate?: () => vo
             </CardHeader>
             <CardContent className="flex flex-1 flex-col gap-4">
               <div>
-                <p className="mb-1.5 text-[0.68rem] font-mono font-bold uppercase tracking-widest text-[var(--color-ink-faint)]">Languages</p>
+                <p className="mb-1.5 text-xs font-mono font-bold uppercase tracking-widest text-[var(--color-ink-faint)]">Languages</p>
                 <div className="flex flex-wrap gap-1.5">
                   {t.languages.map((l) => <Badge key={l} variant="outline" className="text-xs">{l}</Badge>)}
                 </div>
               </div>
               <div>
-                <p className="mb-1.5 text-[0.68rem] font-mono font-bold uppercase tracking-widest text-[var(--color-ink-faint)]">Analyzers</p>
+                <p className="mb-1.5 text-xs font-mono font-bold uppercase tracking-widest text-[var(--color-ink-faint)]">Analyzers</p>
                 <div className="flex flex-wrap gap-1.5">
                   {t.analyzers.map((id) => {
                     const meta = analyzerMeta(id);

@@ -97,7 +97,7 @@ export function LanguageCoverage({ compact }: { compact?: boolean }) {
                 <th key={lang} scope="col" title={lang} className="text-center">
                   <span className="inline-flex flex-col items-center">
                     <span>{LANG_LABELS[lang] ?? lang}</span>
-                    <span className="text-[10px] font-normal text-[var(--color-ink-faint)]">{analyzerCountFor(lang)}x</span>
+                    <span className="text-xs font-normal text-[var(--color-ink-faint)]">{analyzerCountFor(lang)}x</span>
                   </span>
                 </th>
               ))}
@@ -123,7 +123,7 @@ export function LanguageCoverage({ compact }: { compact?: boolean }) {
       </div>
       <div className="mt-2 flex flex-wrap gap-1" aria-label="Language families">
         {FAMILY_ORDER.map((fam) => (
-          <span key={fam} className="inline-flex items-center gap-1 rounded-full border border-[var(--color-rule)] bg-[var(--color-surface)] px-2 py-0.5 text-[10px] text-[var(--color-ink-soft)]">
+          <span key={fam} className="inline-flex items-center gap-1 rounded-full border border-[var(--color-rule)] bg-[var(--color-surface)] px-2 py-0.5 text-xs text-[var(--color-ink-soft)]">
             <strong>{fam}:</strong> {(LANGUAGE_FAMILIES[fam] as readonly string[]).map((l) => LANG_LABELS[l] ?? l).join(', ')}
           </span>
         ))}
@@ -134,5 +134,5 @@ export function LanguageCoverage({ compact }: { compact?: boolean }) {
 
 export function LanguageChips({ languages }: { languages?: string[] }) {
   if (!languages?.length) return null;
-  return <span className="flex flex-wrap gap-1">{languages.map((l) => <span key={l} className="badge text-[10px]">{l}</span>)}</span>;
+  return <span className="flex flex-wrap gap-1">{languages.map((l) => <span key={l} className="badge text-xs">{l}</span>)}</span>;
 }

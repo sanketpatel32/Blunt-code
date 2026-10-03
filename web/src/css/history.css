@@ -156,7 +156,7 @@ tr.is-expanded .history-date::before { border-color: var(--color-accent); backgr
 .history-disclose:hover { border-color: var(--color-rule-strong); color: var(--color-ink); background: var(--color-surface-muted); }
 .history-disclose[aria-expanded='true'] { border-color: var(--color-ink); background: var(--color-ink); color: var(--color-paper); }
 .history-disclose .disclose-arrow {
-  font-size: .62rem; line-height: 1;
+  font-size: var(--text-2xs); line-height: 1;
   transition: transform var(--dur-base) var(--ease-spring);
   display: inline-block;
 }

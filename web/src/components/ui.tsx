@@ -37,7 +37,7 @@ export function ErrorPanel({ error, retry }: { error: string; retry?: () => void
         </div>
         <h2 className="font-display text-xl font-bold">Could not load this view</h2>
         <p className="mt-2 text-sm text-[var(--color-ink-soft)]">{friendly.text}</p>
-        {friendly.code && <p className="mt-1 font-mono text-[11px] uppercase tracking-widest text-[var(--color-ink-faint)]">{friendly.code}</p>}
+        {friendly.code && <p className="mt-1 font-mono text-xs uppercase tracking-widest text-[var(--color-ink-faint)]">{friendly.code}</p>}
         {retry && <Button variant="outline" size="sm" className="mt-4" onClick={retry}>Try again</Button>}
       </CardContent>
     </Card>

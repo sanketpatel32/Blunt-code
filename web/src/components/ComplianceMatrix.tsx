@@ -107,7 +107,7 @@ export function ComplianceMatrix({ findings, scanId, onFilterOwasp }: { findings
                 <div className="h-2 w-full rounded-full bg-[var(--color-surface-muted)] overflow-hidden" role="progressbar" aria-valuenow={r.pct} aria-valuemin={0} aria-valuemax={100} aria-label={`${r.id} coverage ${r.pct}%`}>
                   <div className="h-full bg-[var(--color-accent)] transition-all" style={{ width: `${r.pct}%` }} />
                 </div>
-                <span className="text-[10px] text-[var(--color-ink-faint)]">{r.pct}%</span>
+                <span className="text-xs text-[var(--color-ink-faint)]">{r.pct}%</span>
               </TableCell>
               <TableCell>
                 <Badge variant={r.status==='Pass' ? 'success' : r.status==='Fail' ? 'danger' : 'warning'}>{r.status}</Badge>
