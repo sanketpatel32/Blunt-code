@@ -20,7 +20,7 @@ import { FolderIcon, ScanIcon } from '../components/icons';
 import { Activity, ChevronRight, FolderOpen, FolderPlus } from 'lucide-react';
 
 import { SEVERITY_ORDER, trendPointsFromScans } from '../lib/chartData';
-import { GRADE_BANDS, bandFor, riskGrade, riskScore, severityCountsOf } from '../lib/risk';
+import { GRADE_BANDS, bandFor, gradeDepth, riskGrade, riskScore, severityCountsOf } from '../lib/risk';
 
 const FEED_LIMIT = 10;
 
@@ -806,6 +806,8 @@ function LedgerRow({
   const total = current?.total_findings ?? present.reduce((sum, [, count]) => sum + (count ?? 0), 0);
   const breakdown = present.length ? present.map(([severity, count]) => `${count} ${severity}`).join(', ') : 'none';
   const grade = score !== null ? riskGrade(score) : null;
+  // Loop 147 · how far into its band this score sits; null when ungraded.
+  const depth = gradeDepth(score, grade);
   // The row's grade is only as strong as its scan: flag rows whose latest
   // scan lost analyzer runs, so "few findings" never reads as full assurance.
   const coverage = workspace.latest_scan_coverage;
@@ -813,7 +815,16 @@ function LedgerRow({
 
   return (
     <li className="ledger-row" data-scored={score !== null || undefined}>
-      <span className="ledger-grade" data-grade={grade ?? 'none'} aria-hidden="true">
+      {/* Loop 147 · the tile now carries a magnitude, so a column of Ds ranks
+          instead of repeating. The fill is a CSS custom property rather than a
+          second element: nothing about the letter changes, so a screen reader
+          and a 1x screenshot read exactly what they read before. */}
+      <span
+        className="ledger-grade"
+        data-grade={grade ?? 'none'}
+        style={depth !== null ? ({ '--grade-depth': depth.toFixed(3) } as React.CSSProperties) : undefined}
+        aria-hidden="true"
+      >
         {grade ?? '–'}
       </span>
       {grade && (

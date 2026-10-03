@@ -6,6 +6,35 @@ export type LanguageCoverage = { language: string; files: number; /** true for t
 
 export const SEVERITY_ORDER: Severity[] = ['critical', 'high', 'medium', 'low', 'info'];
 
+/** The one severity→colour map, for every surface that paints a severity in JS.
+ *
+ *  Loop 141. Three surfaces each carried their own hand-rolled map and each was
+ *  wrong in a different way:
+ *
+ *    - the Insights donut mapped `critical` and `high` to the *same* token, so
+ *      the two worst bands were one colour — which is the exact distinction a
+ *      severity ramp exists to draw;
+ *    - it mapped `info` to `--color-success`, the app's green. 608 informational
+ *      findings painted green read as "fine", which is the one thing a severity
+ *      ramp must never say;
+ *    - it mapped `low` to `--color-accent`, the interactive brand blue, so
+ *      "low severity" and "a thing you can click" were the same colour.
+ *
+ *  The search facet had the mirror-image bug: critical==high, and `low` and
+ *  `info` were *both* `--color-ink-faint`, so the two mildest bands were
+ *  literally indistinguishable in the one place you choose between them.
+ *
+ *  `--color-sev-*` has been the app's ordered severity ramp since loop 104.
+ *  This map is the JS-side door to it, so a surface cannot opt out by accident.
+ */
+export const SEVERITY_COLOR: Record<Severity, string> = {
+  critical: 'var(--color-sev-critical)',
+  high: 'var(--color-sev-high)',
+  medium: 'var(--color-sev-medium)',
+  low: 'var(--color-sev-low)',
+  info: 'var(--color-sev-info)',
+};
+
 export function severityCountsFromSummary(summary?: { critical_count?: number; high_count?: number; medium_count?: number; low_count?: number; info_count?: number }): SeverityCounts {
   return {
     critical: summary?.critical_count ?? 0,

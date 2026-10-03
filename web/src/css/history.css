@@ -17,13 +17,11 @@
   position: relative; display: inline-flex; align-items: center;
 }
 
-.history-filter-input-wrap svg {
-  position: absolute; left: 0.52rem; width: 0.85rem; height: 0.85rem;
-  color: var(--color-ink-faint); pointer-events: none;
-}
+/* Loop 150 · the wrap no longer hosts a hand-drawn glyph (see HistoryPage.tsx).
+   It stays as the positioning context for the input's own padding. */
 
 .history-filter-input {
-  height: 2rem; padding: 0 var(--space-sm) 0 1.75rem;
+  height: 2rem; padding: 0 var(--space-sm);
   border: var(--rule) solid var(--color-rule-strong);
   border-radius: var(--radius-button);
   background: var(--color-surface);
@@ -38,7 +36,31 @@
   outline: none; border-color: var(--color-accent);
   box-shadow: 0 0 0 3px var(--color-accent-glow);
 }
-.history-filter-input::-webkit-calendar-picker-indicator { opacity: .55; cursor: pointer; }
+/* The single calendar affordance, pulled into the design system instead of
+   being duplicated by a second hand-drawn icon. */
+.history-filter-input::-webkit-calendar-picker-indicator {
+  opacity: .5; cursor: pointer;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.history-filter-input:hover::-webkit-calendar-picker-indicator,
+.history-filter-input:focus::-webkit-calendar-picker-indicator { opacity: .85; }
+
+/* An unset filter is inactive, not broken. `dd-mm-yyyy` is browser-rendered and
+   cannot be restyled, so the *field* recedes instead: a dashed edge and faint ink
+   say "nothing set here yet", and the moment a date lands the solid border and
+   full ink return. */
+.history-filter-input[data-empty] {
+  border-style: dashed;
+  border-color: var(--color-rule);
+  color: var(--color-ink-faint);
+  font-weight: 500;
+}
+.history-filter-input[data-empty]:hover { border-color: var(--color-rule-strong); }
+.history-filter-input[data-empty]:focus {
+  border-style: solid;
+  border-color: var(--color-accent);
+  color: var(--color-ink);
+}
 
 .history-filter-clear {
   display: inline-flex; align-items: center; gap: var(--space-2xs);

@@ -40,6 +40,10 @@ graphify-out/
 .hallmark/
 blunt-work/
 .workbuddy-ai/
+# Written into the scanned repo by the managed SonarQube instance. Scanning a
+# project with Blunt Code used to leave an untracked .scannerwork/ behind, which
+# is noise in someone else's git status — ours included.
+.scannerwork/
 **/.ruff_cache/
 **/__pycache__/
 *.pyc

@@ -5,7 +5,7 @@ import type { AnalyzerRun, Finding, FindingPage, Report, Scan, Severity } from '
 import type { Route } from '../../lib/router';
 import type { Notice } from '../../lib/notice';
 import { message } from '../../lib/notice';
-import { SEVERITY_LABELS, analyzerName, compactDuration, findingLocation, friendlyFindingTitle, shortFindingLocation } from '../../lib/format';
+import { SEVERITY_LABELS, analyzerName, compactDuration, findingLocation, friendlyFindingTitle, humanizeAnalyzerError, shortFindingLocation } from '../../lib/format';
 import { copyToClipboard } from '../../lib/clipboard';
 import { useLoad } from '../../hooks/useLoad';
 import { findingCategoryLabel } from '../../lib/analyzerCatalog';
@@ -388,7 +388,9 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
   const selectedIndex = selectedKey ? items.findIndex((finding, index) => findingKey(finding, index) === selectedKey) : -1;
   const selected = selectedIndex >= 0 ? items[selectedIndex] : undefined;
   return <section className="report">
-    {data.warnings?.length ? <div className="inline-warning"><strong>Incomplete analysis</strong>{data.warnings.map((warning) => <span key={warning}>{warning}</span>)}</div> : null}
+    {/* Loop 145 · the raw engine text is still there, on `title`, for anyone
+        debugging it. What is on screen is the part a reader can act on. */}
+    {data.warnings?.length ? <div className="inline-warning"><strong>Incomplete analysis</strong>{data.warnings.map((warning) => <span key={warning} title={warning}>{humanizeAnalyzerError(warning)}</span>)}</div> : null}
     <div className="analysis-toolbar" role="search">
       <div className="toolbar-top">
         <label className="analysis-search"><MagnifierIcon aria-hidden="true" /><span className="sr-only">Search findings</span><input value={filters.q} onChange={(event) => updateFilters({ ...filters, q: event.target.value })} placeholder="Search message, rule, or file" /></label>

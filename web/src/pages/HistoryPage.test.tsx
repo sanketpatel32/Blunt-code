@@ -153,9 +153,48 @@ describe('HistoryTable date bands', () => {
     expect(recentStamp.querySelector('.history-relative')?.textContent).toContain('hours ago');
     expect(recentStamp.querySelector('.history-abs')?.textContent).not.toBe(''); // "Sep 15, 10:00"-style stamp
     expect(rows[0].querySelector('td')?.getAttribute('title')).toContain('2026'); // full timestamp in the tooltip
-    // Older scans: relativeTime already renders the absolute short date by itself.
-    expect(rows[1].querySelector('.history-abs')).toBeNull();
     expect(rows[1].querySelector('.history-relative')?.textContent).toContain('2026');
+  });
+
+  /* Loop 149. `relativeTime` degrades to a bare date past a week, and the
+     absolute stamp used to be gated to `age < 7 days` — so every older row got
+     exactly one label and five scans on the same day rendered five identical
+     strings. The clock is now added precisely when the relative label stops
+     distinguishing rows. */
+  it('adds the clock to old rows, because a bare date cannot tell same-day scans apart', async () => {
+    const at = (iso: string) => new Date(iso).toISOString();
+    const { host } = await renderTable([
+      scan({ id: 'old-a', state: 'completed', finished_at: at('2026-02-10T09:15:00Z') }),
+      scan({ id: 'old-b', state: 'completed', finished_at: at('2026-02-10T16:40:00Z') }),
+      // Minutes apart, same minute on the clock: the case minute precision
+      // could not resolve. Two scans seconds apart is routine for --watch and
+      // for a CI rerun, so the stamp has to carry seconds to do its job.
+      scan({ id: 'old-c', state: 'completed', finished_at: at('2026-02-10T16:41:07Z') }),
+      scan({ id: 'old-d', state: 'completed', finished_at: at('2026-02-10T16:41:52Z') }),
+    ]);
+    const rows = dataRows(host);
+    // Both rows fall in the same band and share a date; the stamp is the only
+    // thing that tells them apart, so it must be present on all of them...
+    for (const row of rows) {
+      // Locale-agnostic: this box renders "10 Feb 2026", en-US renders "Feb 10".
+      expect(row.querySelector('.history-relative')?.textContent).toMatch(/Feb.*10|10.*Feb/);
+      expect(row.querySelector('.history-abs')?.textContent).not.toBe('');
+    }
+    // ...and no two rows may end up with the same rendered label.
+    const labels = rows.map((row) => row.querySelector('.history-when')?.textContent);
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  it('does not add a second stamp to a row whose relative label still orders it', async () => {
+    const iso = (offsetHoursAgo: number) => new Date(new Date('2026-03-15T12:00:00').getTime() - offsetHoursAgo * 3_600_000).toISOString();
+    const { host } = await renderTable([
+      scan({ id: 'yesterday', state: 'completed', finished_at: iso(26) }),
+    ]);
+    // "Yesterday" is a distinct, self-ordering label — a second stamp beside it
+    // is the redundancy loop 144 removed elsewhere.
+    const row = dataRows(host)[0];
+    expect(row.querySelector('.history-relative')?.textContent).toBe('Yesterday');
+    expect(row.querySelector('.history-abs')).toBeNull();
   });
 });
 

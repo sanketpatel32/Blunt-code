@@ -337,7 +337,7 @@ function PremiumSummaryCard({ label, value, tone, icon, spark, delay }: { label:
   return <div className={`summary-card premium-card ${tone ?? ''}`} style={{ animationDelay: `${delay*40}ms` }}>
     <span className="premium-card-icon">{icon}</span>
     <strong>{unscanned ? '—' : value}</strong>
-    <span>{unscanned ? 'no scan yet' : label}</span>
+    <span className="premium-card-label">{unscanned ? 'no scan yet' : label}</span>
     {/* Only a real multi-scan trend draws a line (sparkSeries returns null below two points). */}
     {spark && spark.length > 1 && <MiniSparkline values={spark} />}
   </div>;

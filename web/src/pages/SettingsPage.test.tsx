@@ -51,9 +51,19 @@ describe('SettingsPage data folders', () => {
   it('renders every folder button beside the stored data directory', async () => {
     const { host } = await renderPage(settingsMock());
     expect(host.textContent).toContain('Data folders');
-    expect(host.textContent).toContain('Open the folders where Blunt Code keeps local data.');
-    expect(host.textContent).toContain('Stored in: C:\\Users\\you\\BluntCode');
+    expect(host.textContent).toContain('Everything Blunt Code keeps');
+    expect(host.textContent).toContain('C:\\Users\\you\\BluntCode');
     for (const label of ['Reports', 'Logs', 'Tools', 'App data']) expect(button(host, label)).toBeDefined();
+  });
+
+  /* Loop 148. The path printed twice — once as a read-only "Data directory"
+     setting under Privacy, once under Data folders — so the page opened with
+     the same 34-character string in two places 40px apart and read as though
+     they were two different directories. One directory, one mention. */
+  it('states the data directory exactly once', async () => {
+    const { host } = await renderPage(settingsMock());
+    const occurrences = (host.textContent!.match(/C:\\Users\\you\\BluntCode/g) ?? []).length;
+    expect(occurrences).toBe(1);
   });
 
   it('opens a folder through the endpoint and reports success', async () => {

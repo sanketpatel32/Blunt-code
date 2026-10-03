@@ -149,6 +149,45 @@ export function analyzerName(id: string) {
   return analyzerDisplayNames[id] ?? id;
 }
 
+/** Loop 145 · turn an analyzer's raw failure text into one readable sentence.
+ *
+ *  Third-party engines report failures in their own vocabulary, and the report
+ *  page was rendering it verbatim. A real SonarQube failure reached the UI as:
+ *
+ *    sonarqube: SonarQube compute task FAILED: Fail to process issues of
+ *    component 'bluntcode:e02dcf05-e6c9-3a0b-aec0-09bd5c6c0831:web/src/lib/
+ *    hackingTests.ts' (Visit of Component {key=bluntcode:e02dcf05-…:web/src/lib/
+ *    hackingTests.ts,type=FILE} failed)
+ *
+ *  Two internal UUIDs, a Java object dump and a duplicated file path, wrapping
+ *  the only two facts a reader can act on: *which analyzer* and *which file*.
+ *  Nobody debugging this needs the component key — it is not in their repo, it is
+ *  in ours — and it pushed the actual message across four lines of noise.
+ *
+ *  Returns a short sentence; the untouched text stays available to the caller
+ *  for a title attribute, so nothing is actually hidden. */
+export function humanizeAnalyzerError(raw: string): string {
+  let text = raw.trim();
+
+  // "sonarqube: " / "gitleaks-secrets: " prefix -> use the display name.
+  const prefix = /^([a-z][a-z0-9-]*):\s*/i.exec(text);
+  if (prefix && analyzerDisplayNames[prefix[1]]) {
+    text = text.slice(prefix[0].length);
+    text = `${analyzerDisplayNames[prefix[1]]}: ${text}`;
+  }
+
+  // Drop Java/JS object dumps entirely — "(Visit of Component {key=…,type=FILE} failed)".
+  text = text.replace(/\s*\((?:Visit|Run|Process)\s+of\s+Component\s*\{[^)]*\}[^)]*\)/gi, '');
+
+  // SonarQube component keys: "bluntcode:<uuid>:<path>" -> "<path>".
+  text = text.replace(/\b[\w.-]+:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:/gi, '');
+
+  // Whatever survives, one sentence, no trailing period stacking.
+  text = text.replace(/\s+/g, ' ').trim();
+  text = text.replace(/[.;:\s]+$/, '');
+  return text ? `${text}.` : raw.trim();
+}
+
 export function findingLocation(finding: Finding) {
   return `${finding.relative_path ?? 'Project-level finding'}${finding.start_line ? `:${finding.start_line}${finding.start_column ? `:${finding.start_column}` : ''}` : ''}`;
 }

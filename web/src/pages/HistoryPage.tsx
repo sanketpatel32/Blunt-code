@@ -174,8 +174,22 @@ export function HistoryPage({ workspaceId, go }: { workspaceId: string; go: (r: 
         <PageHeader title={workspace.data?.name ? `${workspace.data.name} — History` : 'Scan history'} />
         <div className="toolbar-row history-toolbar">
           <div className="toolbar-filters">
-            <label className="history-filter-field"><span className="history-filter-label">From</span><span className="history-filter-input-wrap"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 9h18"/></svg><input type="date" value={dateFilter.from} onChange={(e)=>{dateFilter.setFrom(e.target.value); setPage(1); syncPageParam(1);}} className="history-filter-input" aria-label="Filter from date" /></span></label>
-            <label className="history-filter-field"><span className="history-filter-label">To</span><span className="history-filter-input-wrap"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 9h18"/></svg><input type="date" value={dateFilter.to} onChange={(e)=>{dateFilter.setTo(e.target.value); setPage(1); syncPageParam(1);}} className="history-filter-input" aria-label="Filter to date" /></span></label>
+            {/* Loop 150 · the hand-drawn calendar SVG is gone.
+                Every one of these fields carried TWO calendar glyphs — the app's
+                own on the left, the browser's `::-webkit-calendar-picker-indicator`
+                on the right — so the toolbar showed four calendar icons for two
+                controls, and it was genuinely ambiguous which one opened the
+                picker. The native indicator is styled into the design system
+                instead and becomes the only affordance; the input keeps native
+                date entry, keyboard support and locale formatting.
+
+                Both fields also start empty (no bound applied) and `dd-mm-yyyy`
+                gave no hint of that, so the controls read as broken rather than
+                inactive — hence `data-empty`, which fades and dashes the field.
+                The "leave empty" explanation rides on `title`, NOT on the
+                accessible name: the label stays short and stable. */}
+            <label className="history-filter-field"><span className="history-filter-label">From</span><span className="history-filter-input-wrap"><input type="date" value={dateFilter.from} onChange={(e)=>{dateFilter.setFrom(e.target.value); setPage(1); syncPageParam(1);}} className="history-filter-input" data-empty={dateFilter.from ? undefined : ''} aria-label="Filter from date" title="Leave empty for no lower bound" /></span></label>
+            <label className="history-filter-field"><span className="history-filter-label">To</span><span className="history-filter-input-wrap"><input type="date" value={dateFilter.to} onChange={(e)=>{dateFilter.setTo(e.target.value); setPage(1); syncPageParam(1);}} className="history-filter-input" data-empty={dateFilter.to ? undefined : ''} aria-label="Filter to date" title="Leave empty for no upper bound" /></span></label>
             {dateFilter.hasFilter && <button type="button" className="history-filter-clear" onClick={()=>{dateFilter.setFrom(''); dateFilter.setTo(''); setPage(1); syncPageParam(1);}} aria-label="Clear date filters">✕ Clear</button>}
           </div>
           <span className="toolbar-meta history-count tabular-nums" aria-live="polite">{countLine}</span>
@@ -228,6 +242,42 @@ const bandOrder: HistoryBand[] = ['Today', 'Yesterday', 'This week', 'Earlier'];
 
 /** Short absolute stamp ("Sep 15, 14:05") shown beside a recent scan's relative time — chronology without stealing a second line. */
 const shortStamp = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+/* Loop 149 · the disambiguator stamp carries seconds.
+ *
+ * Minute precision was not enough. Measured on the live corpus after the first
+ * pass at this: five rows from 24 Aug still produced TWO identical labels —
+ * `24 Aug 2026 / 24 Aug, 04:32` twice and `24 Aug, 04:29` twice. Two scans
+ * seconds apart in a test corpus is not exotic; a --watch loop or a CI rerun
+ * does it routinely. If this stamp's entire job is to tell same-day scans
+ * apart, then minute resolution is not finishing the job.
+ *
+ * Only the old-row stamp gains seconds. Recent rows keep minute precision
+ * because their relative label ("3 minutes ago") is already self-ordering and
+ * a seconds column there would be noise. */
+const disambiguatingStamp = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+/** Loop 149 · what to print in the Date column, and whether to add the clock.
+ *
+ * `relativeTime` degrades to a bare date past a week, and the absolute stamp
+ * beside it was gated to `age < 7 days` — so every row older than a week got
+ * exactly one label, the date. Measured on the live corpus: five consecutive
+ * scans all rendered `24 Aug 2026`, an identical string on five rows whose whole
+ * purpose is to be told apart. Two of them had different finding counts and no
+ * visible way to say which was which.
+ *
+ * So the rule inverts past the 7-day mark: once the label has stopped being
+ * relative it is no longer distinguishing anything on its own, and the clock is
+ * the only remaining discriminator. Add the time exactly when the relative
+ * label stops carrying order.
+ */
+function historyWhenLabel(stampValue: string | undefined | null, stampTime: number): { relative: string; absolute: string | null } {
+  const relative = relativeTime(stampValue);
+  if (Number.isNaN(stampTime)) return { relative, absolute: null };
+  const age = Date.now() - stampTime;
+  const needsClock = age < 0 || age >= 7 * DAY_MS;
+  return { relative, absolute: needsClock ? disambiguatingStamp.format(stampTime) : null };
+}
 
 function startOfDay(time: number) {
   const day = new Date(time);
@@ -400,8 +450,8 @@ export function HistoryTable({ scans, go, paging, dateFrom, dateTo, compareBaseI
     const stampTime = new Date(stampValue).getTime();
     // Recent scans read "2 hours ago · Sep 15, 14:05"; older ones fall back to
     // the absolute short date that relativeTime already produces by itself.
-    const showAbsDate = !Number.isNaN(stampTime) && Date.now() - stampTime >= 0 && Date.now() - stampTime < 7 * DAY_MS;
+    const when = historyWhenLabel(stampValue, stampTime);
     const menuItems = scanRowMenuItems(scan, compareBaseId, onComparePick);
-    return <Fragment key={scan.id}><tr className={[tone, isOpen ? 'is-expanded' : ''].filter(Boolean).join(' ') || undefined}><td title={date(stampValue)}><span className="history-date"><button type="button" className="history-disclose" aria-expanded={isOpen} aria-controls={`history-detail-${scan.id}`} aria-label={`${isOpen ? 'Hide' : 'Show'} details for the scan from ${relativeTime(stampValue)}`} onClick={() => toggleExpanded(scan.id)}><span className="disclose-arrow" aria-hidden="true">▸</span></button><span className="history-when"><span className="history-relative">{relativeTime(stampValue)}</span>{showAbsDate && <span className="history-abs">{shortStamp.format(stampTime)}</span>}</span></span></td><td><div className="history-status"><Badge variant={stateDisplay.variant} className="whitespace-nowrap">{stateDisplay.label}</Badge>{scan.profile && <span className="badge profile-badge">{scan.profile}</span>}</div></td><td><FindingsCell scan={scan} /></td><td>{compactDuration(scan.duration_ms)}</td><td><div className="table-actions history-actions"><button type="button" className="text-button" onClick={() => go({ page: 'scan', id: scan.id })}>Open report</button>{compareBaseId === scan.id && <span className="compare-base-tag">Base scan</span>}<RowMenu label={`Actions for scan ${scan.id}`} items={menuItems} /></div></td></tr>{isOpen && <tr className="history-detail-row"><td colSpan={5}><div className="history-detail" id={`history-detail-${scan.id}`}><dl className="history-detail-meta"><div><dt>Started</dt><dd>{date(scan.started_at)}</dd></div><div><dt>Finished</dt><dd>{date(scan.finished_at)}</dd></div>{scan.profile && <div><dt>Profile</dt><dd>{scan.profile}</dd></div>}</dl>{scan.snapshot && <p className="history-coverage">Selected {scan.snapshot.selected_file_count ?? 0} of {scan.snapshot.candidate_file_count ?? 0} candidate files{skipCoverageSummary(scan.snapshot.skip_counts) && <> — skipped {skipCoverageSummary(scan.snapshot.skip_counts)}</>}{(scan.snapshot.exclusions?.length ?? 0) > 0 && <> · {scan.snapshot.exclusions!.length} exclusion{scan.snapshot.exclusions!.length === 1 ? '' : 's'} in effect</>}</p>}{scan.error_summary && <div className="inline-warning">Warning: {scan.error_summary}</div>}{runs.length > 0 && <ul className="history-analyzers">{runs.map((run) => <li key={run.analyzer_id}><span>{analyzerName(run.analyzer_id)}</span><span className={`state ${run.status}`}>{run.status.replaceAll('_', ' ')}</span></li>)}</ul>}</div></td></tr>}</Fragment>;
+    return <Fragment key={scan.id}><tr className={[tone, isOpen ? 'is-expanded' : ''].filter(Boolean).join(' ') || undefined}><td title={date(stampValue)}><span className="history-date"><button type="button" className="history-disclose" aria-expanded={isOpen} aria-controls={`history-detail-${scan.id}`} aria-label={`${isOpen ? 'Hide' : 'Show'} details for the scan from ${relativeTime(stampValue)}`} onClick={() => toggleExpanded(scan.id)}><span className="disclose-arrow" aria-hidden="true">▸</span></button><span className="history-when"><span className="history-relative">{when.relative}</span>{when.absolute && <span className="history-abs">{when.absolute}</span>}</span></span></td><td><div className="history-status"><Badge variant={stateDisplay.variant} className="whitespace-nowrap">{stateDisplay.label}</Badge>{scan.profile && <span className="badge profile-badge">{scan.profile}</span>}</div></td><td><FindingsCell scan={scan} /></td><td>{compactDuration(scan.duration_ms)}</td><td><div className="table-actions history-actions"><button type="button" className="text-button" onClick={() => go({ page: 'scan', id: scan.id })}>Open report</button>{compareBaseId === scan.id && <span className="compare-base-tag">Base scan</span>}<RowMenu label={`Actions for scan ${scan.id}`} items={menuItems} /></div></td></tr>{isOpen && <tr className="history-detail-row"><td colSpan={5}><div className="history-detail" id={`history-detail-${scan.id}`}><dl className="history-detail-meta"><div><dt>Started</dt><dd>{date(scan.started_at)}</dd></div><div><dt>Finished</dt><dd>{date(scan.finished_at)}</dd></div>{scan.profile && <div><dt>Profile</dt><dd>{scan.profile}</dd></div>}</dl>{scan.snapshot && <p className="history-coverage">Selected {scan.snapshot.selected_file_count ?? 0} of {scan.snapshot.candidate_file_count ?? 0} candidate files{skipCoverageSummary(scan.snapshot.skip_counts) && <> — skipped {skipCoverageSummary(scan.snapshot.skip_counts)}</>}{(scan.snapshot.exclusions?.length ?? 0) > 0 && <> · {scan.snapshot.exclusions!.length} exclusion{scan.snapshot.exclusions!.length === 1 ? '' : 's'} in effect</>}</p>}{scan.error_summary && <div className="inline-warning">Warning: {scan.error_summary}</div>}{runs.length > 0 && <ul className="history-analyzers">{runs.map((run) => <li key={run.analyzer_id}><span>{analyzerName(run.analyzer_id)}</span><span className={`state ${run.status}`}>{run.status.replaceAll('_', ' ')}</span></li>)}</ul>}</div></td></tr>}</Fragment>;
   })}</Fragment>)}</tbody></table></div>{scrollCue && <div aria-hidden="true" style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: '2.25rem', pointerEvents: 'none', borderRadius: '0 var(--radius-card) var(--radius-card) 0', background: 'linear-gradient(to right, transparent, var(--color-surface))' }} />}</div>{!filteredMode && <nav className="history-pagination" aria-label="Scan history pagination">{!paging && <span className="history-pagination-count tabular-nums">Showing <strong>{shownFrom}–{shownTo}</strong> of <strong>{windowTotal}</strong> scans</span>}<div><button type="button" className="button secondary" onClick={() => serverMode ? paging!.onPage(paging!.page - 1) : setClientPage(currentPage - 1)} disabled={serverMode ? paging!.page <= 1 : currentPage === 0}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="14" height="14"><path d="M15 18 9 12l6-6" strokeLinecap="round" strokeLinejoin="round"/></svg>Previous</button><output aria-live="polite" className="tabular-nums">Page {serverMode ? paging!.page : currentPage + 1} of {pageCount}</output><button type="button" className="button secondary" onClick={() => serverMode ? paging!.onPage(paging!.page + 1) : setClientPage(currentPage + 1)} disabled={serverMode ? !paging!.hasNext : currentPage >= pageCount - 1}>Next<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="14" height="14"><path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round"/></svg></button></div></nav>}</>;
 }

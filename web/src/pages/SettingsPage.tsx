@@ -176,21 +176,22 @@ export function SettingsPage({ notify }: { notify: (n: Notice) => void }) {
             description="Blunt Code does not send usage analytics or repository data to a cloud service."
             value="Disabled"
           />
-          <Setting
-            label="Data directory"
-            description="Application state, tool installs, and scan history are kept on this computer."
-            value={meta.data?.data_directory ?? (meta.loading ? 'Loading…' : 'Available from local metadata')}
-            mono
-          />
         </section>
 
+        {/* Loop 148 · the path is stated once.
+            It used to print here AND 40px below in "Data folders", so the page
+            opened with the same 34-character string twice and made the reader
+            wonder whether they were two different directories. It is one
+            directory, and the section that *acts* on it is the right place to
+            name it — a settings row that only reports a value is not worth its
+            own heading. */}
         <section>
           <h2>Data folders</h2>
           <div className="data-folders">
             <div>
               <h3>Open local folders</h3>
-              <p>Open the folders where Blunt Code keeps local data.</p>
-              <code>Stored in: {meta.data?.data_directory ?? (meta.loading ? 'Loading…' : 'Available from local metadata')}</code>
+              <p>Everything Blunt Code keeps — scan history, tool installs, reports — lives in one folder on this computer.</p>
+              <code>{meta.data?.data_directory ?? (meta.loading ? 'Loading…' : 'Available from local metadata')}</code>
             </div>
             <div className="folder-buttons">
               {DATA_FOLDERS.map((folder) => (

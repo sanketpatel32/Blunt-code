@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SEVERITY_LABELS, analyzerName, compactDuration, date, elapsed, formatBytes, friendlyFindingTitle, relativeTime, ruleDocsUrl, scanStateDisplay, shortFindingLocation, shortPath } from './format';
+import { SEVERITY_LABELS, analyzerName, compactDuration, date, elapsed, formatBytes, friendlyFindingTitle, humanizeAnalyzerError, relativeTime, ruleDocsUrl, scanStateDisplay, shortFindingLocation, shortPath } from './format';
 
 const NOW = new Date('2026-08-22T12:00:00Z').getTime();
 
@@ -248,5 +248,59 @@ describe('formatBytes', () => {
     expect(formatBytes(52428800)).toBe('50.0 MB');
     expect(formatBytes(1073741824)).toBe('1.0 GB');
     expect(formatBytes(7301444403)).toBe('6.8 GB');
+  });
+});
+
+/* Loop 145. The report page rendered analyzer failures verbatim, which put two
+   internal UUIDs, a Java object dump and a duplicated path in front of the
+   reader. The untouched text is still available on `title`; this is about what
+   lands on screen. */
+describe('humanizeAnalyzerError', () => {
+  const SONAR = "sonarqube: SonarQube compute task FAILED: Fail to process issues of component 'bluntcode:e02dcf05-e6c9-3a0b-aec0-09bd5c6c0831:web/src/lib/hackingTests.ts' (Visit of Component {key=bluntcode:e02dcf05-e6c9-3a0b-aec0-09bd5c6c0831:web/src/lib/hackingTests.ts,type=FILE} failed)";
+
+  it('strips the internal component key and keeps the file path', () => {
+    const out = humanizeAnalyzerError(SONAR);
+    expect(out).toContain('web/src/lib/hackingTests.ts');
+    expect(out).toContain('Fail to process issues');
+  });
+
+  it('removes every internal UUID — those keys are not in the reader\'s repo', () => {
+    expect(humanizeAnalyzerError(SONAR)).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}/i);
+  });
+
+  it('drops the Java object dump', () => {
+    const out = humanizeAnalyzerError(SONAR);
+    expect(out).not.toContain('Visit of Component');
+    expect(out).not.toContain('{key=');
+    expect(out).not.toContain('type=FILE');
+  });
+
+  it('collapses to one sentence on one line', () => {
+    const out = humanizeAnalyzerError(SONAR);
+    expect(out).not.toMatch(/\s{2,}/);
+    expect(out.endsWith('.')).toBe(true);
+    expect(out.split('.').filter((s) => s.trim()).length).toBeLessThanOrEqual(3);
+  });
+
+  it('promotes a raw analyzer id to its display name', () => {
+    expect(humanizeAnalyzerError('gitleaks-secrets: found 3 leaks')).toContain('Gitleaks');
+    expect(humanizeAnalyzerError('ruff: E501 line too long')).toContain('Ruff');
+  });
+
+  it('leaves a short human message essentially alone', () => {
+    expect(humanizeAnalyzerError('semgrep exited 7: ')).toBe('semgrep exited 7.');
+  });
+
+  it('never returns an empty string for a non-empty input', () => {
+    // An input made entirely of the patterns we strip must still say
+    // *something* — falling back to the raw text beats rendering a blank chip.
+    for (const raw of [':::', '(Visit of Component {key=x,type=FILE} failed)', 'bluntcode:e02dcf05-e6c9-3a0b-aec0-09bd5c6c0831:src/a.ts']) {
+      expect(humanizeAnalyzerError(raw).length).toBeGreaterThan(0);
+    }
+  });
+
+  it('has nothing to say about empty input', () => {
+    expect(humanizeAnalyzerError('')).toBe('');
+    expect(humanizeAnalyzerError('   ')).toBe('');
   });
 });

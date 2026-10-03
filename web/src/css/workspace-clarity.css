@@ -119,7 +119,22 @@
 
 .workspace-verdict > .summary-grid.premium > .premium-card {
   flex: 1 1 auto;
-  min-width: 12rem;
+  /* Loop 151 · 12rem could not hold icon + number + label + a 64px sparkline,
+     which is what pushed the chart onto its own line. Sized so the common
+     labels fit without truncation at the desktop strip width. */
+  min-width: 13.5rem;
+  /* Loop 153 · the strip holds three cards but the risk card is wide, so the
+     third one always wraps onto a line of its own — where `flex: 1 1 auto`
+     stretched it across the full 1140px and `margin-left: auto` fired,
+     parking its sparkline at the far right, ~900px from its own label. The
+     card read as a label floating on the left with an unrelated line drawing
+     floating on the right.
+
+     Capping the width only bites when a card is alone on a wrapped line; on
+     the first row each card is sized by its column and never reaches 30rem.
+     So the number and its sparkline stay neighbours, and the leftover space
+     becomes ordinary whitespace instead of a stretched card. */
+  max-width: 30rem;
   display: flex;
   flex-flow: row wrap;
   align-items: baseline;
@@ -150,7 +165,34 @@
   width: 1.5rem;
   height: 1.5rem;
 }
-.workspace-verdict .premium-sparkline { margin-left: auto; align-self: center; opacity: .8; }
+/* Loop 151 · the sparkline used to orphan.
+ *
+ * The card is `flex-flow: row wrap` with a 12rem min-width. A 64px sparkline
+ * beside an icon, a number and a label overflows that, so the svg wrapped onto
+ * a line of its own and `margin-left: auto` fired — parking a 64x20 chart
+ * alone at the far right of an otherwise empty second line. On the live
+ * workspace page that read as a broken render: a large empty white region with
+ * a stray line drawing floating in it.
+ *
+ * A chart fragment on its own line is never the answer, so the label became the
+ * shrinkable element instead: it ellipsises, the sparkline stays inline and
+ * right-aligned, and the card degrades by shortening a word rather than by
+ * orphaning its picture. `flex: none` is what actually prevents the wrap —
+ * a shrinkable svg would just squash into a sliver.
+ */
+.workspace-verdict > .summary-grid.premium > .premium-card .premium-card-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workspace-verdict .premium-sparkline {
+  flex: none;
+  margin-left: auto;
+  align-self: center;
+  opacity: .8;
+}
 
 /* Grade owns the risk card's color; the score itself stays neutral ink. */
 .workspace-verdict .risk-hero { flex-flow: row wrap; align-items: baseline; column-gap: var(--space-sm); }

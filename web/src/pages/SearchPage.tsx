@@ -1,7 +1,8 @@
 import '../css/search.css';
 import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { api } from '../api';
-import type { SearchedFinding, Workspace } from '../types';
+import type { SearchedFinding, Severity, Workspace } from '../types';
+import { SEVERITY_COLOR } from '../lib/chartData';
 import type { Route } from '../lib/router';
 import { analyzerName, findingLocation, friendlyFindingTitle, shortFindingLocation } from '../lib/format';
 import { useLoad } from '../hooks/useLoad';
@@ -39,7 +40,7 @@ import { analyzerMeta } from '../lib/analyzerCatalog';
 
 const SEARCH_PAGE_SIZE = 25;
 const SEARCH_DEBOUNCE_MS = 250;
-const SEVERITIES = ['critical', 'high', 'medium', 'low', 'info'] as const;
+const SEVERITIES = ['critical', 'high', 'medium', 'low', 'info'] as const satisfies readonly Severity[];
 const ANALYZERS = [
   'pentest',
   'semgrep',
@@ -399,19 +400,16 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                 onClick={() => toggleSeverity(sev)}
               >
                 <div className="flex items-center gap-2">
+                  {/* Loop 141 · was an inline ternary that painted critical and
+                      high the same colour and low and info BOTH as
+                      --color-ink-faint — so the two mildest bands were
+                      indistinguishable in the one panel whose whole job is
+                      choosing between them. Now the shared ramp. */}
                   <span
                     className="h-2 w-2 rounded-full severity-dot"
-                    style={{
-                      background:
-                        sev === 'critical'
-                          ? 'var(--color-danger)'
-                          : sev === 'high'                          ? 'var(--color-danger)'
-                          : sev === 'medium'
-                          ? 'var(--color-warning)'
-                          : 'var(--color-ink-faint)',
-                    }}
+                    style={{ background: SEVERITY_COLOR[sev] }}
                   />
-                  <span className="capitalize">{sev}</span>
+                  <span className="capitalize facet-sev-label">{sev}</span>
                 </div>
                 {/* A proportion bar, so the facet shows the SHAPE of the result
                     set and not just five numbers. Widths are explicit percentages
@@ -421,7 +419,10 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                     nothing at all. Sqrt for the same reason as the board's bar —
                     proportionally, 40 criticals against 55k highs draws critical
                     as an invisible sliver, and that is the band a security user
-                    most needs to see. The exact count stays on the right. */}
+                    most needs to see. The exact count stays on the right.
+                    Loop 142 · the label and count are fixed-width, so this
+                    percentage is now rendered against an identical track on all
+                    five rows instead of five different leftovers. */}
                 {severityCounts && (
                   <span className="facet-meter" aria-hidden="true">
                     <span
@@ -431,7 +432,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                   </span>
                 )}
                 {severityCounts && (
-                  <Badge variant={isSelected ? 'outline' : 'secondary'} className="text-[10px] tabular-nums px-1.5 py-0">
+                  <Badge variant={isSelected ? 'outline' : 'secondary'} className="facet-count-slot text-[10px] tabular-nums px-1.5 py-0">
                     {severityCounts[sev] ?? 0}
                   </Badge>
                 )}

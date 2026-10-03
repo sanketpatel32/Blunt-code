@@ -1,7 +1,7 @@
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import type { Severity } from '../types';
 import type { LanguageCoverage, SeverityCounts, TrendPoint } from '../lib/chartData';
-import { SEVERITY_ORDER } from '../lib/chartData';
+import { SEVERITY_COLOR, SEVERITY_ORDER } from '../lib/chartData';
 
 type Props = {
   trends?: TrendPoint[];
@@ -9,13 +9,8 @@ type Props = {
   languages?: LanguageCoverage[];
 };
 
-const SEVERITY_COLOR: Record<Severity, string> = {
-  critical: 'var(--color-danger)',
-  high: 'var(--color-danger)',
-  medium: 'var(--color-warning)',
-  low: 'var(--color-accent)',
-  info: 'var(--color-success)',
-};
+// Loop 141 · the severity→colour map moved to lib/chartData so every surface
+// paints the same ramp. See SEVERITY_COLOR for what the local map got wrong.
 
 function Card({ children, delay, reduced, label }: { children: React.ReactNode; delay: string; reduced: boolean; label: string }) {
   return (

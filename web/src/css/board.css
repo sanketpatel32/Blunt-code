@@ -229,7 +229,23 @@
 
 /* A meter with real height. At 8px across 1364px this was a hairline - a
    texture, not a shape. 20px is enough for the sqrt segments to read as
-   distinct bands at a glance. */
+   distinct bands at a glance.
+
+   Loop 146 · and then it was a 20px, full-saturation, five-hue ribbon running
+   the full 1140px of the card — which made it, by a wide margin, the loudest
+   object on the landing page, and it was encoding the *least* actionable thing
+   there: how 5,740 findings are distributed across five bands.
+
+   Two changes, both about the bar being one scale instead of five stickers:
+
+   1. The segments are separated by a hairline in the surface colour, so each
+      band reads as a discrete quantity rather than blending into a gradient.
+      A stacked bar whose neighbours are the same hue family is genuinely
+      ambiguous about where one band ends; a rule makes the boundary exact.
+   2. The non-severe tail steps down in chroma. `--color-sev-low` and
+      `--color-sev-info` are two different blues at nearly the same lightness,
+      so side by side they read as one ambiguous 38%-wide slab. Muted toward the
+      track, the ribbon now reads as ordered: hot on the left, cooling right. */
 .verdict-bar { height: 1.25rem; background: var(--color-surface-muted); border-radius: var(--radius-button); overflow: hidden; }
 
 /* Segment layout is board-scoped: styles.css carries only the container track and seg-* colors.
@@ -239,6 +255,15 @@
    to nothing even after the sqrt curve. */
 .board-page .severity-stack { display: flex; }
 .board-page .severity-stack i { display: block; height: 100%; flex: none; flex-basis: 0; min-width: 3px; }
+/* Loop 146 · 2px inset instead of a border, so the separator does not eat into
+   a segment that is already only 3px wide. box-shadow insets, it never
+   participates in layout. */
+.board-page .verdict-bar i { box-shadow: inset -2px 0 0 var(--color-surface); }
+.board-page .verdict-bar i:last-child { box-shadow: none; }
+/* The two mildest bands step toward the track. Still clearly "low" and "info",
+   no longer two full-strength blues fighting for the same 38% of the bar. */
+.board-page .verdict-bar .seg-low,
+.board-page .verdict-bar .seg-info { opacity: .62; }
 
 .verdict-legend {
   display: flex;
@@ -441,6 +466,40 @@
   font-family: var(--font-display);
   font-weight: 800;
   font-size: var(--text-sm);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Loop 147 · the tile is now a gauge, not a sticker.
+ *
+ * A grade is a bucket, and this board has six D rows — 6489, 4682, 1195, 950,
+ * 869, 66 — because D means "50 or more". Six identical dark-red squares in a
+ * column: 360px of the most saturated colour on the landing page, ranking
+ * nothing, right next to a sort order that had just done the ranking.
+ *
+ * The depth gauge is a 3px bar on the tile's bottom edge, filled in
+ * `--grade-ink`. That token is the whole trick:
+ *   - grade D is a SOLID dark-red fill, so its ink is near-white — the bar
+ *     reads bright against it;
+ *   - grades A/B/C are soft fills, so their ink is the dark text grade — the
+ *     bar reads dark against them.
+ * One token, legible on all four fills, and no change to any existing
+ * background/ink pairing, so no contrast guarantee is disturbed.
+ *
+ * The first attempt washed the whole tile with `--grade-edge`, which is
+ * `transparent` for grade D by design (the solid fill has no edge colour) — so
+ * it silently did nothing on exactly the rows that needed it. */
+.ledger-grade::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  width: calc(var(--grade-depth, 0) * 100%);
+  min-width: 0;
+  background: var(--grade-ink);
+  opacity: .85;
+  pointer-events: none;
 }
 
 .ledger-identity { grid-area: identity; display: flex; flex-direction: column; gap: 2px; min-width: 0; }

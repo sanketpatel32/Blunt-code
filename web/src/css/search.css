@@ -28,13 +28,34 @@
 .page-search .severity-pill[aria-pressed='true'] { border-color: var(--color-accent); background: var(--color-surface-subtle); }
 .page-search .severity-pill:focus-visible { outline: var(--rule-focus) solid var(--color-focus); outline-offset: 1px; }
 
+/* Loop 142 · the meter is now the ONLY elastic thing on the row.
+ *
+ *  It used to be a bare flex item in a `justify-between` row, so it inherited
+ *  whatever width was left over after the label and the count badge. Measured
+ *  live on a real corpus, the five tracks came out 118.3 / 114.1 / 93.2 / 124 /
+ *  129.9px — five different denominators for five bars whose widths are computed
+ *  as percentages of ONE shared scale. The declared 26.8% for medium and the
+ *  18.3% for low then rendered as 25px and 22.7px, a 2px gap for a 2.15x
+ *  difference in findings, because medium's track was the shortest.
+ *
+ *  The numbers were right and the chart was still lying: the eye compares
+ *  pixels, not percentages. `.facet-sev-label` and `.facet-count-slot` are now
+ *  fixed-width, so `flex: 1` gives every track the identical length.
+ */
 .facet-meter {
   display: flex;
+  flex: 1 1 0;
+  min-width: 3rem;
   height: .3rem;
   border-radius: var(--radius-pill);
   background: var(--color-surface-muted);
   overflow: hidden;
 }
+
+/* Fixed siblings, so the meter above is the only thing that flexes and all five
+   tracks stay the same length. Sized to the widest real label/count. */
+.facet-sev-label { min-width: 3.6rem; }
+.facet-count-slot { min-width: 2.9rem; justify-content: flex-end; }
 
 .facet-meter-fill { display: block; height: 100%; border-radius: inherit; }
 .facet-meter-fill.sev-critical { background: var(--color-sev-critical); }
@@ -77,14 +98,31 @@
 }
 .page-search .search-finding-line .tag { flex-shrink: 0; }
 
-/* The one visible per-row action — quiet link, never a filled button. */
+/* The one visible per-row action — quiet link, never a filled button.
+ *
+ * Loop 143 · this is the THIRD parallel class for "the repeated per-row link",
+ * which is why it survived two sweeps that each fixed one of the others:
+ * v0.32 caught `.row-action`, v0.36 caught `.text-button`, and this one was
+ * called `.search-row-open`. Measured on the live corpus: 9 links, all
+ * `oklch(0.5 0.24 268)` — full accent, stacked down the last column of a
+ * 25-row result set.
+ *
+ * The reasoning is the one that already won twice: an action repeated once per
+ * row cannot also be the page's emphasis, because by the ninth row it is
+ * furniture. It keeps a real hit area and its hover, and spends accent on hover
+ * only, so the row that is actually under your cursor is the one that lights up.
+ */
 .page-search .search-row-open {
-  color: var(--color-accent-strong);
+  color: var(--color-ink-soft);
   font-size: var(--text-xs);
   font-weight: 600;
   white-space: nowrap;
+  transition: color var(--dur-fast) var(--ease-out);
 }
-.page-search .search-row-open:hover { text-decoration: underline; }
+.page-search .search-row-open:hover {
+  color: var(--color-accent-strong);
+  text-decoration: underline;
+}
 .page-search .search-row-open:focus-visible {
   outline: var(--rule-focus) solid var(--color-focus);
   outline-offset: 1px;

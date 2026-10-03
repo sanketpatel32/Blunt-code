@@ -55,6 +55,35 @@ export function bandFor(grade: RiskGrade): GradeBand {
   return GRADE_BANDS.find((band) => band.grade === grade)!;
 }
 
+/**
+ * Loop 147 · how deep into its band a score sits, as a 0–1 fraction.
+ *
+ * A grade is a bucket, and buckets throw away the thing the number was for. The
+ * board's ledger sorted six workspaces by score — 6489, 4682, 1195, 950, 869,
+ * 14 — and then printed the same letter on every one of them, because D means
+ * "50 or more" and D is open-ended. Six identical red tiles in a column: 360px
+ * of the most saturated colour on the page, ranking nothing.
+ *
+ * The fraction is only meaningful for a *closed* band, so the top band needs a
+ * reference point. `D_TOP` is the score at which a D stops being a rounding of
+ * "bad" and becomes "this codebase has a systemic problem" — chosen as a round
+ * number well clear of the observed corpus, not derived from it.
+ *
+ * `null` for an open-ended band or a missing score, so a caller can fall back to
+ * "no magnitude to show" rather than inventing one.
+ */
+export const D_TOP = 5000;
+
+export function gradeDepth(score: number | null, grade: RiskGrade | null): number | null {
+  if (score === null || grade === null) return null;
+  const band = bandFor(grade);
+  const floor = band === GRADE_BANDS[0] ? 0 : GRADE_BANDS[GRADE_BANDS.indexOf(band) - 1].max;
+  const ceiling = band.max === Infinity ? D_TOP : band.max;
+  if (ceiling <= floor) return null;
+  const depth = (score - floor) / (ceiling - floor);
+  return Math.min(1, Math.max(0, depth));
+}
+
 /** Objects carrying per-severity counts as `*_count` fields (Scan, RecentScanItem, …). */
 export interface ScanLikeCounts {
   critical_count?: number | null;

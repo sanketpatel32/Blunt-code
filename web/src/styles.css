@@ -448,10 +448,28 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .file-tree > li { border-bottom: var(--rule) solid var(--color-rule-faint); }
 .file-tree > li:last-child { border-bottom: 0; }
 .tree-row { display: flex; align-items: center; gap: var(--space-sm); min-height: 2.75rem; padding: var(--space-2xs) var(--space-sm); border-radius: var(--radius-md); font-size: var(--text-sm); transition: background var(--dur-fast) var(--ease-out); }
+/* Loop 152 · the row wash now marks the EXCEPTION, not the rule.
+ *
+ * It tinted `:checked`, so a freshly-opened workspace — where every path is
+ * included, which is the default and carries no information — painted all 27
+ * rows the same pale accent. 27 identical blue bands read as "27 things are
+ * special here", and the two rows you actually excluded looked exactly like the
+ * 25 you did not. The most likely state of this panel was the least legible.
+ *
+ * Inverting it is the whole fix: inclusion is the default and goes quiet (the
+ * checkbox already says it, once, per row), and anything *not* fully included
+ * gets the wash. "What did I change?" becomes a question the panel answers at a
+ * glance, which is the only thing a background wash is good for. Indeterminate
+ * directories match too — half-included is exactly the row you want to notice. */
+.tree-row:has(input[type="checkbox"]:checked) { background: transparent; }
+.tree-row:has(input[type="checkbox"]:not(:checked)) {
+  background: color-mix(in oklch, var(--color-warning) 9%, transparent);
+  box-shadow: inset 2px 0 0 color-mix(in oklch, var(--color-warning) 55%, transparent);
+}
 .tree-row:hover { background: color-mix(in oklch, var(--color-accent) 5%, transparent); }
-/* Included rows carry a whisper of accent so mass selections read at a glance. */
-.tree-row:has(input[type="checkbox"]:checked) { background: color-mix(in oklch, var(--color-accent) 6%, transparent); }
-.tree-row:has(input[type="checkbox"]:checked):hover { background: color-mix(in oklch, var(--color-accent) 9%, transparent); }
+.tree-row:has(input[type="checkbox"]:not(:checked)):hover {
+  background: color-mix(in oklch, var(--color-warning) 14%, transparent);
+}
 .tree-row input[type="checkbox"] { accent-color: var(--color-accent); width: 1.15rem; height: 1.15rem; flex: none; cursor: pointer; }
 .tree-toggle { width: 1.65rem; height: 1.65rem; flex: none; display: grid; place-items: center; padding: 0; border: var(--rule) solid var(--color-rule); background: var(--color-surface); color: var(--color-ink-soft); font-family: var(--font-mono); font-size: var(--text-sm); font-weight: 700; line-height: 1; border-radius: var(--radius-xs); transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out); }
 .tree-toggle:hover:not(:disabled) { background: var(--color-surface-muted); color: var(--color-ink); border-color: var(--color-rule-strong); }
@@ -639,14 +657,30 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
   letter-spacing: -.005em;
   color: var(--color-ink);
 }
-.setting { display: flex; align-items: center; justify-content: space-between; gap: var(--space-lg); padding: var(--space-md) 0; border-bottom: var(--rule) solid var(--color-rule-faint); }
+/* Loop 148 · `justify-content: space-between` on a 1140px row put the label at
+   x=270 and its value at x=1170 — a 900px gulf, with the description text
+   ending around x=600 and nothing connecting it to the word it describes.
+   Measured on the live page, "Workspace managed" sat 700px from "Default scan
+   profile" and read as an unrelated floating label.
+
+   A grid with a bounded value column keeps the pair within reading distance at
+   any width, and makes every value on the page start at the same x — so the
+   column of values is scannable instead of ragged. */
+.setting {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 20rem);
+  align-items: center;
+  gap: var(--space-lg);
+  padding: var(--space-md) 0;
+  border-bottom: var(--rule) solid var(--color-rule-faint);
+}
 .setting h3 { margin: 0 0 var(--space-2xs); font-size: var(--text-sm); font-weight: 700; }
 .setting p { max-width: 36rem; margin: 0; color: var(--color-ink-soft); font-size: var(--text-sm); line-height: 1.5; }
 /* Read-only values, not links. This was accent-coloured, so "Workspace
    managed" and "Loading…" looked clickable and were not — an affordance lie on
    every dead-end state in the page. A value that IS actionable (a path, a
    button) opts back in explicitly via .setting-value-action. */
-.setting > span { max-width: 22rem; color: var(--color-ink-soft); font-size: var(--text-xs); text-align: right; overflow-wrap: anywhere; }
+.setting > span { max-width: 22rem; color: var(--color-ink-soft); font-size: var(--text-xs); overflow-wrap: anywhere; }
 .setting > span.setting-value-mono { font-family: var(--font-mono); }
 /* Loop 122 · control slot for non-switch settings (language picker). */
 .setting-control { flex: none; }
@@ -728,12 +762,38 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .tree-name mark { padding: 0 2px; border-radius: var(--radius-xs); background: var(--color-accent-soft); color: var(--color-accent-strong); font-weight: 700; }
 .tree-load-error { display: inline-flex; align-items: center; gap: var(--space-2xs); color: var(--color-danger); font-size: var(--text-xs); }
 .kbd-hint { display: inline-flex; align-items: center; justify-content: center; min-width: 1.35rem; margin-left: var(--space-2xs); padding: 1px var(--space-3xs); border: var(--rule) solid var(--color-rule); border-bottom-width: 2px; border-radius: var(--radius-xs); background: var(--color-surface-muted); color: var(--color-ink-soft); font: 600 var(--text-xs)/1.4 var(--font-mono); text-align: center; }
-.what-changed { margin-top: var(--space-xl); padding: var(--space-lg); border: var(--rule) solid color-mix(in oklch, var(--color-success) 30%, var(--color-rule)); border-left: 3px solid var(--color-success); border-radius: var(--radius-lg); background: var(--color-success-soft); }
-.what-changed-header { display: flex; align-items: end; justify-content: space-between; gap: var(--space-lg); padding-bottom: var(--space-md); border-bottom: var(--rule) solid color-mix(in oklch, var(--color-success) 20%, var(--color-rule)); }
+/* Loop 144 · "2 findings fixed" was getting the loudest positive treatment in
+   the app: a full-bleed `--color-success-soft` flood, a saturated green 3px
+   rail, and a 24px green numeral — roughly 200px of bright green, stacked
+   directly under a red hero that says 2,899 findings and directly above an amber
+   "Incomplete analysis" block. Three saturated banners in a row, and the
+   smallest of the three facts was the brightest.
+
+   Loudness is a budget, and this card was spending all of it on the least
+   important sentence on the page. The fix follows the rule the severity rows
+   already use (loop 120/133): the semantic lives in the rail and the ink, not
+   in a flood. It is still unmistakably "good news" — a green rail, a green
+   count, green row ticks — it just stops shouting over the findings.
+   Note `.what-changed-row` already sits on `--color-surface`, so the rows used
+   to be white cards floating in a green field. */
+.what-changed {
+  margin-top: var(--space-xl);
+  padding: var(--space-lg);
+  border: var(--rule) solid var(--color-rule);
+  border-left: 3px solid var(--color-success);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+.what-changed-header { display: flex; align-items: end; justify-content: space-between; gap: var(--space-lg); padding-bottom: var(--space-md); border-bottom: var(--rule) solid var(--color-rule); }
 .what-changed-header h2 { margin: 0; font-family: var(--font-display); font-size: var(--text-xl); font-weight: 700; }
 .what-changed-header > div > p { margin: var(--space-2xs) 0 0; color: var(--color-ink-soft); font-size: var(--text-sm); }
 .what-changed-headline { margin: 0; color: var(--color-ink-soft); font-size: var(--text-sm); white-space: nowrap; }
-.what-changed-headline strong { margin-right: var(--space-2xs); color: var(--color-success); font-family: var(--font-display); font-size: var(--text-2xl); }
+/* Loop 144 · --color-success is a *fill* grade (4.79:1 on white as a large
+   numeral it is fine, but as the card's loudest element it competed with the
+   findings above). --color-success-text is the same hue as ink: 5.51:1, and it
+   reads as "a number in a good colour" rather than a beacon. Size carries the
+   emphasis now, not chroma. */
+.what-changed-headline strong { margin-right: var(--space-2xs); color: var(--color-success-text); font-family: var(--font-display); font-size: var(--text-2xl); }
 .what-changed-list { display: grid; gap: var(--space-2xs); margin: var(--space-md) 0 0; padding: 0; list-style: none; }
 .what-changed-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2xs) var(--space-sm); padding: var(--space-xs) var(--space-sm); border-radius: var(--radius-md); background: var(--color-surface); border: var(--rule) solid var(--color-rule-faint); }
 .what-changed-rule { flex: 1 1 12rem; min-width: 0; overflow: hidden; color: var(--color-ink); font-size: var(--text-sm); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
