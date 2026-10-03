@@ -14,9 +14,12 @@ Reproduce the evidence:
 ```powershell
 .\bluntcode.exe scan . --profile standard      # real findings to look at
 .\bluntcode.exe --no-browser --port 8787
-node .playwright-cli\shots.cjs .playwright-cli\before
-node .playwright-cli\verify-loops.cjs          # prints the PASS/FAIL table
+node scripts\ui-loops\shots.cjs .playwright-cli\before
+node scripts\ui-loops\verify-loops.cjs          # prints the PASS/FAIL table
 ```
+
+See [`scripts/ui-loops/README.md`](scripts/ui-loops/README.md) for why these
+cannot be jsdom tests, and for how to produce a before/after plate.
 
 ---
 
@@ -253,8 +256,8 @@ over-claiming. It does not find a chart whose pixels disagree with its own
 percentages, a chart fragment orphaned by a flex line, or a colour map that
 collapses two categories into one.
 
-Every loop above has a number attached, and `verify-loops.cjs` re-derives all of
-them against the running app. Three of these were found *by* that script rather
-than by eye: the five track widths, the `transparent` grade edge, and the
-remaining same-minute date collision — the last of which means the first fix for
-it was not actually a fix.
+Every loop above has a number attached, and `scripts/ui-loops/verify-loops.cjs`
+re-derives all of them against the running app. Three of these were found *by*
+that script rather than by eye: the five track widths, the `transparent` grade
+edge, and the remaining same-minute date collision — the last of which means the
+first fix for it was not actually a fix.

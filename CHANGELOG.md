@@ -44,6 +44,7 @@ source. Full write-up, with before/after numbers and a reproduction script, in
 - Three of these were found by the measurement script rather than by eye, and one of those three exposed a fix that had not worked at all: the grade-tile wash used `--grade-edge`, which is `transparent` for grade D by design, so it silently did nothing on exactly the rows that needed it. The screenshot looked unchanged and the tempting conclusion — "the CSS must be wrong" — was the wrong one.
 - Two of the new tests failed on first run and were right to: `humanizeAnalyzerError` returned an empty string for empty input, and the depth gauge was asserted monotonic across a band boundary, which it is not and should not be. Both were the tests being wrong about the intent, and both are now asserted explicitly.
 - Tests that asserted the old *presentation* were rewritten to assert the new intent, not deleted: the same-day collision test now requires that no two rows render the same label, and the settings test counts path occurrences instead of matching a string.
+- The evidence is reproducible. `scripts/ui-loops/` carries the three scripts that produced every number above — a full light/dark capture sweep, a PASS/FAIL verifier, and a side-by-side plate generator — with a README on why these defects are invisible to jsdom and therefore cannot be unit-tested.
 - 529 web tests passing, up from 506. Contrast audit unchanged and green.
 
 ## [0.37.0] - 2026-09-28
