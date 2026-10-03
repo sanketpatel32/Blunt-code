@@ -35,6 +35,23 @@ function Invoke-Gate {
 
 function ConvertTo-Lf([string]$text) { $text -replace "`r`n", "`n" }
 
+# gofmt writes UTF-8. PowerShell decodes a native command's stdout with
+# [Console]::OutputEncoding, which on a stock Windows console is still ibm850 -
+# a legacy IBM code page. Every non-ASCII character in gofmt's output then
+# decodes to mojibake, so the comparison below against the UTF-8 file on disk
+# fails on any file containing an em-dash, a multiplication sign or an arrow.
+#
+# Measured on this machine with the default console: 83 correctly-formatted
+# files reported as gofmt drift, and after setting UTF-8: zero. The gate was
+# reporting failures that did not exist, and - worse - it was only ever wrong
+# in the direction of noise, which is how a real formatting regression would
+# have slipped through unnoticed. The value was 'ibm850'.
+#
+# Pin it for the whole script rather than per-call: every other gate shells out
+# to a tool too, and npm/go both emit UTF-8 on Windows.
+$previousEncoding = [Console]::OutputEncoding
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
 Invoke-Gate 'gofmt' {
     # A CRLF checkout makes gofmt -l name files whose only difference from
     # gofmt output is line endings, so every file it flags is re-checked
@@ -77,4 +94,5 @@ if (-not $SkipWeb) {
 }
 
 Write-Host ("`nverify: {0} gates green - tree is shippable." -f $script:greenGates) -ForegroundColor Green
+[Console]::OutputEncoding = $previousEncoding
 exit 0

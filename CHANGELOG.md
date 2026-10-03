@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **The gofmt gate was reporting failures that did not exist.** `verify.ps1` compares each flagged file against `gofmt`'s output, but it captured that output through PowerShell's native-command pipeline, which decodes stdout with `[Console]::OutputEncoding` — still **ibm850** on a stock Windows console. `gofmt` writes UTF-8, so every non-ASCII character in its output decoded to mojibake and failed the comparison against the UTF-8 file on disk. Measured here: **83 correctly-formatted files reported as drift**, and zero after pinning the encoding to UTF-8.
+
+  The nastier half is the direction it fails in. It only ever produced *false* drift, never missed real drift, so a genuine formatting regression would have been buried under 83 lines of noise — or, on a machine whose console happened to be UTF-8, the gate would simply have agreed with everything. Which is why it read `ok gofmt` earlier in this same session and `FAIL gofmt` later: something in between changed the console code page. A gate whose verdict depends on the code page of whoever ran it is not a gate. The encoding is now pinned for the whole script and restored on exit.
+
+### Removed
+- **Five stale markdown files and a duplicated asset**, all superseded and all git-committed, so `git show HEAD~1:<path>` still recovers any of them:
+
+  | Deleted | Why it was dead |
+  |---|---|
+  | `blunt-code-build-spec.md` (89 KB) | The V1 planning spec. Describes a product with "CI/CD integrations in V1: None", three analyzers and no CLI. The app now ships twelve analyzers, a full headless CLI, and GitHub Actions. |
+  | `IMPLEMENTATION_STATUS.md` (18 KB) | Stopped at milestone 12 / release 0.6.0. The build is at 0.38.0 and `CHANGELOG.md` is the record. |
+  | `UI_POLISH_100_LOOPS.md`, `UI_POLISH_140_LOOPS.md`, `UI_POLISH_153_LOOPS.md` | Loop-by-loop UI history, superseded by `CHANGELOG.md` at 177 KB. Nothing referenced them. |
+  | `logo-showcase.html` | A fourth copy. `web/public/` is the source, `web/dist/` and `cmd/bluntcode/static/` are generated. Four copies of one HTML file is how they drift apart. |
+
+- **Build and tool detritus, 800 MB → 395 MB**: the `bluntcode.exe~` editor backup, release zips 0.24.0–0.36.0 (0.37.0 kept), the `.playwright-cli` capture sweep and prior-session audit scripts, and the `.delta` / `.ruff_cache` / `.workbuddy-ai` / `.mimosa` / `.scannerwork` scratch directories. Nothing here is tracked or regenerable-only-with-effort.
+
 ## [0.38.0] - 2026-10-03
 
 Thirteen loops, all found by measuring the rendered app in a real browser against
