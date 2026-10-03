@@ -2,7 +2,7 @@
 
 ## Subagents
 
-- Use Luna and Claude CLI as subagents.
+- Do not invoke subagents (Luna, Claude CLI, delegated child agents, or similar). Do the work in-thread. If a required check needs a shell the session cannot provide, report it as BLOCKED instead of delegating.
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
 

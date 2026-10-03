@@ -219,6 +219,22 @@ func ProjectKey(workspaceID string) string {
 	}, workspaceID)
 	return "bluntcode:" + clean
 }
+
+// binaryExclusions keeps the scanner out of files no language sensor can
+// analyze. sonar.sources="." hands SonarQube the whole workspace, and its
+// encoding validation then reads every binary it finds as UTF-8 — measured on
+// a real workspace as ~50 "Invalid character encountered" warnings per scan
+// and 80s of preprocessing indexing images alongside source. No source file
+// is affected: none of these extensions has a language sensor.
+var binaryExclusions = []string{
+	"**/*.png", "**/*.jpg", "**/*.jpeg", "**/*.gif", "**/*.bmp", "**/*.ico", "**/*.webp", "**/*.tif", "**/*.tiff",
+	"**/*.woff", "**/*.woff2", "**/*.ttf", "**/*.eot", "**/*.otf",
+	"**/*.zip", "**/*.gz", "**/*.tar", "**/*.7z", "**/*.rar", "**/*.jar",
+	"**/*.pdf", "**/*.exe", "**/*.dll", "**/*.so", "**/*.dylib", "**/*.wasm",
+	"**/*.mp3", "**/*.mp4", "**/*.mov", "**/*.avi", "**/*.mkv", "**/*.wav",
+	"**/*.psd", "**/*.pyc",
+}
+
 func ScannerProperties(dataDir, root, key, serverURL, token string, exclusions any) (string, func(), error) {
 	if dataDir == "" {
 		return "", nil, fmt.Errorf("Blunt Code application data directory is required for temporary scanner configuration")
@@ -231,11 +247,11 @@ func ScannerProperties(dataDir, root, key, serverURL, token string, exclusions a
 		return "", nil, err
 	}
 	p := filepath.Join(dir, "sonar-project.properties")
-	var exclusion string
+	patterns := binaryExclusions
 	if xs, ok := exclusions.([]string); ok {
-		exclusion = strings.Join(xs, ",")
+		patterns = append(append([]string(nil), xs...), binaryExclusions...)
 	}
-	content := strings.Join([]string{"sonar.projectKey=" + key, "sonar.projectBaseDir=" + filepath.ToSlash(root), "sonar.sources=.", "sonar.sourceEncoding=UTF-8", "sonar.host.url=" + serverURL, "sonar.token=" + token, "sonar.exclusions=" + exclusion}, "\n") + "\n"
+	content := strings.Join([]string{"sonar.projectKey=" + key, "sonar.projectBaseDir=" + filepath.ToSlash(root), "sonar.sources=.", "sonar.sourceEncoding=UTF-8", "sonar.host.url=" + serverURL, "sonar.token=" + token, "sonar.exclusions=" + strings.Join(patterns, ",")}, "\n") + "\n"
 	if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
 		os.RemoveAll(dir)
 		return "", nil, err

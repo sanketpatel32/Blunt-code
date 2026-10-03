@@ -342,6 +342,47 @@ func TestScannerPropertiesRemainInAppData(t *testing.T) {
 	}
 }
 
+// Regression: sonar.sources="." hands SonarQube the entire workspace, and its
+// UTF-8 validation then reads every binary as text — measured at ~50 "Invalid
+// character encountered" warnings and 80s of preprocessing on a real
+// workspace that ships images. The generated properties must keep the scanner
+// out of binaries no language sensor can analyze, without dropping the user's
+// own excludes.
+func TestScannerPropertiesExcludeUnanalyzableBinaries(t *testing.T) {
+	root := t.TempDir()
+	p, cleanup, err := ScannerProperties(root, `C:\workspace`, "bluntcode:one", "http://127.0.0.1:9000", "secret", []string{"vendor/**"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(b)
+	if !strings.Contains(content, "vendor/**") {
+		t.Fatalf("user exclusions were dropped: %s", content)
+	}
+	for _, pattern := range []string{"**/*.png", "**/*.jpg", "**/*.zip", "**/*.pdf", "**/*.woff2"} {
+		if !strings.Contains(content, pattern) {
+			t.Fatalf("binary pattern %s missing from sonar.exclusions: %s", pattern, content)
+		}
+	}
+	// Without user excludes the binary list still applies (nil exclusions).
+	p2, cleanup2, err := ScannerProperties(root, `C:\workspace`, "bluntcode:one", "http://127.0.0.1:9000", "secret", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup2()
+	b2, err := os.ReadFile(p2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b2), "**/*.png") {
+		t.Fatalf("binary exclusions missing without user excludes: %s", b2)
+	}
+}
+
 func TestScannerTaskParsesDefaultScannerOutput(t *testing.T) {
 	// Real sonar-scanner stdout (Windows CRLF): the task id only appears in
 	// the human-readable INFO line. The old parser looked for a debug-only

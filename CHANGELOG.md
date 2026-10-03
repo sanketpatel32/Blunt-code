@@ -5,6 +5,16 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- The generated `sonar-project.properties` carried only the user's excludes,
+  so SonarQube (`sonar.sources=.`) walked the entire workspace and read every
+  binary it found as UTF-8 — measured at ~50 "Invalid character encountered"
+  warnings and 80s of preprocessing on a real workspace that ships images. The
+  properties now also exclude binaries no language sensor can inspect
+  (images, fonts, archives, media, executables); user excludes are untouched.
+
 ## [0.39.1] - 2026-10-03
 
 ### Fixed
