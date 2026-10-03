@@ -1,0 +1,130 @@
+/* ════════════════════════════════════════════════════════════════════
+   HIERARCHY — make the page rank itself
+   ════════════════════════════════════════════════════════════════════
+   Imported LAST, after identity.css. Where identity.css owns type VOICE
+   (which face, which sizes read as which level), this file owns one thing
+   only: the three surface tiers, and which tier each kind of object gets.
+
+   WHY THIS FILE EXISTS
+   The measure pass (`node scripts/ui-loops/measure.mjs`, live app, 1440x1000)
+   found 2 distinct border+radius+shadow recipes across every bordered panel
+   on the home page. The verdict band, the ledger, the activity feed and the
+   analyzer footer strip were all the same box. Nothing on the page could
+   rank itself, because every surface drew itself identically.
+
+   This is the cause of "the UI sucks" more than any single colour or font.
+   A page with good typography and a good palette still reads as flat when
+   its most important object and its least important object are painted the
+   same. So the fix is not decorative: it is giving the page three named
+   heights and spending them deliberately.
+
+     sunken — recessed INSIDE a panel. Table heads, code wells, tree
+              interiors. Reads as "this is a well, not a card".
+     base   — a panel on the canvas. The default, and deliberately the
+              majority: ~80% of boxes stay here so that the ones that
+              don't actually mean something.
+     raised — ONE per page. The object the page is about. It gets a
+              stronger edge and a real shadow.
+
+   The rule that makes it work: A PAGE GETS ONE RAISED SURFACE. The old
+   `.board-verdict` (hero), `.board-columns` (two panels), and `.board-foot`
+   (an analyzer status strip) were all the same recipe, so the verdict had no
+   advantage over the footer. Now the verdict is raised and the other two are
+   base, and the page has a top.
+
+   Tokens only — no literal colour, no ad-hoc oklch — so dark mode holds
+   without a second set of rules. Tokens come from tokens.css:
+     --color-surface-sunken / --color-surface-raised / --color-edge-raised
+     --elev-base / --elev-base-hover / --elev-raised
+   ════════════════════════════════════════════════════════════════════ */
+
+/* ── Tier 1 · BASE — the default panel ─────────────────────────────
+   Every box that is simply a box. Deliberately the quietest of the three:
+   a hairline border and the small shadow, nothing more. */
+.tier-base,
+.board-verdict,
+.board-columns,
+.board-foot,
+.board-panel,
+.workspace-section-card,
+.lang-donut-card,
+.workspace-card-accordion,
+.stage-list,
+.scan-side,
+.tree-panel,
+.rule-editor,
+.workspace-card,
+.summary-card,
+.about-card,
+.analysis-toolbar,
+.report,
+.empty,
+.error-panel {
+  background: var(--color-surface);
+  border: var(--rule) solid var(--color-rule-faint);
+  box-shadow: var(--elev-base);
+}
+
+/* ── Tier 2 · RAISED — the one object the page is about ─────────────
+   The extra step is an EDGE plus a real shadow, not a lighter fill: in light
+   mode `--color-surface` is already 100% white, so a "lighter" raised surface
+   does not exist and trying to make one produced a panel that looked like a
+   rendering bug. Depth on a white plane is carried by the shadow, and the
+   shadow is what actually reads at a glance.
+
+   `data-focus` is the hook a page sets on its hero panel. It is opt-in rather
+   than a class every panel could take, so the "one raised surface per page"
+   rule is enforceable by looking at the markup: one `data-focus` per route. */
+[data-focus='hero'] {
+  background: var(--color-surface-raised);
+  border-color: var(--color-edge-raised);
+  box-shadow: var(--elev-raised);
+}
+
+/* The home verdict is the clearest case in the app: it is the answer to "how
+   risky is my code", and it was painted identically to the analyzer footer
+   three panels below it. `data-focus` is set on the section in HomePage.tsx. */
+
+/* ── Tier 3 · SUNKEN — recessed inside a panel ──────────────────────
+   Applied to the INSIDE of a panel, never to a top-level object. The tell is
+   that it is darker than its container in light mode, so the eye reads it as
+   a well rather than another card floating on the canvas.
+
+   Table heads and the code preview are the two places this earns its keep:
+   both are dense rows of small type where a raised white header read as a
+   sibling of the data instead of as its label. */
+.table-wrap th,
+.code-preview,
+.tree-panel .tree-scroll,
+.scan-progress,
+.console-well {
+  background: var(--color-surface-sunken);
+}
+
+/* A sunken well needs its own edge, because it has no shadow to define it —
+   a recess is defined by the line where it meets the panel around it. */
+.tree-panel .tree-scroll,
+.code-preview { border: var(--rule) solid var(--color-rule-faint); border-radius: var(--radius-sm); }
+
+/* ── Hover belongs to base ───────────────────────────────────────────
+   The lift on hover is the elevation token stepping up, not a hand-written
+   shadow. This is why the tiers are tokens: a base panel's hover is defined
+   once and cannot drift from its rest state. */
+.board-columns:hover,
+.workspace-card:hover,
+.stage-list:hover { box-shadow: var(--elev-base-hover); }
+
+/* ── What this file deliberately does NOT do ─────────────────────────
+   No new colours, no new radii, no new type sizes, no layout changes. The
+   palette and the type ramp are audited and passing (npm run audit:contrast);
+   the problem was not their values, it was that every object was painted
+   with the same recipe regardless of what it meant. Repainting the
+   hierarchy is the whole job; anything else here would be churn that risks
+   the contrast work for no gain. */
+
+/* ── Reduced motion ───────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  [data-focus='hero'],
+  .board-columns,
+  .workspace-card { transition: none; }
+}

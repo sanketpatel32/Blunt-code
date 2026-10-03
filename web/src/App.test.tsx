@@ -227,7 +227,11 @@ describe('Blunt Code home', () => {
     const host = await render(fetchMock);
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     await act(async () => { FakeEventSource.instances[0].emit('analyzer.started', { type: 'analyzer.started', data: { analyzer_id: 'ruff', name: 'Ruff' } }); });
-    expect(host.textContent).toContain('Low risk — 1 finding'); // the verdict headline leads the page
+    // The h1 is the verdict ALONE; the counts sit in their own line beside it.
+    // It used to be one 65-character sentence carrying verdict + counts +
+    // caveat, which is why this route's h1 was 28px against 40px elsewhere.
+    expect(host.querySelector('.scan-hero h1')?.textContent).toBe('Low risk');
+    expect(host.querySelector('.scan-hero-stats')?.textContent).toContain('1 finding');
     expect(host.textContent).toContain('Example finding');
     expect(host.querySelector('.findings-table table')).not.toBeNull();
     // Tool chips sit in the always-visible toolbar with per-tool counts; no Filters toggle exists.
@@ -261,7 +265,11 @@ describe('Blunt Code home', () => {
     const host = await render(fetchMock);
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     expect(host.textContent).toContain('Saved report');
-    expect(host.textContent).toContain('Scan interrupted — partial results below'); // the verdict headline names the outcome
+    // The caveat MOVED out of the h1 when the headline was split, so this now
+    // asserts it survives as its own element. An interrupted scan that reads
+    // like a finished one invites treating half a scan as the whole thing.
+    expect(host.querySelector('.scan-hero h1')?.textContent).toBe('Scan interrupted');
+    expect(host.querySelector('.scan-hero-caveat')?.textContent).toBe('partial results below');
     expect(host.textContent).not.toContain('Cancel scan');
   });
 
@@ -278,7 +286,11 @@ describe('Blunt Code home', () => {
     });
     const host = await render(fetchMock);
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
-    expect(host.textContent).toContain('All clear — no findings');
+    // A clean zero-finding scan shows the verdict alone — no "0 findings", and
+    // no "coverage complete" chip, because a scan with nothing to report has no
+    // qualification worth printing.
+    expect(host.querySelector('.scan-hero h1')?.textContent).toBe('All clear');
+    expect(host.querySelector('.scan-hero-stats')).toBeNull();
     expect(host.textContent).toContain('Every analyzer finished and found nothing to flag. Nice work.');
     expect(host.textContent).not.toContain('No findings match these filters');
     expect(host.querySelector('.empty.positive .empty-icon svg')).not.toBeNull();

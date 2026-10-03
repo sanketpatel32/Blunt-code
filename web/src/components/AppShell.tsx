@@ -168,7 +168,15 @@ export function AppShell({ route, onNavigate, onClose, theme, onToggleTheme, onS
         <div className="rail-foot">
           {/* One search affordance, and it is the thing the palette actually
               does. The old header advertised it as a "Ctrl K" pill — a keyboard
-              shortcut badge worn as chrome, which is a template tell. */}
+              shortcut badge worn as chrome, which is a template tell.
+
+              It moves HERE, out of the navigation list. This rail is read
+              positionally: the user's eye lands in the PRIMARY group (Home,
+              Workspaces, Search, Tools) and reads down. Parking a text input
+              ~500px above the list's midpoint put a *destination* control in
+              the same column as *places*, which is why the rail read as two
+              competing things. At the foot it sits with the other utilities,
+              below every destination, where a shortcut affordance belongs. */}
           <button
             type="button"
             className="rail-search"
@@ -180,23 +188,26 @@ export function AppShell({ route, onNavigate, onClose, theme, onToggleTheme, onS
             <kbd className="kbd-hint">Ctrl K</kbd>
           </button>
 
+          {/* Settings and About only. The theme toggle used to sit in this list
+              as a full-width row with a text label — visually identical to a
+              nav destination, so a twice-a-session preference got the same
+              weight as Settings. It is now an icon button in the utility
+              cluster below, which is what it is: a preference, not a place. */}
           <ul className="rail-group">
             {items(SETTINGS_PAGES).map(link)}
-            <li>
-              <button
-                type="button"
-                className="rail-link rail-link-button theme-toggle"
-                onClick={onToggleTheme}
-                aria-pressed={theme === 'dark'}
-                title={theme === 'dark' ? t('common.switchToLight') : t('common.switchToDark')}
-              >
-                {theme === 'dark' ? <Sun className="rail-link-icon" aria-hidden="true" /> : <Moon className="rail-link-icon" aria-hidden="true" />}
-                <span className="rail-link-label">{theme === 'dark' ? t('common.switchToLight') : t('common.switchToDark')}</span>
-              </button>
-            </li>
           </ul>
 
           <div className="rail-util">
+            <button
+              type="button"
+              className="rail-util-btn theme-toggle"
+              onClick={onToggleTheme}
+              aria-pressed={theme === 'dark'}
+              aria-label={theme === 'dark' ? t('common.switchToLight') : t('common.switchToDark')}
+              title={theme === 'dark' ? t('common.switchToLight') : t('common.switchToDark')}
+            >
+              {theme === 'dark' ? <Sun className="h-4 w-4" aria-hidden="true" /> : <Moon className="h-4 w-4" aria-hidden="true" />}
+            </button>
             <NotificationsCenter routeKey={href(route)} />
             {seqArmed && <span className="seq-hint" aria-hidden="true">g…</span>}
             <DropdownMenu>

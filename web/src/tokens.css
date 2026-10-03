@@ -179,6 +179,35 @@
   --rule-strong: 1.5px;
   --rule-focus: 2px;
 
+  /* ══════════════════════════════════════════════════════════════
+     SURFACE ELEVATION — a named tier per height, not one value reused
+     ══════════════════════════════════════════════════════════════
+     The measure pass found only 2 distinct border+radius+shadow recipes
+     across every bordered panel on the page: the verdict, the ledger, the
+     activity feed and the footer strip were all the same box, so a page's
+     own content had no way to rank itself.
+
+     Three named tiers make the choice explicit. Elevation reads as LIGHT,
+     so in light mode each step climbs toward white and in dark mode each
+     step climbs away from black:
+
+       sunken — recessed INSIDE a panel (table heads, code, tree wells)
+       base   — a panel on the canvas. The default; ~80% of boxes
+       raised — one step above base, for the single object a page is
+                about. Also the hover state of a base panel.
+
+     A page gets ONE raised surface. Spending it on a footer strip as
+     readily as on the verdict is exactly what made everything rank equal.
+
+     `raised` carries no fill shift in light mode — 100% is already the top
+     of the ramp, so pushing higher would leave pure white and break the
+     tonal ceiling. Its extra step is an EDGE and a SHADOW instead, which
+     is how elevation actually reads on a real surface. */
+  --color-surface-sunken: oklch(94.6% 0.008 262);
+
+  /* The edge a raised surface draws, because it cannot shift its own fill. */
+  --color-edge-raised: var(--color-rule-strong);
+
   /* — Shadows — VISIBLE, premium depth (not faint) */
   --shadow-xs: 0 1px 2px oklch(17% 0.016 268 / 0.07), 0 1px 3px oklch(17% 0.016 268 / 0.05);
   --shadow-sm: 0 2px 10px oklch(17% 0.016 268 / 0.08), 0 1px 3px oklch(17% 0.016 268 / 0.06);
@@ -221,6 +250,36 @@
   --focus-ring: 0 0 0 3px var(--color-focus-ring);
   --grid-gap: var(--space-md);
 
+  /* — Elevation recipes — the three tiers, named once.
+     Components pick a tier by ROLE ("this is the thing the page is
+     about") instead of restating a border/radius/shadow triple, which is
+     how 6 panels came to share one recipe while 2 were supposed to rank. */
+  --elev-base: var(--shadow-card);
+  --elev-base-hover: var(--shadow-card-hover);
+  --elev-raised: var(--shadow-lg);
+
+  /* — Page title — ONE size for every route's h1.
+     The measure pass found 2 sizes across 4 routes: 40px on home /
+     workspaces / workspace, and 28px on report. Two causes, both now gone:
+
+       1. The report h1 was a 65-CHARACTER SENTENCE ("Critical risk — 2,899
+          findings, 50 critical — coverage incomplete") and had its own
+          `clamp(1.35rem, 2.4vw, 1.75rem)` in analysis.css, shrunk to make a
+          sentence fit a title slot. ScanPage.tsx now puts the verdict alone
+          in the h1 ("Critical risk") and the counts in their own line.
+       2. The 40px came from `clamp(1.75rem, 1.3rem + 1.5vw, 2.5rem)` in
+          identity.css, which is imported AFTER styles.css and therefore beat
+          any title rule declared there. Two files, two title sizes, and the
+          one that lost was the one that looked intentional.
+
+     The curve below is identity.css's, unchanged, so no existing page moves.
+     What changed is that it now lives in ONE place and both sheets read it —
+     so a title can never again be sized to dodge a wrap. */
+  --text-page-title: clamp(1.75rem, 1.3rem + 1.5vw, 2.5rem);
+
+  /* The section title inside a page — one step down, never a rival. */
+  --text-section-title: var(--text-lg);
+
   /* — Layout constants — single source for chrome offsets (loop 102) */
   --nav-h: 3.25rem;
   --page-gutter: var(--space-lg);
@@ -233,9 +292,18 @@
   --color-paper: oklch(14% 0.012 268);
   --color-paper-elevated: oklch(16% 0.013 268);
   --color-surface: oklch(19% 0.013 268);
-  --color-surface-raised: oklch(22% 0.013 268);
   --color-surface-muted: oklch(24% 0.013 268);
   --color-surface-subtle: oklch(27% 0.013 268);
+
+  /* Dark mode has room to shift the FILL, so `raised` does exactly what the
+     light theme cannot: 19% → 23%, a real step above base. `sunken` moves the
+     other way, to 17% — below base, because a recess in a dark plane is
+     darker, not lighter. The light theme's sunken (94.6%) sits BELOW its
+     canvas too; the two agree on direction and only differ on which end of
+     the ramp has room to move. */
+  --color-surface-raised: oklch(23% 0.014 268);
+  --color-surface-sunken: oklch(17% 0.012 268);
+  --color-edge-raised: var(--color-rule-strong);
   --color-surface-glass: oklch(19% 0.013 268 / 0.82);
   --color-surface-overlay: oklch(19% 0.013 268 / 0.92);
 

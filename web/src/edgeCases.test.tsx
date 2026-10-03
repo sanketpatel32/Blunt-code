@@ -206,7 +206,11 @@ describe('hostile API fixtures', () => {
     ]);
     const host = await renderAt('/scans/scan-1', fetchMock);
     expectClean(host);
-    expect(host.textContent).toContain('Low risk — 1 finding'); // the page renders from the scan endpoint; the empty report degrades to zeroed controls
+    // The page renders from the scan endpoint; the empty report degrades to
+    // zeroed controls. The verdict is the h1 on its own and the count is its
+    // own line beside it — they were one sentence until the headline was split.
+    expect(host.querySelector('.scan-hero h1')?.textContent).toBe('Low risk');
+    expect(host.querySelector('.scan-hero-stats')?.textContent).toContain('1 finding');
   });
 
   it('ToolsPage survives inventory entries missing display fields', async () => {

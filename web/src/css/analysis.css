@@ -73,16 +73,49 @@
 
 .scan-hero-copy { min-width: 0; }
 
+/* The h1 carries `.page-title`, which supplies font-family/size/weight/
+   tracking/line-height from --text-page-title — the SAME token every other
+   route's title uses.
+
+   It had its own `clamp(1.35rem, 2.4vw, 1.75rem)` here, which resolved to
+   28px at 1440px against 40px on home/workspaces/workspace. The cause was
+   not taste: the h1 was a 65-character sentence ("Critical risk — 2,899
+   findings, 50 critical — coverage incomplete") and had been shrunk to make
+   a sentence fit a title slot. ScanPage.tsx now puts the verdict alone in
+   the h1 and the counts in `.scan-hero-stats`, so the clamp is unnecessary —
+   a short verdict fits the shared title size at every width. */
 .scan-hero-copy h1 {
   margin: 0;
-  font-family: var(--font-display);
-  font-size: clamp(1.35rem, 2.4vw, 1.75rem);
-  font-weight: 700;
-  letter-spacing: -.025em;
-  line-height: 1.15;
-  color: var(--color-ink);
   text-wrap: balance;
-  overflow-wrap: anywhere;
+}
+
+/* The counts the old headline carried, as their own line under the verdict.
+   Tabular so the digits line up with the meta line beneath them. The caveat
+   is a separate span so it can be tinted without tinting the counts, and
+   both are inside one aria-label so they read as a single clause. */
+.scan-hero-stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2xs) var(--space-sm);
+  margin: var(--space-2xs) 0 0;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: -.02em;
+  color: var(--color-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.scan-hero-caveat {
+  padding: 1px 8px;
+  border: var(--rule) solid color-mix(in oklch, var(--color-warning) 40%, var(--color-rule));
+  border-radius: var(--radius-pill);
+  background: var(--color-warning-soft);
+  color: var(--color-warning-text);
+  font: 600 var(--text-2xs) var(--font-body);
+  letter-spacing: 0;
+  font-variant-numeric: normal;
 }
 
 .scan-hero-meta {
@@ -344,6 +377,13 @@
 .filter-group-wide { flex: 1 1 100%; border-left: 0; border-top: var(--rule) solid var(--color-rule-faint); }
 .filter-group-wide:first-child { border-top: 0; }
 
+/* The Tool group takes the slack instead of wrapping to its own row. With the
+   rail capped at 7 chips plus a disclosure it fits beside Severity and Status,
+   which is what removes the third toolbar row — the Type rail keeps its full
+   width because it is the one group that still scrolls. */
+.filter-group-grow { flex: 1 1 auto; min-width: 0; }
+.filter-group-grow > .chip-group { min-width: 0; }
+
 .filter-group-label {
   flex: none;
   color: var(--color-ink-faint);
@@ -364,6 +404,51 @@
 
 /* The Type rail scrolls horizontally when long. */
 .analysis-toolbar .chip-rail { flex: 1; min-width: 0; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: thin; padding-bottom: 2px; }
+
+/* ── Collapsed rails ────────────────────────────────────────────────
+   The Tool and Type rails used to render every option they had, which on a
+   real workspace meant 22 chips across 3 rows above the table — 3 rows of
+   filter chrome before the first finding. They now show their top 7 by
+   finding count and hide the tail behind a "+N" disclosure (see
+   leadingWithSelection in ReportView.tsx).
+
+   The disclosure and its scroller are INLINE inside the same <fieldset> as
+   the visible chips, not a popover: the group keeps its role and its
+   aria-label, the tail is reachable without a second click target to
+   discover, and keyboard focus stays on the toolbar instead of escaping into
+   an overlay that has to manage its own focus trap. */
+.analysis-toolbar .chip-more {
+  gap: 3px;
+  color: var(--color-accent-strong);
+  border-color: color-mix(in oklch, var(--color-accent) 26%, var(--color-rule));
+}
+.analysis-toolbar .chip-more:hover { background: var(--color-accent-soft); border-color: var(--color-accent); }
+.analysis-toolbar .chip-more[aria-expanded='true'] { background: var(--color-accent-soft); border-color: var(--color-accent); color: var(--color-accent-strong); }
+
+/* Rotates on open. The one transition is declared here rather than per-icon so
+   the reduced-motion override below is a single rule. */
+.chip-more-chevron { flex: none; transition: transform var(--dur-fast) var(--ease-out); }
+.chip-more-chevron[data-open='true'] { transform: rotate(180deg); }
+
+/* The revealed tail. `inline-flex` + wrap so it flows after the disclosure and
+   continues on the toolbar's own rows rather than opening a floating layer;
+   a surface-muted wash distinguishes it from the leading chips without a
+   second border. */
+.analysis-toolbar .chip-scroller {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2xs);
+  padding: 2px 0 2px var(--space-2xs);
+  margin-left: var(--space-2xs);
+  border-left: var(--rule) solid var(--color-rule-faint);
+  animation: chip-rail-open var(--dur-fast) var(--ease-out);
+}
+@keyframes chip-rail-open { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .analysis-toolbar .chip-scroller { animation: none; }
+  .chip-more-chevron { transition: none; }
+}
 
 /* Status cell text; suppressed rows read as struck-through archive entries. */
 .status-text { font-size: var(--text-xs); color: var(--color-ink-soft); text-transform: capitalize; }

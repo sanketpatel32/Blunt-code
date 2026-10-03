@@ -200,12 +200,44 @@
 
 /* Hero count: the page's single oversized number. Its composition is the
    severity tally directly beneath it; every other number on the board is
-   body-size tabular-nums. */
+   body-size tabular-nums.
+
+   THE FIX. This was one flex row with `align-items: baseline` holding three
+   things: the 72px number, the word "findings", and the sentence "across the
+   latest completed scans of 10 workspaces". Baseline alignment is only
+   meaningful between type of comparable size — it lines up 72px type with
+   16px type by dropping the small type to the big type's baseline, which is
+   precisely what jammed `5740` against `findings` with no space and let the
+   sentence wrap around the number's box. Measured at 1440px, the number's
+   parent <p> contained the number AND the prose, and the rendered line read
+   `5740findings across the latest…`.
+
+   Two fixes, and the second matters more than the first:
+
+   1. The number and its unit are wrapped in `.verdict-hero-figure`. The unit
+      is `display: inline` on an `inline-block` parent, so the 72px and 24px
+      type inside the figure still share a baseline with each other — the
+      one place baseline alignment is the right tool.
+
+   2. The parent is a COLUMN, so the figure and the scope sentence occupy
+      separate lines. The number is the panel's headline and the sentence is
+      its caption; a caption that shares a line with a display number is
+      never legible, whatever the alignment.
+
+   `text-wrap: balance` on the caption keeps the sentence from breaking
+   awkwardly now that it has a line of its own to fill. */
 .verdict-hero {
   margin: 0;
   display: flex;
-  align-items: baseline;
+  flex-direction: column;
   gap: var(--space-2xs);
+  min-width: 0;
+}
+
+.verdict-hero-figure {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-sm);
   flex-wrap: wrap;
 }
 
@@ -223,7 +255,15 @@
 
 .verdict-hero-unit { font-size: var(--text-xl); font-weight: 600; color: var(--color-ink); letter-spacing: -.02em; }
 
-.verdict-hero-ctx { font-size: var(--text-md); color: var(--color-ink-soft); }
+/* A caption, so it is sized and coloured like one — not like body copy that
+   happens to be shorter. */
+.verdict-hero-ctx {
+  max-width: var(--measure);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  color: var(--color-ink-soft);
+  text-wrap: pretty;
+}
 
 .verdict-tally { display: flex; flex-direction: column; gap: var(--space-md); min-width: 0; }
 
@@ -919,6 +959,10 @@
 
   .verdict-hero-num { font-size: clamp(2.5rem, 1.8rem + 5vw, 3.25rem); }
   .verdict-hero-unit { font-size: var(--text-lg); }
+  /* The caption had `max-width: var(--measure)` (40rem); at a phone width
+     that is the whole viewport minus padding, so nothing changes — but the
+     explicit cap keeps it from ever competing with the number's line. */
+  .verdict-hero-ctx { max-width: none; }
 
   .feed-detail { grid-template-columns: 1fr auto; }
 }

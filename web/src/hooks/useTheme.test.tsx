@@ -101,12 +101,20 @@ describe('useTheme', () => {
   });
 });
 
-describe('theme toggle in the header', () => {
+describe('theme toggle in the rail', () => {
+  /* The toggle moved out of the nav link list into the rail's utility cluster,
+     and from a full-width labelled row to an icon button. It was a
+     twice-a-session preference sitting at the same weight as Settings, and
+     as a *destination* in a rail that is read positionally.
+     These assertions therefore check the ACCESSIBLE NAME rather than
+     textContent: an icon-only button has no text child, and what actually
+     has to survive the move is the name a screen reader announces and a
+     mouse user gets on hover. */
   it('offers Dark with a moon icon in light mode and toggles on click', async () => {
     const { host, onToggleTheme } = await renderShell('light');
     const toggle = host.querySelector<HTMLButtonElement>('.theme-toggle');
     expect(toggle).not.toBeNull();
-    expect(toggle!.textContent).toContain('Switch to dark theme');
+    expect(toggle!.getAttribute('aria-label')).toBe('Switch to dark theme');
     expect(toggle!.getAttribute('aria-pressed')).toBe('false');
     expect(toggle!.querySelector('path')).not.toBeNull();
     await act(async () => { toggle!.click(); });
@@ -117,9 +125,17 @@ describe('theme toggle in the header', () => {
     const { host } = await renderShell('dark');
     const toggle = host.querySelector<HTMLButtonElement>('.theme-toggle');
     expect(toggle).not.toBeNull();
-    expect(toggle!.textContent).toContain('Switch to light theme');
+    expect(toggle!.getAttribute('aria-label')).toBe('Switch to light theme');
     expect(toggle!.getAttribute('aria-pressed')).toBe('true');
     expect(toggle!.querySelector('circle')).not.toBeNull();
     expect(toggle!.title).toBe('Switch to light theme');
+  });
+
+  it('is not a nav destination — it sits in the utility cluster, not the link list', async () => {
+    const { host } = await renderShell('light');
+    // A rail is scanned top-to-bottom as a list of places. The toggle is a
+    // preference, so it must not render as one of the .rail-link rows.
+    expect(host.querySelectorAll('.rail-group .theme-toggle')).toHaveLength(0);
+    expect(host.querySelector('.rail-util .theme-toggle')).not.toBeNull();
   });
 });

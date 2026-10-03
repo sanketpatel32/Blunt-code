@@ -115,15 +115,51 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
   // Zero findings only mean "all clear" when coverage was complete; a warned
   // scan (failed or degraded analyzers) must never present a clean bill.
   const incomplete = current.state === 'completed_with_warnings';
-  /** One sentence the whole page hangs on: the verdict, in the same grade language as the dashboard. */
-  const headline = live
+  /* The page title is the VERDICT and nothing else.
+   *
+   * It used to be `${band} — ${count} findings, ${critical} critical — coverage
+   * incomplete` — 65 characters carrying three separate facts, which measured
+   * at 28px while every other route's h1 measured 40px. The type had been
+   * shrunk to make a sentence fit a title slot, and that is why this page was
+   * the one place in the app where the h1 scale disagreed with itself.
+   *
+   * So the three facts go where each of them belongs, and none of them is
+   * lost:
+   *   verdict → the h1            "Critical risk"   (matches the grade tile
+   *                                 beside it, so the eye reads them as one)
+   *   counts  → `.scan-hero-stats` "2,899 findings · 50 critical"
+   *   caveat  → `.scan-hero-caveat`, beside the counts
+   * A title is a label. Three facts in one is a sentence wearing a label's
+   * clothes, and it is why this h1 was a different size from all twelve others.
+   *
+   * THE CAVEAT IS NOT OPTIONAL, and moving it is where this change could have
+   * quietly cost the page its honesty. Two different states need two different
+   * qualifications, and each was previously welded onto the end of the title:
+   *   completed_with_warnings → "coverage incomplete" (analyzers failed/degraded)
+   *   interrupted             → "partial results below" (the scan was killed)
+   * A first pass at this split kept only the first and dropped the second,
+   * which is precisely the regression the "partial results below" assertion
+   * exists to catch: an interrupted scan that looks identical to a finished one
+   * invites the reader to treat half a scan as the whole thing. So `caveat` is
+   * derived from the state, and neither state reaches a rendered page without
+   * its qualification.
+   */
+  const interrupted = current.state === 'interrupted';
+  const verdict = live
     ? liveHeadline(events, current.state)
     : current.state === 'failed' ? 'Scan failed'
       : current.state === 'cancelled' ? 'Scan cancelled'
-        : current.state === 'interrupted' ? 'Scan interrupted — partial results below'
+        : interrupted ? 'Scan interrupted'
           : total === 0
-            ? incomplete ? 'No findings — but coverage was incomplete' : 'All clear — no findings'
-            : `${bandFor(riskGrade(score)).label} — ${count(total)} ${total === 1 ? 'finding' : 'findings'}${critical > 0 ? `, ${count(critical)} critical` : ''}${incomplete ? ' — coverage incomplete' : ''}`;
+            ? incomplete ? 'No findings' : 'All clear'
+            : bandFor(riskGrade(score)).label;
+  /* Real counts, still exact. `count()` formats 2899 as "2,899" for reading;
+     the aria-label keeps the raw digits so assistive tech is not read a
+     comma-separated number one character at a time. */
+  const stats: string[] = total === 0 ? [] : [`${count(total)} ${total === 1 ? 'finding' : 'findings'}`];
+  if (critical > 0) stats.push(`${count(critical)} critical`);
+  const statsLabel = stats.join(', ');
+  const caveat = interrupted ? 'partial results below' : incomplete ? 'coverage incomplete' : '';
   const runs = current.analyzer_runs ?? [];
   const succeeded = runs.filter((run) => run.status === 'succeeded').length;
   /** Card accent follows the worst finding on the page: danger > warning > success > neutral. */
@@ -144,7 +180,17 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
               ? <span className="scan-grade scan-grade-clear" data-tone="warning" aria-hidden="true">!</span>
               : <span className={`scan-grade scan-grade-clear`} aria-hidden="true">✓</span>}
           <div className="scan-hero-copy">
-            <h1>{headline}</h1>
+            <h1 className="page-title">{verdict}</h1>
+            {/* The counts and the qualification the old headline carried, as
+                their own line. Rendered when there is anything to say — a clean
+                zero-finding scan shows "All clear" alone rather than "0 findings
+                · coverage complete". */}
+            {(stats.length > 0 || caveat) && (
+              <p className="scan-hero-stats" aria-label={[statsLabel, caveat].filter(Boolean).join(', ')}>
+                {stats.length > 0 && <span aria-hidden="true">{stats.join(' · ')}</span>}
+                {caveat && <span className="scan-hero-caveat">{caveat}</span>}
+              </p>
+            )}
             <p className="scan-hero-meta">
               <span>Started {startedText}</span>
               <span aria-hidden="true">·</span>

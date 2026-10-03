@@ -5,9 +5,104 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.39.0] - 2026-10-03
+
+The UI had a good palette and a good type ramp and still read as flat, because
+**every object on every page was painted with the same recipe**. The measure
+pass (`scripts/ui-loops/measure.mjs`, a new gate) found **2 distinct
+border+radius+shadow treatments across every bordered panel** in the running
+app: the risk verdict, the workspace ledger, the activity feed and an analyzer
+status footer strip were all the same box, so a page had no way to rank its own
+content. Everything below is either that fix or a defect the pass exposed on the
+way to it.
+
+### Added
+- **`scripts/ui-loops/measure.mjs`** — eight rendered-geometry gates that re-derive
+  every claim in this release against a live server and a real corpus, in both
+  themes. jsdom loads no CSS and cannot see a track that is 7px short, so these
+  have to run in a browser; every number quoted below comes from it rather than
+  from reading the cascade.
+- **Three named surface tiers** (`web/src/css/hierarchy.css`, tokens in
+  `tokens.css`): `sunken` for recesses inside a panel (table heads, code wells,
+  tree interiors), `base` for a panel on the canvas (the default, ~80% of boxes,
+  so the ones that don't stay quiet), and `raised` for **one object per page**.
+  The rule that makes it work is that a page gets exactly one raised surface —
+  spending it on a footer strip as readily as on the verdict is what had made
+  everything rank equal. `data-focus="hero"` is the opt-in hook, so "one per
+  page" is enforceable by reading the markup.
+- **`--text-page-title`** — one title size for every route's `<h1>`.
+- **Collapsed filter rails** on the report toolbar (`leadingWithSelection`): the
+  Tool and Type rails show their top 7 by finding count and hide the tail behind
+  a `+N` disclosure. A selected option outside the top 7 is *promoted* into the
+  rail rather than left behind a closed disclosure, which is the case that would
+  otherwise look like the filter had silently stopped applying. Nothing becomes
+  unreachable.
+
+### Changed
+- The severity ribbon, the ledger, the feed, the verdict, cards, tables and the
+  empty/error states all read from the three elevation tiers instead of
+  restating a border/radius/shadow triple. Dark mode shifts `raised` 19% → 23%
+  and `sunken` to 17%; light mode cannot shift `raised`'s fill (white is already
+  the top of the ramp) so its extra step is an edge and a shadow, which is how
+  elevation reads on a real surface anyway.
 
 ### Fixed
+- **The home hero rendered as `5740findings across the latest completed scans of 10
+  workspaces.`** `.verdict-hero` was a flex row with `align-items: baseline`
+  holding three things: the 72px count, the word "findings", and 16px prose.
+  Baseline alignment is only meaningful between type of comparable size — it
+  lines 72px type up with 16px type by *dropping the small type to the big type's
+  baseline*, which is precisely what jammed the largest number in the app against
+  a paragraph with no space between them. The count and its unit are now one
+  figure and the scope sentence is a caption beneath it.
+- **The hero's accessible name was three fragments with no word boundaries.**
+  Putting the figure and its caption on separate lines means the whitespace
+  between them collapses (a flex container ignores whitespace-only text), so the
+  name went from one sentence to `"21"` / `"findings"` / `"across the latest…"`.
+  One `aria-label` on the parent with the children `aria-hidden` restores a
+  single clean sentence.
+- **Two `<AppFooter>` in the DOM.** `App.tsx` rendered it inside `.app-content`
+  *and* again at the frame root.
+- **Two `<h1>` sizes across the app** (40px on most routes, 28px on the report
+  page). Two independent causes, both real: the report title was a
+  **65-character sentence** (`Critical risk — 2,899 findings, 50 critical —
+  coverage incomplete`) carrying verdict + counts + caveat at once, and it had its
+  own `clamp()` in `analysis.css`; separately, `identity.css` is imported *after*
+  `styles.css`, so the 40px title rule there silently beat any token rule written
+  in `styles.css`. The title now carries the verdict alone (`Critical risk`) with
+  the counts and the caveat in their own line, and both sheets read one token.
+- **The scan page could have lost its honesty in that split, and did on the first
+  attempt.** Two states need two different qualifications — `completed_with_warnings`
+  needs "coverage incomplete", `interrupted` needs "partial results below" — and
+  both were welded onto the end of the title. Moving them out is exactly the
+  regression the existing "partial results below" assertion exists to catch: an
+  interrupted scan that reads identical to a finished one invites treating half a
+  scan as the whole thing. The caveat is now derived from the state, so neither
+  can reach a rendered page unqualified.
+- **The report toolbar wrapped onto extra rows.** Nine tool chips in a single row
+  is a wall of `Tool | Ruff 3 | Biome 1819 | Gitleaks 835 | …` text; the rails now
+  fit one row with a disclosure for the tail.
+- **The files page spent 821px of tree beside a 302px rules panel**, in a
+  1.2fr/0.8fr split chosen for a layout that no longer existed, and clipped its
+  own list. Rows are 44px → 32px, the tree's inner scroll is gone, and the panels
+  are 1:1 — the rules panel is where the editable glob pattern lives, so it is the
+  one that wanted the width.
+- **The eyebrow tell on all 13 routes.** Every page rendered an uppercase label
+  above a title that already said the same thing: `DASHBOARD` over "Risk board",
+  `WORKSPACE` over "Blunt-code", `FINDINGS SEARCH` over "Search findings", `FILE
+  SELECTION` over "Blunt-code — Files". Nine labels, zero information. It is now a
+  quiet metadata line *under* the title. The scan hero's label survived, because
+  what it carries (`Scan · standard profile` + the state badge) is the scan's
+  identity and its outcome, neither of which the new shorter title states — but its
+  volume was wrong, so it lost the uppercase and the mono.
+- **The rail withheld 17.2% of a 1440px viewport**, with a fake search box parked
+  ~500px above the list's midpoint and "Switch to dark theme" — a twice-a-session
+  preference — given a full row beside Settings. Now 15.0% (216px, verified zero
+  labels truncated), the search box sits with the other utilities below every
+  destination, and the theme toggle is an icon button in the utility cluster
+  rather than a nav destination.
+
+### Fixed (build)
 - **The gofmt gate was reporting failures that did not exist.** `verify.ps1` compares each flagged file against `gofmt`'s output, but it captured that output through PowerShell's native-command pipeline, which decodes stdout with `[Console]::OutputEncoding` — still **ibm850** on a stock Windows console. `gofmt` writes UTF-8, so every non-ASCII character in its output decoded to mojibake and failed the comparison against the UTF-8 file on disk. Measured here: **83 correctly-formatted files reported as drift**, and zero after pinning the encoding to UTF-8.
 
   The nastier half is the direction it fails in. It only ever produced *false* drift, never missed real drift, so a genuine formatting regression would have been buried under 83 lines of noise — or, on a machine whose console happened to be UTF-8, the gate would simply have agreed with everything. Which is why it read `ok gofmt` earlier in this same session and `FAIL gofmt` later: something in between changed the console code page. A gate whose verdict depends on the code page of whoever ran it is not a gate. The encoding is now pinned for the whole script and restored on exit.
@@ -18,7 +113,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   | Deleted | Why it was dead |
   |---|---|
   | `blunt-code-build-spec.md` (89 KB) | The V1 planning spec. Describes a product with "CI/CD integrations in V1: None", three analyzers and no CLI. The app now ships twelve analyzers, a full headless CLI, and GitHub Actions. |
-  | `IMPLEMENTATION_STATUS.md` (18 KB) | Stopped at milestone 12 / release 0.6.0. The build is at 0.38.0 and `CHANGELOG.md` is the record. |
+  | `IMPLEMENTATION_STATUS.md` (18 KB) | Stopped at milestone 12 / release 0.6.0. The build is at 0.39.0 and `CHANGELOG.md` is the record. |
   | `UI_POLISH_100_LOOPS.md`, `UI_POLISH_140_LOOPS.md`, `UI_POLISH_153_LOOPS.md` | Loop-by-loop UI history, superseded by `CHANGELOG.md` at 177 KB. Nothing referenced them. |
   | `logo-showcase.html` | A fourth copy. `web/public/` is the source, `web/dist/` and `cmd/bluntcode/static/` are generated. Four copies of one HTML file is how they drift apart. |
 

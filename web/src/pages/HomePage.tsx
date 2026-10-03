@@ -287,7 +287,12 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
       {workspaces.loading ? (
         <div className="board-verdict-loading"><SkeletonCards count={1} variant="metric" /></div>
       ) : (
-        <section className="board-verdict" aria-label="Current risk across your workspaces">
+        /* data-focus="hero" is the opt-in hook for the ONE raised surface a
+           page gets. It was painted with the same recipe as the analyzer
+           strip three panels below it, so the answer to "how risky is my
+           code" had no advantage over a status footer. Enforceable in the
+           markup: one data-focus per route. */
+        <section className="board-verdict" data-focus="hero" aria-label="Current risk across your workspaces">
           {/* One head line answers "how bad is it" — grade tile, then the hero
               count — instead of the old three-column strip where the grade
               occupied its own 90px-tall bordered column and pushed the
@@ -320,13 +325,43 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
             </div>
 
             <div className="verdict-main">
-              {verdictTallied ? (
-                // The one hero number on the page; its composition is the severity
-                // tally directly beneath it.
-                <p className="verdict-hero">
-                  <span className="verdict-hero-num tabular-nums">{verdict.totalFindings}</span>{' '}
-                  <span className="verdict-hero-unit">finding{verdict.totalFindings === 1 ? '' : 's'}</span>{' '}
-                  <span className="verdict-hero-ctx">
+                      {verdictTallied ? (
+                // The one hero number on the page.
+                //
+                // This was a single <p> holding the number, the word "findings"
+                // and the sentence "across the latest completed scans of 10
+                // workspaces", with `.verdict-hero` set to
+                // `align-items: baseline`. All three therefore sat on ONE
+                // baseline: the rendered page read `5740findings across the
+                // latest completed scans of 10 workspaces.`, with the
+                // largest number in the app butted against a paragraph and no
+                // space between them. A flex baseline does not make a 72px
+                // number and 16px prose coexist — it forces the prose down to
+                // the big number's baseline, which is the collision.
+                //
+                // So the number and its unit are one block (a figure, baseline-
+                // aligned with each other) and the scope sentence is a separate
+                // line beneath it. The measurement is now the first line of the
+                // panel and the qualification is the second, which is also how
+                // a caption should read.
+                //
+                // The aria-label is load-bearing and was not optional. Putting
+                // two things on two lines means the whitespace between them
+                // collapses (a flex container ignores whitespace-only text), so
+                // the accessible name went from one sentence to the three
+                // fragments "21" / "findings" / "across the latest completed
+                // scan of 1 workspace." — no word boundaries at all. One label
+                // on the parent, children hidden, gives assistive tech a
+                // single clean sentence and costs the sighted reader nothing.
+                <p
+                  className="verdict-hero"
+                  aria-label={`${verdict.totalFindings} finding${verdict.totalFindings === 1 ? '' : 's'} across the latest completed scan${verdict.scanned === 1 ? '' : 's'} of ${verdict.scanned} workspace${verdict.scanned === 1 ? '' : 's'}.`}
+                >
+                  <span className="verdict-hero-figure" aria-hidden="true">
+                    <span className="verdict-hero-num tabular-nums">{verdict.totalFindings}</span>
+                    <span className="verdict-hero-unit">finding{verdict.totalFindings === 1 ? '' : 's'}</span>
+                  </span>
+                  <span className="verdict-hero-ctx" aria-hidden="true">
                     across the latest completed scan{verdict.scanned === 1 ? '' : 's'} of {verdict.scanned} workspace{verdict.scanned === 1 ? '' : 's'}.
                   </span>
                 </p>

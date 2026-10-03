@@ -222,7 +222,6 @@ export function App() {
         <Page route={route} go={go} notify={notify} onAdd={() => setAddOpen(true)} onUpdateHandoff={updateHandoff} />
       </ErrorBoundary>
     </main>
-    <AppFooter />
       </div>
     </div>
     {addOpen && <AddWorkspaceDialog onClose={() => setAddOpen(false)} onCreated={(workspace) => { setAddOpen(false); if (workspace.existing) notify({ kind: 'info', text: 'Workspace already registered — opening it' }); go({ page: 'workspace', id: workspace.id }); }} notify={notify} />}

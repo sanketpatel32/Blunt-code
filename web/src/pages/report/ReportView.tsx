@@ -288,6 +288,17 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
   const [suppressionVersion, setSuppressionVersion] = useState(0);
   const reportWorkspaceId = report.data?.scan?.workspace_id ?? '';
   const suppressions = useLoad(() => (reportWorkspaceId ? api.suppressions(reportWorkspaceId) : Promise.resolve([])), [reportWorkspaceId, suppressionVersion]);
+  /* Open/closed state for the two collapsed filter rails (see RAIL_LEAD below).
+   * These two hooks MUST sit above the loading/error early returns: React
+   * compares hook counts between renders, so a hook added after an early
+   * return makes the first resolved render throw "Rendered more hooks than
+   * during the previous render" — which took out all 53 other tests in this
+   * file before it took out the two rails. */
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
+  // Any change to the selection closes both: a disclosure left open after the
+  // filter changed shows a list that no longer matches the results.
+  useEffect(() => { setToolsOpen(false); setCategoriesOpen(false); }, [filters.analyzer, filters.category]);
   if (report.loading) return <section className="report"><SkeletonTable rows={6} cols={5} className="findings-table" /></section>;
   if (report.error) return <ErrorPanel error={report.error} retry={report.reload} />;
   const data = report.data ?? ({} as Report);
@@ -374,6 +385,33 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
   const tools = [...runById.keys()];
   /** Type rail: the categories actually present in this scan, most findings first. */
   const categories = [...(data.findings ?? []).reduce((map, finding) => { if (finding.category) map.set(finding.category, (map.get(finding.category) ?? 0) + 1); return map; }, new Map<string, number>())].sort((a, b) => b[1] - a[1]);
+  /* The tool rail collapses past its leaders.
+   *
+   * THE FILTER WALL. This toolbar rendered 22 chips in 3 rows above the table —
+   * Severity (5) + Status (3) + Tool (9) + Type (5) — before the first finding
+   * was visible, which measured 3 rows / ~150px of pure filter chrome. The
+   * chips are individually good: every option is visible, no hidden <select>.
+   * The problem is that a rail of N options is only scannable while N is small
+   * enough to hold in one glance, and the tool list scales with however many
+   * analyzers a scan ran. Nine tools in one row is already a wall of
+   * `Tool | Ruff 3 | Biome 1819 | Gitleaks 835 | ...` text.
+   *
+   * So the two rails that can grow (Tool, Type) show their top N by finding
+   * count — which is the order anyone actually filters in — and the tail moves
+   * behind a disclosure that reports how many it hides. Severity and Status are
+   * fixed-size by nature (5 and 3), so they stay fully visible: collapsing
+   * them would buy nothing and hide the one filter that matters most.
+   *
+   * The full set stays reachable, so no filter becomes unreachable — this is a
+   * density change, not a capability cut. A selected option outside the top N
+   * is promoted into the rail rather than left stranded behind a closed
+   * disclosure, which is the case that would otherwise look like the filter had
+   * silently stopped applying. */
+  const railLead = RAIL_LEAD;
+  const visibleTools = leadingWithSelection(tools, filters.analyzer, (tool) => countByAnalyzer.get(tool) ?? 0, railLead);
+  const visibleCategories = leadingWithSelection(categories.map(([name]) => name), filters.category, (name) => categories.find(([key]) => key === name)?.[1] ?? 0, railLead);
+  const toolsOver = tools.length > visibleTools.length;
+  const categoriesOver = categories.length > visibleCategories.length;
   const noFindingsTitle = filters.analyzer ? `${analyzerName(filters.analyzer)} reported no findings` : 'No findings match these filters';
   const noFindingsCopy = filters.analyzer ? 'This analyzer completed without reportable issues for the selected files.' : 'Try clearing one or more filters.';
   /** A completed scan with zero findings and no active filters earns the celebratory panel; anything else keeps the filter-empty messaging. */
@@ -407,13 +445,24 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
           <span className="filter-group-label" aria-hidden="true">Status</span>
           <fieldset className="chip-group" aria-label="Status">{STATUS_OPTIONS.map((status) => <button type="button" key={status} className={`chip${filters.status === status ? ' pressed' : ''}`} aria-pressed={filters.status === status} onClick={() => toggleStatus(status)}>{STATUS_LABELS[status]}<span className="chip-count">{countByStatus.get(status) ?? 0}</span></button>)}</fieldset>
         </div>
-        {tools.length > 0 && <div className="filter-group">
+        {/* Sorting for the collapsed rails happens on the whole set, so the
+            order a reader sees in "+N" matches the order they saw in the rail.
+            Counting `runById` here (not just findings) keeps a tool that ran
+            but reported zero findings in the list at all — a "0" chip is how
+            you find the analyzer that came back clean. */}
+        {tools.length > 0 && <div className="filter-group filter-group-grow">
           <span className="filter-group-label" aria-hidden="true">Tool</span>
-          <fieldset className="chip-group" aria-label="Tool">{tools.map((tool) => { const run = runById.get(tool); const runTitle = run ? `${run.status ?? 'unknown'}${run.duration_ms !== undefined ? ` · ${compactDuration(run.duration_ms)}` : ''}${run.warning_count ? ` · coverage incomplete (${run.warning_count} warning${run.warning_count === 1 ? '' : 's'})` : ''}` : 'Reported findings; no run recorded on this scan'; return <button type="button" key={tool} className={`chip${filters.analyzer === tool ? ' pressed' : ''}`} aria-pressed={filters.analyzer === tool} title={runTitle} onClick={() => toggleAnalyzer(tool)}>{analyzerName(tool)}{run?.warning_count ? <span className="chip-flag" aria-label="coverage incomplete">!</span> : null}<span className="chip-count">{countByAnalyzer.get(tool) ?? 0}</span></button>; })}</fieldset>
+          <fieldset className="chip-group" aria-label="Tool">
+            {visibleTools.map((tool) => { const run = runById.get(tool); const runTitle = run ? `${run.status ?? 'unknown'}${run.duration_ms !== undefined ? ` · ${compactDuration(run.duration_ms)}` : ''}${run.warning_count ? ` · coverage incomplete (${run.warning_count} warning${run.warning_count === 1 ? '' : 's'})` : ''}` : 'Reported findings; no run recorded on this scan'; return <button type="button" key={tool} className={`chip${filters.analyzer === tool ? ' pressed' : ''}`} aria-pressed={filters.analyzer === tool} title={runTitle} onClick={() => toggleAnalyzer(tool)}>{analyzerName(tool)}{run?.warning_count ? <span className="chip-flag" aria-label="coverage incomplete">!</span> : null}<span className="chip-count">{countByAnalyzer.get(tool) ?? 0}</span></button>; })}
+            {toolsOver && <MoreTools open={toolsOpen} onToggle={() => setToolsOpen((open) => !open)} hidden={tools.filter((tool) => !visibleTools.includes(tool))} selected={filters.analyzer} onPick={toggleAnalyzer} countOf={(tool) => countByAnalyzer.get(tool) ?? 0} warnOf={(tool) => !!runById.get(tool)?.warning_count} />}
+          </fieldset>
         </div>}
         {categories.length > 0 && <div className="filter-group filter-group-wide">
           <span className="filter-group-label" aria-hidden="true">Type</span>
-          <fieldset className="chip-rail chip-group" aria-label="Type">{categories.map(([category, count]) => <button type="button" key={category} className={`chip${filters.category === category ? ' pressed' : ''}`} aria-pressed={filters.category === category} onClick={() => toggleCategory(category)}>{findingCategoryLabel(category)}<span className="chip-count">{count}</span></button>)}</fieldset>
+          <fieldset className="chip-rail chip-group" aria-label="Type">
+            {visibleCategories.map((category) => <button type="button" key={category} className={`chip${filters.category === category ? ' pressed' : ''}`} aria-pressed={filters.category === category} onClick={() => toggleCategory(category)}>{findingCategoryLabel(category)}<span className="chip-count">{categories.find(([key]) => key === category)?.[1] ?? 0}</span></button>)}
+            {categoriesOver && <MoreCategories open={categoriesOpen} onToggle={() => setCategoriesOpen((open) => !open)} hidden={categories.filter(([name]) => !visibleCategories.includes(name))} selected={filters.category} onPick={toggleCategory} />}
+          </fieldset>
         </div>}
       </div>
     </div>
@@ -454,6 +503,93 @@ function ExportMenu({ scanId, csvParams, findings }: { scanId: string; csvParams
     downloadJiraCsv(data, `jira-${scanId}.csv`);
   };
   return <fieldset className="export-menu export-inline" aria-label="Export report">{items.map((item) => <a key={item.label} className="export-item" href={item.href} title={item.title} download>{item.label}<small>{item.ext}</small></a>)}<button type="button" className="export-item" onClick={handleJiraCsv}>Jira CSV<small>.csv</small></button></fieldset>;
+}
+
+/* ── The rails that collapse ──────────────────────────────────────────
+ *
+ * A rail of chips stays scannable only while its options fit one glance. The
+ * Tool and Type rails scale with how many analyzers a scan ran and how many
+ * categories they emit, so on a real workspace they reached 9 and 5 and the
+ * toolbar spent three rows on filter chrome before the first finding.
+ *
+ * Both rails now show their top N by finding count — the order anyone filters
+ * in — and put the tail behind a disclosure that says how many it is hiding.
+ * A selected option outside the top N is PROMOTED into the rail rather than
+ * left behind a closed disclosure, because the alternative looks like the
+ * filter silently stopped applying. Selecting something from the disclosure
+ * therefore re-sorts the rail around the new selection on the next render,
+ * which is what makes the selection impossible to lose.
+ *
+ * Severity and Status are NOT collapsed: 5 and 3 options is under the limit,
+ * and Severity is the filter this page exists for.
+ */
+
+/** How many chips a growing rail shows before collapsing its tail. Seven fills
+ *  a row on the 1440px report toolbar with the label and count still legible;
+ *  eight started wrapping the tail onto a second line. */
+export const RAIL_LEAD = 7;
+
+/** The top `limit` entries by `weight`, with `selected` promoted into the rail
+ *  if it fell outside. Ties keep their existing order, so the rail does not
+ *  reshuffle between renders when counts are equal. */
+export function leadingWithSelection(
+  entries: string[],
+  selected: string | undefined,
+  weight: (entry: string) => number,
+  limit: number,
+): string[] {
+  if (entries.length <= limit) return entries;
+  const ranked = [...entries].sort((a, b) => weight(b) - weight(a));
+  const lead = ranked.slice(0, limit);
+  // Promotion trades the last visible slot, not an appended one: a chip past
+  // the limit would just recreate the wrap this is meant to remove.
+  if (selected && entries.includes(selected) && !lead.includes(selected)) lead[lead.length - 1] = selected;
+  return entries.filter((entry) => lead.includes(entry));
+}
+
+/** "+N more" for the tool rail. Icon-only chevron, labelled for screen
+ *  readers, because the number it hides is the whole point of the control. */
+function MoreTools({ open, onToggle, hidden, selected, onPick, countOf, warnOf }: { open: boolean; onToggle: () => void; hidden: string[]; selected?: string; onPick: (tool: string) => void; countOf: (tool: string) => number; warnOf: (tool: string) => boolean }) {
+  return (
+    <>
+      <button type="button" className="chip chip-more" aria-expanded={open} aria-label={`${open ? 'Hide' : 'Show'} ${hidden.length} more tool${hidden.length === 1 ? '' : 's'}`} onClick={onToggle}>
+        +{hidden.length}
+        <ChevronIcon open={open} />
+      </button>
+      {open && (
+        <span className="chip-scroller" role="group" aria-label="More tools">
+          {hidden.map((tool) => <button type="button" key={tool} className={`chip${selected === tool ? ' pressed' : ''}`} aria-pressed={selected === tool} onClick={() => onPick(tool)}>{analyzerName(tool)}{warnOf(tool) ? <span className="chip-flag" aria-label="coverage incomplete">!</span> : null}<span className="chip-count">{countOf(tool)}</span></button>)}
+        </span>
+      )}
+    </>
+  );
+}
+
+/** The same disclosure for the Type rail, minus the coverage flag. */
+function MoreCategories({ open, onToggle, hidden, selected, onPick }: { open: boolean; onToggle: () => void; hidden: Array<[string, number]>; selected?: string; onPick: (category: string) => void }) {
+  return (
+    <>
+      <button type="button" className="chip chip-more" aria-expanded={open} aria-label={`${open ? 'Hide' : 'Show'} ${hidden.length} more type${hidden.length === 1 ? '' : 's'}`} onClick={onToggle}>
+        +{hidden.length}
+        <ChevronIcon open={open} />
+      </button>
+      {open && (
+        <span className="chip-scroller" role="group" aria-label="More types">
+          {hidden.map(([category, count]) => <button type="button" key={category} className={`chip${selected === category ? ' pressed' : ''}`} aria-pressed={selected === category} onClick={() => onPick(category)}>{findingCategoryLabel(category)}<span className="chip-count">{count}</span></button>)}
+        </span>
+      )}
+    </>
+  );
+}
+
+/** Disclosure chevron. Rotates rather than swapping glyphs so the transition
+ *  can honour `prefers-reduced-motion` from the one rule in identity.css. */
+function ChevronIcon({ open }: { open: boolean }) {
+  return (
+    <svg className="chip-more-chevron" data-open={open} viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 4.5 L6 7.5 L9 4.5" />
+    </svg>
+  );
 }
 
 /** Active-filter chips for the filters that have no other visible control —

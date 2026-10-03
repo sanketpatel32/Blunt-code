@@ -93,12 +93,44 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .page-heading p:not(.eyebrow) { max-width: none; margin-top: 2px; color: var(--color-ink-soft); font-size: var(--text-xs); line-height: 1.4; }
 .page-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-md); margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: var(--rule) solid var(--color-rule-faint); }
 .page-heading-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; flex-shrink: 0; align-self: center; }
-/* Shared page identity: title first, supporting context quiet, actions wrap.
-   The header block measured 116px before any page content — three stacked
-   lines at 8px gaps inside 28px of padding, on every route. Tightened to
-   2px gaps, one step down of padding and a one-step-smaller title: still three
-   lines of hierarchy, ~28px less of it before the first real element. */
+/* ── Page identity ──────────────────────────────────────────────────
+   THE TEMPLATE TELL. Every one of the 13 routes rendered this header as
+   three stacked lines: an UPPERCASE eyebrow, then the h1, then a one-line
+   description. The eyebrow repeated the h1 — "DASHBOARD" over "Risk board",
+   "WORKSPACE" over "Blunt-code", "FINDINGS SEARCH" over "Search findings",
+   "FILE SELECTION" over "Blunt-code — Files" — so it carried no information
+   while spending ~18px of vertical space and the only decorative slot in the
+   component. It was the single loudest "this is a generated layout" signal in
+   the app.
+
+   `.page-eyebrow` is now a quiet metadata line UNDER the title: same slot,
+   no shouting, and a caller with something real to say (a workspace path, a
+   profile, a state) reads as annotating the page rather than filing it. */
 .page-header { flex-wrap: wrap; gap: var(--space-lg); padding-block: var(--space-sm) var(--space-md); }
+
+/* One title size for every route, from a token. This class replaces the
+   `text-xl sm:text-2xl` Tailwind pair the h1 used to carry, which is what
+   let the report page ship a 28px title against 40px everywhere else — see
+   --text-page-title in tokens.css. `.page-heading h1` and `.hero h1` are both
+   overridden here so no route can reintroduce a private size. */
+.page-title {
+  font-family: var(--font-display);
+  font-size: var(--text-page-title);
+  font-weight: 700;
+  letter-spacing: -.025em;
+  line-height: 1.15;
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.page-heading h1, .page-header h1 { font-size: var(--text-page-title); }
+
+.page-eyebrow {
+  margin: 3px 0 0;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--color-ink-faint);
+}
 .page-header .page-heading-main { flex-basis: 20rem; }
 .page-header h1 { font-size: clamp(1.375rem, 1.15rem + .7vw, 1.75rem); line-height: 1.2; overflow-wrap: anywhere; }
 .page-header .page-heading-description { max-width: 68ch; font-size: var(--text-sm); line-height: 1.45; }
@@ -448,6 +480,33 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .file-tree > li { border-bottom: var(--rule) solid var(--color-rule-faint); }
 .file-tree > li:last-child { border-bottom: 0; }
 .tree-row { display: flex; align-items: center; gap: var(--space-sm); min-height: 2.75rem; padding: var(--space-2xs) var(--space-sm); border-radius: var(--radius-md); font-size: var(--text-sm); transition: background var(--dur-fast) var(--ease-out); }
+
+/* ── Tree density ───────────────────────────────────────────────────
+   MEASURED: 18 rows at 44px = 821px of tree beside a 302px rules panel, in a
+   1.2fr/0.8fr split. The panel was 63% empty and the tree spilled past the
+   fold, so the page's real job — choose which files a scan covers — was the
+   one thing you could not see at once.
+
+   The row drops from 44px to 30px and the tree's max-height from 560px to
+   none, so the whole loaded set is visible without scrolling and the two
+   columns balance instead of one dwarfing the other.
+
+   30px is the floor, not a preference. Below it the 1.15rem checkbox and the
+   1.65rem expander cannot both keep a click target that isn't a precision
+   task, and this is a panel people click down a column of paths. The win
+   comes from removing the scroll, not from making rows unclickable. */
+.tree-panel { min-height: 22rem; }
+.tree-scroll { max-height: none; overflow-y: visible; }
+.tree-panel .tree-row { min-height: 1.875rem; }
+.tree-panel .tree-toggle { width: 1.5rem; height: 1.5rem; }
+.tree-panel .tree-row input[type='checkbox'] { width: 1rem; height: 1rem; }
+
+/* The two panels were a 1.2/0.8 split chosen for a layout that no longer
+   exists. Even now, with a shorter tree, the rules panel is the one that
+   wants the width — its rows are `segmented | glob pattern | ×`, and the
+   pattern input is the thing being edited. 1fr / 1fr gives both a chance. */
+.file-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+@media (max-width: 68rem) { .file-layout { grid-template-columns: minmax(0, 1fr); } }
 /* Loop 152 · the row wash now marks the EXCEPTION, not the rule.
  *
  * It tinted `:checked`, so a freshly-opened workspace — where every path is
