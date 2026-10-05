@@ -571,6 +571,38 @@ export function CLIPage() {
       {/* TAB 1: Reference Manual */}
       {tab === 'reference' && (
         <div>
+          {/* The comprehension layer. The reference below answers "what flags
+              exist"; this panel answers the questions that come before that:
+              which command do I even run, what does a profile mean, and what
+              did that exit code just tell me. It disappears once the reader
+              searches, so it never stands between them and the reference. */}
+          {!search.trim() && (
+            <section className="cli-start" aria-label="Start here">
+              <h3 className="cli-start-title">Start here — three commands cover most of it</h3>
+              <ol className="cli-start-steps">
+                <li>
+                  <code>bluntcode scan .</code>
+                  <span>scan the current folder; your files are only read, never changed</span>
+                </li>
+                <li>
+                  <code>bluntcode findings list .</code>
+                  <span>see what it found, file by file</span>
+                </li>
+                <li>
+                  <code>bluntcode report .</code>
+                  <span>the full report of the last scan</span>
+                </li>
+              </ol>
+              <p className="cli-start-profiles">
+                <strong>Pick a depth with <code>--profile</code>:</strong>{' '}
+                <code>quick</code> linters only, under a minute ·{' '}
+                <code>standard</code> adds secrets, security patterns and SonarQube (default) ·{' '}
+                <code>deep</code> adds dependencies, containers and infrastructure, 10+ min ·{' '}
+                <code>pentest</code> standard plus OWASP checks.
+              </p>
+            </section>
+          )}
+
           {/* Filter Bar */}
           <div className="cli-filter-bar">
             <div className="cli-search-wrap">
