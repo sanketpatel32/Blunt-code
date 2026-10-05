@@ -366,6 +366,35 @@ func TestPlanRejectsSelectionWithoutManifestFiles(t *testing.T) {
 	}
 }
 
+// TestPlanAppliesToDependencyInputOnlyWorkspaces pins the osv convention for
+// dependency scanners: a workspace whose selection carries no yaml, json,
+// toml, dockerfile, or terraform file still deserves a trivy run when
+// discovery tracked dependency manifests (go.mod, requirements.txt, Gemfile).
+// Refusing here recorded a failed analyzer run on plain Go and Python repos
+// and downgraded their deep scans to completed_with_warnings.
+func TestPlanAppliesToDependencyInputOnlyWorkspaces(t *testing.T) {
+	adapter := New("trivy.exe", "0.74.0")
+	adapter.CacheDir = t.TempDir()
+	req := analyzers.ScanRequest{
+		WorkspaceRoot:    `C:\ws`,
+		Profile:          analyzers.ProfileDeep,
+		Files:            []string{`C:\ws\main.go`},
+		Languages:        []analyzers.Language{analyzers.LanguageGo},
+		DependencyInputs: []string{"go.mod"},
+	}
+	plan, err := adapter.Plan(context.Background(), req)
+	if err != nil {
+		t.Fatalf("dependency-input workspace: %v", err)
+	}
+	defer os.Remove(plan.Metadata[planKeyOutput].(string))
+	if plan.AnalyzerID != ID || len(plan.Commands) != 1 {
+		t.Fatalf("plan = %#v", plan)
+	}
+	if got := plan.Metadata["dependency_inputs"]; got == nil {
+		t.Fatal("plan metadata should record the dependency-input applicability")
+	}
+}
+
 func TestRunLoadsAndRemovesOutputFile(t *testing.T) {
 	adapter := New(`Z:\definitely\missing\trivy.exe`, "0.74.0")
 	adapter.CacheDir = t.TempDir()
