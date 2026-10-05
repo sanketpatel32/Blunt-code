@@ -226,7 +226,12 @@ func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, 
 	s.emit(scan.ID, "scan.started", map[string]any{"state": "queued"})
 	s.transition(scan.ID, "preparing", map[string]any{"stage": "Preparing workspace"})
 	languages, absoluteFiles, filesByLanguage := scanInputs(work.RootPath, files)
-	if len(absoluteFiles) == 0 {
+	// A workspace with no routable source files still has scan signal when
+	// discovery tracked dependency manifests: osv, trivy, and the license
+	// scanner all analyze inputs the per-file selection does not carry
+	// (lockfiles are smart-skipped as artifacts). Only a workspace with
+	// neither source files nor dependency inputs is truly unscannable.
+	if len(absoluteFiles) == 0 && len(scanDependencyInputs(scan)) == 0 {
 		_ = s.db.UpdateScanState(context.Background(), scan.ID, "failed", "No supported source files were selected.")
 		s.emit(scan.ID, "scan.completed", map[string]any{"state": "failed"})
 		return
@@ -289,8 +294,20 @@ func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, 
 	}
 	successful, failed, warned := counters.snapshot()
 	state := "completed"
+	// Nothing ran. That is a failure only when something tried and could not:
+	// "every analyzer that applied crashed" must stay failed (zero findings
+	// from crashed coverage is not a pass). But "no analyzer applies here" —
+	// a quick profile over a Go or Terraform workspace, where the tier's two
+	// language linters have nothing to lint — is the honest outcome of the
+	// requested scan, not an error: it completes with a note instead of
+	// failing every such repo's CI.
+	zeroCoverage := false
 	if successful == 0 {
-		state = "failed"
+		if failed > 0 {
+			state = "failed"
+		} else {
+			zeroCoverage = true
+		}
 	}
 	// Drift detection: if the workspace content changed between the input
 	// digest recorded at start and now, the scan's results may mix two
@@ -337,13 +354,26 @@ func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, 
 	if incremental != nil {
 		incrementalNote = fmt.Sprintf("incremental: reused findings for %d unchanged file(s), ran analyzers on %d file(s)", len(incremental.unchanged), incremental.changedCount)
 	}
-	if driftNote != "" || incrementalNote != "" {
+	zeroCoverageNote := ""
+	if zeroCoverage {
+		profile := scan.Profile
+		if profile == "" {
+			profile = analyzers.ProfileStandard
+		}
+		zeroCoverageNote = fmt.Sprintf("no analyzer in the %s profile covers this workspace's file types, so nothing was analyzed; try the standard or deep profile for broader language and dependency coverage", profile)	}
+	if driftNote != "" || incrementalNote != "" || zeroCoverageNote != "" {
 		note := driftNote
 		if incrementalNote != "" {
 			if note != "" {
 				note += "; "
 			}
 			note += incrementalNote
+		}
+		if zeroCoverageNote != "" {
+			if note != "" {
+				note += "; "
+			}
+			note += zeroCoverageNote
 		}
 		_ = s.db.SetScanNote(context.Background(), scan.ID, note)
 	}
