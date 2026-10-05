@@ -367,6 +367,12 @@ describe('ReportView load-more pagination', () => {
     }, async () => { await body(await render()); });
   }
 
+  // Renders 100 real DOM rows, then 100 more, then 50. ~10s on an idle
+  // machine, but 20s+ when vitest starts right after the full Go test suite
+  // has saturated every core (verify.ps1 runs them back to back). When the
+  // 20s budget expired mid-render, the aborted cleanup leaked this test's
+  // 250-finding fetch mock into the NEXT test — one timeout read as two
+  // failures. 45s keeps the test honest without punishing loaded hardware.
   it('fetches a 100-row window, then Show more appends the next window without duplicates', async () => {
     await pageMock(async (host) => {
       expect(findingUrls()[0]).toContain('page=1');
@@ -386,7 +392,7 @@ describe('ReportView load-more pagination', () => {
       expect(footStatus(host)).toBe('End of list');
       expect([...host.querySelectorAll('button')].some((button) => button.textContent === 'Show more')).toBe(false);
     });
-  }, 20000);
+  }, 45000);
 
   it('treats the envelope has_next as authoritative over the legacy has_more flag', async () => {
     await pageMock(async (host) => {
