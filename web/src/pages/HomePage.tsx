@@ -443,7 +443,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
             <div>
               <h2 id="ledger-heading" className="board-panel-title">Where the risk is</h2>
               <p className="board-panel-sub">
-                Weighted: critical ×10 · high ×5 · medium ×2 · low ×1.
+                Worst first · the score weights critical ×10, high ×5, medium ×2, low ×1.
               </p>
             </div>
             {ledgerBase.length > 4 && (
@@ -851,17 +851,28 @@ function LedgerRow({
 
   return (
     <li className="ledger-row" data-scored={score !== null || undefined}>
-      {/* Loop 147 · the tile now carries a magnitude, so a column of Ds ranks
-          instead of repeating. The fill is a CSS custom property rather than a
-          second element: nothing about the letter changes, so a screen reader
-          and a 1x screenshot read exactly what they read before. */}
-      <span
-        className="ledger-grade"
-        data-grade={grade ?? 'none'}
-        style={depth !== null ? ({ '--grade-depth': depth.toFixed(3) } as React.CSSProperties) : undefined}
-        aria-hidden="true"
-      >
-        {grade ?? '–'}
+      {/* The grade tile and its score are one object: the letter answers "how
+          bad", the number under it answers "how much of it". They used to live
+          at opposite ends of the row (tile left, "6489 risk" chip right), so
+          every row carried the same fact twice in two visual languages and the
+          right edge stacked a second metadata cell beside the actions. */}
+      <span className="ledger-grade-wrap">
+        <span
+          className="ledger-grade"
+          data-grade={grade ?? 'none'}
+          style={depth !== null ? ({ '--grade-depth': depth.toFixed(3) } as React.CSSProperties) : undefined}
+          aria-hidden="true"
+        >
+          {grade ?? '–'}
+        </span>
+        {score !== null && (
+          <span
+            className="ledger-score tabular-nums"
+            title="Weighted risk score: critical ×10, high ×5, medium ×2, low ×1"
+          >
+            {score}
+          </span>
+        )}
       </span>
       {grade && (
         <span className="sr-only">
@@ -930,13 +941,6 @@ function LedgerRow({
       </div>
 
       <div className="ledger-meta">
-        {current ? (
-          <span className="ledger-score tabular-nums" title="Weighted risk score: critical ×10, high ×5, medium ×2, low ×1">
-            {score} <small>risk</small>
-          </span>
-        ) : (
-          <span className="ledger-score ledger-score-none">—</span>
-        )}
         <span className="ledger-last">
           {scan ? (
             <>
@@ -952,14 +956,18 @@ function LedgerRow({
       </div>
 
       <div className="ledger-actions">
-        {/* The row's one visible control: run a scan (profiles/pentest in its own
-            overflow). Remove is a destructive action, so it lives behind the
-            RowMenu trigger and its confirmation dialog — never as a bare button. */}
+        {/* The row's controls stay icon-sized: the header already carries the
+            page's one primary "Run scan", so a column of full split-buttons
+            down the ledger was the loudest thing on the board. The accessible
+            names survive (sr-only label), and the confirm-first flow, profile
+            picker, and pentest entries live on in the dropdown. Remove stays
+            behind the RowMenu trigger with its confirmation dialog. */}
         <ScanActionDropdown
           workspaceId={workspace.id}
           workspaceName={workspace.name}
           defaultProfile={workspace.default_profile}
-          variant="outline"
+          size="icon"
+          variant="ghost"
           go={go}
           notify={notify}
           onScanStarted={onRemoved}
@@ -1016,19 +1024,15 @@ function ToolsFoot({
         <>
           <i className="board-foot-dot" data-state={total > 0 && ready === total ? 'ready' : 'partial'} aria-hidden="true" />
           <p className="board-foot-note">
-            {/* Managed-tool readiness, not the analyzer inventory — the totals must not read as "all N analyzers". */}
+            {/* Managed-tool readiness, not the analyzer inventory — the totals must not read as "all N analyzers".
+                A chip wall of tool ids used to follow this sentence; the one fact
+                the footer owes a reader who cannot open the Tools page is WHICH
+                tools are missing, so the sentence names exactly those. */}
             <strong>{ready} of {total}</strong> optional tools ready · managed locally, nothing leaves this computer
+            {tools.some((tool) => !tool.ready) && (
+              <> — {tools.filter((tool) => !tool.ready).map((tool) => tool.id).join(', ')} not installed</>
+            )}
           </p>
-          {tools.length > 0 && (
-            <div className="board-foot-chips">
-              {tools.slice(0, 6).map((tool) => (
-                <span key={tool.id} className={`board-foot-chip ${tool.ready ? 'ready' : 'pending'}`} title={`${tool.id}: ${tool.ready ? 'Ready' : 'Not installed'}`}>
-                  {tool.id}
-                </span>
-              ))}
-              {tools.length > 6 && <span className="board-foot-more">+{tools.length - 6}</span>}
-            </div>
-          )}
           <Button variant="ghost" size="sm" onClick={() => go({ page: 'tools' })}>
             Manage tools
           </Button>

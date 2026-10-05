@@ -91,9 +91,12 @@ export function ScanActionDropdown({
         {running ? (
           <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent motion-reduce:animate-none" aria-hidden="true" />
         ) : (
-          <Sparkles className="h-3.5 w-3.5" />
+          <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
         )}
-        <span>{running ? 'Scanning…' : 'Run scan'}</span>
+        {/* icon size is for dense rows (the risk-board ledger): the label goes
+            screen-reader-only so the button keeps its accessible name but stops
+            printing "Run scan" eighteen times down the page. */}
+        <span className={size === 'icon' ? 'sr-only' : undefined}>{running ? 'Scanning…' : 'Run scan'}</span>
       </Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
