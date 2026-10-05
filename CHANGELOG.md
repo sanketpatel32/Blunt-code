@@ -5,6 +5,55 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **Scans now work on every repository type, not just Python/JS/TS.** A
+  battery of synthetic repos (Go-only, Terraform-only, Dockerfile/Kubernetes,
+  lockfile-only, Python-only, mixed) exposed three cross-type failures, all
+  verified live against real scans:
+  - Trivy refused to plan on workspaces whose selected files carry no
+    yaml/json/toml/dockerfile/terraform file, even when discovery tracked
+    dependency manifests (go.mod, requirements.txt, Gemfile). The refusal was
+    recorded as a FAILED analyzer run, so plain Go and Python repos finished
+    every deep scan as `completed_with_warnings` (exit 3) with zero trivy
+    coverage. Dependency inputs now count as applicability (the osv
+    convention); a python-only deep scan runs all 10 analyzers to completion,
+    exit 0.
+  - A quick scan of a Go/Terraform/infra-only workspace landed state `failed`
+    because zero quick-profile analyzers applied — nothing had actually
+    failed. `successful == 0` now distinguishes the two cases: analyzer
+    failures still fail the scan; "nothing applies at this tier" completes
+    with a scan note ("no analyzer in the quick profile covers this
+    workspace's file types… try the standard or deep profile") so these repos'
+    CI stops breaking on a healthy no-op scan.
+  - A workspace whose only signal is a lockfile (package-lock.json,
+    Cargo.lock) aborted at the empty-selection gate with "No supported source
+    files were selected" even though osv, trivy, and license-scan analyze
+    dependency inputs discovery tracks. The gate now requires neither source
+    files nor dependency inputs to fail; a lockfile-only standard scan
+    completes with the license finding.
+- Scan notes (drift, incremental reuse, zero-coverage) were written to the
+  database but never shown by the CLI summary; the human output now prints
+  them as a `Note:` line on completed scans.
+
+### Changed
+- **Risk board decluttered.** Each workspace row carried the same risk fact
+  three ways (grade tile, risk-level text, "N risk" chip at the far edge)
+  plus a full "Run scan" split-button on every row. The grade tile and its
+  score are now one object (letter + number beneath), the duplicate chip is
+  gone, row scan controls are quiet icon buttons (accessible names intact,
+  the header keeps the page's single primary), and the tools footer is one
+  sentence that names any not-installed tools instead of a wall of analyzer
+  id chips.
+- **CLI docs lead with meaning instead of flags.** `bluntcode cli` opens with
+  "START HERE" (scan / findings list / report) and a 30-second version
+  (what a scan does, the four profiles, the exit-code contract); `bluntcode
+  cli scan` gains WHAT IT DOES, a PROFILES guide (what runs, how long, when
+  to use each tier), the full EXIT CODES table, and goal-oriented RECIPES.
+  The web `/cli` page gets the same "Start here" panel above the reference,
+  which hides itself while searching.
+
 ## [0.39.2] - 2026-10-03
 
 ### Changed

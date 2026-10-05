@@ -360,7 +360,8 @@ func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, 
 		if profile == "" {
 			profile = analyzers.ProfileStandard
 		}
-		zeroCoverageNote = fmt.Sprintf("no analyzer in the %s profile covers this workspace's file types, so nothing was analyzed; try the standard or deep profile for broader language and dependency coverage", profile)	}
+		zeroCoverageNote = fmt.Sprintf("no analyzer in the %s profile covers this workspace's file types, so nothing was analyzed; try the standard or deep profile for broader language and dependency coverage", profile)
+	}
 	if driftNote != "" || incrementalNote != "" || zeroCoverageNote != "" {
 		note := driftNote
 		if incrementalNote != "" {
