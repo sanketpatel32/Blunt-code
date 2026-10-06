@@ -195,6 +195,7 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
   const [pageSize, setPageSize] = useState(initialUrlState.pageSize);
   const [sort, setSort] = useState<SortState>(initialUrlState.sort);
   const [selectedKey, setSelectedKey] = useState<string | undefined>();
+  const [paneExpanded, setPaneExpanded] = useState(false);
   const [suppressing, setSuppressing] = useState<Finding>();
   /** Findings queued for BULK suppression: the dialog confirms the reason once
    *  (it renders a single finding), then every queued fingerprint is posted
@@ -432,10 +433,44 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
     {data.warnings?.length ? <div className="inline-warning"><strong>Incomplete analysis</strong>{data.warnings.map((warning) => <span key={warning} title={warning}>{humanizeAnalyzerError(warning)}</span>)}</div> : null}
     <div className="analysis-toolbar" role="search">
       <div className="toolbar-top">
-        <label className="analysis-search"><MagnifierIcon aria-hidden="true" /><span className="sr-only">Search findings</span><input value={filters.q} onChange={(event) => updateFilters({ ...filters, q: event.target.value })} placeholder="Search message, rule, or file" /></label>
+        <label className="analysis-search">
+          <MagnifierIcon aria-hidden="true" />
+          <span className="sr-only">Search findings</span>
+          <input
+            value={filters.q}
+            onChange={(event) => updateFilters({ ...filters, q: event.target.value })}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                if (filters.q) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  updateFilters({ ...filters, q: '' });
+                } else {
+                  event.currentTarget.blur();
+                }
+              }
+            }}
+            placeholder="Search message, rule, or file"
+          />
+          {filters.q ? (
+            <button
+              type="button"
+              className="search-clear-button"
+              onClick={() => updateFilters({ ...filters, q: '' })}
+              aria-label="Clear search input"
+              title="Clear search"
+            >
+              ×
+            </button>
+          ) : (
+            <kbd className="kbd-hint search-kbd" aria-hidden="true" title="Press / to search">
+              /
+            </kbd>
+          )}
+        </label>
         <span className="toolbar-result-count" aria-live="polite"><strong>{total}</strong> {total === 1 ? 'finding' : 'findings'}</span>
         <button type="button" className="button secondary density-toggle" aria-pressed={dense} title={dense ? 'Switch to comfortable row spacing' : 'Switch to compact row spacing'} onClick={toggleDensity}>{dense ? 'Comfortable' : 'Compact'}</button>
-        {activeFilterCount ? <button type="button" className="text-button toolbar-clear" onClick={clearFilters}>Clear</button> : null}
+        {activeFilterCount ? <button type="button" className="text-button toolbar-clear" title={`Clear all ${activeFilterCount} active filters`} onClick={clearFilters}>Clear</button> : null}
       </div>
       <div className="toolbar-groups">
         <div className="filter-group">
@@ -468,7 +503,7 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
       </div>
     </div>
     <FilterChips filters={filters} onRemove={removeFilter} />
-    <div className="analysis-split" data-pane={selected ? 'open' : 'closed'}>
+    <div className="analysis-split" data-pane={selected ? 'open' : 'closed'} data-expanded={selected && paneExpanded ? 'true' : undefined}>
       <div className="findings-col" data-scoped={selected ? 'true' : undefined}>
         {suppressQueue.length > 1 && <p role="status" aria-live="polite">{suppressStatus || `Bulk suppression: the reason you enter applies to all ${suppressQueue.length} selected findings.`}</p>}
         <div className={`finding-list analysis-list${dense ? ' finding-dense' : ''}`}>
@@ -480,7 +515,7 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
           {loadingMore ? <span className="loading-more" role="status"><i className="spinner" aria-hidden="true" />Loading more…</span> : hasNext ? <button type="button" className="button secondary" onClick={() => setPages((current) => current + 1)}>Show more</button> : <span className="load-more-status">End of list</span>}
         </div>}
       </div>
-      {selected && <SourcePane scanId={scanId} finding={selected} workspaceId={workspaceId} onClose={() => setSelectedKey(undefined)} onPrev={() => { if (selectedIndex > 0) setSelectedKey(findingKey(items[selectedIndex - 1]!, selectedIndex - 1)); }} onNext={() => { if (selectedIndex >= 0 && selectedIndex < items.length - 1) setSelectedKey(findingKey(items[selectedIndex + 1]!, selectedIndex + 1)); }} hasPrev={selectedIndex > 0} hasNext={selectedIndex >= 0 && selectedIndex < items.length - 1} onSuppress={setSuppressing} onRestore={restoreFinding} />}
+      {selected && <SourcePane scanId={scanId} finding={selected} workspaceId={workspaceId} onClose={() => setSelectedKey(undefined)} onPrev={() => { if (selectedIndex > 0) setSelectedKey(findingKey(items[selectedIndex - 1]!, selectedIndex - 1)); }} onNext={() => { if (selectedIndex >= 0 && selectedIndex < items.length - 1) setSelectedKey(findingKey(items[selectedIndex + 1]!, selectedIndex + 1)); }} hasPrev={selectedIndex > 0} hasNext={selectedIndex >= 0 && selectedIndex < items.length - 1} onSuppress={setSuppressing} onRestore={restoreFinding} currentIndex={selectedIndex} totalCount={items.length} expanded={paneExpanded} onToggleExpand={() => setPaneExpanded((exp) => !exp)} />}
     </div>
     <footer className="report-foot">
       <span className="report-foot-count">{total} {total === 1 ? 'finding' : 'findings'} · {tools.length || 0} {tools.length === 1 ? 'analyzer' : 'analyzers'} ran</span>

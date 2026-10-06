@@ -99,6 +99,19 @@ describe('global keyboard shortcuts', () => {
     field.remove();
   });
 
+  it('focuses the analysis search input when / is pressed', async () => {
+    const host = await renderApp();
+    const searchWrapper = document.createElement('label');
+    searchWrapper.className = 'analysis-search';
+    const input = document.createElement('input');
+    searchWrapper.append(input);
+    host.append(searchWrapper);
+
+    expect(document.activeElement).not.toBe(input);
+    await act(async () => { key('/'); });
+    expect(document.activeElement).toBe(input);
+  });
+
   it('focuses the tree search with / on the files page', async () => {
     window.history.replaceState({}, '', '/workspaces/ws-1/files');
     const fetchMock = vi.fn((input: string) => {

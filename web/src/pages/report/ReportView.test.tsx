@@ -989,3 +989,108 @@ describe('ReportView states and guards', () => {
     expect(host.querySelector('.findings-table caption')?.textContent).toBe('Findings matching the current filters');
   });
 });
+
+describe('ReportView UX enhancements', () => {
+  function twoFindings(body: (host: HTMLElement) => Promise<void>) {
+    return fetchMock.withImplementation((input: string) => {
+      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, warnings: [], findings: [finding, { ...finding, id: 'finding-2', title: 'Second finding', start_line: 9 }] }));
+      if (input.includes('/preview')) return Promise.resolve(json(previewBody));
+      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: [finding, { ...finding, id: 'finding-2', title: 'Second finding', start_line: 9 }], total: 2, limit: 100, offset: 0, has_more: false, has_next: false }));
+      return Promise.resolve(json({ items: [] }));
+    }, async () => { await body(await render()); });
+  }
+
+  it('displays position counter and toggles expand mode on the source pane', async () => {
+    await twoFindings(async (host) => {
+      await click(rows(host)[0]);
+      await settle();
+      const pane = host.querySelector('.source-pane')!;
+      const counter = pane.querySelector('.source-pane-counter');
+      expect(counter?.textContent?.trim()).toBe('1/2');
+
+      const split = host.querySelector('.analysis-split')!;
+      expect(split.getAttribute('data-expanded')).toBeNull();
+
+      const expandBtn = pane.querySelector<HTMLButtonElement>('.pane-expand-toggle')!;
+      expect(expandBtn).not.toBeNull();
+      await click(expandBtn);
+      expect(split.getAttribute('data-expanded')).toBe('true');
+
+      await click(expandBtn);
+      expect(split.getAttribute('data-expanded')).toBeNull();
+    });
+  });
+
+  it('j and k keys navigate findings when focus is inside the source pane', async () => {
+    await twoFindings(async (host) => {
+      await click(rows(host)[0]);
+      await settle();
+      const pane = host.querySelector<HTMLElement>('.source-pane')!;
+      pane.focus();
+
+      // Press j to advance to next finding
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'j', bubbles: true }));
+      });
+      await settle();
+      expect(rows(host)[1].className).toContain('active');
+      expect(host.querySelector('.source-pane-counter')?.textContent?.trim()).toBe('2/2');
+
+      // Press k to return to previous finding
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', bubbles: true }));
+      });
+      await settle();
+      expect(rows(host)[0].className).toContain('active');
+      expect(host.querySelector('.source-pane-counter')?.textContent?.trim()).toBe('1/2');
+    });
+  });
+
+  it('copies code snippet to clipboard from source pane foot', async () => {
+    await twoFindings(async (host) => {
+      await click(rows(host)[0]);
+      await settle();
+      const pane = host.querySelector('.source-pane')!;
+      const writeText = vi.fn(() => Promise.resolve());
+      Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+
+      try {
+        const copyBtn = pane.querySelector<HTMLButtonElement>('button.copy-snippet')!;
+        expect(copyBtn).not.toBeNull();
+        await click(copyBtn);
+        await settle();
+        expect(writeText).toHaveBeenCalledTimes(1);
+        expect(writeText).toHaveBeenCalledWith('x = undefined_name');
+        expect(copyBtn.textContent).toBe('Copied snippet');
+      } finally {
+        delete (navigator as { clipboard?: unknown }).clipboard;
+      }
+    });
+  });
+
+  it('provides inline search clear button and clears search on Escape key', async () => {
+    const host = await render();
+    const search = host.querySelector<HTMLInputElement>('.analysis-search input')!;
+    await type(search, 'foo');
+    await settle();
+
+    const clearBtn = host.querySelector<HTMLButtonElement>('.search-clear-button');
+    expect(clearBtn).not.toBeNull();
+
+    await click(clearBtn!);
+    await settle();
+    expect(search.value).toBe('');
+    expect(host.querySelector('.search-clear-button')).toBeNull();
+
+    // Type again and hit Escape
+    await type(search, 'bar');
+    await settle();
+    expect(search.value).toBe('bar');
+    await act(async () => {
+      search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    await settle();
+    expect(search.value).toBe('');
+  });
+});
+
