@@ -680,7 +680,18 @@ func newScanFixture(t *testing.T, adapters ...analyzers.Analyzer) *scanFixture {
 // generation failure.
 func newScanFixtureWithReportsDir(t *testing.T, reportsDir string, adapters ...analyzers.Analyzer) *scanFixture {
 	t.Helper()
-	root := pythonWorkspace(t)
+	return newScanFixtureWithRootAndReportsDir(t, pythonWorkspace(t), reportsDir, adapters...)
+}
+
+// newScanFixtureWithRoot builds the fixture over an explicit workspace root so
+// tests can pin behavior to one repository shape (Go-only, lockfile-only, ...).
+func newScanFixtureWithRoot(t *testing.T, root string, adapters ...analyzers.Analyzer) *scanFixture {
+	t.Helper()
+	return newScanFixtureWithRootAndReportsDir(t, root, "", adapters...)
+}
+
+func newScanFixtureWithRootAndReportsDir(t *testing.T, root, reportsDir string, adapters ...analyzers.Analyzer) *scanFixture {
+	t.Helper()
 	paths, err := config.NewPaths(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -709,7 +720,12 @@ func newScanFixtureWithReportsDir(t *testing.T, reportsDir string, adapters ...a
 
 func (f *scanFixture) startScan(t *testing.T) core.Scan {
 	t.Helper()
-	scan, err := f.service.DiscoverAndStart(context.Background(), f.work, "standard", nil)
+	return f.startScanWithProfile(t, "standard")
+}
+
+func (f *scanFixture) startScanWithProfile(t *testing.T, profile string) core.Scan {
+	t.Helper()
+	scan, err := f.service.DiscoverAndStart(context.Background(), f.work, profile, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1137,5 +1153,59 @@ func TestAutomaticScanRetentionPrune(t *testing.T) {
 	}
 	if len(scans) > 2 {
 		t.Fatalf("expected at most 2 scans retained per policy, got %d", len(scans))
+	}
+}
+
+// TestQuickScanOfUncoveredWorkspaceCompletesWithNote pins the zero-coverage
+// outcome: a quick profile over a workspace whose files no quick analyzer
+// covers (Go, Terraform, ...) has nothing failed and nothing analyzed, so the
+// scan completes with an explanatory note instead of landing "failed" and
+// failing CI for every such repository type.
+func TestQuickScanOfUncoveredWorkspaceCompletesWithNote(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// A python-only analyzer: the registry has no ruff or biome, and there are
+	// no python files, so zero analyzers apply and zero fail at the quick tier.
+	fixture := newScanFixtureWithRoot(t, root, &scriptedAnalyzer{id: "fake"})
+	scan := fixture.startScanWithProfile(t, "quick")
+	final := fixture.waitForTerminal(t, scan.ID)
+	if final.State != "completed" {
+		t.Fatalf("zero-coverage quick scan state = %q, want completed", final.State)
+	}
+	if !strings.Contains(final.ErrorSummary, "no analyzer in the quick profile") {
+		t.Fatalf("scan note = %q, want the zero-coverage explanation", final.ErrorSummary)
+	}
+}
+
+// TestDependencyInputOnlyWorkspaceStillScans pins the early-abort gate: a
+// workspace whose only signal is a lockfile (smart-skipped out of the file
+// selection) must still scan, because dependency-driven analyzers key off
+// discovery's dependency inputs and the license scanner reads the root.
+func TestDependencyInputOnlyWorkspaceStillScans(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "package-lock.json"), []byte(`{"lockfileVersion":3}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// The scripted analyzer borrows the osv-dependencies id so the executor's
+	// dependency-input eligibility applies; deep is osv's tier. Its Plan/Run
+	// are the scripted no-op, so a succeeded run proves the scan executed
+	// analyzers instead of aborting at the empty-selection gate.
+	fixture := newScanFixtureWithRoot(t, root, &scriptedAnalyzer{id: "osv-dependencies"})
+	scan := fixture.startScanWithProfile(t, "deep")
+	final := fixture.waitForTerminal(t, scan.ID)
+	if final.State != "completed" {
+		t.Fatalf("lockfile-only scan state = %q, want completed", final.State)
+	}
+	if strings.Contains(final.ErrorSummary, "No supported source files") {
+		t.Fatalf("scan aborted at the empty-selection gate: %q", final.ErrorSummary)
+	}
+	runs, err := fixture.db.AnalyzerRuns(context.Background(), scan.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(runs) == 0 || runs[0].AnalyzerID != "osv-dependencies" || runs[0].State != "succeeded" {
+		t.Fatalf("analyzer runs = %#v, want the scripted osv run to have succeeded", runs)
 	}
 }

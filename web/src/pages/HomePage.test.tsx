@@ -268,7 +268,8 @@ describe('HomePage risk board — ledger', () => {
     expect(rows[1].querySelector('.ledger-grade')?.textContent).toBe('A');
     expect(rows[2].querySelector('.ledger-grade')?.textContent).toBe('–');
     expect(rows[2].textContent).toContain('Never scanned');
-    expect(rows[2].querySelector('.ledger-score-none')?.textContent).toBe('—');
+    // The dashed tile is the ungraded signal; no second dash chip follows it.
+    expect(rows[2].querySelector('.ledger-score')).toBeNull();
   });
 
   it('ignores non-terminal latest scans for risk and shows their live state instead', async () => {
@@ -369,7 +370,7 @@ describe('HomePage cancelled-scan fallback and trajectory', () => {
     const host = await render(homeFetchMock({ scans: [], total: 0, summary }, { items: [dead] }));
 
     expect(host.querySelector('.ledger-grade')?.textContent).toBe('–');
-    expect(host.querySelector('.ledger-score-none')).not.toBeNull();
+    expect(host.querySelector('.ledger-score')).toBeNull();
     expect(host.textContent).toContain('Scan cancelled');
     expect(host.querySelector('.ledger-fallback-note')).toBeNull();
     expect(host.querySelector('.ledger-delta')).toBeNull();
@@ -617,16 +618,15 @@ describe('HomePage quick actions', () => {
 });
 
 describe('HomePage optional tools foot', () => {
-  it('reports real tool readiness with per-tool chips, without implying the analyzer total', async () => {
+  it('reports real tool readiness and names the missing tools, without implying the analyzer total', async () => {
     const host = await render(homeFetchMock(
       { scans: [scanItem()], total: 1, summary },
       undefined,
       { items: [{ id: 'ruff', ready: true }, { id: 'semgrep', ready: true }, { id: 'gitleaks', ready: false }] },
     ));
     expect(host.querySelector('.board-foot-note')?.textContent).toContain('2 of 3 optional tools ready');
-    const chips = [...host.querySelectorAll('.board-foot-chip')];
-    expect(chips.map((chip) => chip.textContent)).toEqual(['ruff', 'semgrep', 'gitleaks']);
-    expect(chips[2].className).toContain('pending');
+    expect(host.querySelector('.board-foot-note')?.textContent).toContain('gitleaks not installed');
+    expect(host.querySelector('.board-foot-chip')).toBeNull();
   });
 });
 

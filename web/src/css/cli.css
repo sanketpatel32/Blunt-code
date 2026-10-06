@@ -67,6 +67,58 @@
   color: var(--color-ink-soft);
 }
 
+/* The comprehension layer above the reference: the first three commands and
+   the profile ladder, gone as soon as the reader searches. */
+.cli-start {
+  border: var(--rule) solid var(--color-rule);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+  padding: var(--space-md) var(--space-lg);
+  margin-bottom: var(--space-lg);
+}
+
+.cli-start-title {
+  margin: 0 0 var(--space-sm);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.cli-start-steps {
+  margin: 0 0 var(--space-sm);
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--space-2xs) var(--space-lg);
+}
+
+.cli-start-steps li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.cli-start-steps code {
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.cli-start-steps span {
+  font-size: var(--text-xs);
+  color: var(--color-ink-faint);
+}
+
+.cli-start-profiles {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-ink-soft);
+}
+
+.cli-start-profiles code {
+  font-size: var(--text-2xs);
+}
+
 /* Hero Quick Fact Tiles */
 .cli-facts {
   display: grid;

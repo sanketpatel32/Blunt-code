@@ -87,7 +87,12 @@ func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.
 	// The orchestrator already narrows req.Files by SupportedLanguages, but
 	// the adapter filters again (the ruff convention) so no caller can start
 	// a whole-workspace trivy sweep over a selection it does not belong to.
-	if len(analyzers.FilesForLanguages(req.Files, a.SupportedLanguages()...)) == 0 {
+	// Dependency inputs keep the scanner applicable on their own (the osv
+	// convention): trivy's vulnerability scanner exists to read exactly those
+	// manifests, and a Go or Python workspace whose selection carries no
+	// yaml/json/toml/dockerfile/terraform file would otherwise be refused as
+	// "does not apply" — a failed analyzer run on a perfectly scannable repo.
+	if len(analyzers.FilesForLanguages(req.Files, a.SupportedLanguages()...)) == 0 && len(req.DependencyInputs) == 0 {
 		return analyzers.AnalyzerPlan{}, fmt.Errorf("trivy does not apply")
 	}
 	if req.WorkspaceRoot == "" {
@@ -128,7 +133,7 @@ func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.
 		AnalyzerID: ID,
 		Version:    a.Version,
 		Commands:   []analyzers.ProcessSpec{command},
-		Metadata:   map[string]any{planKeyOutput: outputPath, planKeyWarmDB: warm, "offline": a.Offline},
+		Metadata:   map[string]any{planKeyOutput: outputPath, planKeyWarmDB: warm, "offline": a.Offline, "dependency_inputs": len(req.DependencyInputs)},
 	}, nil
 }
 

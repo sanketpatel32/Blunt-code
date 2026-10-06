@@ -1089,8 +1089,16 @@ func writeScanHuman(w io.Writer, s scanSummary) {
 			fmt.Fprintln(w, "  - analyzer warnings were reported")
 		}
 	}
-	if s.errorSummary != "" && s.state != "completed" && s.state != "completed_with_warnings" {
-		fmt.Fprintf(w, "Error: %s\n", terminalSafe(s.errorSummary))
+	// error_summary doubles as the note channel for completed scans (see
+	// database.SetScanNote: zero-coverage, drift, and incremental notes ride
+	// the same column), so a completed scan presents it as a Note while every
+	// non-completed state keeps the Error framing.
+	if s.errorSummary != "" {
+		if s.state == "completed" || s.state == "completed_with_warnings" {
+			fmt.Fprintf(w, "Note: %s\n", terminalSafe(s.errorSummary))
+		} else {
+			fmt.Fprintf(w, "Error: %s\n", terminalSafe(s.errorSummary))
+		}
 	}
 	if s.reportPath != "" {
 		fmt.Fprintf(w, "Report: %s\n", s.reportPath)

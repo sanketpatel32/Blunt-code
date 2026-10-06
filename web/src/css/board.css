@@ -493,8 +493,19 @@
 
 .ledger-row:focus-within { background: var(--color-surface-muted); }
 
-.ledger-grade {
+/* The grade zone is a small column: tile on top, its weighted score beneath.
+ * Keeping both on the left removes the duplicate "N risk" chip that used to
+ * sit at the row's right edge, so one fact has one visual home and the meta
+ * cell carries only state and time. */
+.ledger-grade-wrap {
   grid-area: grade;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.ledger-grade {
   display: grid;
   place-items: center;
   width: 1.625rem;
@@ -559,7 +570,7 @@
 
 .ledger-name:hover { color: var(--color-accent-strong); text-decoration: underline; }
 
-.ledger-name:focus-visible, .feed-workspace:focus-visible, .feed-detail:focus-visible, .verdict-explore:focus-visible, .feed-filter-btn:focus-visible, .board-foot-chip:focus-visible {
+.ledger-name:focus-visible, .feed-workspace:focus-visible, .feed-detail:focus-visible, .verdict-explore:focus-visible, .feed-filter-btn:focus-visible {
   outline: var(--rule-focus) solid var(--color-focus);
   border-radius: var(--radius-xs);
 }
@@ -629,12 +640,9 @@
   min-width: 0;
 }
 
-/* Row risk score: semibold body size — the board's hero count outranks it. */
-.ledger-score { font-family: var(--font-display); font-weight: 700; font-size: var(--text-md); color: var(--color-ink); white-space: nowrap; }
-
-.ledger-score small { font: 500 var(--text-2xs) var(--font-body); color: var(--color-ink-faint); margin-left: 2px; }
-
-.ledger-score-none { color: var(--color-ink-ghost); font-weight: 500; }
+/* Row risk score, now the small number under the grade tile — the board's
+   hero count outranks it, and the tile's letter already owns the color. */
+.ledger-score { font-family: var(--font-display); font-weight: 700; font-size: var(--text-2xs); color: var(--color-ink-faint); white-space: nowrap; }
 
 /* The state badge repeated in full ("Completed with warnings") down every row
    was the loudest thing in the ledger. StateTag reduces it to a coloured dot
@@ -868,21 +876,9 @@
 
 .board-foot-note strong { color: var(--color-ink); }
 
-.board-foot-chips { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-
-.board-foot-chip {
-  padding: 1px 8px;
-  border-radius: var(--radius-pill);
-  border: var(--rule) solid var(--color-rule-faint);
-  font: 500 12px var(--font-mono);
-  letter-spacing: .02em;
-}
-
-.board-foot-chip.ready { border-color: color-mix(in oklch, var(--color-success) 35%, var(--color-rule)); background: var(--color-success-soft); color: var(--color-success-text); }
-
-.board-foot-chip.pending { background: var(--color-surface-muted); color: var(--color-ink-faint); }
-
-.board-foot-more { font: 500 12px var(--font-mono); color: var(--color-ink-faint); }
+/* Per-tool readiness chips were removed from the footer: tool ids are jargon
+   at dashboard altitude, the sentence names the not-installed ones, and the
+   Tools page owns the per-tool detail. */
 
 /* ── Responsive ────────────────────────────────────────────────────
    The row sheds columns in reverse order of importance: language chips go
