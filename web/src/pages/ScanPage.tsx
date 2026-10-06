@@ -16,6 +16,8 @@ import { pushNotification } from '../lib/notifications';
 import { analyzerMeta, categoryColor, CATEGORY_LABELS } from '../lib/analyzerCatalog';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { Button } from '../components/ui/button';
+import { copyToClipboard } from '../lib/clipboard';
+import { ScanActionDropdown } from '../components/ScanActionDropdown';
 
 export type { ScanEvent } from '../lib/scanEvents';
 
@@ -107,6 +109,18 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
   const reportedFindings = [...completions.values()].reduce((acc, event) => acc + (event.findings ?? 0), 0);
   const liveSeverity = severityTotalsSoFar(events);
   const findingsSoFar = Math.max(current?.total_findings ?? 0, reportedFindings);
+  const [copiedId, setCopiedId] = useState(false);
+  useEffect(() => {
+    if (!copiedId) return;
+    const timer = window.setTimeout(() => setCopiedId(false), 2000);
+    return () => window.clearTimeout(timer);
+  }, [copiedId]);
+  const copyScanId = async () => {
+    if (await copyToClipboard(id)) {
+      setCopiedId(true);
+      notify({ kind: 'info', text: 'Scan ID copied to clipboard.' });
+    }
+  };
   async function cancel() {
     if (cancelling) return;
     setCancelling(true);
@@ -210,6 +224,17 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
                 <span aria-hidden="true">·</span>
                 <span>{succeeded} of {runs.length} {runs.length === 1 ? 'analyzer' : 'analyzers'} succeeded</span>
               </>}
+              <span aria-hidden="true">·</span>
+              <button
+                type="button"
+                className="scan-id-chip"
+                onClick={copyScanId}
+                title="Click to copy full scan ID"
+                aria-label={`Copy scan ID ${id}`}
+              >
+                <code>{id.slice(0, 8)}</code>
+                {copiedId && <span className="copy-hint">Copied</span>}
+              </button>
             </p>
             {/* The reason a scan failed or warned must survive outside the
                 live panel — "no eligible inputs" scans fail instantly, so
@@ -233,6 +258,16 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
             <Button variant="destructive" size="sm" onClick={cancel} disabled={cancelling}>
               {cancelling ? 'Cancelling…' : 'Cancel scan'}
             </Button>
+          )}
+          {terminal && go && current.workspace_id && (
+            <ScanActionDropdown
+              workspaceId={current.workspace_id}
+              defaultProfile={current.profile ?? 'standard'}
+              size="sm"
+              variant="default"
+              go={go}
+              notify={notify}
+            />
           )}
           {go && current.workspace_id && (
             <Button variant="outline" size="sm" onClick={() => go({ page: 'workspace', id: current.workspace_id })}>

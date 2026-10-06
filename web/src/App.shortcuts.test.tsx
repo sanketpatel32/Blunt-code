@@ -112,6 +112,18 @@ describe('global keyboard shortcuts', () => {
     expect(document.activeElement).toBe(input);
   });
 
+  it('focuses the workspaces search input when / is pressed on the workspaces page', async () => {
+    window.history.replaceState({}, '', '/workspaces');
+    const host = await renderApp(vi.fn(() => Promise.resolve(json([
+      { id: 'ws-1', name: 'Alpha', root_path: 'C:\\code\\alpha', created_at: '2026-08-12T00:00:00Z', default_profile: 'standard', languages: ['ts'] }
+    ]))));
+    const search = host.querySelector<HTMLInputElement>('.ws-filter-search')!;
+    expect(search).not.toBeNull();
+    expect(document.activeElement).not.toBe(search);
+    await act(async () => { key('/'); });
+    expect(document.activeElement).toBe(search);
+  });
+
   it('focuses the tree search with / on the files page', async () => {
     window.history.replaceState({}, '', '/workspaces/ws-1/files');
     const fetchMock = vi.fn((input: string) => {

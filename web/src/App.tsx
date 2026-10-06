@@ -164,7 +164,7 @@ export function App() {
       if (target) { event.preventDefault(); setShortcutsOpen(false); go({ page: target }); return; }
       if (key === 'n') { event.preventDefault(); setAddOpen(true); return; }
       if (key === '/') {
-        const search = document.querySelector<HTMLInputElement>('.analysis-search input') ?? document.querySelector<HTMLInputElement>('.filter-search input') ?? document.querySelector<HTMLInputElement>('.tree-panel .search input') ?? document.querySelector<HTMLInputElement>('.search-input');
+        const search = document.querySelector<HTMLInputElement>('.analysis-search input') ?? document.querySelector<HTMLInputElement>('.ws-filter-search') ?? document.querySelector<HTMLInputElement>('.filter-search input') ?? document.querySelector<HTMLInputElement>('.tree-panel .search input') ?? document.querySelector<HTMLInputElement>('.search-input');
         if (search) { event.preventDefault(); search.focus(); }
         return;
       }

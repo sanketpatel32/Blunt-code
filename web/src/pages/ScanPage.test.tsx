@@ -387,4 +387,30 @@ describe('ScanPage terminal and action states (IMP-14)', () => {
     const after = [...host.querySelectorAll('button')].find((button) => button.textContent?.includes('Cancel scan'));
     expect(after?.hasAttribute('disabled')).toBe(false);
   });
+
+  it('provides a Run scan dropdown action on terminal scans with a workspace', async () => {
+    const { host } = await renderScanPage(scanFixture({ state: 'completed', workspace_id: 'ws-1' }));
+    const scanActions = host.querySelector('[aria-label="Scan actions"]');
+    expect(scanActions).not.toBeNull();
+    const runBtn = scanActions?.querySelector('button');
+    expect(runBtn?.textContent).toContain('Run scan');
+  });
+
+  it('copies the full scan ID to clipboard on chip click', async () => {
+    const { host } = await renderScanPage(scanFixture({ id: 'scan-abcdef123456' }));
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+
+    try {
+      const chip = host.querySelector<HTMLButtonElement>('.scan-id-chip')!;
+      expect(chip).not.toBeNull();
+      expect(chip.textContent).toContain('scan-abc');
+      await act(async () => { chip.click(); });
+      await act(async () => { await Promise.resolve(); });
+      expect(writeText).toHaveBeenCalledWith('scan-abcdef123456');
+      expect(chip.textContent).toContain('Copied');
+    } finally {
+      delete (navigator as { clipboard?: unknown }).clipboard;
+    }
+  });
 });

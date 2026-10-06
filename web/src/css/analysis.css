@@ -130,6 +130,30 @@
 
 .scan-hero-meta span[aria-hidden='true'] { color: var(--color-ink-ghost); }
 
+.scan-id-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3xs);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: var(--color-ink-soft);
+  font-size: var(--text-xs);
+  transition: color var(--dur-fast);
+}
+
+.scan-id-chip:hover code {
+  color: var(--color-accent-strong);
+  border-color: var(--color-accent);
+}
+
+.scan-id-chip .copy-hint {
+  font-size: var(--text-2xs);
+  color: var(--color-success);
+  font-weight: 600;
+}
+
 /* IMP-14: the scan's literal state rides the eyebrow so warned/failed scans
    are recognizable without inspecting logs, and the failure or degradation
    reason gets its own line in the hero. */
