@@ -570,7 +570,7 @@ export function CLIPage() {
 
       {/* TAB 1: Reference Manual */}
       {tab === 'reference' && (
-        <div>
+        <div className="cli-reference-view">
           {/* The comprehension layer. The reference below answers "what flags
               exist"; this panel answers the questions that come before that:
               which command do I even run, what does a profile mean, and what
@@ -578,18 +578,54 @@ export function CLIPage() {
               searches, so it never stands between them and the reference. */}
           {!search.trim() && (
             <section className="cli-start" aria-label="Start here">
-              <h3 className="cli-start-title">Start here — three commands cover most of it</h3>
+              <div className="cli-start-header">
+                <h3 className="cli-start-title">Start here — three commands cover most of it</h3>
+                <span className="cli-start-tag">Quick Start</span>
+              </div>
               <ol className="cli-start-steps">
                 <li>
-                  <code>bluntcode scan .</code>
+                  <div className="cli-start-cmd-row">
+                    <code>bluntcode scan .</code>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="cli-mini-copy"
+                      onClick={() => copy('bluntcode scan .')}
+                      title="Copy command"
+                    >
+                      {copiedText === 'bluntcode scan .' ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+                    </Button>
+                  </div>
                   <span>scan the current folder; your files are only read, never changed</span>
                 </li>
                 <li>
-                  <code>bluntcode findings list .</code>
+                  <div className="cli-start-cmd-row">
+                    <code>bluntcode findings list .</code>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="cli-mini-copy"
+                      onClick={() => copy('bluntcode findings list .')}
+                      title="Copy command"
+                    >
+                      {copiedText === 'bluntcode findings list .' ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+                    </Button>
+                  </div>
                   <span>see what it found, file by file</span>
                 </li>
                 <li>
-                  <code>bluntcode report .</code>
+                  <div className="cli-start-cmd-row">
+                    <code>bluntcode report .</code>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="cli-mini-copy"
+                      onClick={() => copy('bluntcode report .')}
+                      title="Copy command"
+                    >
+                      {copiedText === 'bluntcode report .' ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+                    </Button>
+                  </div>
                   <span>the full report of the last scan</span>
                 </li>
               </ol>
@@ -614,6 +650,16 @@ export function CLIPage() {
                 onChange={(e) => setSearch(e.target.value)}
                 className="cli-search-input"
               />
+              {search && (
+                <button
+                  type="button"
+                  className="cli-search-clear"
+                  onClick={() => setSearch('')}
+                  aria-label="Clear search"
+                >
+                  ✕
+                </button>
+              )}
             </div>
             <div className="cli-cat-pills">
               {categories.map((cat) => (
@@ -629,6 +675,31 @@ export function CLIPage() {
             </div>
           </div>
 
+          {/* Quick Jump Bar */}
+          {filteredCommands.length > 0 && (
+            <div className="cli-quick-jump">
+              <span className="cli-jump-label">Quick Jump:</span>
+              <div className="cli-jump-chips">
+                {filteredCommands.map((cmd) => (
+                  <a
+                    key={cmd.id}
+                    href={`#${cmd.id}`}
+                    className="cli-jump-chip"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      document.getElementById(cmd.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }}
+                  >
+                    <code>{cmd.id}</code>
+                  </a>
+                ))}
+              </div>
+              <span className="cli-match-count">
+                {filteredCommands.length} command{filteredCommands.length === 1 ? '' : 's'}
+              </span>
+            </div>
+          )}
+
           {/* Commands List */}
           <div className="cli-commands-list">
             {filteredCommands.length === 0 ? (
@@ -637,7 +708,7 @@ export function CLIPage() {
               </div>
             ) : (
               filteredCommands.map((cmd) => (
-                <article key={cmd.id} className="cli-command-card">
+                <article key={cmd.id} id={cmd.id} className="cli-command-card">
                   <div className="cli-cmd-head">
                     <div>
                       <div className="cli-cmd-title-row">
@@ -647,15 +718,28 @@ export function CLIPage() {
                       </div>
                       <p className="cli-cmd-desc">{cmd.description}</p>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => copy(cmd.synopsis)}
-                      title="Copy synopsis"
-                    >
-                      {copiedText === cmd.synopsis ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
-                      {copiedText === cmd.synopsis ? 'Copied' : 'Copy'}
-                    </Button>
+                    <div className="cli-cmd-actions">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => copy(cmd.synopsis)}
+                        title="Copy synopsis"
+                      >
+                        {copiedText === cmd.synopsis ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                        {copiedText === cmd.synopsis ? 'Copied' : 'Copy'}
+                      </Button>
+                      <a
+                        href="#main-content"
+                        className="cli-back-to-top"
+                        title="Back to top"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
+                      >
+                        ↑ Top
+                      </a>
+                    </div>
                   </div>
 
                   {/* Synopsis Box */}
@@ -827,6 +911,69 @@ export function CLIPage() {
             <p>
               Customize your scan flags visually, preview the generated terminal command, and copy it straight into your terminal or pipeline.
             </p>
+            <div className="cli-builder-presets">
+              <span className="cli-presets-label">Workflow Presets:</span>
+              <button
+                type="button"
+                className="cli-preset-btn"
+                onClick={() => {
+                  setBuilderTarget('.');
+                  setBuilderProfile('standard');
+                  setBuilderFailOn('high+');
+                  setBuilderFormat('sarif');
+                  setBuilderOutput('audit.sarif');
+                  setBuilderQuiet(false);
+                  setBuilderIncremental(false);
+                }}
+              >
+                CI Gate (High+)
+              </button>
+              <button
+                type="button"
+                className="cli-preset-btn"
+                onClick={() => {
+                  setBuilderTarget('.');
+                  setBuilderProfile('quick');
+                  setBuilderFailOn('none');
+                  setBuilderFormat('text');
+                  setBuilderOutput('');
+                  setBuilderQuiet(true);
+                  setBuilderIncremental(true);
+                }}
+              >
+                Fast Local Lint
+              </button>
+              <button
+                type="button"
+                className="cli-preset-btn"
+                onClick={() => {
+                  setBuilderTarget('.');
+                  setBuilderProfile('deep');
+                  setBuilderFailOn('high+');
+                  setBuilderFormat('markdown');
+                  setBuilderOutput('audit.md');
+                  setBuilderQuiet(false);
+                  setBuilderIncremental(false);
+                }}
+              >
+                Deep Markdown Audit
+              </button>
+              <button
+                type="button"
+                className="cli-preset-btn"
+                onClick={() => {
+                  setBuilderTarget('.');
+                  setBuilderProfile('pentest');
+                  setBuilderFailOn('critical');
+                  setBuilderFormat('json');
+                  setBuilderOutput('pentest.json');
+                  setBuilderQuiet(true);
+                  setBuilderIncremental(false);
+                }}
+              >
+                Pentest DAST JSON
+              </button>
+            </div>
           </div>
 
           <div className="cli-builder-grid">
@@ -936,6 +1083,48 @@ export function CLIPage() {
                 {copiedText === generatedBuilderCommand ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
                 {copiedText === generatedBuilderCommand ? 'Copied' : 'Copy'}
               </Button>
+            </div>
+            {/* Live Flag Explainer */}
+            <div className="cli-builder-explainer">
+              <div className="cli-explainer-item">
+                <span className="cli-explainer-dot" />
+                <span><strong>Target:</strong> <code>{builderTarget || '.'}</code></span>
+              </div>
+              <div className="cli-explainer-item">
+                <span className="cli-explainer-dot" />
+                <span>
+                  <strong>Profile:</strong> <code>{builderProfile}</code> (
+                  {builderProfile === 'quick' && 'Fast linters only, < 1 min'}
+                  {builderProfile === 'standard' && 'Linters, secrets, security & SonarQube'}
+                  {builderProfile === 'deep' && 'Exhaustive static rules & dependencies'}
+                  {builderProfile === 'pentest' && 'Standard analyzers plus DAST prober'}
+                  )
+                </span>
+              </div>
+              {builderFailOn !== 'none' && (
+                <div className="cli-explainer-item">
+                  <span className="cli-explainer-dot" />
+                  <span><strong>Gate:</strong> Fails build (exit 1) on <code>{builderFailOn}</code> findings</span>
+                </div>
+              )}
+              {builderFormat !== 'text' && (
+                <div className="cli-explainer-item">
+                  <span className="cli-explainer-dot" />
+                  <span><strong>Format:</strong> <code>{builderFormat}</code>{builderOutput ? ` saved to ${builderOutput}` : ' to stdout'}</span>
+                </div>
+              )}
+              {builderIncremental && (
+                <div className="cli-explainer-item">
+                  <span className="cli-explainer-dot" />
+                  <span><strong>Incremental:</strong> Only scans changed files since last completed run</span>
+                </div>
+              )}
+              {builderQuiet && (
+                <div className="cli-explainer-item">
+                  <span className="cli-explainer-dot" />
+                  <span><strong>Quiet:</strong> Progress messages on stderr suppressed</span>
+                </div>
+              )}
             </div>
           </div>
         </section>

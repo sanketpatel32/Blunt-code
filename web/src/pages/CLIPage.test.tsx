@@ -242,4 +242,74 @@ describe('CLIPage', () => {
     expect(host.textContent).toContain('bluntcode tools');
     expect(host.textContent).toContain('uninstall');
   });
+
+  it('renders quick jump bar and scrolls to target command', async () => {
+    const host = await renderPage();
+    const jumpBar = host.querySelector('.cli-quick-jump');
+    expect(jumpBar).not.toBeNull();
+    expect(jumpBar?.textContent).toContain('Quick Jump:');
+    expect(jumpBar?.textContent).toContain('scan');
+
+    const scanChip = jumpBar?.querySelector('a[href="#scan"]') as HTMLAnchorElement | null;
+    expect(scanChip).not.toBeNull();
+  });
+
+  it('clears search when clear button is clicked', async () => {
+    const host = await renderPage();
+    const input = host.querySelector('input[placeholder*="Search commands"]') as HTMLInputElement;
+
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+      setter?.call(input, 'doctor');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    expect(host.textContent).toContain('bluntcode doctor');
+    expect(host.textContent).not.toContain('bluntcode tools');
+
+    const clearBtn = host.querySelector('.cli-search-clear') as HTMLButtonElement | null;
+    expect(clearBtn).not.toBeNull();
+
+    await act(async () => {
+      clearBtn?.click();
+    });
+
+    expect(host.textContent).toContain('bluntcode tools');
+  });
+
+  it('applies workflow presets in Command Builder', async () => {
+    const host = await renderPage();
+    const tabs = Array.from(host.querySelectorAll('button.tab')) as HTMLButtonElement[];
+    const builderTab = tabs.find((b) => b.textContent?.includes('Command Builder'));
+
+    await act(async () => {
+      builderTab!.click();
+    });
+
+    expect(host.textContent).toContain('Workflow Presets:');
+    const fastLintBtn = Array.from(host.querySelectorAll('.cli-preset-btn')).find((b) =>
+      b.textContent?.includes('Fast Local Lint'),
+    ) as HTMLButtonElement | undefined;
+    expect(fastLintBtn).toBeDefined();
+
+    await act(async () => {
+      fastLintBtn!.click();
+    });
+
+    expect(host.textContent).toContain('bluntcode scan . --profile quick --incremental --quiet');
+  });
+
+  it('copies command from start here section', async () => {
+    const writeText = stubClipboard();
+    const host = await renderPage();
+    const miniCopyBtn = host.querySelector('.cli-mini-copy') as HTMLButtonElement | null;
+    expect(miniCopyBtn).not.toBeNull();
+
+    await act(async () => {
+      miniCopyBtn?.click();
+    });
+
+    expect(writeText).toHaveBeenCalledWith('bluntcode scan .');
+  });
 });
