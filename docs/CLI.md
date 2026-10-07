@@ -20,7 +20,7 @@ CLI queries open the SQLite database directly with shared concurrency, meaning C
 | `bluntcode rules <cmd>` | Configuration | View/set path exclusion globs and toggle analyzer rules |
 | `bluntcode tools <cmd>` | Toolchain | List, install, repair, and update hermetic analyzer binaries |
 | `bluntcode pentest probe` | DAST | Dynamic HTTP security header, TLS, and vulnerability probe |
-| `bluntcode stats / risk` | Metrics | Calculate global/workspace statistics, risk score (0-100), grade |
+| `bluntcode stats / risk` | Metrics | Calculate global/workspace statistics, weighted risk score (A–D grade), trends |
 | `bluntcode doctor / update` | System | Run environment health checks, auto-repair, check updates |
 | `bluntcode agent / llm` | AI Agents | Machine-readable defaults and developer documentation for agents |
 | `bluntcode cli [command]` | Built-in Docs | Built-in CLI reference manual and syntax helper |
@@ -242,7 +242,7 @@ bluntcode pentest probe <url> [options]
 
 ## 10. Metrics, Trends & Risk (`bluntcode stats`)
 
-Calculate aggregate figures, risk scores (0-100), and historical trendlines.
+Calculate aggregate figures, weighted risk scores (unbounded with letter grades A–D: A 0–4, B 5–19, C 20–49, D 50+), and historical trendlines.
 
 ```bash
 # Global statistics across all workspaces

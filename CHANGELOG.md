@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Explicit full-report, filtered-findings and loaded-row export scopes; direct finding links from workspace priority findings.
 
 ### Changed
+- **CLI Documentation Overhaul**:
+  - Added sticky Quick Jump Bar with command pills, smooth scroll offsets, and live matching command counts to eliminate vertical navigation fatigue.
+  - Added 4 one-click workflow presets (`CI Gate (High+)`, `Fast Local Lint`, `Deep Markdown Audit`, `Pentest DAST JSON`) to the Command Builder with a live Flag Explainer breaking down each option in plain English.
+  - Enhanced Start Here guide with inline 1-click copy buttons for primary commands and visual profile ladder chips.
+  - Added instant search clear button (`✕`) and back-to-top (`↑ Top`) links on every command card.
+  - Corrected `docs/CLI.md` risk score documentation to accurately reflect the unbounded weighted score with A–D letter grade bands.
 - Workspace profiles initialize from the saved default. Source previews show the current-source caveat visibly.
 - Dependency graph and custom-rule execution show honest unavailable states instead of generated findings or connections.
 - OWASP classification shows loaded evidence and exact finding links rather than compliance pass/fail claims.
