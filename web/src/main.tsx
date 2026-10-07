@@ -18,6 +18,7 @@ import './css/identity.css';
 // is the three named tiers (sunken / base / raised) and which objects get
 // them; see the header for the measurement that motivated it.
 import './css/hierarchy.css';
+import './css/design-system.css';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

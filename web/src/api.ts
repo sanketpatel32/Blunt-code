@@ -1,4 +1,4 @@
-import type { AnalyzerStatus, CompareResult, FindingPage, FindingsQuery, FixedFindingsResponse, GlobalStats, PathOverride, PentestProbeResult, RecentScansResponse, Report, RiskProfile, Scan, ScanPage, SearchFindingsPage, SeverityTrendPoint, SourcePreview, Suppression, Tool, TreeNode, Workspace } from './types';
+import type { AnalyzerStatus, ScanPlan, CompareResult, FindingPage, FindingsQuery, FixedFindingsResponse, GlobalStats, PathOverride, PentestProbeResult, RecentScansResponse, Report, RiskProfile, Scan, ScanPage, SearchFindingsPage, SeverityTrendPoint, SourcePreview, Suppression, Tool, TreeNode, Workspace } from './types';
 
 const PREFIX = '/api/v1';
 
@@ -37,7 +37,12 @@ function list<T>(value: T[] | { items?: T[]; workspaces?: T[]; scans?: T[]; find
  *  callers can greet a duplicate with "opening it" instead of "added". */
 export type CreatedWorkspace = Workspace & { existing: boolean };
 
+export type FindingNote = { id: string; text: string; createdAt: string };
 export const api = {
+  findingNotes: async (id: string, fingerprint: string) => list<FindingNote>(await request<{ items: FindingNote[] }>(`/workspaces/${id}/notes/${encodeURIComponent(fingerprint)}`)),
+  addFindingNote: (id: string, fingerprint: string, text: string, importKey?: string) => request<FindingNote>(`/workspaces/${id}/notes/${encodeURIComponent(fingerprint)}`, { method: 'POST', body: JSON.stringify({ text, import_key: importKey }) }),
+  deleteFindingNote: (id: string, fingerprint: string, note: string) => request<void>(`/workspaces/${id}/notes/${encodeURIComponent(fingerprint)}/${note}`, { method: 'DELETE' }),
+  scanPlan: (id: string, profile: string) => request<ScanPlan>(`/workspaces/${id}/scan-plan?profile=${encodeURIComponent(profile)}`),
   health: () => request<{ status?: string }>('/health'),
   meta: () => request<Record<string, string>>('/meta'),
   settings: () => request<{ offline: boolean; open_browser: boolean }>('/settings'),

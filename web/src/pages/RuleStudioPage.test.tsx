@@ -78,7 +78,7 @@ describe('RuleStudioPage pattern sanity lint', () => {
     expect(saveButton(host).disabled).toBe(true);
     // the mock Live Preview is suppressed while the pattern is malformed
     expect(previewFindings(host)).toBeNull();
-    expect(host.textContent).toContain('preview suppressed until the pattern is fixed');
+    expect(host.textContent).toContain('Pattern looks malformed');
     expect(host.textContent).not.toContain('src/example.py:12');
   });
 
@@ -86,7 +86,7 @@ describe('RuleStudioPage pattern sanity lint', () => {
     const host = await renderPage();
     await typeYaml(host, INVALID_YAML_WITH_PATTERN);
     expect(saveButton(host).disabled).toBe(true);
-    expect(host.textContent).toContain('Preview suppressed — fix the YAML errors');
+    expect(host.textContent).toContain('unclosed quote');
     expect(previewFindings(host)).toBeNull();
   });
 
@@ -94,8 +94,9 @@ describe('RuleStudioPage pattern sanity lint', () => {
     const host = await renderPage();
     await typeYaml(host, VALID_YAML);
     expect(saveButton(host).disabled).toBe(false);
-    expect(previewFindings(host)).not.toBeNull();
-    expect(host.textContent).toContain('src/example.py:12');
+    expect(previewFindings(host)).toBeNull();
+    expect(host.textContent).toContain('Rule execution is unavailable');
+    expect(host.textContent).not.toContain('src/example.py:12');
   });
 });
 

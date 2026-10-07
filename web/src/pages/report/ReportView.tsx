@@ -1,3 +1,4 @@
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../../components/ui/dialog';
 import * as React from 'react';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { api } from '../../api';
@@ -194,7 +195,7 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
   const [pages, setPages] = useState(initialUrlState.page);
   const [pageSize, setPageSize] = useState(initialUrlState.pageSize);
   const [sort, setSort] = useState<SortState>(initialUrlState.sort);
-  const [selectedKey, setSelectedKey] = useState<string | undefined>();
+  const [selectedKey, setSelectedKey] = useState<string | undefined>(() => new URLSearchParams(window.location.search).get('finding') ?? undefined);
   const [suppressing, setSuppressing] = useState<Finding>();
   /** Findings queued for BULK suppression: the dialog confirms the reason once
    *  (it renders a single finding), then every queued fingerprint is posted
@@ -216,12 +217,14 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
   // replaceState keeps back/forward linear. A no-op when nothing changed.
   useEffect(() => {
     const urlFilters: FindingFilter = { ...filters, q: debouncedQ };
-    const qs = buildUrlSearch(urlFilters, sort, pages, pageSize);
+    const query = new URLSearchParams(buildUrlSearch(urlFilters, sort, pages, pageSize));
+    if (selectedKey) query.set('finding', selectedKey);
+    const qs = query.toString();
     const current = window.location.search.replace(/^\?/, '');
     if (qs === current) return;
     const nextUrl = qs ? `${window.location.pathname}?${qs}${window.location.hash}` : `${window.location.pathname}${window.location.hash}`;
     window.history.replaceState(null, '', nextUrl);
-  }, [filters, debouncedQ, sort, pages, pageSize]);
+  }, [filters, debouncedQ, sort, pages, pageSize, selectedKey]);
   // Restore filters/sort/pages when the user navigates back/forward.
   useEffect(() => {
     const onPopState = () => {
@@ -230,6 +233,7 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
       setSort(next.sort);
       setPages(next.page);
       setPageSize(next.pageSize);
+      setSelectedKey(new URLSearchParams(window.location.search).get('finding') ?? undefined);
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
@@ -425,7 +429,7 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
   const overRange = items.length === 0 && pages > 1 && total > 0;
   const loadingMore = findings.loading && items.length > 0;
   const selectedIndex = selectedKey ? items.findIndex((finding, index) => findingKey(finding, index) === selectedKey) : -1;
-  const selected = selectedIndex >= 0 ? items[selectedIndex] : undefined;
+  const selected = selectedIndex >= 0 ? items[selectedIndex] : report.data?.findings?.find((finding) => findingKey(finding) === selectedKey);
   return <section className="report">
     {/* Loop 145 · the raw engine text is still there, on `title`, for anyone
         debugging it. What is on screen is the part a reader can act on. */}
@@ -492,18 +496,24 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
 
 /** Flat export row — plain `<a download>` GET links for the Markdown/HTML/SARIF attachments plus a CSV of the currently filtered findings and a client-side Jira CSV. */
 function ExportMenu({ scanId, csvParams, findings }: { scanId: string; csvParams: Record<string, string>; findings?: Finding[] }) {
+  const [open, setOpen] = useState(false);
+  const returnFocus = useRef<HTMLButtonElement>(null);
   const items = [
-    { label: 'Markdown', ext: '.md', href: api.markdownUrl(scanId), title: 'Paste into docs or PRs' },
-    { label: 'HTML', ext: '.html', href: api.exportUrl(scanId, 'html'), title: 'Standalone shareable report' },
-    { label: 'SARIF', ext: '.sarif', href: api.exportUrl(scanId, 'sarif'), title: 'For GitHub code scanning & CI gates' },
-    { label: 'CSV (current filters)', ext: '.csv', href: api.exportUrl(scanId, 'csv', csvParams), title: 'Current filters as CSV' },
+    { label: 'Markdown', ext: '.md', href: api.markdownUrl(scanId) },
+    { label: 'HTML', ext: '.html', href: api.exportUrl(scanId, 'html') },
+    { label: 'SARIF', ext: '.sarif', href: api.exportUrl(scanId, 'sarif') },
   ];
-  const handleJiraCsv = () => {
-    const data = findings ?? [];
-    if (!data.length) return;
-    downloadJiraCsv(data, `jira-${scanId}.csv`);
-  };
-  return <fieldset className="export-menu export-inline" aria-label="Export report">{items.map((item) => <a key={item.label} className="export-item" href={item.href} title={item.title} download>{item.label}<small>{item.ext}</small></a>)}<button type="button" className="export-item" onClick={handleJiraCsv}>Jira CSV<small>.csv</small></button></fieldset>;
+  return <>
+    <button ref={returnFocus} className="button secondary" onClick={() => setOpen(true)}>Export report</button>
+    <Dialog open={open} onOpenChange={setOpen}><DialogContent onCloseAutoFocus={(event) => { event.preventDefault(); returnFocus.current?.focus(); }}>
+      <DialogHeader><DialogTitle>Export report</DialogTitle><DialogDescription>Choose the scope to include. Exports describe this scan, not the current source files.</DialogDescription></DialogHeader>
+      <section><h3>Full scan report</h3><p className="muted">Includes the whole report regardless of visible filters.</p>
+        <div className="export-inline">{items.map((item) => <a key={item.label} className="export-item" href={item.href} download>{item.label}<small>{item.ext}</small></a>)}</div>
+      </section>
+      <section><h3>All findings matching current filters</h3><p className="muted">Includes matching rows beyond the loaded page.</p><a className="export-item" href={api.exportUrl(scanId, 'csv', csvParams)} download>CSV (current filters)<small>.csv</small></a></section>
+      <section><h3>Loaded findings only</h3><p className="muted">{findings?.length ?? 0} rows currently loaded. Load more findings first to include more rows.</p><button className="export-item" disabled={!findings?.length} onClick={() => downloadJiraCsv(findings ?? [], `jira-${scanId}.csv`)}>Jira CSV<small>.csv · loaded rows</small></button></section>
+    </DialogContent></Dialog>
+  </>;
 }
 
 /* ── The rails that collapse ──────────────────────────────────────────

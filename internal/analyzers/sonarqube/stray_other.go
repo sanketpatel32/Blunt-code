@@ -4,6 +4,7 @@ package sonarqube
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 )
@@ -14,3 +15,9 @@ import (
 func sweepStrayServerProcesses(context.Context, string, *slog.Logger) error { return nil }
 func trackProcessInKillOnCloseJob(*os.Process) error                        { return nil }
 func SweepStrayProcesses(context.Context, string) error                     { return nil }
+
+// The shared managed lifecycle references this Windows helper even though its
+// platform guard excludes the call here. Keep non-Windows builds complete.
+func killWindowsProcessTree(context.Context, int) error {
+	return errors.New("Windows process-tree termination is unavailable on this platform")
+}

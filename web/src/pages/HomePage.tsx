@@ -93,7 +93,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
     return (workspaces.data ?? []).map((workspace) => {
       const { scan: current, superseded } = riskScanOf(workspace);
       const score = current ? riskScore(severityCountsOf(current)) : null;
-      const coverage = workspace.latest_scan_coverage;
+      const coverage = workspace.assessment_coverage ?? (workspace.latest_scan?.id === current?.id ? workspace.latest_scan_coverage : undefined);
       const partial = !!current && !!coverage && (coverage.failed > 0 || coverage.warned > 0);
       return { workspace, current, superseded, score, total: current?.total_findings ?? 0, coverage, partial };
     });
@@ -191,7 +191,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
       <div className="page board-page">
         <PageHeader
           eyebrow="Dashboard"
-          title="Risk board"
+          title="Overview"
           description="Scan a project locally, then track its risk here."
           actions={
             <>
@@ -243,8 +243,8 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
     <div className="page board-page">
       <PageHeader
         eyebrow="Dashboard"
-        title="Risk board"
-        description="Every workspace's latest completed scan, graded and ranked by risk."
+        title="Overview"
+        description="Review current assessments, resolve missing coverage, and choose what to fix next."
         badge={activeScans > 0 ? (
           <span className="board-live">
             <i className="board-live-dot" aria-hidden="true" />
@@ -284,6 +284,13 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
         }
       />
 
+      <section className="overview-metrics" aria-label="Current assessment metrics">
+        <div className="metric-card"><span>Workspaces assessed</span><strong>{workspaces.loading || workspaces.error ? '—' : `${verdict.scanned} / ${workspaces.data?.length ?? 0}`}</strong><small>Latest completed assessments</small></div>
+        <div className="metric-card"><span>Critical + high</span><strong>{verdictTallied ? verdict.counts.critical + verdict.counts.high : '—'}</strong><small>Across assessed workspaces</small></div>
+        <div className="metric-card"><span>Incomplete assessments</span><strong>{workspaces.loading || workspaces.error ? '—' : ledgerBase.filter((row) => row.current?.state === 'completed_with_warnings' || row.partial).length}</strong><small>Findings remain qualified</small></div>
+        <div className="metric-card"><span>Active scans</span><strong>{recent.loading || recent.error ? '—' : activeScans}</strong><small>From current scan activity</small></div>
+      </section>
+      <details className="assessment-details"><summary>Current assessment details and severity distribution</summary>
       {/* ── Verdict: how risky is the code right now ── */}
       {workspaces.loading ? (
         <div className="board-verdict-loading"><SkeletonCards count={1} variant="metric" /></div>
@@ -436,12 +443,13 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
         </section>
       )}
 
+      </details>
       {/* ── Two questions side by side: where is the risk · what happened lately ── */}
       <div className="board-columns">
         <section className="board-panel board-ledger" aria-labelledby="ledger-heading">
           <header className="board-panel-head">
             <div>
-              <h2 id="ledger-heading" className="board-panel-title">Where the risk is</h2>
+              <h2 id="ledger-heading" className="board-panel-title">Workspace assessments</h2>
               <p className="board-panel-sub">
                 Worst first · the score weights critical ×10, high ×5, medium ×2, low ×1.
               </p>
@@ -846,7 +854,7 @@ function LedgerRow({
   const depth = gradeDepth(score, grade);
   // The row's grade is only as strong as its scan: flag rows whose latest
   // scan lost analyzer runs, so "few findings" never reads as full assurance.
-  const coverage = workspace.latest_scan_coverage;
+  const coverage = workspace.assessment_coverage ?? (workspace.latest_scan?.id === current?.id ? workspace.latest_scan_coverage : undefined);
   const partialCoverage = !!current && !!coverage && (coverage.failed > 0 || coverage.warned > 0);
 
   return (

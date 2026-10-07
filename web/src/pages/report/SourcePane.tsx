@@ -95,7 +95,7 @@ export function SourcePane({
     </div>
     <div className="source-pane-body">
       {preview.loading ? <SkeletonLines lines={8} /> : preview.error ? <div className="source-pane-error" role="note"><strong>Preview unavailable</strong>{previewErrorText(preview.error)}</div> : data ? <>
-        <p className="sr-only">{data.note ?? 'Current source near this finding.'}</p>
+        <p className="source-provenance" role="note">{data.note ?? 'Current source near this finding.'}</p>
         <pre className="code-preview">{data.lines.map((line) => <code key={line.number} className={line.number >= (data.highlight_start_line ?? 0) && line.number <= (data.highlight_end_line ?? 0) ? 'highlight' : ''}><span aria-hidden="true">{line.number}</span>{line.text || ' '}</code>)}</pre>
       </> : null}
     </div>
@@ -112,6 +112,6 @@ export function SourcePane({
         : <button type="button" className="text-button suppress-finding" onClick={() => onSuppress(finding)}>Suppress…</button>)}
       <button type="button" className="text-button" aria-expanded={commentsOpen} onClick={() => setCommentsOpen((open) => !open)}>{commentsOpen ? 'Hide notes' : 'Notes'}</button>
     </div>
-    {commentsOpen && <div className="source-pane-comments"><CommentsPanel fingerprint={finding.fingerprint ?? finding.id ?? 'unknown'} title={findingLocation(finding)} /></div>}
+    {commentsOpen && <div className="source-pane-comments"><CommentsPanel key={`${workspaceId}:${finding.fingerprint ?? finding.id}`} workspaceId={workspaceId} fingerprint={finding.fingerprint ?? finding.id ?? 'unknown'} title={findingLocation(finding)} /></div>}
   </aside>;
 }

@@ -13,7 +13,7 @@ import { ApiError, api } from '../api';
 import type { Route } from '../lib/router';
 import type { Notice } from '../lib/notice';
 import { message } from '../lib/notice';
-import { ConfirmationDialog } from './dialogs';
+import { ScanReviewDialog } from './ScanReviewDialog';
 
 export interface ScanActionDropdownProps {
   workspaceId: string;
@@ -124,7 +124,7 @@ export function ScanActionDropdown({
             <Zap className="h-4 w-4 text-[var(--color-warning)]" />
             <div className="flex flex-col">
               <span className="font-medium">Quick scan</span>
-              <span className="text-xs text-[var(--color-ink-faint)]">Lint and secret check · usually under a minute</span>
+              <span className="text-xs text-[var(--color-ink-faint)]">Python and JS/TS lint only</span>
             </div>
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setPendingProfile('deep')} className="gap-2 cursor-pointer">
@@ -140,7 +140,7 @@ export function ScanActionDropdown({
             <ShieldAlert className="h-4 w-4" />
             <div className="flex flex-col">
               <span className="font-medium font-semibold">Run pentest scan</span>
-              <span className="text-xs text-[var(--color-ink-faint)]">OWASP Top 10 security checks</span>
+              <span className="text-xs text-[var(--color-ink-faint)]">Static security findings · supported analyzers</span>
             </div>
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => go({ page: 'pentest', id: workspaceId })} className="gap-2 cursor-pointer">
@@ -153,12 +153,10 @@ export function ScanActionDropdown({
         </DropdownMenuContent>
       </DropdownMenu>
       {pendingProfile !== null && (
-        // tone="primary": starting a scan is a safe, cancellable action — the
-        // destructive red confirm would read as "you are about to break things".
-        <ConfirmationDialog
-          tone="primary"
-          title={`Run ${pendingProfile} scan${workspaceName ? ` on ${workspaceName}` : ''}?`}
-          description={`A ${pendingProfile} scan runs the enabled analyzers over this workspace and can take several minutes. You can cancel it from the scan page while it runs.`}
+        <ScanReviewDialog
+          workspaceId={workspaceId}
+          workspaceName={workspaceName}
+          profile={pendingProfile}
           confirmLabel={`Run ${pendingProfile} scan`}
           busy={running}
           onCancel={() => setPendingProfile(null)}

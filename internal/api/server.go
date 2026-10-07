@@ -78,10 +78,11 @@ type scanDetail struct {
 // cannot erase a workspace's last good numbers.
 type workspaceView struct {
 	core.Workspace
-	Languages         []string               `json:"languages,omitempty"`
-	LatestScan        *scanDetail            `json:"latest_scan,omitempty"`
-	LatestScanCov     *database.ScanCoverage `json:"latest_scan_coverage,omitempty"`
-	LastCompletedScan *scanDetail            `json:"last_completed_scan,omitempty"`
+	Languages          []string               `json:"languages,omitempty"`
+	LatestScan         *scanDetail            `json:"latest_scan,omitempty"`
+	LatestScanCov      *database.ScanCoverage `json:"latest_scan_coverage,omitempty"`
+	LastCompletedScan  *scanDetail            `json:"last_completed_scan,omitempty"`
+	AssessmentCoverage *database.ScanCoverage `json:"assessment_coverage,omitempty"`
 }
 
 func New(db *database.DB, bus *events.Bus, scanService *scans.Service, toolService *tools.Service, paths config.Paths, version string, logger *slog.Logger) *Server {
@@ -122,6 +123,10 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("PATCH /api/v1/workspaces/{id}", s.updateWorkspace)
 	s.mux.HandleFunc("DELETE /api/v1/workspaces/{id}", s.deleteWorkspace)
 	s.mux.HandleFunc("POST /api/v1/workspaces/{id}/discover", s.discoverWorkspace)
+	s.mux.HandleFunc("GET /api/v1/workspaces/{id}/scan-plan", s.scanPlan)
+	s.mux.HandleFunc("GET /api/v1/workspaces/{id}/notes/{fingerprint}", s.findingNotes)
+	s.mux.HandleFunc("POST /api/v1/workspaces/{id}/notes/{fingerprint}", s.findingNotes)
+	s.mux.HandleFunc("DELETE /api/v1/workspaces/{id}/notes/{fingerprint}/{note}", s.findingNotes)
 	s.mux.HandleFunc("GET /api/v1/workspaces/{id}/tree", s.tree)
 	s.mux.HandleFunc("GET /api/v1/workspaces/{id}/path-overrides", s.getPathOverrides)
 	s.mux.HandleFunc("PUT /api/v1/workspaces/{id}/path-overrides", s.putPathOverrides)
@@ -449,6 +454,17 @@ func (s *Server) workspaceView(ctx context.Context, workspace core.Workspace, la
 		if view.LastCompletedScan, err = attach(lastCompleted); err != nil {
 			return workspaceView{}, err
 		}
+	}
+	assessment := latest
+	if assessment == nil || (assessment.State != "completed" && assessment.State != "completed_with_warnings") {
+		assessment = lastCompleted
+	}
+	if assessment != nil {
+		coverage, err := s.db.ScanAnalyzerCoverage(ctx, assessment.ID)
+		if err != nil {
+			return workspaceView{}, err
+		}
+		view.AssessmentCoverage = &coverage
 	}
 	if len(view.Languages) == 0 {
 		patterns, err := s.userExcludes(ctx, workspace.ID)
@@ -2689,4 +2705,41 @@ func safeOrigin(r *http.Request) bool {
 		return false
 	}
 	return loopbackHost(u.Host)
+}
+
+// scanPlan uses the same discovery and routing as a full scan, without creating a job.
+func (s *Server) scanPlan(w http.ResponseWriter, r *http.Request) {
+	work, ok := s.workspace(r)
+	if !ok {
+		fail(w, 404, "WORKSPACE_NOT_FOUND", "Workspace was not found.")
+		return
+	}
+	profile := r.URL.Query().Get("profile")
+	if profile == "" {
+		profile = work.DefaultProfile
+	}
+	if profile == "" {
+		profile = "standard"
+	}
+	switch profile {
+	case "quick", "standard", "deep", "pentest":
+	default:
+		fail(w, 400, "INVALID_PROFILE", "Choose quick, standard, deep, or pentest.")
+		return
+	}
+	if s.scans == nil {
+		fail(w, 503, "SCAN_UNAVAILABLE", "Scan service is unavailable.")
+		return
+	}
+	patterns, err := s.userExcludes(r.Context(), work.ID)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load exclusions.")
+		return
+	}
+	plan, err := s.scans.Plan(r.Context(), work, profile, patterns)
+	if err != nil {
+		fail(w, 500, "DISCOVERY_FAILED", "Could not review workspace inputs.")
+		return
+	}
+	writeJSON(w, 200, plan)
 }

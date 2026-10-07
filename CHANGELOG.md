@@ -5,9 +5,24 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.40.0] - 2026-10-07
+
+### Added
+- Shared page design with light/dark tokens, responsive navigation drawer, breadcrumbs, assessment metrics, consistent cards and tables.
+- Scan review endpoint and dialog using the same discovery and file overrides as execution, with profile routing, tool readiness and analyzer network details.
+- Workspace-scoped finding notes in the local database, with browser-note import and confirmed deletion.
+- Explicit full-report, filtered-findings and loaded-row export scopes; direct finding links from workspace priority findings.
+
+### Changed
+- Workspace profiles initialize from the saved default. Source previews show the current-source caveat visibly.
+- Dependency graph and custom-rule execution show honest unavailable states instead of generated findings or connections.
+- OWASP classification shows loaded evidence and exact finding links rather than compliance pass/fail claims.
 
 ### Fixed
+- Dashboard assessment coverage is paired with the completed scan that supplies its counts.
+- Missing risk data displays unavailable rather than zero. Missing analyzer status is never counted as ready.
+- Async page loads ignore responses after dependency changes or unmount; scan-history pruning requires confirmation.
+- Non-Windows compilation includes the platform helper referenced by the shared managed analyzer lifecycle.
 - **Scans now work on every repository type, not just Python/JS/TS.** A
   battery of synthetic repos (Go-only, Terraform-only, Dockerfile/Kubernetes,
   lockfile-only, Python-only, mixed) exposed three cross-type failures, all

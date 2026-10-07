@@ -15,6 +15,7 @@ import { Input } from '../components/ui/input';
 import { FolderIcon } from '../components/icons';
 import { SkeletonTable } from '../components/skeletons';
 import { ConfirmationDialog } from '../components/dialogs';
+import { ScanReviewDialog } from '../components/ScanReviewDialog';
 import { WorkspaceTemplates } from '../components/WorkspaceTemplates';
 import { RowMenu, type RowMenuItem } from '../components/RowMenu';
 import { PageHeader } from '../components/PageHeader';
@@ -96,7 +97,7 @@ export function WorkspacesPage({ go, onAdd, notify }: { go: (r: Route) => void; 
         actions={workspaces.length ? addPrimary : undefined}
       />
       {state.loading ? <SkeletonTable rows={8} cols={6} /> : state.error ? <ErrorPanel error={state.error} retry={state.reload} /> : !workspaces.length ? (
-        <><Empty title="No workspaces yet" icon={<FolderIcon />} action={addPrimary}>Add a project folder to scan it for security findings. Everything runs locally — your code never leaves this machine.</Empty><WorkspaceTemplates onUseTemplate={onAdd} /></>
+        <><Empty title="No workspaces yet" icon={<FolderIcon />} action={addPrimary}>Add a project folder to scan it for security findings. Scan history stays on this computer. Some analyzers query advisory services or download tools; review network use before starting.</Empty><WorkspaceTemplates onUseTemplate={onAdd} /></>
       ) : (
         <>
           <div className="toolbar-row ws-toolbar">
@@ -129,7 +130,7 @@ export function WorkspacesPage({ go, onAdd, notify }: { go: (r: Route) => void; 
           ) : debouncedSearch ? <Empty title={`No workspaces match “${debouncedSearch}”`} icon={<FolderIcon />} action={<Button variant="outline" size="sm" onClick={() => setSearch('')}>Clear search</Button>}>No workspace name or path contains “{debouncedSearch}”.</Empty> : <Empty title="No workspaces match this tag" icon={<FolderIcon />}>No workspace tags contain “{tagNeedle}”. Clear the filter to see every project.</Empty>}
         </>
       )}
-      {pendingScan && <ConfirmationDialog tone="primary" title={`Run ${pendingScan.profile} scan on ${pendingScan.workspace.name}?`} description={`A ${pendingScan.profile} scan runs the enabled analyzers over this workspace and can take several minutes. You can cancel it from the scan page while it runs.`} confirmLabel={`Run ${pendingScan.profile} scan`} busy={scanning} onCancel={() => setPendingScan(null)} onConfirm={runPendingScan} />}
+      {pendingScan && <ScanReviewDialog workspaceId={pendingScan.workspace.id} workspaceName={pendingScan.workspace.name} profile={pendingScan.profile} confirmLabel={`Run ${pendingScan.profile} scan`} busy={scanning} onCancel={() => setPendingScan(null)} onConfirm={runPendingScan} />}
       {removeTarget && <ConfirmationDialog title="Remove this workspace?" description="This removes the saved workspace, file rules, and local scan history from Blunt Code. Your project files will not be changed." confirmLabel="Remove workspace" busy={removing} onCancel={() => setRemoveTarget(null)} onConfirm={removeWorkspace} />}
     </div>
   );
@@ -198,6 +199,7 @@ function LanguagesCell({ languages }: { languages?: string[] }) {
       <span className="ws-langs" title={names}>
         {shown.map((language) => <i key={language} aria-hidden="true" className="ws-lang" style={{ background: languageColor(language) }} />)}
         {extra > 0 && <span className="tag">+{extra}</span>}
+        <span>{shown.map((language) => languageNames[language] ?? language).join(', ')}</span>
         <span className="sr-only">{names}</span>
       </span>
     </td>

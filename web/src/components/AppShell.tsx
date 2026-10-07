@@ -1,3 +1,5 @@
+import type { Workspace } from '../types';
+import { Sheet, SheetTrigger, SheetContent, SheetTitle, SheetDescription } from './ui/sheet';
 import * as React from 'react';
 import { href, type Route } from '../lib/router';
 import { navigateFromLink } from '../lib/navigation';
@@ -5,7 +7,6 @@ import type { Theme } from '../hooks/useTheme';
 import { Button } from './ui/button';
 import {
   Check,
-  ChevronsUpDown,
   FileCode,
   FolderCog,
   HelpCircle,
@@ -16,11 +17,9 @@ import {
   Power,
   Search,
   Settings,
-  ShieldAlert,
   SlidersHorizontal,
   Sun,
   Terminal,
-  Clock,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { NotificationsCenter } from './NotificationsCenter';
@@ -86,9 +85,10 @@ const NAV_HINTS: Record<Route['page'], string> = {
   'not-found': 'Page not found',
 };
 
-export function AppShell({ route, onNavigate, onClose, theme, onToggleTheme, onShowShortcuts, seqArmed = false }: { route: Route; onNavigate: (route: Route) => void; onAdd?: () => void; onClose: () => void; theme: Theme; onToggleTheme: () => void; onShowShortcuts?: () => void; seqArmed?: boolean }) {
+export function AppShell({ workspace, route, onNavigate, onClose, theme, onToggleTheme, onShowShortcuts, seqArmed = false }: { workspace?: Workspace; route: Route; onNavigate: (route: Route) => void; onAdd?: () => void; onClose: () => void; theme: Theme; onToggleTheme: () => void; onShowShortcuts?: () => void; seqArmed?: boolean }) {
   const { t, locale, setLocale } = useT();
   const reduced = useReducedMotion();
+  const [mobileOpen, setMobileOpen] = React.useState(false);
 
   const items = (pages: ReadonlyArray<Route['page']>): NavItem[] =>
     pages.map((page) => ({
@@ -101,7 +101,8 @@ export function AppShell({ route, onNavigate, onClose, theme, onToggleTheme, onS
   // Workspace-scoped pages appear in the rail only while inside a workspace,
   // under its name. `route.id` is the workspace id on exactly these routes.
   const inWorkspace = ['workspace', 'files', 'history', 'pentest'].includes(route.page) && 'id' in route;
-  const workspaceNav = inWorkspace && 'id' in route ? workspaceSections(route.id!) : [];
+  const workspaceId = workspace?.id ?? (inWorkspace ? route.id : undefined);
+  const workspaceNav = workspaceId ? workspaceSections(workspaceId) : [];
 
   const link = ({ route: next, label, icon: Icon, hint }: NavItem) => {
     const active = route.page === next.page;
@@ -134,11 +135,11 @@ export function AppShell({ route, onNavigate, onClose, theme, onToggleTheme, onS
         </a>
 
         <nav className="rail-nav" aria-label="Main navigation">
-          <ul className="rail-group">{items(PRIMARY).map(link)}</ul>
+          <ul className="rail-group">{items(PRIMARY).map((item) => <li key={item.route.page}>{link(item)}</li>)}</ul>
 
           {workspaceNav.length > 0 && (
             <div className="rail-workspace">
-              <p className="rail-group-label">This workspace</p>
+              <p className="rail-group-label">{workspace?.name ?? 'This workspace'}</p>
               <ul className="rail-group">
                 {workspaceNav.map((section) => {
                   const active = isSameSection(route, section.route);
@@ -162,7 +163,7 @@ export function AppShell({ route, onNavigate, onClose, theme, onToggleTheme, onS
             </div>
           )}
 
-          <ul className="rail-group rail-group-secondary">{items(SECONDARY).map(link)}</ul>
+          <ul className="rail-group rail-group-secondary">{items(SECONDARY).map((item) => <li key={item.route.page}>{link(item)}</li>)}</ul>
         </nav>
 
         <div className="rail-foot">
@@ -262,35 +263,17 @@ export function AppShell({ route, onNavigate, onClose, theme, onToggleTheme, onS
           </svg>
           <b>Blunt Code</b>
         </a>
-        <nav className="topbar-nav" aria-label="Main navigation">
-          {[...PRIMARY, ...SECONDARY].map((page) => {
-            const Icon = NAV_ICONS[page]!;
-            const next = { page } as Route;
-            const active = route.page === next.page;
-            return (
-              <a key={page} href={href(next)} className={cn('topbar-link', active && 'active')} aria-current={active ? 'page' : undefined} title={NAV_HINTS[page]} onClick={(event) => navigateFromLink(event, () => onNavigate(next))}>
-                <Icon aria-hidden="true" />
-                <span>{t(`nav.${page}` as never)}</span>
-              </a>
-            );
-          })}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="nav-more-toggle" aria-label={t('nav.more')}>
-                {t('nav.more')}
-                <ChevronsUpDown className="h-3.5 w-3.5" aria-hidden="true" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-[12rem] p-1">
-              {items(SETTINGS_PAGES).map((item) => (
-                <DropdownMenuItem key={item.route.page} onSelect={() => onNavigate(item.route)} className="gap-2 cursor-pointer">
-                  <item.icon className="h-4 w-4 text-[var(--color-ink-faint)]" aria-hidden="true" />
-                  <span>{item.label}</span>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </nav>
+        <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+          <SheetTrigger asChild><Button variant="outline" size="sm" aria-label="Open navigation">Menu</Button></SheetTrigger>
+          <SheetContent side="left" className="w-72 bg-[var(--color-surface)]">
+            <SheetTitle>Blunt Code</SheetTitle>
+            <SheetDescription>Pages and workspace sections</SheetDescription>
+            <nav aria-label="Mobile navigation" className="mt-6" onClick={(event) => { if ((event.target as Element).closest('a')) setMobileOpen(false); }}>
+              <ul className="rail-group">{items([...PRIMARY, ...SECONDARY, ...SETTINGS_PAGES]).map((item) => <li key={item.route.page}>{link(item)}</li>)}</ul>
+              {workspaceNav.length > 0 && <><p className="rail-group-label mt-6">{workspace?.name ?? 'This workspace'}</p><ul>{workspaceNav.map((section) => <li key={section.key}><a className="rail-link" href={href(section.route)} onClick={(e) => navigateFromLink(e, () => onNavigate(section.route))}>{section.label}</a></li>)}</ul></>}
+            </nav>
+          </SheetContent>
+        </Sheet>
         <div className="nav-actions">
           <Button variant="ghost" size="icon" className="rail-util-btn" onClick={onToggleTheme} aria-pressed={theme === 'dark'} aria-label={theme === 'dark' ? t('common.switchToLight') : t('common.switchToDark')} title={theme === 'dark' ? t('common.switchToLight') : t('common.switchToDark')}>
             {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}

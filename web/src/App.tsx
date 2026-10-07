@@ -1,3 +1,5 @@
+import { useWorkspaceContext } from './hooks/useWorkspaceContext';
+import { DesignTopbar } from './components/DesignTopbar';
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from './api';
 import type { Workspace } from './types';
@@ -62,6 +64,7 @@ type Farewell = { mode: 'stopped' } | { mode: 'updating'; version: string };
 
 export function App() {
   const [route, setRoute] = useState(parseRoute);
+  const workspaceContext = useWorkspaceContext(route);
   const [addOpen, setAddOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
   const [closing, setClosing] = useState(false);
@@ -182,8 +185,8 @@ export function App() {
     { id: 'nav-about', label: 'Go to About', keywords: 'version info', hint: 'g a', group: 'Navigation', run: () => go({ page: 'about' }) },
     { id: 'nav-search', label: 'Go to findings', keywords: 'search findings', group: 'Navigation', run: () => go({ page: 'search' }) },
     { id: 'nav-pentest', label: 'Go to Pentest', keywords: 'pentest zap nuclei burp hacking', group: 'Navigation', run: () => go({ page: 'pentest' }) },
-    { id: 'filter-critical', label: 'Filter critical', keywords: 'severity critical', group: 'Filters', run: () => go({ page: 'search' }) },
-    { id: 'filter-findings', label: 'Go to findings', keywords: 'findings', group: 'Filters', run: () => go({ page: 'search' }) },
+    { id: 'filter-critical', label: 'Filter critical', keywords: 'severity critical', group: 'Filters', run: () => go({ page: 'search', q: 'severity=critical' }) },
+    { id: 'filter-findings', label: 'Go to findings', keywords: 'findings', group: 'Filters', run: () => go({ page: 'search', q: 'severity=critical' }) },
     { id: 'action-add-workspace', label: 'Add workspace', keywords: 'new project folder scan', hint: 'N', group: 'Navigation', run: () => setAddOpen(true) },
     { id: 'action-theme', label: theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme', keywords: 'dark light mode appearance', group: 'Navigation', run: toggleTheme },
     { id: 'action-shortcuts', label: 'Show keyboard shortcuts', keywords: 'help keys', hint: '?', group: 'Navigation', run: () => setShortcutsOpen(true) },
@@ -216,8 +219,9 @@ export function App() {
         wrapper did not exist - which is exactly why the app read as a web page
         rather than an application. */}
     <div className="app-shell">
-      <AppShell route={route} onNavigate={go} onAdd={() => setAddOpen(true)} onClose={() => setCloseOpen(true)} theme={theme} onToggleTheme={toggleTheme} onShowShortcuts={() => setShortcutsOpen(true)} seqArmed={seqArmed} />
+      <AppShell workspace={workspaceContext.data} route={route} onNavigate={go} onAdd={() => setAddOpen(true)} onClose={() => setCloseOpen(true)} theme={theme} onToggleTheme={toggleTheme} onShowShortcuts={() => setShortcutsOpen(true)} seqArmed={seqArmed} />
       <div className="app-content">
+        <DesignTopbar workspace={workspaceContext.data} route={route} go={go} />
     <main className="main" id="main-content" tabIndex={-1}>
       <ErrorBoundary resetKey={href(route)}>
         <Page route={route} go={go} notify={notify} onAdd={() => setAddOpen(true)} onUpdateHandoff={updateHandoff} />
@@ -242,10 +246,10 @@ function Page({ route, go, notify, onAdd, onUpdateHandoff }: { route: Route; go:
   switch (route.page) {
     case 'home': return <HomePage go={go} onAdd={onAdd} notify={notify} />;
     case 'workspaces': return <WorkspacesPage go={go} onAdd={onAdd} notify={notify} />;
-    case 'workspace': return id ? <WorkspacePage id={id} go={go} notify={notify} /> : <NotFoundPage go={go} />;
+    case 'workspace': return id ? <WorkspacePage key={id} id={id} go={go} notify={notify} /> : <NotFoundPage go={go} />;
     case 'files': return id ? <FilesPage id={id} go={go} notify={notify} /> : <NotFoundPage go={go} />;
     case 'history': return id ? <HistoryPage workspaceId={id} go={go} /> : <NotFoundPage go={go} />;
-    case 'scan': return id ? <ScanPage id={id} go={go} notify={notify} /> : <NotFoundPage go={go} />;
+    case 'scan': return id ? <ScanPage key={id} id={id} go={go} notify={notify} /> : <NotFoundPage go={go} />;
     case 'search': return <SearchPage go={go} />;
     case 'tools': return <ToolsPage notify={notify} go={go} />;
     case 'cli': return <CLIPage />;

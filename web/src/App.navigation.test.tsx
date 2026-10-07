@@ -142,11 +142,7 @@ describe('browser history and hostile URLs', () => {
 
   it('follows back and forward navigation (popstate) without remounting the app', async () => {
     const host = await renderApp();
-    // Navigate to About through the More menu (its new home), then exercise popstate.
-    const more = host.querySelector<HTMLButtonElement>('.nav-more-toggle')!;
-    expect(more).toBeDefined();
-    await act(async () => { more.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
-    const aboutItem = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent === 'About')!;
+    const aboutItem = host.querySelector<HTMLAnchorElement>('.app-rail a[href="/about"]')!;
     expect(aboutItem).toBeDefined();
     await act(async () => { aboutItem.click(); await Promise.resolve(); await Promise.resolve(); });
     expect(window.location.pathname).toBe('/about');

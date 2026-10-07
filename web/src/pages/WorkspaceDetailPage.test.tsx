@@ -170,7 +170,7 @@ describe('WorkspaceDetailPage cancelled-latest fallback (C2)', () => {
     expect(host.textContent).toContain('cancelled ·');
 
     // C4: analyzer rows read like products; the raw id never leaks into the text.
-    expect(host.textContent).toContain('Gitleaks');
+    expect(host.textContent).toContain('No language-matched analyzers reported.');
     expect(host.textContent).not.toContain('gitleaks-secrets');
   });
 
