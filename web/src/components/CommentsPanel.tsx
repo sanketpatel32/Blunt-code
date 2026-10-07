@@ -1,141 +1,74 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { api, type FindingNote } from '../api';
+import { useLoad } from '../hooks/useLoad';
+import { message } from '../lib/notice';
+import { relativeTime } from '../lib/format';
 import { Card, CardHeader, CardTitle, CardContent } from './ui/card';
 import { Button } from './ui/button';
-import { relativeTime } from '../lib/format';
+import { ConfirmationDialog } from './dialogs';
 
-export type FindingComment = {
-  id: string;
-  author: string;
-  text: string;
-  createdAt: string;
-};
-
-function storageKey(fingerprint: string) {
-  return `bluntcode.comments.${fingerprint}`;
-}
-
-function loadComments(fingerprint: string): FindingComment[] {
+export type FindingComment = FindingNote & { author?: string };
+function legacyNotes(fingerprint: string): FindingComment[] {
   try {
-    const raw = window.localStorage.getItem(storageKey(fingerprint));
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as FindingComment[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+    const value: unknown = JSON.parse(localStorage.getItem(`bluntcode.comments.${fingerprint}`) ?? '[]');
+    return Array.isArray(value) ? value.filter((item) => item && typeof item.text === 'string' && typeof item.id === 'string') : [];
+  } catch { return []; }
 }
 
-function saveComments(fingerprint: string, items: FindingComment[]) {
-  try {
-    window.localStorage.setItem(storageKey(fingerprint), JSON.stringify(items));
-  } catch { /* quota */ }
-}
-
-function avatarInitial(author: string) {
-  const t = author.trim();
-  return t ? t[0]!.toUpperCase() : '?';
-}
-
-export function CommentsPanel({ fingerprint, title }: { fingerprint: string; title?: string }) {
-  const [comments, setComments] = useState<FindingComment[]>(() => loadComments(fingerprint));
+export function CommentsPanel({ workspaceId, fingerprint, title }: { workspaceId?: string; fingerprint: string; title?: string }) {
+  const notes = useLoad(() => workspaceId ? api.findingNotes(workspaceId, fingerprint) : Promise.resolve([]), [workspaceId, fingerprint]);
   const [text, setText] = useState('');
-  const [tick, setTick] = useState(0);
+  const [error, setError] = useState<string>();
+  const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState<FindingNote>();
+  const [legacy, setLegacy] = useState(() => legacyNotes(fingerprint));
+  useEffect(() => { setText(''); setError(undefined); setLegacy(legacyNotes(fingerprint)); }, [workspaceId, fingerprint]);
 
-  // refresh relative time every 30s
-  useEffect(() => {
-    const id = window.setInterval(() => setTick((n) => n + 1), 30_000);
-    return () => window.clearInterval(id);
-  }, []);
-
-  // reload when fingerprint changes
-  useEffect(() => {
-    setComments(loadComments(fingerprint));
-  }, [fingerprint]);
-
-  // keep tick used
-  void tick;
-
-  const canSend = useMemo(() => text.trim().length > 0, [text]);
-
-  const handleSend = () => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    const next: FindingComment = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      author: 'You',
-      text: trimmed,
-      createdAt: new Date().toISOString(),
-    };
-    const updated = [...comments, next];
-    setComments(updated);
-    saveComments(fingerprint, updated);
-    setText('');
-  };
-
-  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-      e.preventDefault();
-      if (canSend) handleSend();
-    }
-  };
-
-  return (
-    <Card className="border-[var(--color-rule)] shadow-none">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-sm font-semibold">Comments</CardTitle>
-        {title && <p className="text-xs text-[var(--color-ink-soft)] truncate">{title}</p>}
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3 pt-0">
-        <div
-          role="log"
-          aria-live="polite"
-          aria-label="Comments"
-          className="max-h-[42vh] overflow-y-auto rounded-[var(--radius-md)] border border-[var(--color-rule-faint)] bg-[var(--color-surface-muted)]/40 p-2"
-          style={{ scrollbarWidth: 'thin' }}
-        >
-          {comments.length === 0 ? (
-            <p className="py-6 text-center text-sm text-[var(--color-ink-faint)]">No comments yet. Start the discussion.</p>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {comments.map((c) => (
-                <li key={c.id} className="flex gap-2 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-rule-faint)] px-3 py-2 shadow-[var(--shadow-xs)]">
-                  <span
-                    aria-hidden="true"
-                    className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--color-accent-soft)] text-xs font-bold text-[var(--color-accent-strong)]"
-                  >
-                    {avatarInitial(c.author)}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex flex-wrap items-baseline gap-1.5">
-                      <strong className="text-xs font-semibold text-[var(--color-ink)]">{c.author}</strong>
-                      <span className="text-xs text-[var(--color-ink-faint)]">{relativeTime(c.createdAt)}</span>
-                    </span>
-                    <span className="mt-0.5 block whitespace-pre-wrap break-words text-sm leading-5 text-[var(--color-ink)]">{c.text}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <label className="flex flex-col gap-1.5" htmlFor={`comment-${fingerprint}`}>
-          <span className="sr-only">Add a comment</span>
-          <textarea
-            id={`comment-${fingerprint}`}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={onKeyDown}
-            placeholder="Add a comment… (⌘+Enter to send)"
-            rows={3}
-            className="min-h-[72px] w-full resize-y rounded-[var(--radius-md)] border border-[var(--color-rule-strong)] bg-[var(--color-surface)] px-3 py-2 text-sm placeholder:text-[var(--color-ink-faint)] focus-visible:outline-none focus-visible:border-[var(--color-accent)] focus-visible:ring-2 focus-visible:ring-[var(--color-accent-glow)]"
-          />
-        </label>
-        <div className="flex justify-end">
-          <Button size="sm" disabled={!canSend} onClick={handleSend} aria-label="Send comment">
-            Send
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
+  async function send() {
+    if (!workspaceId || !text.trim() || busy) return;
+    setBusy(true); setError(undefined);
+    try { await api.addFindingNote(workspaceId, fingerprint, text.trim()); setText(''); await notes.reload(); }
+    catch (e) { setError(`${message(e)} Your text has been kept.`); }
+    finally { setBusy(false); }
+  }
+  async function remove() {
+    if (!workspaceId || !deleting || busy) return;
+    setBusy(true); setError(undefined);
+    try { await api.deleteFindingNote(workspaceId, fingerprint, deleting.id); setDeleting(undefined); await notes.reload(); }
+    catch (e) { setError(message(e)); }
+    finally { setBusy(false); }
+  }
+  // Import one at a time. A successful item is removed from the browser queue,
+  // so retrying a partially failed import does not duplicate saved notes.
+  async function importNotes() {
+    if (!workspaceId || busy) return;
+    setBusy(true); setError(undefined);
+    let remaining = [...legacy];
+    try {
+      while (remaining.length) {
+        await api.addFindingNote(workspaceId, fingerprint, remaining[0].text, remaining[0].id);
+        remaining = remaining.slice(1);
+        setLegacy(remaining);
+        localStorage.setItem(`bluntcode.comments.${fingerprint}`, JSON.stringify(remaining));
+      }
+    } catch (e) { setError(`${message(e)} Saved notes remain in the database; remaining browser notes are shown above.`); }
+    finally { await notes.reload(); setBusy(false); }
+  }
+  return <Card>
+    <CardHeader><CardTitle className="text-sm">Finding notes</CardTitle>{title && <p className="text-xs text-[var(--color-ink-soft)]">{title}</p>}
+      <p className="text-xs text-[var(--color-ink-soft)]">Saved in the local app database for this workspace and finding. Notes persist across browser sessions and scans with the same fingerprint.</p>
+    </CardHeader>
+    <CardContent className="space-y-3">
+      {!workspaceId && <p role="alert">Workspace context is unavailable. Notes cannot be saved yet.</p>}
+      {legacy.length > 0 && <div className="availability-note">{legacy.length} notes remain in this browser from the earlier version. <Button size="sm" variant="outline" disabled={busy || !workspaceId} onClick={() => void importNotes()}>Import browser notes</Button></div>}
+      {notes.loading ? <p role="status">Loading notes…</p> : notes.error ? <div role="alert"><p>{notes.error}</p><Button variant="outline" onClick={() => void notes.reload()}>Retry</Button></div> : <div role="log" aria-live="polite" aria-label="Finding notes" className="max-h-[42vh] overflow-y-auto">
+        {notes.data?.length ? <ul className="space-y-2">{notes.data.map((note) => <li key={note.id} className="scan-review-row"><header><strong>You</strong><span className="text-xs">{relativeTime(note.createdAt)}</span></header><p className="whitespace-pre-wrap break-words">{note.text}</p><button className="text-button" onClick={() => setDeleting(note)} disabled={busy}>Delete note</button></li>)}</ul> : <p className="muted">No notes yet. Add context for your next review.</p>}
+      </div>}
+      <label className="block text-xs" htmlFor={`note-${fingerprint}`}>Add a note</label>
+      <textarea id={`note-${fingerprint}`} value={text} onChange={(e) => setText(e.target.value)} maxLength={10000} rows={3} className="w-full border border-[var(--color-rule)] bg-[var(--color-surface)] p-3 text-sm" placeholder="Add review context…" onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void send(); } }} />
+      {error && <p role="alert" className="availability-note">{error}</p>}
+      <div className="flex justify-end"><Button size="sm" disabled={busy || !workspaceId || !text.trim()} onClick={() => void send()}>{busy ? 'Saving…' : 'Save note'}</Button></div>
+      {deleting && <ConfirmationDialog title="Delete this note?" description="This permanently removes the note from the local app database." confirmLabel="Delete note" busy={busy} onCancel={() => setDeleting(undefined)} onConfirm={() => void remove()} />}
+    </CardContent>
+  </Card>;
 }

@@ -38,7 +38,7 @@ function loadRules(): CustomRule[] {
 }
 
 function saveRules(rules: CustomRule[]) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(rules)); } catch { /* quota */ }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(rules));
 }
 
 const DEFAULT_YAML = `id: my-custom-rule
@@ -214,47 +214,6 @@ export function lintPattern(pattern: string | undefined): string | null {
   return null;
 }
 
-type MockFinding = { file: string; line: number; message: string; severity: CustomRule['severity'] };
-
-const LANG_EXTENSIONS: Record<string, string> = {
-  python: 'py',
-  javascript: 'js',
-  typescript: 'ts',
-  go: 'go',
-  rust: 'rs',
-  java: 'java',
-  ruby: 'rb',
-  c: 'c',
-  cpp: 'cpp',
-  csharp: 'cs',
-  php: 'php',
-  swift: 'swift',
-  kotlin: 'kt',
-  bash: 'sh',
-  yaml: 'yml',
-  json: 'json',
-  html: 'html',
-  css: 'css',
-  dockerfile: 'Dockerfile',
-  terraform: 'tf',
-};
-
-function extensionFor(language: string | undefined): string {
-  if (!language) return 'txt';
-  return LANG_EXTENSIONS[language.toLowerCase()] ?? 'txt';
-}
-
-function mockFindings(rule: Partial<CustomRule>): MockFinding[] {
-  if (!rule.pattern || !rule.id) return [];
-  const sev = (rule.severity ?? 'medium') as CustomRule['severity'];
-  const msg = rule.message ?? `Matched ${rule.id}`;
-  const ext = extensionFor(rule.languages?.[0]);
-  return [
-    { file: `src/example.${ext}`, line: 12, message: msg, severity: sev },
-    { file: `src/utils.${ext}`, line: 34, message: msg, severity: sev },
-  ];
-}
-
 export function RuleStudioPage() {
   const [yaml, setYaml] = useState(DEFAULT_YAML);
   const [language, setLanguage] = useState<CodeEditorLanguage>('yaml');
@@ -266,10 +225,11 @@ export function RuleStudioPage() {
   const parsed = useMemo(() => parseYamlLike(yaml), [yaml]);
   const yamlValidationError = useMemo(() => validateYaml(yaml), [yaml]);
   const patternLint = useMemo(() => lintPattern(parsed.pattern), [parsed]);
-  const findings = useMemo(() => mockFindings(parsed), [parsed]);
   const canSave = Boolean(parsed.id && parsed.pattern && parsed.message) && !yamlValidationError && !patternLint;
 
-  useEffect(() => { saveRules(rules); }, [rules]);
+  useEffect(() => {
+    try { saveRules(rules); } catch { setError('Draft could not be saved. Browser storage is unavailable or full; keep a copy before leaving.'); }
+  }, [rules]);
 
   function handleSave() {
     if (yamlValidationError) { setError(yamlValidationError); return; }
@@ -336,7 +296,7 @@ export function RuleStudioPage() {
            is made once, where the user is about to do the thing: on the editor
            itself. The header keeps the count and the shortcut, which are
            different facts. */
-        description="Create YAML rules, preview matched findings, and save locally."
+        description="Draft YAML rules and validate their fields. Drafts stay in this browser and are not executed by workspace scans."
         actions={
           <span className="text-xs text-[var(--color-ink-soft)] font-mono hidden sm:inline-flex items-center gap-1">
             <kbd className="px-1.5 py-0.5 bg-[var(--color-surface-muted)] border border-[var(--color-rule)] rounded-[var(--radius-xs)] text-xs">Ctrl+S</kbd> inside the editor saves
@@ -395,28 +355,11 @@ export function RuleStudioPage() {
 
         <Card className={reduced ? '' : 'anim-fadeInUp'} style={reduced ? undefined : { animationDelay: '60ms' } as never}>
           <CardHeader>
-            <CardTitle>Live preview</CardTitle>
-            <CardDescription>Mock findings generated from the current pattern.</CardDescription>
+            <CardTitle>Draft validation</CardTitle>
+            <CardDescription>Checks required fields and basic pattern syntax; does not execute the rule.</CardDescription>
           </CardHeader>
           <CardContent>
-            {yamlValidationError ? (
-              <p className="text-sm text-[var(--color-ink-faint)]">Preview suppressed — fix the YAML errors shown in the editor to see mock findings.</p>
-            ) : patternLint ? (
-              <p className="text-sm text-[var(--color-warning)]">{patternLint} — preview suppressed until the pattern is fixed.</p>
-            ) : !parsed.pattern ? <p className="text-sm text-[var(--color-ink-faint)]">Enter a pattern to see preview findings.</p> : findings.length ? (
-              <ul className="space-y-2" aria-label="Preview findings">
-                {findings.map((f, i) => (
-                  <li key={i} className="flex items-start justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--color-rule-faint)] bg-[var(--color-surface)] p-3">
-                    <div>
-                      <code className="text-xs font-mono text-[var(--color-ink-soft)]">{f.file}:{f.line}</code>
-                      <p className="mt-1 text-sm text-[var(--color-ink)]">{f.message}</p>
-                      {parsed.pattern && <code className="mt-1 block text-xs text-[var(--color-ink-faint)]">pattern: {parsed.pattern}</code>}
-                    </div>
-                    <Badge variant={f.severity === 'critical' || f.severity === 'high' ? 'danger' : f.severity === 'medium' ? 'warning' : 'secondary'} className="shrink-0">{f.severity}</Badge>
-                  </li>
-                ))}
-              </ul>
-            ) : <p className="text-sm text-[var(--color-ink-faint)]">No matches for the current rule.</p>}
+            <p className="availability-note" role="status">{yamlValidationError ?? patternLint ?? (canSave ? 'Draft fields are valid. Rule execution is unavailable in this version.' : 'Enter an id, pattern, and message to validate your draft.')}</p>
             {parsed.id && <div className="mt-4 flex flex-wrap gap-1.5"><Badge variant="outline">{parsed.id}</Badge>{(parsed.languages ?? []).map((l) => <Badge key={l} variant="secondary">{l}</Badge>)}{parsed.severity && <Badge variant="outline">{parsed.severity}</Badge>}</div>}
             {severityNotice && <p className="mt-2 text-xs text-[var(--color-warning)]">{severityNotice}</p>}
           </CardContent>
@@ -448,7 +391,7 @@ export function RuleStudioPage() {
                           <span className={`block h-4 w-4 rounded-full bg-white shadow transition-transform ${r.enabled ? 'translate-x-4' : 'translate-x-0'}`} style={reduced ? { transition: 'none' } : undefined} />
                         </span>
                       </span>
-                      <span className="text-xs font-medium text-[var(--color-ink-soft)]">{r.enabled ? 'Enabled' : 'Disabled'}</span>
+                      <span className="text-xs font-medium text-[var(--color-ink-soft)]">{r.enabled ? 'Included in draft' : 'Excluded from draft'}</span>
                     </label>
                     <Button variant="ghost" size="sm" onClick={() => setPendingDelete(r)} aria-label={`Delete ${r.id}`} className="text-[var(--color-danger)] hover:text-[var(--color-danger)] hover:bg-[var(--color-danger-soft)]">Delete</Button>
                   </div>

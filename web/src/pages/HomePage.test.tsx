@@ -93,6 +93,7 @@ function homeFetchMock(
   toolsPayload: unknown = { items: [{ id: 'ruff', ready: true }, { id: 'semgrep', ready: true }] },
 ) {
   return vi.fn((input: string, init?: RequestInit) => {
+    if (input.includes('/scan-plan?')) return Promise.resolve(json({ profile: 'standard', selected_files: 1, candidate_files: 1, dependency_inputs: [], exclusions: [], skip_counts: {}, analyzers: [{ id: 'ruff', display_name: 'Ruff', planned: true, ready: true, registered: true, reason: 'Ready to run', network: 'none' }] }));
     if (input === '/api/v1/scans') return Promise.resolve(json(scansPayload));
     if (input.endsWith('/workspaces') && init?.method === 'POST') return Promise.resolve(json({ id: 'ws-new', name: 'New', root_path: 'C:\\code\\new' }));
     if (input.endsWith('/workspaces')) return Promise.resolve(json(workspacesPayload));
@@ -573,12 +574,13 @@ describe('HomePage quick actions', () => {
     expect(runScan!.disabled).toBe(false);
     // …and it names its target: the riskiest workspace, not the mildest.
     await act(async () => { runScan!.click(); });
-    const dialog = host.querySelector('dialog[open]');
+    const dialog = document.querySelector('[role="dialog"]');
     expect(dialog?.textContent).toContain('Run standard scan on Risky Core?');
   });
 
   it('starts a scan on the most recently scanned workspace after confirming it by name', async () => {
     const fetchMock = vi.fn((input: string, init?: RequestInit) => {
+      if (input.includes('/scan-plan?')) return Promise.resolve(json({ profile: 'standard', selected_files: 1, candidate_files: 1, dependency_inputs: [], exclusions: [], skip_counts: {}, analyzers: [{ id: 'ruff', display_name: 'Ruff', planned: true, ready: true, registered: true, reason: 'Ready to run', network: 'none' }] }));
       if (input === '/api/v1/workspaces/ws-2/scans' && init?.method === 'POST') return Promise.resolve(json({ id: 'scan-new', workspace_id: 'ws-2', state: 'queued' }));
       if (input === '/api/v1/scans') return Promise.resolve(json({ scans: [scanItem({ id: 'scan-9', workspace_id: 'ws-2', workspace_name: 'Second Project' }), scanItem()], total: 2, summary }));
       if (input.endsWith('/workspaces')) return Promise.resolve(json({ items: [] }));
@@ -595,7 +597,7 @@ describe('HomePage quick actions', () => {
     // …and the split-button still confirms first — nothing is posted until the
     // dialog accepts (one misclick cannot start a minutes-long job).
     await act(async () => { runScan!.click(); });
-    const dialog = host.querySelector('dialog[open]');
+    const dialog = document.querySelector('[role="dialog"]');
     expect(dialog?.textContent).toContain('Run standard scan on Second Project?');
     expect(fetchMock).not.toHaveBeenCalledWith('/api/v1/workspaces/ws-2/scans', expect.objectContaining({ method: 'POST' }));
     const confirm = [...dialog!.querySelectorAll('button')].find((button) => button.textContent === 'Run standard scan');

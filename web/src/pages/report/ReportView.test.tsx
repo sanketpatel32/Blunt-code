@@ -764,11 +764,13 @@ describe('ReportView bulk suppression', () => {
 });
 
 describe('ReportView export foot', () => {
-  it('lists the five export targets as always-visible links and carries the active filter in the CSV href', async () => {
+  it('opens export scopes and carries the active filter in the CSV href', async () => {
     const host = await render();
     await click(chipIn(host, 'Severity', 'High')); // filter first so the CSV link carries it
-    const items = [...host.querySelectorAll('.export-menu.export-inline .export-item')] as HTMLElement[];
-    expect(items.map((item) => item.textContent)).toEqual(['Markdown.md', 'HTML.html', 'SARIF.sarif', 'CSV (current filters).csv', 'Jira CSV.csv']);
+    await click([...host.querySelectorAll('button')].find((button) => button.textContent === 'Export report')!);
+    const dialog = document.querySelector('[role="dialog"]')!;
+    const items = [...dialog.querySelectorAll('.export-item')] as HTMLElement[];
+    expect(items.map((item) => item.textContent)).toEqual(['Markdown.md', 'HTML.html', 'SARIF.sarif', 'CSV (current filters).csv', 'Jira CSV.csv · loaded rows']);
     expect(items[0].getAttribute('href')).toBe('/api/v1/scans/scan-1/report.md');
     const csvHref = (items[3] as HTMLAnchorElement).getAttribute('href')!;
     expect(csvHref).toContain('/api/v1/scans/scan-1/findings.csv?');
@@ -785,13 +787,13 @@ describe('ReportView export foot', () => {
     expect(host.querySelector('.report-foot-count')!.textContent).toContain('1 analyzer');
   });
 
-  it('hover hints say what each export is for', async () => {
+  it('explains full, filtered and loaded scopes before downloading', async () => {
     const host = await render();
-    const items = [...host.querySelectorAll('.export-menu.export-inline .export-item')] as HTMLElement[];
-    expect(items[0].getAttribute('title')).toBe('Paste into docs or PRs');
-    expect(items[1].getAttribute('title')).toBe('Standalone shareable report');
-    expect(items[2].getAttribute('title')).toBe('For GitHub code scanning & CI gates');
-    expect(items[3].getAttribute('title')).toBe('Current filters as CSV');
+    await click([...host.querySelectorAll('button')].find((button) => button.textContent === 'Export report')!);
+    const dialog = document.querySelector('[role="dialog"]')!;
+    expect(dialog.textContent).toContain('Full scan report');
+    expect(dialog.textContent).toContain('beyond the loaded page');
+    expect(dialog.textContent).toContain('1 rows currently loaded');
   });
 });
 

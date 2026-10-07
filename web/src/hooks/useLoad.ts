@@ -28,6 +28,6 @@ export function useLoad<T>(load: () => Promise<T>, deps: unknown[]) {
       if (id === runId.current) setLoading(false);
     }
   }, deps);
-  useEffect(() => { void reload(); }, [reload]);
+  useEffect(() => { void reload(); return () => { ++runId.current; }; }, [reload]);
   return { data, error, loading, reload };
 }

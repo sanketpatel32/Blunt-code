@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { Finding } from '../types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
@@ -45,7 +45,8 @@ function severityBadgeVariant(s: string) {
   return 'secondary' as const;
 }
 
-export function ComplianceMatrix({ findings, scanId, onFilterOwasp }: { findings: Finding[]; scanId?: string; onFilterOwasp?: (id: OwaspId) => void }) {
+export function ComplianceMatrix({ findings, scanId }: { findings: Finding[]; scanId?: string }) {
+  const [expanded, setExpanded] = useState<OwaspId>();
   const rows = useMemo(() => {
     const byOwasp = new Map<string, Finding[]>();
     for (const o of OWASP_TOP10) byOwasp.set(o.id, []);
@@ -61,28 +62,21 @@ export function ComplianceMatrix({ findings, scanId, onFilterOwasp }: { findings
       const count = list.length;
       const topSeverity = list.length ? [...list].sort((a,b)=> severityRank(b.severity)-severityRank(a.severity))[0].severity : 'info';
       const pct = Math.round((count/total)*100);
-      const status = count === 0 ? 'Pass' : topSeverity === 'critical' || topSeverity === 'high' ? 'Fail' : count > 0 ? 'Review' : 'Pass';
+      const status = count === 0 ? 'No evidence' : topSeverity === 'critical' || topSeverity === 'high' ? 'Review required' : 'Review';
       return { ...o, count, findings: list, topSeverity, pct, status };
     });
   }, [findings]);
 
-  const handleRowClick = (id: OwaspId) => {
-    if (onFilterOwasp) { onFilterOwasp(id); return; }
-    if (scanId) {
-      const ow = OWASP_TOP10.find((o)=> o.id===id);
-      const q = ow ? ow.categoryHints[0] : id;
-      const url = `/scans/${scanId}?q=${encodeURIComponent(q)}`;
-      window.history.pushState(null,'',url);
-      window.dispatchEvent(new PopStateEvent('popstate'));
-    }
-  };
+  const handleRowClick = (id: OwaspId) => setExpanded((current) => current === id ? undefined : id);
+  const selected = rows.find((row) => row.id === expanded);
 
   return (
     <section aria-label="Compliance matrix" className="rounded-[var(--radius-card)] border border-[var(--color-rule)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] overflow-hidden">
       <div className="p-4 pb-2 flex items-center justify-between">
-        <h3 className="font-display text-sm font-semibold tracking-tight">Compliance — OWASP Top 10 (2021) + CWE Top 25</h3>
-        <span className="text-xs text-[var(--color-ink-faint)]">{findings.length} {findings.length === 1 ? 'finding' : 'findings'} mapped</span>
+        <h3 className="font-display text-sm font-semibold tracking-tight">OWASP Top 10 (2021) — finding classification</h3>
+        <span className="text-xs text-[var(--color-ink-faint)]">{rows.reduce((sum, row) => sum + row.count, 0)} {findings.length === 1 ? 'finding' : 'findings'} mapped</span>
       </div>
+      <p className="availability-note mx-4 mb-3">Heuristic classification of loaded findings, not a compliance assessment. No evidence does not mean a category passed.</p>
       <Table>
         <TableHeader>
           <TableRow>
@@ -97,25 +91,32 @@ export function ComplianceMatrix({ findings, scanId, onFilterOwasp }: { findings
         </TableHeader>
         <TableBody>
           {rows.map((r) => (
-            <TableRow key={r.id} className="cursor-pointer hover:bg-[var(--color-surface-muted)]" onClick={()=> handleRowClick(r.id as OwaspId)} tabIndex={0} role="button" aria-label={`Filter report by ${r.id} ${r.title}`} onKeyDown={(e)=> { if(e.key==='Enter'||e.key===' ') { e.preventDefault(); handleRowClick(r.id as OwaspId);} }}>
+            <TableRow key={r.id} className="cursor-pointer hover:bg-[var(--color-surface-muted)]" onClick={()=> handleRowClick(r.id as OwaspId)} tabIndex={0} role="button" aria-expanded={expanded === r.id} aria-label={`Show loaded findings for ${r.id} ${r.title}`} onKeyDown={(e)=> { if(e.key==='Enter'||e.key===' ') { e.preventDefault(); handleRowClick(r.id as OwaspId);} }}>
               <TableCell className="font-mono font-semibold">{r.id}</TableCell>
               <TableCell className="max-w-[14rem] truncate" title={r.title}>{r.title}</TableCell>
               <TableCell className="text-xs text-[var(--color-ink-faint)]">{r.cwe.join(', ')}</TableCell>
               <TableCell><Badge variant={r.count===0 ? 'secondary' : severityBadgeVariant(r.topSeverity)}>{r.count===0 ? '—' : r.topSeverity}</Badge></TableCell>
               <TableCell className="tabular-nums font-mono">{r.count}</TableCell>
               <TableCell className="min-w-[8rem]">
-                <div className="h-2 w-full rounded-full bg-[var(--color-surface-muted)] overflow-hidden" role="progressbar" aria-valuenow={r.pct} aria-valuemin={0} aria-valuemax={100} aria-label={`${r.id} coverage ${r.pct}%`}>
+                <div className="h-2 w-full rounded-full bg-[var(--color-surface-muted)] overflow-hidden" role="progressbar" aria-valuenow={r.pct} aria-valuemin={0} aria-valuemax={100} aria-label={`${r.id} share of loaded findings ${r.pct}%`}>
                   <div className="h-full bg-[var(--color-accent)] transition-all" style={{ width: `${r.pct}%` }} />
                 </div>
                 <span className="text-xs text-[var(--color-ink-faint)]">{r.pct}%</span>
               </TableCell>
               <TableCell>
-                <Badge variant={r.status==='Pass' ? 'success' : r.status==='Fail' ? 'danger' : 'warning'}>{r.status}</Badge>
+                <Badge variant={r.count === 0 ? 'secondary' : r.status === 'Review required' ? 'danger' : 'warning'}>{r.status}</Badge>
               </TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
+      {selected && <section className="p-4 border-t border-[var(--color-rule)]" aria-label={`${selected.id} loaded findings`}>
+        <h4>{selected.id} · {selected.title}</h4>
+        {selected.findings.length ? <ul className="space-y-2 mt-3">{selected.findings.map((finding) => <li key={finding.id}>
+          <a href={`/scans/${encodeURIComponent(scanId ?? '')}?finding=${encodeURIComponent(finding.id)}`} className="text-[var(--color-accent-strong)]">{finding.title || finding.message}</a>
+          <p className="text-xs text-[var(--color-ink-soft)]">{finding.severity} · {finding.relative_path || 'Project-level finding'}</p>
+        </li>)}</ul> : <p className="muted">No loaded findings mapped to this category. This does not establish compliance.</p>}
+      </section>}
     </section>
   );
 }

@@ -618,20 +618,10 @@ func (s *Service) DiscoverAndStart(ctx context.Context, work core.Workspace, pro
 // options (see ScanOptions). The web API keeps the defaults through
 // DiscoverAndStart; the CLI uses this to pass its --jobs bound through.
 func (s *Service) DiscoverAndStartWithOptions(ctx context.Context, work core.Workspace, profile string, excludes []string, opts ScanOptions) (core.Scan, error) {
-	// Fold in the workspace's committed .bluntcodeignore so its patterns are
-	// recorded in the scan snapshot's exclusions. Discover and Tree merge the
-	// file themselves too; WorkspaceExcludes deduplicates, so the double
-	// merge is idempotent.
-	excludes = discovery.WorkspaceExcludes(work.RootPath, excludes)
-	found, err := discovery.Discover(ctx, work.RootPath, excludes)
+	found, excludes, err := s.discoverInputs(ctx, work, excludes)
 	if err != nil {
 		return core.Scan{}, err
 	}
-	overrides, err := s.db.PathOverrides(ctx, work.ID)
-	if err != nil {
-		return core.Scan{}, err
-	}
-	applyPathOverrides(found.Files, overrides)
 	return s.start(ctx, work, profile, found.Files, excludes, opts, discoveryExtras{skipCounts: found.SkipCounts, dependencyInputs: found.DependencyInputs})
 }
 

@@ -17,6 +17,7 @@ export interface Workspace {
   last_completed_scan?: Scan;
   /** Analyzer outcome counts for `latest_scan` (absent when it recorded no runs) — pairs every dashboard grade with its coverage. */
   latest_scan_coverage?: ScanCoverage;
+  assessment_coverage?: ScanCoverage;
 }
 
 export interface Scan {
@@ -346,3 +347,10 @@ export interface PentestProbeResult {
   probed_at: string;
 }
 
+
+/** Backend discovery and routing before a scan starts. */
+export type ScanPlan = {
+  profile: string; candidate_files: number; selected_files: number;
+  dependency_inputs: string[]; exclusions: string[]; skip_counts: Record<string, number>;
+  analyzers: Array<AnalyzerStatus & { planned: boolean; reason: string }>;
+};

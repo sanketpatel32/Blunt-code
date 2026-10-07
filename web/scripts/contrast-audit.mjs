@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 /**
  * WCAG contrast audit for the Blunt Code palette.
  * Converts oklch(L% C H) -> sRGB -> relative luminance -> contrast ratio.
@@ -61,43 +62,37 @@ const checks = [
   ['DARK success-strong bg + success-ink  (.scan-flow li.done .flow-marker)', [56, 0.16, 152], oklchToLinear(14, 0.015, 152)],
 ];
 
+const design = readFileSync(new URL('../src/css/design-system.css', import.meta.url), 'utf8');
+const lightBlock = design.slice(design.indexOf(':root {'), design.indexOf(":root[data-theme='dark']"));
+const darkBlock = design.slice(design.indexOf(":root[data-theme='dark']"), design.indexOf('body {'));
+function token(block, name) {
+  const match = block.match(new RegExp(`--color-${name}:\\s*(#[0-9a-f]{3,6})`, 'i'));
+  if (!match) throw new Error(`Missing design token ${name}`);
+  let hex = match[1].slice(1);
+  if (hex.length === 3) hex = [...hex].map((c) => c+c).join('');
+  return [0,2,4].map((i) => {
+    const c = parseInt(hex.slice(i,i+2),16)/255;
+    return c <= .04045 ? c/12.92 : ((c+.055)/1.055)**2.4;
+  });
+}
 let failures = 0;
-console.log('pair'.padEnd(74), 'ratio   AA-normal(4.5)');
-for (const [name, bg, fg] of checks) {
-  const b = oklchToLinear(bg[0], bg[1], bg[2]);
-  const r = ratio(b, fg);
+function check(name, bg, fg) {
+  const r = ratio(bg, fg);
   const pass = r >= 4.5;
-  if (!pass) failures += 1;
+  if (!pass) failures++;
   console.log(name.padEnd(74), r.toFixed(2).padStart(5), '  ', pass ? 'PASS' : 'FAIL');
 }
-if (failures > 0) {
-  console.error(`\n${failures} pairing(s) below WCAG AA (4.5:1) for normal text.`);
-  process.exitCode = 1;
+console.log('pair'.padEnd(74), 'ratio   AA-normal(4.5)');
+for (const [name, bg, fg] of checks) {
+  const block = name.startsWith('DARK') ? darkBlock : lightBlock;
+  const isAccent = name.includes('accent bg') || name.includes('accent-strong bg');
+  check(name, isAccent ? token(block, name.includes('accent-strong') ? 'accent-strong' : 'accent') : oklchToLinear(...bg), isAccent ? token(block, 'accent-ink') : fg);
 }
-
-console.log('\n--- text on paper (ink ramp) ---');
-const paper = oklchToLinear(98.6, 0.005, 260);
-const inks = [
-  ['ink 17%', 17, 0.016, 268],
-  ['ink-soft 42%', 42, 0.013, 268],
-  ['ink-faint 55%', 55, 0.011, 268],
-  // Decorative only — see the note on --color-ink-ghost in tokens.css.
-  ['ink-ghost 65% (by design)', 65, 0.01, 268],
-];
-for (const [name, L, C, H] of inks) {
-  const r = ratio(paper, oklchToLinear(L, C, H));
-  console.log(name.padEnd(20), r.toFixed(2).padStart(5), r >= 4.5 ? 'AA-normal PASS' : r >= 3 ? 'AA-large only' : 'FAIL');
+for (const [theme, block] of [['LIGHT', lightBlock], ['DARK', darkBlock]]) {
+  for (const ink of ['ink','ink-soft','ink-faint','ink-ghost','accent-strong']) {
+    for (const surface of ['paper','surface','surface-muted']) {
+      check(`${theme} ${ink} on ${surface} (design-system.css)`, token(block, surface), token(block, ink));
+    }
+  }
 }
-
-console.log('\n--- dark: text on paper ---');
-const darkPaper = oklchToLinear(14, 0.012, 268);
-const darkInks = [
-  ['ink 96%', 96, 0.004, 280],
-  ['ink-soft 78%', 78, 0.009, 280],
-  ['ink-faint 64%', 64, 0.012, 280],
-  ['ink-ghost 58%', 58, 0.014, 280],
-];
-for (const [name, L, C, H] of darkInks) {
-  const r = ratio(darkPaper, oklchToLinear(L, C, H));
-  console.log(name.padEnd(20), r.toFixed(2).padStart(5), r >= 4.5 ? 'AA-normal PASS' : r >= 3 ? 'AA-large only' : 'FAIL');
-}
+if (failures) { console.error(`${failures} pairing(s) below WCAG AA.`); process.exitCode = 1; }

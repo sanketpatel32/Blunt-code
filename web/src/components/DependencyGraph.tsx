@@ -15,33 +15,6 @@ const VIEW_W = 800;
 const VIEW_H = 360;
 const PADDING = 40;
 
-/** Derive a deterministic mock graph from workspace languages. */
-export function mockGraphFromLanguages(languages?: string[]): { nodes: GraphNode[]; edges: GraphEdge[] } {
-  const langs = languages?.length ? languages.slice(0, 6) : ["typescript", "python"];
-  const nodes: GraphNode[] = [
-    { id: "workspace", label: "workspace", kind: "workspace", findingCount: langs.length * 2 },
-  ];
-  const edges: GraphEdge[] = [];
-  for (const lang of langs) {
-    const fileId = `file:${lang}`;
-    nodes.push({
-      id: fileId,
-      label: `${lang}`,
-      kind: "file",
-      language: lang,
-      findingCount: Math.floor(Math.random() * 4),
-    });
-    edges.push({ from: "workspace", to: fileId });
-    // add one dependent package node per language for richer graph
-    const pkgId = `pkg:${lang}`;
-    nodes.push({ id: pkgId, label: `${lang}-deps`, kind: "package", findingCount: Math.floor(Math.random() * 2) });
-    edges.push({ from: fileId, to: pkgId });
-  }
-  // cross edge between first two files if multiple
-  if (langs.length > 1) edges.push({ from: `file:${langs[0]}`, to: `file:${langs[1]}` });
-  return { nodes, edges };
-}
-
 type Pos = { x: number; y: number; vx: number; vy: number };
 
 function initialPositions(nodes: GraphNode[]): Record<string, Pos> {
@@ -76,7 +49,6 @@ function nodeFill(node: GraphNode): string {
 export function DependencyGraph({
   nodes: propNodes,
   edges: propEdges,
-  languages,
 }: {
   nodes?: GraphNode[];
   edges?: GraphEdge[];
@@ -84,8 +56,8 @@ export function DependencyGraph({
 }) {
   const { nodes, edges } = useMemo(() => {
     if (propNodes?.length) return { nodes: propNodes, edges: propEdges ?? [] };
-    return mockGraphFromLanguages(languages);
-  }, [propNodes, propEdges, languages]);
+    return { nodes: [], edges: [] };
+  }, [propNodes, propEdges]);
 
   const [positions, setPositions] = useState<Record<string, Pos>>(() => initialPositions(nodes));
   const [hovered, setHovered] = useState<string | null>(null);
@@ -220,6 +192,14 @@ export function DependencyGraph({
 
   const hoveredNode = hovered ? nodes.find((n) => n.id === hovered) : null;
   const hoveredPos = hovered ? positions[hovered] : null;
+
+  if (nodes.length === 0) return (
+    <Card><CardHeader><CardTitle>Dependency graph</CardTitle></CardHeader>
+      <CardContent><p className="availability-note">Dependency relationships are unavailable in this version.</p>
+        <p className="muted">Detected languages do not describe imports or package relationships. Run a deep scan to review supported dependency vulnerability findings in the report.</p>
+      </CardContent>
+    </Card>
+  );
 
   return (
     <Card className="rounded-[var(--radius-card)] border border-[var(--color-rule)] bg-[var(--color-surface)] shadow-[var(--shadow-card)]">

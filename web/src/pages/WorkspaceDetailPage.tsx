@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState, type ReactNode } from 'react';
+import { Suspense, lazy, useEffect, useState, type ReactNode } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { api } from '../api';
 import type { AnalyzerRun, RiskProfile, Scan } from '../types';
@@ -61,10 +61,14 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
   const [pruneOpen, setPruneOpen] = useState(false);
   const [pruneKeep, setPruneKeep] = useState(20);
   const [pruning, setPruning] = useState(false);
+  const [pruneConfirm, setPruneConfirm] = useState(false);
   const [copied, setCopied] = useState(false);
   const reduced = useReducedMotion();
   // Declared before the handlers below use it (openSettings reads name/profile).
   const item = workspace.data;
+  useEffect(() => {
+    if (item?.default_profile) setProfile(item.default_profile);
+  }, [item?.id, item?.default_profile]);
   const scanHistory = scans.data ?? [];
   // The workspace payload's latest_scan omits the discovery snapshot that scan-list
   // rows carry (Scan.snapshot), so backfill it from the matching history row before
@@ -93,7 +97,6 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
   // Real per-language file counts live on the effective scan's discovery snapshot; when it is absent the language list renders without counts rather than inventing them.
   const coverage = languageCoverageFromSnapshot(latest?.snapshot);
   // Confetti celebrates a fresh completed run — a cancelled one is not a milestone.
-  const isCompleted = isCompletedState(rawLatest?.state);
   function copyPath() {
     const p = workspace.data?.root_path ?? '';
     if (!p) return;
@@ -174,7 +177,6 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
         </div>
       }
     >
-      {isCompleted && !reduced && <div className="workspace-confetti" aria-hidden="true"><i /><i /><i /><i /><i /><i /></div>}
     </PageHeader>
     {/* Pre-flight: what this profile will run before it runs (IMP-14). */}
     <PreScanSummary
@@ -189,8 +191,10 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
         (overrides.data ?? []).filter((override) => override.mode === 'exclude').length
       }
     />
+    {latest && <p className="availability-note" role="note">Assessment from {date(latest.finished_at ?? latest.started_at)} · {latest.profile ?? 'standard'} · {latest.state.replaceAll('_', ' ')}. {fallbackNotice ?? 'Counts describe this completed scan.'}</p>}
     {/* Editors submit as secondary: Run scan stays the screen's one primary. */}
-    {pruneOpen && <form className="settings-editor" onSubmit={(event) => { event.preventDefault(); void prune(); }} aria-label="Prune scan history"><label>Keep newest<input type="number" min={1} max={100} value={pruneKeep} onChange={(event) => setPruneKeep(Number(event.target.value))} /></label><div className="editor-actions"><button type="submit" className="button secondary" disabled={pruning}>Delete older scans</button><button type="button" className="button secondary" onClick={() => setPruneOpen(false)}>Cancel</button></div></form>}
+    {pruneOpen && <form className="settings-editor" onSubmit={(event) => { event.preventDefault(); setPruneConfirm(true); }} aria-label="Prune scan history"><label>Keep newest<input type="number" min={1} max={100} value={pruneKeep} onChange={(event) => setPruneKeep(Number(event.target.value))} /></label><div className="editor-actions"><button type="submit" className="button secondary" disabled={pruning}>Delete older scans</button><button type="button" className="button secondary" onClick={() => setPruneOpen(false)}>Cancel</button></div></form>}
+    {pruneConfirm && <ConfirmationDialog title="Delete older scan history?" description={`Keep the newest ${pruneKeep} terminal scans. Older scans, their findings, and reports will be removed permanently. Active scans and project files are retained.`} confirmLabel="Delete older scans" busy={pruning} onCancel={() => setPruneConfirm(false)} onConfirm={() => { setPruneConfirm(false); void prune(); }} />}
     {editing && <form className="settings-editor" onSubmit={(event) => { event.preventDefault(); saveSettings(); }} aria-label="Workspace settings"><label>Name<input value={nameDraft} onChange={(event) => setNameDraft(event.target.value)} maxLength={80} /></label><div className="settings-editor-profile"><span>Default profile</span><fieldset className="segmented" aria-label="Default profile">{['quick', 'standard', 'deep', 'pentest'].map((value) => <button key={value} type="button" aria-pressed={profileDraft === value} onClick={() => setProfileDraft(value)}>{value}</button>)}</fieldset></div><div className="editor-actions"><button type="submit" className="button secondary" disabled={savingSettings}>Save</button><button type="button" className="button secondary" onClick={() => setEditing(false)}>Cancel</button></div></form>}
 
     {/* 3 · Verdict — three headline numbers; the rest are one click away.
@@ -298,7 +302,7 @@ function TopFindingsStrip({ scanId, go }: { scanId: string; go: (r: Route) => vo
       <ul>
         {top.map((finding) => (
           <li key={finding.id || finding.fingerprint}>
-            <button type="button" className="workspace-top-findings-row" onClick={() => go({ page: 'scan', id: scanId })} title="Open the full report">
+            <button type="button" className="workspace-top-findings-row" onClick={() => go({ page: 'scan', id: scanId, q: `finding=${encodeURIComponent(finding.id)}` })} title="Open this finding">
               <span className={`severity ${finding.severity}`}>{finding.severity}</span>
               <span className="workspace-top-findings-message">{finding.message}</span>
               {/* Column included on purpose. Two analyzers can flag the same rule
@@ -458,14 +462,14 @@ function ComplianceSection({ scanId, go }: { scanId: string; go: (r: Route) => v
   return (
     <Suspense fallback={<div className="skeleton-chart" aria-busy="true" />}>
       <div className="workspace-section-card">
-        <ComplianceMatrix findings={findings} scanId={scanId} onFilterOwasp={() => go({ page: 'scan', id: scanId })} />
+        <ComplianceMatrix findings={findings} scanId={scanId}  />
       </div>
     </Suspense>
   );
 }
 
 export function RiskCard({ risk, unscanned }: { risk?: RiskProfile | null; /** true when no completed scan exists: "—" beats a 0 that reads as all-clear. */ unscanned?: boolean }) {
-  if (!risk?.available || typeof risk.score !== 'number') return <div className="summary-card premium-card risk-hero"><span className="premium-card-icon"><ShieldAlert className="h-4 w-4" /></span><strong>{unscanned ? '—' : '0'}</strong><span>Risk score{unscanned ? ' · no scan yet' : ''}</span></div>;
+  if (!risk?.available || typeof risk.score !== 'number') return <div className="summary-card premium-card risk-hero"><span className="premium-card-icon"><ShieldAlert className="h-4 w-4" /></span><strong>{'—'}</strong><span>Risk score{unscanned ? ' · no scan yet' : ' · unavailable'}</span></div>;
   // C8 · words beat glyphs: "Risk D · ▼ 4" made screen readers say "down arrow" and
   // left everyone else guessing whether down was good. Trend direction now says
   // what happened. The delta note stays neutral ink with a decorative arrow:
