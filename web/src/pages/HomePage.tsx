@@ -242,9 +242,9 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
   return (
     <div className="page board-page">
       <PageHeader
-        eyebrow="Dashboard"
+        eyebrow={workspaces.data?.length ? `${workspaces.data.length} workspace${workspaces.data.length === 1 ? '' : 's'} on this computer` : undefined}
         title="Overview"
-        description="Review current assessments, resolve missing coverage, and choose what to fix next."
+        description={<>Each project is graded from its newest scan that <strong>actually finished</strong> — a cancelled run never sets a grade.</>}
         badge={activeScans > 0 ? (
           <span className="board-live">
             <i className="board-live-dot" aria-hidden="true" />
@@ -284,14 +284,15 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
         }
       />
 
-      <section className="overview-metrics" aria-label="Current assessment metrics">
-        <div className="metric-card"><span>Workspaces assessed</span><strong>{workspaces.loading || workspaces.error ? '—' : `${verdict.scanned} / ${workspaces.data?.length ?? 0}`}</strong><small>Latest completed assessments</small></div>
-        <div className="metric-card"><span>Critical + high</span><strong>{verdictTallied ? verdict.counts.critical + verdict.counts.high : '—'}</strong><small>Across assessed workspaces</small></div>
-        <div className="metric-card"><span>Incomplete assessments</span><strong>{workspaces.loading || workspaces.error ? '—' : ledgerBase.filter((row) => row.current?.state === 'completed_with_warnings' || row.partial).length}</strong><small>Findings remain qualified</small></div>
-        <div className="metric-card"><span>Active scans</span><strong>{recent.loading || recent.error ? '—' : activeScans}</strong><small>From current scan activity</small></div>
-      </section>
-      <details className="assessment-details"><summary>Current assessment details and severity distribution</summary>
-      {/* ── Verdict: how risky is the code right now ── */}
+      {/* ── Verdict: how risky is the code right now ──
+          Always visible. This panel is the entire reason the board exists — the
+          grade, the hero count and the severity tally together answer "how bad
+          is it and where do I start" — and it used to sit behind a collapsed
+          <details> labelled "Current assessment details and severity
+          distribution". A dashboard whose only verdict is one click away is a
+          dashboard that shows four metric cards and a table, which is exactly
+          what the rest of this screen already is. So the panel is on the page;
+          the tallies stay in their own disclosure inside it. */}
       {workspaces.loading ? (
         <div className="board-verdict-loading"><SkeletonCards count={1} variant="metric" /></div>
       ) : (
@@ -443,7 +444,17 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
         </section>
       )}
 
-      </details>
+      {/* No metric strip. The four cards that used to sit here each restated a
+          number the verdict panel already shows — "Workspaces assessed 17 / 18"
+          against the rail's "Workspaces scanned 17 of 18", "Critical + high 1768"
+          against the tally's Critical 65 / High 1703 — and worst of all
+          "Incomplete assessments 7" against the caveat's "6 of 17 scanned
+          workspaces ran with partial analyzer coverage". Two different counts
+          for what reads as one condition, two rows apart, is worse than saying
+          it once: the reader cannot tell whether to trust either.
+
+          The verdict is now the single place the board's numbers live. */}
+
       {/* ── Two questions side by side: where is the risk · what happened lately ── */}
       <div className="board-columns">
         <section className="board-panel board-ledger" aria-labelledby="ledger-heading">
@@ -506,62 +517,90 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
           </footer>
         </section>
 
-        <section className="board-panel board-activity" aria-labelledby="activity-heading">
-          <header className="board-panel-head">
-            <div>
-              <h2 id="activity-heading" className="board-panel-title">
-                <Activity className="h-4 w-4 text-[var(--color-accent)]" />
-                What happened lately
-              </h2>
-              <p className="board-panel-sub">Every scan lands here, newest first.</p>
-            </div>
-            {scans.length > 0 && (
-              <div className="feed-filters" role="group" aria-label="Filter recent activity">
-                {(['all', 'running', 'completed', 'warnings'] as FeedFilter[]).map((filter) => (
-                  <button
-                    key={filter}
-                    type="button"
-                    className={`feed-filter-btn ${feedFilter === filter ? 'active' : ''}`}
-                    aria-pressed={feedFilter === filter}
-                    onClick={() => setFeedFilter(filter)}
-                  >
-                    {feedFilterLabel(filter)}
-                  </button>
-                ))}
+        {/* The activity column is a stack, not a lone panel. The feed API serves a
+            fixed ten most-recent rows while the ledger beside it lists every
+            workspace, so at 18 workspaces the two columns differ by ~1,100px of
+            height. `align-items: stretch` makes both columns end on the same line
+            (they are halves of one question and should not ragged-edge), and this
+            wrapper gives the short one something real to hold in the space the
+            stretch now owns: the analyzer-readiness strip, which used to run
+            full-width at the very bottom of the page, below the fold on this
+            screen, where it was the least connected thing on it. */}
+        <div className="board-side">
+          <section className="board-panel board-activity" aria-labelledby="activity-heading">
+            <header className="board-panel-head">
+              <div>
+                <h2 id="activity-heading" className="board-panel-title">
+                  <Activity className="h-4 w-4 text-[var(--color-accent)]" />
+                  What happened lately
+                </h2>
+                <p className="board-panel-sub">Every scan lands here, newest first.</p>
               </div>
+              {scans.length > 0 && (
+                <div className="feed-filters" role="group" aria-label="Filter recent activity">
+                  {(['all', 'running', 'completed', 'warnings'] as FeedFilter[]).map((filter) => (
+                    <button
+                      key={filter}
+                      type="button"
+                      className={`feed-filter-btn ${feedFilter === filter ? 'active' : ''}`}
+                      aria-pressed={feedFilter === filter}
+                      onClick={() => setFeedFilter(filter)}
+                    >
+                      {feedFilterLabel(filter)}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </header>
+
+            {recent.loading ? (
+              <div className="board-skeleton"><SkeletonLines lines={5} /></div>
+            ) : recent.error ? (
+              <p className="muted board-soft-error">
+                Recent activity is unavailable right now. Your workspaces are unaffected.
+              </p>
+            ) : !scans.length ? (
+              <Empty title="No scans yet" icon={<ScanIcon />}>
+                Run a scan to follow what changed across your projects.
+              </Empty>
+            ) : !feedRows.length ? (
+              <div className="board-empty-filter">
+                <p>No scans matching the “{feedFilterLabel(feedFilter)}” filter.</p>
+                <Button variant="ghost" size="sm" onClick={() => setFeedFilter('all')}>Show all activity</Button>
+              </div>
+            ) : (
+              <>
+                <TrendBars scans={feedRows} />
+                <ol className="feed-list">
+                  {feedRows.slice(0, FEED_LIMIT).map((scan) => (
+                    <FeedRow key={scan.id} scan={scan} go={go} />
+                  ))}
+                </ol>
+              </>
             )}
-          </header>
 
-          {recent.loading ? (
-            <div className="board-skeleton"><SkeletonLines lines={5} /></div>
-          ) : recent.error ? (
-            <p className="muted board-soft-error">
-              Recent activity is unavailable right now. Your workspaces are unaffected.
-            </p>
-          ) : !scans.length ? (
-            <Empty title="No scans yet" icon={<ScanIcon />}>
-              Run a scan to follow what changed across your projects.
-            </Empty>
-          ) : !feedRows.length ? (
-            <div className="board-empty-filter">
-              <p>No scans matching the “{feedFilterLabel(feedFilter)}” filter.</p>
-              <Button variant="ghost" size="sm" onClick={() => setFeedFilter('all')}>Show all activity</Button>
-            </div>
-          ) : (
-            <>
-              <TrendBars scans={feedRows} />
-              <ol className="feed-list">
-                {feedRows.slice(0, FEED_LIMIT).map((scan) => (
-                  <FeedRow key={scan.id} scan={scan} go={go} />
-                ))}
-              </ol>
-            </>
+          {/* The ledger panel closes with "All workspaces"; this one closed on a
+              blank stretch of card instead. Same termination, and the note
+              answers the one question the capped list raises (why did my scan
+              disappear?) by naming the window against the real total — the feed
+              API serves a fixed 10 most-recent rows out of however many scans
+              exist, and a reader cannot otherwise tell that 86 scans happened. */}
+          {scans.length > 0 && !recent.loading && !recent.error && (
+            <footer className="board-panel-foot">
+              <span className="board-panel-foot-note tabular-nums">
+                Showing {Math.min(feedRows.length, FEED_LIMIT)} of {summary?.scans_total ?? feedRows.length} {feedFilter === 'all' ? 'scans' : `${feedFilterLabel(feedFilter).toLowerCase()} scans`}
+              </span>
+              <Button variant="ghost" size="sm" onClick={() => go({ page: 'search' })}>
+                Search all findings <ChevronRight className="ml-0.5 h-3.5 w-3.5" />
+              </Button>
+            </footer>
           )}
-        </section>
-      </div>
+          </section>
 
-      {/* ── Optional-tools strip: real tool readiness, nothing invented ── */}
-      <ToolsFoot tools={tools.data ?? []} ready={readyTools} total={totalTools} loading={tools.loading} error={tools.error} retry={tools.reload} go={go} />
+          {/* ── Optional-tools strip: real tool readiness, nothing invented ── */}
+          <ToolsFoot tools={tools.data ?? []} ready={readyTools} total={totalTools} loading={tools.loading} error={tools.error} retry={tools.reload} go={go} />
+        </div>
+      </div>
     </div>
   );
 }
@@ -785,7 +824,7 @@ function StateTag({ state }: { state: { label: string; variant: string } }) {
  *  red grade reads incoherent. The payload carries no predecessor severity
  *  counts, so "crossed a grade boundary" (the only case that would earn color)
  *  cannot be computed honestly; the chip stays monochrome and says what changed.
- *  Hidden when the scan recorded neither count (older backends omit them). */
+ * Hidden when the scan recorded neither count (older backends omit them). */
 function DeltaChip({ scan }: { scan: Scan }) {
   const fixed = scan.fixed_count ?? 0;
   const fresh = scan.new_count ?? 0;

@@ -71,13 +71,44 @@
 .page-search .search-results {
   table-layout: fixed;
 }
-.page-search .search-col-location { width: 21%; }
+.page-search .search-col-location { width: 24%; }
 .page-search .search-col-severity { width: 6.5rem; }
 .page-search .search-col-actions { width: 4.5rem; }
 .page-search .search-results th.search-cell-severity,
 .page-search .search-results td.search-cell-severity,
 .page-search .search-results th.search-cell-action,
 .page-search .search-results td.search-cell-action { text-align: right; }
+
+/* ---- Location cell: the file is the fact, the directory is context ----
+   One shrinking pill holding `…/pentest/pentest_te…` clipped the only part of
+   the row that identifies the finding. The cell is now two spans with opposite
+   flex rules: the basename (with `:line:col`) is fixed and always whole, and the
+   parent directory is the elastic half, so when the column runs out it is the
+   `src/components/` prefix that dissolves and never `AppShell.tsx:118`. */
+.page-search .search-location {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2xs);
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.page-search .search-location-file {
+  flex: none;
+  color: var(--color-ink);
+  font-weight: 600;
+}
+.page-search .search-location-dir {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--color-ink-faint);
+}
+/* Cards have no narrow column to fight, so the same parts read inline there. */
+.page-search .search-location { max-width: 100%; }
 
 /* Finding cell: display title leads (truncates first), neutral rule tag follows. */
 .page-search .search-finding-line,
@@ -210,6 +241,66 @@
   text-transform: none;
   letter-spacing: 0;
 }
+
+/* ---- Saved-search presets, inline in the facet section ----
+   These used to be an `position: absolute` popover opened by a bare "Saved"
+   button pinned to the bottom of the sidebar, 400px below the section that
+   already talked about saved searches. Inline list rows in the section's own
+   rhythm: same hit height as the analyzer chips above, full width so a 40-char
+   preset name is never truncated. */
+.page-search .saved-presets-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.page-search .saved-preset-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-2xs);
+}
+.page-search .saved-preset-row:hover { background: var(--color-surface-muted); }
+.page-search .saved-preset-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+  padding: var(--space-2xs) 0;
+  border: 0;
+  background: none;
+  color: var(--color-ink);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.page-search .saved-preset-name:hover { color: var(--color-accent-strong); }
+.page-search .saved-preset-remove {
+  flex: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: none;
+  color: var(--color-ink-faint);
+  font-size: var(--text-sm);
+  line-height: 1;
+  cursor: pointer;
+}
+.page-search .saved-preset-remove:hover { background: var(--color-danger-soft); color: var(--color-danger-text); }
+.page-search .saved-presets-empty { color: var(--color-ink-faint); font-size: var(--text-xs); margin: 0; }
+.page-search .saved-preset-add { display: flex; gap: var(--space-2xs); align-items: center; margin-top: var(--space-2xs); }
+.page-search .saved-preset-add input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: var(--space-2xs) var(--space-xs);
+  border: var(--rule) solid var(--color-rule-strong);
+  border-radius: var(--radius-xs);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-size: var(--text-xs);
+}
+.page-search .saved-preset-add .button { min-height: 1.75rem; padding: 0 var(--space-sm); font-size: var(--text-2xs); }
 
 /* Sticky header without utility-class overrides; .table-dense supplies the rest. */
 .page-search .search-results thead th {

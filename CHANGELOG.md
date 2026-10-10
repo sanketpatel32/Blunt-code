@@ -5,6 +5,22 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.42.0] - 2026-10-10
+
+### Changed
+- **The dashboard's verdict is on the page, not behind a click.** The board's headline — risk grade, weighted score, total findings, severity distribution, coverage caveat — sat inside a collapsed `<details>` labelled "Current assessment details and severity distribution", so the landing screen showed four counter cards and a table with no answer to "how bad is it". The panel now opens the page, and because it already carries every one of those numbers, the four counter cards below it were removed rather than restated: they duplicated the verdict's own figures, including one pair that disagreed ("Incomplete assessments 7" against the caveat's "6 of 17 scanned workspaces ran with partial analyzer coverage").
+- **Search results name the file and the line.** The Location column was a single ellipsised path pill in a 21% column, which clipped at about twenty characters — a row read `…/pentest/pentest_te…`, so the only thing that identifies a finding was the part cut off. The cell now renders `basename:line:col`, which never truncates, followed by the parent directory as the portion that absorbs the truncation. The full path stays on the cell's title.
+- **Scan history stops printing each date twice.** A row older than a week rendered `16 Sept 2026 · 16 Sept 2026, 00:29:26`; the disambiguating stamp is now the clock alone.
+- **Insight cards carry their count, not their chart type.** The uppercase caption pills — "sparklines per workspace", "donut", "files per language" — described their own box back at the reader. They are replaced with the number each card does not already state ("8 scans", "3 of 5 bands", "9 languages").
+- **The dashboard's two columns balance.** The activity feed is capped at ten most-recent rows while the ledger lists every workspace, so the shared surface ended with roughly 1,100px of empty card in one half. Both columns now end on the same line; the analyzer-readiness strip moved from a full-width bar at the page bottom into the short column; the feed reports its window ("Showing 10 of 86 scans") instead of looking arbitrarily truncated; and the ledger list scrolls within a readable window rather than stretching the pair to match the longer half.
+- **Mobile chrome is one bar, not two.** A phone viewport stacked the app bar and a breadcrumb/search bar about 110px tall, printed the app name twice, and crushed its own search label to "Search comman…". Below 700px the breadcrumb bar is gone and its command-search control moved into the bar that remains.
+
+### Fixed
+- **Workspace "Fix these first" showed three visually identical rows.** Three findings sharing a rule and a file differed only by line number, and that line number lived in an ellipsised `relative_path` column at the row's far end. The location now leads the message as `auth-flows.spec.ts:189:17`, so the rows are distinguishable, and it is short enough to stay visible on a phone, where hiding it left nothing to tell the three apart.
+- **Summary-card sparklines read as stray marks.** They were hard-coded 64×20 and stranded at the right edge of a ~350px card. They now fill the width the label and number leave them, using the same trend data already supplied.
+- **Saved searches shipped two competing features.** The search sidebar listed a text-only "Saved Searches" panel and then, 400px below it, a floating `Saved` button storing full filter presets on a different localStorage key. They are merged into the single named-preset list inside the section that already carried the heading, with the save-current action in that section's header and disabled when there is nothing to save.
+- Two ledger chips that were clipped off the viewport at 320px now wrap instead of disappearing.
+
 ## [0.41.0] - 2026-10-07
 
 ### Changed

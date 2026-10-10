@@ -1,4 +1,18 @@
 /* Blunt Code design reference: shared production tokens and responsive layouts. */
+
+/* Chart header note — the number a card's own body does not already state.
+   Replaced three uppercase mono pills ("sparklines per workspace", "donut",
+   "files per language") that named the chart type back at the reader. Same
+   visual weight, real content. */
+.analytics-head-note {
+  flex: none;
+  color: var(--color-ink-faint);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 :root {
   --color-paper: #f3f5f9;
   --color-surface: #ffffff;
@@ -102,8 +116,14 @@ input, select, textarea { color: var(--color-ink); }
   .app-topbar { display: flex; flex-wrap: wrap; height: auto; min-height: 60px; gap: 12px; padding: 12px 16px; background: var(--color-surface); }
   .page { padding: 24px 16px; }
   .page-header .page-title { font-size: 26px; }
-  .design-topbar { padding: 0 16px; height: 48px; }
-  .topbar-search kbd { display: none; }
+  /* The breadcrumb/search bar is redundant below 700px: this breakpoint already
+     shows `.app-topbar` (brand + Menu + theme + command search), so a second
+     stacked bar only duplicated the app name, repeated the page title the
+     header already carries, and crushed its own "Search commands  Ctrl K"
+     label to "Search comman…" at 412px. Its one useful control moved into
+     `.nav-actions`; the Menu sheet still lists every destination, including the
+     current workspace's own sections. */
+  .design-topbar { display: none; }
   .verdict-head { flex-wrap: wrap; }
   .verdict-hero-num { font-size: 36px; }
   .verdict-rail { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
@@ -112,14 +132,13 @@ input, select, textarea { color: var(--color-ink); }
   [role='dialog'] { max-width: calc(100vw - 32px); max-height: 90dvh; overflow-y: auto; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; } }
-.overview-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 24px; }
-.metric-card { display: flex; flex-direction: column; gap: 8px; padding: 20px; background: var(--color-surface); border: 1px solid var(--color-rule); border-radius: 10px; }
-.metric-card > span, .metric-card > small { color: var(--color-ink-soft); font-size: 12px; }
-.metric-card > strong { font-size: 30px; line-height: 1.25; font-weight: 650; font-variant-numeric: tabular-nums; }
-.assessment-details { margin-bottom: 24px; }
-.assessment-details summary { font-size: 12px; color: var(--color-ink-soft); cursor: pointer; margin-bottom: 12px; }
-@media (max-width: 950px) { .overview-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 420px) { .overview-metrics { gap: 10px; } .metric-card { padding: 14px; } }
+/* The `.overview-metrics` / `.metric-card` strip is gone. It duplicated the
+   verdict panel's own numbers — including one pair that disagreed ("Incomplete
+   assessments 7" against the caveat's "6 of 17 … partial coverage") — so the
+   board now states each fact once, in the place that already owns it. */
+/* The `.assessment-details` disclosure that used to wrap `.board-verdict` is
+   gone: the verdict is always on the page now, so there is no summary bar to
+   weld it to. Its dead rules went with it. */
 @media (max-width: 1250px) {
   .analysis-split[data-pane='open'] { grid-template-columns: minmax(0, 1fr); }
   .analysis-split[data-pane='open'] .source-pane { position: relative; inset: auto; z-index: auto; max-height: none; min-height: 0; box-shadow: var(--shadow-card); }

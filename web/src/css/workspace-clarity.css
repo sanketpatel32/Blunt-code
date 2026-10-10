@@ -187,11 +187,21 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Loop 155 · the sparkline now takes the width it has.
+ *
+ * It was `flex: none` at a hard-coded 64x20, so on a ~350px card it rendered as
+ * a small flat squiggle stranded at the right edge — which is exactly how it
+ * read: a stray mark rather than a chart. The label and the number own the left
+ * half; everything left over belongs to the trend, and a sparkline that fills
+ * its share reads as one. (`preserveAspectRatio="none"` + `vectorEffect` in
+ * MiniSparkline keep the stroke from stretching with the box.) */
 .workspace-verdict .premium-sparkline {
-  flex: none;
+  flex: 1 1 auto;
+  min-width: 3rem;
+  height: 1.75rem;
   margin-left: auto;
   align-self: center;
-  opacity: .8;
+  opacity: .85;
 }
 
 /* Grade owns the risk card's color; the score itself stays neutral ink. */
@@ -336,14 +346,20 @@
   color: var(--color-ink);
   font-weight: 500;
 }
+/* The location used to be the LAST flex item with `max-width: 40%`, ellipsising
+   a whole relative path into a sliver. It is now the second element (severity →
+   where → what) and it is a basename with the line, so it is short enough to
+   never truncate and never hides the message. The full path rides the title. */
 .workspace-top-findings-row code {
   flex: none;
-  max-width: 40%;
+  max-width: 45%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--color-ink-faint);
+  color: var(--color-ink-soft);
+  font-family: var(--font-mono);
   font-size: var(--text-2xs, .6875rem);
+  font-weight: 600;
 }
 
 /* ── 5 · Insights ──────────────────────────────────────────────── */
@@ -404,7 +420,11 @@
     border-left: 0;
     border-top: var(--rule) solid var(--color-rule-faint);
   }
-  .workspace-top-findings-row code { display: none; } /* the path rides in the message row's report link on narrow screens */
+  /* The basename stays. It used to be hidden here because it was a full
+     relative path that could not fit; as `AppShell.tsx:118` it is the row's
+     only distinguishing mark on a phone, where three identical messages would
+     otherwise stack with nothing to tell them apart. */
+  .workspace-top-findings-row code { max-width: 40%; }
   .workspace-insights-head { padding: var(--space-sm) var(--space-md) 0; }
   /* Six tabs overflow a narrow card, whose `overflow: clip` would cut them
      off: let the strip scroll in place instead of disappearing. */

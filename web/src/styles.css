@@ -1082,8 +1082,10 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .filter-drawer-body label{display:grid;gap:var(--space-xs);font:700 var(--text-xs) var(--font-mono);color:var(--color-ink-faint);text-transform:uppercase;letter-spacing:.02em;}
 .filter-drawer-sort{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-sm);}
 .filter-drawer-foot{display:flex;justify-content:flex-end;gap:var(--space-sm);padding:var(--space-lg);border-top:var(--rule) solid var(--color-rule-faint);margin-top:auto;}
-.saved-filters{position:relative;}
-.saved-filters-menu{position:absolute;top:calc(100% + var(--space-xs));right:0;min-width:14rem;padding:var(--space-sm);border:var(--rule) solid var(--color-rule);border-radius:var(--radius-lg);background:var(--color-surface);box-shadow:var(--shadow-lg);display:grid;gap:var(--space-xs);z-index:10;}
+/* `.saved-filters` / `.saved-filters-menu` are gone: the saved-search presets
+   render inline in the search sidebar's own section now, so there is no anchor
+   button and no absolutely-positioned popover to place. `.saved-preset-row`
+   and `.saved-preset-add` stay — the inline rows share those names. */
 .saved-preset-row{display:flex;align-items:center;justify-content:space-between;gap:var(--space-sm);}
 .saved-preset-add{display:flex;gap:var(--space-xs);align-items:center;}
 .search-layout{display:grid;grid-template-columns:16rem 1fr;gap:var(--space-lg);}
@@ -1240,7 +1242,7 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
     --color-rule-faint: oklch(95% 0.003 260);
   }
   .export-menu, .command-palette, .skip-link, .toast-dismiss,
-  .filter-chip-remove, .saved-filters-menu { display: none !important; }
+  .filter-chip-remove { display: none !important; }
   .app-nav, .app-footer, .toast-stack, .filters, .filter-chips, .severity-pills, .findings-pagination { display: none; }
   .table-wrap tr, .workspace-card, .summary-card { break-inside: avoid; }
   .table-wrap thead { display: table-header-group; }

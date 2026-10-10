@@ -146,19 +146,33 @@ function LanguageBars({ items }: { items: LanguageCoverage[] }) {
   );
 }
 
+/* The uppercase pills that used to sit in every chart header — "sparklines per
+   workspace", "donut", "files per language" — named the CHART TYPE back to the
+   reader. A label that describes its own box is decoration: nobody opens a
+   panel titled "Severity" and needs to be told the thing next to it is a donut,
+   and the pills were the loudest element in a 3-card strip whose real content
+   is the charts themselves.
+
+   They now carry the one number each card does not already show. */
+
 export function AnalyticsCharts({ trends, severityCounts, languages }: Props) {
   const reduced = useReducedMotion();
   const fallbackCounts: SeverityCounts = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
   const counts = severityCounts ?? fallbackCounts;
   const langs = languages ?? [];
   const lineData = trends ?? [];
+  const severityBands = SEVERITY_ORDER.filter((key) => (counts[key] ?? 0) > 0).length;
 
   return (
     <section aria-label="Analytics overview" className="grid gap-3 md:grid-cols-3">
       <Card label="Findings over time" delay="0ms" reduced={reduced}>
         <header className="flex items-center justify-between gap-2">
           <h3 className="font-display text-sm font-semibold tracking-tight">Findings over time</h3>
-          <span className="rounded-full border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-2 py-0.5 font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-ink-faint)]">sparklines per workspace</span>
+          {lineData.length > 0 && (
+            <span className="analytics-head-note tabular-nums">
+              {lineData.length} scan{lineData.length === 1 ? '' : 's'}
+            </span>
+          )}
         </header>
         <FindingsLineArea data={lineData} reduced={reduced} />
         <p className="text-xs leading-relaxed text-[var(--color-ink-soft)]">Area shows total findings across recent scans.</p>
@@ -167,15 +181,22 @@ export function AnalyticsCharts({ trends, severityCounts, languages }: Props) {
       <Card label="Severity breakdown" delay="40ms" reduced={reduced}>
         <header className="flex items-center justify-between gap-2">
           <h3 className="font-display text-sm font-semibold tracking-tight">Severity</h3>
-          <span className="rounded-full bg-[var(--color-accent-soft)] px-2 py-0.5 font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-accent-strong)]">donut</span>
+          {severityBands > 0 && (
+            <span className="analytics-head-note tabular-nums">
+              {severityBands} of {SEVERITY_ORDER.length} bands
+            </span>
+          )}
         </header>
         <SeverityDonut counts={counts} reduced={reduced} />
       </Card>
-
       <Card label="Language coverage" delay="80ms" reduced={reduced}>
         <header className="flex items-center justify-between gap-2">
           <h3 className="font-display text-sm font-semibold tracking-tight">Language coverage</h3>
-          <span className="rounded-full border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-2 py-0.5 font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-ink-faint)]">files per language</span>
+          {langs.length > 0 && (
+            <span className="analytics-head-note tabular-nums">
+              {langs.length} language{langs.length === 1 ? '' : 's'}
+            </span>
+          )}
         </header>
         <LanguageBars items={langs} />
       </Card>

@@ -5,7 +5,7 @@ import type { AnalyzerRun, RiskProfile, Scan } from '../types';
 import type { Route } from '../lib/router';
 import type { Notice } from '../lib/notice';
 import { message } from '../lib/notice';
-import { analyzerName, date, languageColor } from '../lib/format';
+import { analyzerName, date, findingLocation, languageColor } from '../lib/format';
 import { useLoad } from '../hooks/useLoad';
 import { Empty, ErrorPanel, LanguageBadges, Loading } from '../components/ui';
 import { ScanIcon } from '../components/icons';
@@ -285,6 +285,21 @@ function Disclosure({ label, hint, children }: { label: string; hint?: string; c
   </details>;
 }
 
+/** `AppShell.tsx:118:9` — the identifying part of a finding's location with the
+ *  directory stripped. Two analyzers can flag the same rule family on the same
+ *  line at different columns (semgrep at :8, the secrets detector at :33) and
+ *  share a message, so the column stays in the label: without it those two rows
+ *  render byte-identical and the list claims three problems where there were
+ *  two. Falls back to the shared locator when the finding has no path at all. */
+function findingBasename(finding: { relative_path?: string; start_line?: number; start_column?: number }): string {
+  const path = finding.relative_path;
+  if (!path) return 'Project-level';
+  const base = path.split(/[\\/]/).pop() ?? path;
+  const line = finding.start_line ? `:${finding.start_line}` : '';
+  const column = finding.start_column ? `:${finding.start_column}` : '';
+  return `${base}${line}${column}`;
+}
+
 /** The three highest-severity findings of the effective scan — the page's
  *  answer to "what should I fix first?", kept out of the Insights tabs so it
  *  is never below the fold. Dense rows, not cards; a row opens the full
@@ -304,19 +319,24 @@ function TopFindingsStrip({ scanId, go }: { scanId: string; go: (r: Route) => vo
           <li key={finding.id || finding.fingerprint}>
             <button type="button" className="workspace-top-findings-row" onClick={() => go({ page: 'scan', id: scanId, q: `finding=${encodeURIComponent(finding.id)}` })} title="Open this finding">
               <span className={`severity ${finding.severity}`}>{finding.severity}</span>
-              <span className="workspace-top-findings-message">{finding.message}</span>
-              {/* Column included on purpose. Two analyzers can flag the same rule
-                  family on the same line at different columns (here semgrep at
-                  :8 and the secrets detector at :33) and share a message, so a
-                  bare file:line rendered the two rows byte-identical and the
-                  list claimed three problems where there were two. */}
+              {/* The location leads the message, and it is the BASENAME with the
+                  line, not the whole relative path.
+
+                  This strip is the page's answer to "what do I fix first", and
+                  the three rows it showed were three instances of the SAME rule
+                  in the SAME file, distinguished only by line number — which the
+                  old cell rendered as a 40%-width, ellipsised `relative_path`
+                  column. Two of the three rows came out visually identical, so
+                  a panel whose entire job is "these are different problems"
+                  presented three identical-looking lines.
+
+                  The basename never truncates and sits beside the severity, so
+                  the eye gets severity → where → what, and the what is where the
+                  rows genuinely differ. The full path stays on the title. */}
               {finding.relative_path && (
-                <code title={finding.relative_path + (finding.start_line ? `:${finding.start_line}` : '')}>
-                  {finding.relative_path}
-                  {finding.start_line ? `:${finding.start_line}` : ''}
-                  {finding.start_column ? `:${finding.start_column}` : ''}
-                </code>
+                <code title={findingLocation(finding)}>{findingBasename(finding)}</code>
               )}
+              <span className="workspace-top-findings-message">{finding.message}</span>
             </button>
           </li>
         ))}
@@ -330,10 +350,10 @@ function MiniSparkline({ values }: { values: number[] }) {
   const max = Math.max(...values,1);
   const min = Math.min(...values);
   const range = Math.max(max-min,1);
-  const w=64,h=20;
+  const w=100,h=28;
   const step = values.length>1 ? w/(values.length-1) : 0;
   const pts = values.map((v,i)=> `${i*step},${h - ((v-min)/range)*h}`);
-  return <svg viewBox={`0 0 ${w} ${h}`} width={64} height={20} aria-hidden="true" className="premium-sparkline"><polyline fill="none" stroke="var(--color-accent)" strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round" points={pts.join(' ')} /></svg>;
+  return <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} preserveAspectRatio="none" aria-hidden="true" className="premium-sparkline"><polyline vectorEffect="non-scaling-stroke" fill="none" stroke="var(--color-accent)" strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round" points={pts.join(' ')} /></svg>;
 }
 
 function PremiumSummaryCard({ label, value, tone, icon, spark, delay }: { label: string; /** null = nothing has completed yet — the card reads "—" / "no scan yet" instead of a lying 0. */ value: number | null; tone?: string; icon: ReactNode; spark?: number[] | null; delay: number }) {

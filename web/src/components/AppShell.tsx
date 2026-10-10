@@ -90,6 +90,12 @@ export function AppShell({ workspace, route, onNavigate, onClose, theme, onToggl
   const reduced = useReducedMotion();
   const [mobileOpen, setMobileOpen] = React.useState(false);
 
+  // One handler for every "open the command palette" control. The rail search,
+  // this mobile bar's utility button and the desktop topbar all funnel through
+  // App's global Ctrl+K listener exactly as a real keystroke does, so there is
+  // one implementation of the action and no second entry point to keep in sync.
+  const openCommandPalette = () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }));
+
   const items = (pages: ReadonlyArray<Route['page']>): NavItem[] =>
     pages.map((page) => ({
       route: { page } as Route,
@@ -181,7 +187,7 @@ export function AppShell({ workspace, route, onNavigate, onClose, theme, onToggl
           <button
             type="button"
             className="rail-search"
-            onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }))}
+            onClick={openCommandPalette}
             title="Search and commands (Ctrl+K)"
           >
             <Search className="rail-search-icon" aria-hidden="true" />
@@ -275,6 +281,23 @@ export function AppShell({ workspace, route, onNavigate, onClose, theme, onToggl
           </SheetContent>
         </Sheet>
         <div className="nav-actions">
+          {/* Command search, here rather than in a second bar.
+              
+              The mobile layout used to stack TWO headers: this one (brand +
+              Menu + theme) and DesignTopbar below it (breadcrumb + a wide
+              "Search commands  Ctrl K" button). That is ~110px of chrome
+              before the first pixel of content on a 844px viewport, the app's
+              name printed twice, and a search label that truncated to
+              "Search comman…" at 412px.
+              
+              So the breadcrumb bar does not exist below 700px and its one
+              genuinely useful control — opening the palette — moves up here to
+              sit with the other utilities. The page title already names where
+              you are, and the Menu sheet carries every destination including
+              this workspace's own sections. */}
+          <Button variant="ghost" size="icon" className="rail-util-btn" onClick={openCommandPalette} aria-label="Search and commands" title="Search and commands (Ctrl+K)">
+            <Search className="h-4 w-4" aria-hidden="true" />
+          </Button>
           <Button variant="ghost" size="icon" className="rail-util-btn" onClick={onToggleTheme} aria-pressed={theme === 'dark'} aria-label={theme === 'dark' ? t('common.switchToLight') : t('common.switchToDark')} title={theme === 'dark' ? t('common.switchToLight') : t('common.switchToDark')}>
             {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>

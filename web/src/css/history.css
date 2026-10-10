@@ -118,8 +118,11 @@ tr.is-expanded .history-date::before { border-color: var(--color-accent); backgr
 /* Relative + absolute: "2 hours ago · Sep 15, 14:05" on one line. The absolute
    stamp is faint; together with the full date in the cell's title tooltip the
    chronology reads without a second row of chrome. */
-.history-when { display: inline-flex; align-items: baseline; gap: var(--space-xs); min-width: 0; white-space: nowrap; }
-.history-when .history-abs { color: var(--color-ink-faint); font-size: var(--text-xs); }
+.history-when { display: inline-flex; align-items: baseline; gap: var(--space-2xs); min-width: 0; white-space: nowrap; }
+.history-when .history-abs { color: var(--color-ink-faint); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+/* The clock is the other half of the date beside it, not a second fact. Without
+   a separator the pair read as two independent labels. */
+.history-when .history-abs-sep { color: var(--color-ink-ghost); font-size: var(--text-xs); }
 
 /* Day band header — a real group boundary: strong weight, breathing room,
    muted background, sticky under the column header. */

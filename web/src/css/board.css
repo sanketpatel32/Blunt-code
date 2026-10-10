@@ -56,17 +56,23 @@
    real 96px statement, the count is the largest number in the app, and the
    severity distribution is a meter with enough height to read as a shape
    rather than a hairline. Everything below is secondary to this, which is the
-   correct hierarchy for a risk board. */
+   correct hierarchy for a risk board.
+
+   The panel is also now a self-contained card. It used to be welded to the
+   <summary> of a collapsed <details> - open top edge, no top radius, negative
+   top margin - so the one rule that could have made it stand on its own was
+   the rule that hid it. The verdict is always rendered, so it is framed like
+   any other card: closed edge, full radius, its own margin. */
 .board-verdict {
   position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-lg);
-  margin-top: calc(var(--space-md) * -1);
+  margin-top: 0;
+  margin-bottom: var(--space-lg);
   padding: var(--space-xl) var(--space-lg) var(--space-lg);
   border: var(--rule) solid var(--color-rule);
-  border-top: none;
-  border-radius: 0 0 var(--radius-card) var(--radius-card);
+  border-radius: var(--radius-card);
   background: var(--color-surface);
   box-shadow: var(--shadow-sm);
 }
@@ -305,8 +311,21 @@
 .board-page .verdict-bar .seg-low,
 .board-page .verdict-bar .seg-info { opacity: .62; }
 
+/* Loop 156 · the legend and the rail now span the panel.
+ *
+ * Both were `display: flex; flex-wrap: wrap`, so they hugged their content.
+ * On a 1,142px card the five legend items ended at ~700px and the four rail
+ * stats at ~900px, leaving a quarter of the card's width empty on both rows
+ * while the bar directly above them ran the full width. Two ragged rows under
+ * one full-width meter read as an unfinished composition.
+ *
+ * `space-between` distributes the items across the same width the bar occupies
+ * without loosening them — each label stays welded to its own number, because
+ * the gap goes between the pairs and never inside one. */
 .verdict-legend {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
   flex-wrap: wrap;
   gap: var(--space-xs) var(--space-lg);
   margin: 0;
@@ -339,6 +358,7 @@
 .verdict-rail {
   display: flex;
   align-items: baseline;
+  justify-content: space-between;
   gap: var(--space-xs) var(--space-xl);
   margin: 0;
   flex-wrap: wrap;
@@ -381,14 +401,17 @@
 .board-columns {
   display: grid;
   grid-template-columns: minmax(0, 1.85fr) minmax(0, 1fr);
-  align-items: start;
+  /* Stretch, not start: both panels are halves of one question, so they must end
+     on the same line. `align-items: start` let the shorter column's card stop
+     mid-page while its sibling ran on for another 600px, and the pair read as
+     two unrelated widgets of different heights. */
+  align-items: stretch;
   border: var(--rule) solid var(--color-rule);
   border-radius: var(--radius-card);
   background: var(--color-surface);
   box-shadow: var(--shadow-card);
   overflow: hidden;
 }
-
 .board-panel {
   display: flex;
   flex-direction: column;
@@ -402,6 +425,19 @@
 
 /* The divider, not a gap. */
 .board-panel + .board-panel { border-left: var(--rule) solid var(--color-rule); }
+
+/* The activity column's stack: panel, then the analyzer-readiness strip, then the
+   panel-foot. It carries the same left rule the panel-to-panel divider used to
+   draw, because the ledger is still the tall half of this surface. */
+.board-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+  border-left: var(--rule) solid var(--color-rule);
+  padding-left: var(--space-md);
+}
+.board-side > .board-panel { border-left: none; }
 
 /* Was 73px for a title and a one-line subtitle. Both lines stay, but on one
    baseline group at md padding so the panel head costs ~48px — the two board
@@ -434,10 +470,27 @@
 
 .board-panel-foot {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: var(--space-sm);
+  /* Pins to the bottom of the panel: the grid stretches both columns to the
+     same height, so without this the foot sits right under the content and
+     leaves the card's lower third bare. */
+  margin-top: auto;
   padding: var(--space-2xs) var(--space-sm);
   border-top: var(--rule) solid var(--color-rule-faint);
   background: var(--color-surface-muted);
+}
+
+/* The "why is my scan not in this list" note. Rare enough (the list is capped
+   at 10) that it never competes with the panel's own action. */
+.board-panel-foot-note {
+  margin-right: auto;
+  color: var(--color-ink-faint);
+  font-size: var(--text-2xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .board-filter input {
@@ -467,7 +520,25 @@
    chips, then a floating score, then a badge on a sixth offset - about 190px
    to carry eight facts. This is one row of 2-line cells sharing a baseline, so
    a workspace reads as a single scannable line. */
-.ledger-list { margin: 0; padding: 0; list-style: none; }
+/* The ledger is the tall half of the board surface, and at 18 workspaces it
+   runs ~1,675px while the activity column beside it holds ten feed rows and can
+   only ever be ~700px. Forcing the pair onto one line therefore left two thirds
+   of the right column as empty card.
+
+   The column cannot grow content it does not have, so the ledger stops at a
+   readable window instead: about ten rows, which is where the activity feed
+   naturally ends too, and the rest stays reachable by scroll inside the panel
+   (`overscroll-behavior: contain` keeps a wheel at the bottom of the list from
+   taking the page with it). The panel's own foot and the "All workspaces" link
+   stay pinned outside the scroll. */
+.ledger-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 44rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 
 .ledger-row {
   display: grid;
@@ -605,7 +676,7 @@
 
 .ledger-mid .ledger-bar { width: 100%; }
 
-.ledger-mid-meta { display: flex; align-items: center; gap: var(--space-xs); min-width: 0; overflow: hidden; }
+.ledger-mid-meta { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2xs) var(--space-xs); min-width: 0; overflow: hidden; }
 
 .ledger-bar { height: .375rem; background: var(--color-surface-muted); border-radius: var(--radius-button); overflow: hidden; }
 

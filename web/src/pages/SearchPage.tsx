@@ -4,7 +4,7 @@ import { api } from '../api';
 import type { SearchedFinding, Severity, Workspace } from '../types';
 import { SEVERITY_COLOR } from '../lib/chartData';
 import type { Route } from '../lib/router';
-import { analyzerName, findingLocation, friendlyFindingTitle, shortFindingLocation } from '../lib/format';
+import { analyzerName, findingLocation, friendlyFindingTitle } from '../lib/format';
 import { useLoad } from '../hooks/useLoad';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { Empty, ErrorPanel } from '../components/ui';
@@ -96,6 +96,51 @@ function resultGroupKey(finding: SearchedFinding) {
   return `${finding.rule_id ?? ''}\u0000${finding.relative_path ?? ''}`;
 }
 
+/** A result's location split into the two halves that matter, so the table can
+ *  give each one its own truncation rule.
+ *
+ *  The cell used to render `shortFindingLocation()` — the last two path
+ *  segments plus `:line:col` — inside one pill in a 21% column. Measured on the
+ *  live corpus the pill clipped at ~20 characters, so a row read
+ *  `…/pentest/pentest_te…` and the only thing that identifies a finding — which
+ *  file, which line — was the part that had been cut off. Hovering the title
+ *  recovered it, but a column you must hover to read is not a column.
+ *
+ *  `file` is the basename with the line (and column) suffix; it never shrinks.
+ *  `dir` is the parent directory and it is the part that gives way, so
+ *  degradation order is the reverse of importance.
+ *
+ *  The directory is pre-collapsed to its last two segments with an ellipsis in
+ *  front (`…/.delta/Blunt-code/`) rather than handed to CSS whole: letting the
+ *  browser truncate `a/b/c/d/e/` from the right keeps the least useful part of
+ *  the path (the first segment) and discards the part immediately above the
+ *  file, which is the only directory anyone reads. The full `path:line:col`
+ *  still rides on the cell's title. */
+function findingLocationParts(finding: SearchedFinding): { file: string; dir: string } {
+  const location = findingLocation(finding);
+  const path = finding.relative_path;
+  if (!path) return { file: location, dir: '' };
+  const lastSlash = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+  const dirPath = lastSlash > 0 ? path.slice(0, lastSlash + 1) : '';
+  if (!dirPath) return { file: location.slice(lastSlash + 1), dir: '' };
+  const segments = dirPath.split(/[\\/]/).filter(Boolean);
+  const dir = segments.length > 2 ? `\u2026/${segments.slice(-2).join('/')}/` : dirPath;
+  return { file: location.slice(lastSlash + 1), dir };
+}
+
+/** The Location cell: `basename:line` in mono, then the parent directory as a
+ *  dimmed suffix that absorbs all the truncation. Project-level findings (no
+ *  path) render the label alone, centred against the file rows. */
+function LocationCell({ finding }: { finding: SearchedFinding }) {
+  const { file, dir } = findingLocationParts(finding);
+  return (
+    <span className="search-location" title={findingLocation(finding)}>
+      <span className="search-location-file">{file}</span>
+      {dir && <span className="search-location-dir">{dir}</span>}
+    </span>
+  );
+}
+
 type SearchRow =
   | { kind: 'single'; finding: SearchedFinding }
   | { kind: 'group'; key: string; occurrences: SearchedFinding[] };
@@ -118,35 +163,6 @@ function buildSearchRows(items: SearchedFinding[], grouped: boolean): SearchRow[
   return rows;
 }
 
-function useSavedSearches() {
-  const key = 'bluntcode.savedSearches';
-  const load = (): string[] => {
-    try {
-      const r = localStorage.getItem(key);
-      return r ? JSON.parse(r) : [];
-    } catch {
-      return [];
-    }
-  };
-  const [list, setList] = useState<string[]>(load);
-  const add = (q: string) => {
-    const t = q.trim();
-    if (!t || list.includes(t)) return;
-    const nxt = [t, ...list].slice(0, 10);
-    setList(nxt);
-    try {
-      localStorage.setItem(key, JSON.stringify(nxt));
-    } catch {}
-  };
-  const remove = (q: string) => {
-    const nxt = list.filter((x) => x !== q);
-    setList(nxt);
-    try {
-      localStorage.setItem(key, JSON.stringify(nxt));
-    } catch {}
-  };
-  return { list, add, remove };
-}
 
 export function SearchPage({ go }: { go: (route: Route) => void }) {
   const [query, setQuery] = useState(() => new URLSearchParams(window.location.search).get('q') ?? '');
@@ -167,6 +183,8 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
   const [pageSize] = useState(SEARCH_PAGE_SIZE);
   const [facetsOpen, setFacetsOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  // The "save current" name form, owned by the Saved Searches facet section.
+  const [savedOpen, setSavedOpen] = useState(false);
   const [queryGroup, setQueryGroup] = useState<QueryGroup>(() =>
     filterToQueryGroup({
       severity: [...(new URLSearchParams(window.location.search).get('severity')?.split(',').filter(Boolean) ?? [])].join(','),
@@ -265,7 +283,6 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
   const total = state.data?.total ?? 0;
   const actualPageSize = state.data?.page_size ?? pageSize;
   const first = (page - 1) * actualPageSize;
-  const saved = useSavedSearches();
 
   // Snap out-of-range pages (deep links like ?page=999999, or a result set that
   // shrank since the page was picked) back to the last page instead of issuing a
@@ -529,59 +546,56 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
         </fieldset>
       </div>
 
-      {/* Saved Searches */}
+      {/* Saved Searches — one mechanism, owned by this section. The old build had
+          two: a text-only list here plus a bare "Saved" button bolted to the
+          bottom of the facet stack via <SavedFilters>, on a different
+          localStorage key. The named preset wins because it carries the WHOLE
+          filter state (severity, analyzer, workspace, query), not just the query
+          string — and it now lives where its heading already was. */}
       <div className="facet-saved pt-3 border-t border-[var(--color-rule-faint)]">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-ink-faint)] flex items-center gap-1.5">
             <Bookmark className="h-3 w-3" /> Saved Searches
           </p>
-          {query.trim() && (
+          {/* Opening the name form is the only way to create a preset, so the
+              trigger is the section's action rather than a button parked after
+              the empty state. Nothing to save = no affordance. */}
+          {!savedOpen && (
             <button
               type="button"
-              className="text-xs text-[var(--color-accent-strong)] hover:underline flex items-center gap-0.5"
-              onClick={() => saved.add(query)}
+              className="facet-saved-save text-xs text-[var(--color-accent-strong)] hover:underline flex items-center gap-0.5 disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed"
+              onClick={() => setSavedOpen(true)}
+              disabled={activeFiltersCount === 0}
+              title={activeFiltersCount === 0 ? 'Apply a filter first, then save it as a preset' : 'Save the current filters as a named preset'}
             >
               <Plus className="h-3 w-3" /> Save current
             </button>
           )}
         </div>
-        <div className="mt-2 space-y-1">
-          {saved.list.length === 0 ? (
-            <span className="text-xs text-[var(--color-ink-faint)]">No saved search presets yet.</span>
-          ) : (
-            saved.list.map((q) => (
-              <div key={q} className="saved-preset-row flex items-center justify-between rounded-[var(--radius-sm)] px-2 py-1 bg-[var(--color-surface-muted)] text-xs text-[var(--color-ink)] hover:bg-[var(--color-surface-subtle)]">
-                <button type="button" className="truncate text-left flex-1" onClick={() => setQuery(q)}>
-                  {q}
-                </button>
-                <button type="button" aria-label={`Delete ${q}`} onClick={() => saved.remove(q)} className="text-[var(--color-ink-faint)] hover:text-[var(--color-danger)] ml-1">
-                  ×
-                </button>
-              </div>
-            ))
-          )}
+        <div className="mt-2">
+          <SavedFilters
+            open={savedOpen}
+            onOpenChange={setSavedOpen}
+            filters={
+              {
+                severity: [...severities].join(','),
+                analyzer,
+                q: query,
+                status: '',
+                category: '',
+                rule: '',
+                path: workspace,
+              } as FindingFilter
+            }
+            onLoad={(f) => {
+              setSeverities(new Set(f.severity ? f.severity.split(',') : []));
+              setAnalyzer(f.analyzer);
+              setQuery(f.q);
+              setWorkspace(f.path);
+            }}
+          />
         </div>
       </div>
-
-      <SavedFilters
-        filters={
-          {
-            severity: [...severities].join(','),
-            analyzer,
-            q: query,
-            status: '',
-            category: '',
-            rule: '',
-            path: workspace,
-          } as FindingFilter
-        }
-        onLoad={(f) => {
-          setSeverities(new Set(f.severity ? f.severity.split(',') : []));
-          setAnalyzer(f.analyzer);
-          setQuery(f.q);
-          setWorkspace(f.path);
-        }}
-      />
     </div>
   );
 
@@ -862,9 +876,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                           <span className={`severity ${finding.severity} text-xs uppercase font-mono px-2 py-0.5 rounded font-semibold`}>
                             {finding.severity}
                           </span>
-                          <span className="tag">
-                            <span title={findingLocation(finding)}>{shortFindingLocation(finding)}</span>
-                          </span>
+                          <LocationCell finding={finding} />
                           {ruleTagFor(finding, title)}
                           <span className="tag">
                             <span>{meta?.displayName ?? analyzerName(finding.analyzer_id)}</span>
@@ -939,9 +951,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                           )}
                           {visibleCols.location && (
                             <td className="search-cell-location">
-                              <span className="tag">
-                                <span title={findingLocation(finding)}>{shortFindingLocation(finding)}</span>
-                              </span>
+                              <LocationCell finding={finding} />
                             </td>
                           )}
                           {visibleCols.severity && (
