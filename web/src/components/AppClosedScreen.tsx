@@ -32,7 +32,7 @@ export function AppClosedScreen({ mode, version }: { mode: 'stopped' | 'updating
         <h1 id="farewell-title">{updating ? 'Updating Blunt Code' : 'Blunt Code has stopped'}</h1>
         {updating ? (
           <>
-            <p>{version ? `Version ${version} is installing. ` : 'The update is installing. '}Blunt Code closed itself and the new version opens in a new browser tab when it is ready — this tab can be closed.</p>
+            <p>{version ? `Version ${version} is installing. ` : 'The update is installing. '}Blunt Code closed itself and the new version opens in a new browser tab when it is ready; this tab can be closed.</p>
             <ol className="farewell-steps">
               <li className="farewell-step is-done"><span className="farewell-step-dot" aria-hidden="true" />Close the running app</li>
               <li className="farewell-step is-active"><span className="farewell-step-dot" aria-hidden="true" />Download and install the new version</li>

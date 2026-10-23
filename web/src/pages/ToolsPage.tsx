@@ -221,7 +221,7 @@ export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r
                                   { label: operationLabels.repair, onSelect: () => setPending({ analyzer, operation: 'repair' }) },
                                 ]}
                               />
-                            </>) : <span className="tools-none" aria-hidden="true">—</span>}
+                            </>) : <span className="tools-none" aria-hidden="true">none</span>}
                         </div>
                       </td>
                     </tr>

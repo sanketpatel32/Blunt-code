@@ -348,7 +348,7 @@ describe('HomePage cancelled-scan fallback and trajectory', () => {
     expect(host.querySelector('.ledger-last')?.textContent).toContain('Cancelled');
     // Trajectory chip comes from the completed scan's comparison.
     const delta = host.querySelector('.ledger-delta');
-    expect(delta?.textContent).toBe('↓ 4 fixed · ↑ 1 new');
+    expect(delta?.textContent).toBe('↓ 4 fixed, ↑ 1 new');
     expect(delta?.getAttribute('title')).toBe('Since the previous completed scan');
     // The grade owns the row's color: the delta stays neutral ink even when
     // fixes outnumber new findings (no green tint beside a red grade).
@@ -392,7 +392,7 @@ describe('HomePage cancelled-scan fallback and trajectory', () => {
       { items: [workspaceItem({ latest_scan: latestScan({ new_count: 3, fixed_count: 1 }) })] },
     ));
     const delta = host.querySelector('.ledger-delta');
-    expect(delta?.textContent).toBe('↓ 1 fixed · ↑ 3 new');
+    expect(delta?.textContent).toBe('↓ 1 fixed, ↑ 3 new');
     expect(delta?.className).toContain('ledger-delta');
     expect(delta?.className).not.toContain('--color-warning');
     expect(delta?.className).not.toContain('--color-success');

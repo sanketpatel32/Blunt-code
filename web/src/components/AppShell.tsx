@@ -132,9 +132,9 @@ export function AppShell({ workspace, route, onNavigate, onClose, theme, onToggl
       <aside className={cn('app-rail', reduced && 'nav-no-motion')}>
         <a className="rail-brand" href={href({ page: 'home' })} onClick={(event) => navigateFromLink(event, () => onNavigate({ page: 'home' }))}>
           <svg className="brand-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
-            <rect width="32" height="32" rx="8" fill="var(--color-brand-mark)" />
-            <path d="M16 5.2 L23.6 9 L23.6 17.2 C23.6 21 20.2 24.5 16 26.8 C11.8 24.5 8.4 21 8.4 17.2 L8.4 9 Z" fill="none" stroke="var(--color-paper)" strokeOpacity="0.14" strokeWidth="1" strokeLinejoin="round" />
-            <path d="M11.8 15.9 L15.2 19.1 L20.6 12.1" fill="none" stroke="var(--color-paper)" strokeWidth="2.7" strokeLinecap="round" strokeLinejoin="round" opacity="0.96" />
+            <rect width="32" height="32" rx="0" fill="var(--color-brand-mark)" />
+            <path d="M16 5.2 L23.6 9 L23.6 17.2 C23.6 21 20.2 24.5 16 26.8 C11.8 24.5 8.4 21 8.4 17.2 L8.4 9 Z" fill="none" stroke="var(--color-brand-line)" strokeOpacity="0.14" strokeWidth="1" strokeLinejoin="round" />
+            <path d="M11.8 15.9 L15.2 19.1 L20.6 12.1" fill="none" stroke="var(--color-brand-line)" strokeWidth="2.7" strokeLinecap="round" strokeLinejoin="round" opacity="0.96" />
             <circle cx="23.4" cy="7.2" r="1.7" fill="var(--color-brand-accent)" />
           </svg>
           <b>Blunt Code</b>
@@ -262,9 +262,9 @@ export function AppShell({ workspace, route, onNavigate, onClose, theme, onToggl
       <header className={cn('app-topbar', reduced && 'nav-no-motion')}>
         <a className="brand" href={href({ page: 'home' })} onClick={(event) => navigateFromLink(event, () => onNavigate({ page: 'home' }))}>
           <svg className="brand-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
-            <rect width="32" height="32" rx="8" fill="var(--color-brand-mark)" />
-            <path d="M16 5.2 L23.6 9 L23.6 17.2 C23.6 21 20.2 24.5 16 26.8 C11.8 24.5 8.4 21 8.4 17.2 L8.4 9 Z" fill="none" stroke="var(--color-paper)" strokeOpacity="0.14" strokeWidth="1" strokeLinejoin="round" />
-            <path d="M11.8 15.9 L15.2 19.1 L20.6 12.1" fill="none" stroke="var(--color-paper)" strokeWidth="2.7" strokeLinecap="round" strokeLinejoin="round" opacity="0.96" />
+            <rect width="32" height="32" rx="0" fill="var(--color-brand-mark)" />
+            <path d="M16 5.2 L23.6 9 L23.6 17.2 C23.6 21 20.2 24.5 16 26.8 C11.8 24.5 8.4 21 8.4 17.2 L8.4 9 Z" fill="none" stroke="var(--color-brand-line)" strokeOpacity="0.14" strokeWidth="1" strokeLinejoin="round" />
+            <path d="M11.8 15.9 L15.2 19.1 L20.6 12.1" fill="none" stroke="var(--color-brand-line)" strokeWidth="2.7" strokeLinecap="round" strokeLinejoin="round" opacity="0.96" />
             <circle cx="23.4" cy="7.2" r="1.7" fill="var(--color-brand-accent)" />
           </svg>
           <b>Blunt Code</b>

@@ -82,9 +82,8 @@
   display: grid;
   gap: var(--space-2xs);
   color: var(--color-ink-faint);
-  font: 600 var(--text-2xs) var(--font-mono);
-  letter-spacing: .06em;
-  text-transform: uppercase;
+  font: 500 var(--text-2xs) var(--font-body);
+  letter-spacing: 0;
 }
 .settings-editor input,
 .settings-editor select {
@@ -271,7 +270,7 @@
 .workspace-disclosure > summary small {
   margin-left: auto;
   color: var(--color-ink-faint);
-  font: 600 var(--text-xs) var(--font-mono);
+  font: 500 var(--text-xs) var(--font-body);
 }
 
 .workspace-disclosure-caret {

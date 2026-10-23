@@ -37,7 +37,7 @@ export function WorkspaceTemplates({ onUseTemplate }: { onUseTemplate?: () => vo
     <section aria-labelledby="workspace-templates-heading" className="mt-8">
       <header className="mb-4">
         <h2 id="workspace-templates-heading" className="font-display text-lg font-bold">Start from a template</h2>
-        <p className="text-sm text-[var(--color-ink-soft)]">Pick a stack — we pre-fill the workspace dialog with the right languages and analyzers.</p>
+        <p className="text-sm text-[var(--color-ink-soft)]">Pick a stack: we pre-fill the workspace dialog with the right languages and analyzers.</p>
       </header>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {WORKSPACE_TEMPLATES.map((t, idx) => (
@@ -48,13 +48,13 @@ export function WorkspaceTemplates({ onUseTemplate }: { onUseTemplate?: () => vo
             </CardHeader>
             <CardContent className="flex flex-1 flex-col gap-4">
               <div>
-                <p className="mb-1.5 text-xs font-mono font-bold uppercase tracking-widest text-[var(--color-ink-faint)]">Languages</p>
+                <p className="mb-1.5 text-xs font-semibold text-[var(--color-ink-faint)]">Languages</p>
                 <div className="flex flex-wrap gap-1.5">
                   {t.languages.map((l) => <Badge key={l} variant="outline" className="text-xs">{l}</Badge>)}
                 </div>
               </div>
               <div>
-                <p className="mb-1.5 text-xs font-mono font-bold uppercase tracking-widest text-[var(--color-ink-faint)]">Analyzers</p>
+                <p className="mb-1.5 text-xs font-semibold text-[var(--color-ink-faint)]">Analyzers</p>
                 <div className="flex flex-wrap gap-1.5">
                   {t.analyzers.map((id) => {
                     const meta = analyzerMeta(id);

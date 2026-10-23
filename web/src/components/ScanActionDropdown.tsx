@@ -117,7 +117,7 @@ export function ScanActionDropdown({
             <Play className="h-4 w-4 text-[var(--color-accent-strong)]" />
             <div className="flex flex-col">
               <span className="font-medium">Standard scan</span>
-              <span className="text-xs text-[var(--color-ink-faint)]">Recommended — full analyzers · a few minutes</span>
+              <span className="text-xs text-[var(--color-ink-faint)]">Recommended: full analyzers, a few minutes</span>
             </div>
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setPendingProfile('quick')} className="gap-2 cursor-pointer">

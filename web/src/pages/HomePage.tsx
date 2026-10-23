@@ -219,7 +219,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
           }
         >
           Choose any folder on this computer. Blunt Code scans it locally, keeps the history here, and never changes your source files.
-          {' '}Blunt Code runs security and code-quality analyzers over the folder — surfacing secrets, vulnerabilities, and risky code — without changing your files.
+          {' '}Blunt Code runs security and code-quality analyzers over the folder, surfacing secrets, vulnerabilities, and risky code, without changing your files.
           <br />
           <span className="mt-2 inline-flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xs text-[var(--color-ink-faint)]" aria-label="Getting started: add a workspace, run a scan, review findings">
             <span>1. Add a workspace</span>
@@ -377,9 +377,9 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
               ) : (
                 <p className="verdict-line">
                   {workspaces.error ? (
-                    <>Couldn't load your workspaces. Nothing is lost — use "Try again" in the panel below to reload the board.</>
+                    <>Couldn't load your workspaces. Nothing is lost. Use "Try again" in the panel below to reload the board.</>
                   ) : workspaces.data?.length ? (
-                    <>No completed scans yet — run a scan to grade your code.</>
+                    <>No completed scans yet; run a scan to grade your code.</>
                   ) : (
                     <>Add a workspace to start grading your code.</>
                   )}
@@ -409,7 +409,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
           {verdictTallied && verdict.partialScans > 0 && (
             <p className="verdict-caveat">
               {verdict.partialScans} of {verdict.scanned} scanned workspace{verdict.partialScans === 1 ? '' : 's'} ran
-              with partial analyzer coverage — their grades reflect only what completed.
+              with partial analyzer coverage; their grades reflect only what completed.
             </p>
           )}
 
@@ -497,7 +497,10 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
             </div>
           ) : (
             <ol className="ledger-list">
-              {ledgerRows.map((row) => (
+              {/* The readable window is rendered, not CSS-scrolled: clipped
+                  rows still lay out under the panel and everything below it
+                  (73). The foot's link carries the rest. */}
+              {ledgerRows.slice(0, 12).map((row) => (
                 <LedgerRow
                   key={row.workspace.id}
                   workspace={row.workspace}
@@ -511,6 +514,11 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
           )}
 
           <footer className="board-panel-foot">
+            {ledgerRows.length > 12 && (
+              <span className="board-panel-foot-note tabular-nums">
+                Showing 12 of {ledgerRows.length}
+              </span>
+            )}
             <Button variant="ghost" size="sm" onClick={() => go({ page: 'workspaces' })}>
               All workspaces <ChevronRight className="ml-0.5 h-3.5 w-3.5" />
             </Button>
@@ -832,7 +840,7 @@ function DeltaChip({ scan }: { scan: Scan }) {
   const parts = [
     fixed > 0 ? `↓ ${fixed} fixed` : null,
     fresh > 0 ? `↑ ${fresh} new` : null,
-  ].filter(Boolean).join(' · ');
+  ].filter(Boolean).join(', ');
 
   return (
     <span
@@ -944,7 +952,7 @@ function LedgerRow({
             className="muted ledger-fallback-note"
             title={`Latest run ${state.label.toLowerCase()}${current.finished_at ? ` on ${date(current.finished_at)}` : ''}; grades come from the newest completed scan.`}
           >
-            Latest scan {state.label.toLowerCase()} — showing {shortDate(current.finished_at) ?? 'earlier'} results
+            Latest scan {state.label.toLowerCase()}, showing {shortDate(current.finished_at) ?? 'earlier'} results
           </small>
         )}
       </div>
@@ -1077,7 +1085,7 @@ function ToolsFoot({
                 tools are missing, so the sentence names exactly those. */}
             <strong>{ready} of {total}</strong> optional tools ready · managed locally, nothing leaves this computer
             {tools.some((tool) => !tool.ready) && (
-              <> — {tools.filter((tool) => !tool.ready).map((tool) => tool.id).join(', ')} not installed</>
+              <>: {tools.filter((tool) => !tool.ready).map((tool) => tool.id).join(', ')} not installed</>
             )}
           </p>
           <Button variant="ghost" size="sm" onClick={() => go({ page: 'tools' })}>

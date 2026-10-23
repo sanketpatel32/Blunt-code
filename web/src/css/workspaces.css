@@ -34,7 +34,7 @@
 .page-workspaces .ws-tags .tag { padding: 0 var(--space-2xs); }
 
 /* — Languages: three color dots + "+N" tag; full list in the tooltip — */
-.page-workspaces .ws-langs { display: inline-flex; align-items: center; gap: 5px; }
+.page-workspaces .ws-langs { display: inline-flex; align-items: center; gap: var(--space-2xs); }
 .page-workspaces .ws-lang { flex: none; width: 0.6rem; height: 0.6rem; border-radius: 50%; box-shadow: 0 0 0 1px color-mix(in oklch, var(--color-ink) 14%, transparent); }
 .page-workspaces .ws-langs .tag { justify-content: center; min-width: 1.35rem; }
 

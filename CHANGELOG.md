@@ -5,6 +5,19 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.43.0] - 2026-10-23
+
+### Changed
+- **Full UI redesign — "Blueprint".** Every page was re-themed in one pass (Hallmark redesign, content and wiring untouched: all links, fields, handlers, and test hooks kept; 561 web tests green). Dark mode is now a cyanotype blueprint sheet — deep prussian ground, white line ink; light mode is its whiteprint negative, near-white paper with prussian ink. Both themes live in one rewritten token sheet, so severity colors, category colors, charts, and states move together between themes.
+- **Structure is drawn, not boxed.** Cards, rounded corners, and drop shadows are gone from the design system: surfaces separate with hairline keylines, every corner is square, and elevation is expressed as concentric keyline rings instead of shadow. Headings are set in a drawn display face (Chakra Petch, bundled locally, no webfont fetch) with body text in IBM Plex Sans; monospace is reserved for what is actually code, paths, or measurement. The design-system CSS no longer ships its own duplicate color block — tokens resolve from one place.
+- **Motion is down to what carries information.** The scan-complete confetti burst, the live-board pulse, and animated bar widths are removed; the progress bar now scales on `transform`, focus states are drawn as outlines rather than border swaps, and glass/blur effects are gone. `prefers-reduced-motion` still silences the rest.
+- **Labels read as sentences.** Tracked uppercase and monospace-styled labels across tables, nav, badges, and panels are set in the body face in sentence case; eyebrow captions are quiet meta lines instead of spaced-caps banners. Prose separators follow one rule: mid-dots and em-dashes in explanatory copy became commas or "to" ("Showing 1 to 6 of 7 scans", "↓ 4 fixed, ↑ 1 new").
+- **The dashboard ledger shows a readable window.** It renders the first 12 rows with a "Showing 12 of N" note instead of scrolling inside a capped box while the feed beside it lists ten.
+
+### Fixed
+- **Phone-width overflow (375px) across pages.** Search-result location paths, the workspace detail path, copy-path code blocks, and ledger language lists laid out at full intrinsic width under their neighbors or clipped off-viewport; all now wrap (`overflow-wrap: anywhere`) instead of truncating or overflowing. Sticky bars that stacked on each other (app rail vs table heads, doubled table heads) no longer fight — one of each pair is offset.
+- **Dark-theme contrast for state text.** Scan-state badge text and danger text now use dedicated text tokens; dark-mode danger text was raised to meet AA contrast.
+
 ## [0.42.0] - 2026-10-10
 
 ### Changed

@@ -47,8 +47,8 @@ export function ComparePanel({ aId, bId }: { aId: string; bId: string }) {
         <h2>Scan comparison</h2>
         <p className="compare-headline">
           Since <strong>{date(previous.finished_at ?? previous.started_at)}</strong>:{' '}
-          <strong className="compare-count tabular-nums">{summary.new}</strong> new ·{' '}
-          <strong className="compare-count tabular-nums">{summary.fixed}</strong> fixed ·{' '}
+          <strong className="compare-count tabular-nums">{summary.new}</strong> new,{' '}
+          <strong className="compare-count tabular-nums">{summary.fixed}</strong> fixed,{' '}
           <strong className="compare-count tabular-nums">{summary.persistent}</strong> still present
         </p>
         <p className="compare-sub">Comparing {date(current.finished_at ?? current.started_at)} with {date(previous.finished_at ?? previous.started_at)}</p>

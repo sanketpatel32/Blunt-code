@@ -138,8 +138,8 @@
    of the old two adjacent boxes. */
 .nav-utils .nav-palette .kbd-hint {
   margin-left: 0;
-  padding: 1px var(--space-2xs);
-  letter-spacing: .06em;
+  padding: var(--space-3xs) var(--space-2xs);
+  letter-spacing: 0;
 }
 
 /* ── Width bands ───────────────────────────────────────────────── */

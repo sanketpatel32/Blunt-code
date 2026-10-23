@@ -603,7 +603,7 @@ describe('ReportView suppression actions', () => {
       const suppressItem = await rowMenuItem(host, 0, 'Suppress…');
       expect(suppressItem.textContent).toBe('Suppress…');
       await click(suppressItem);
-      expect(host.querySelector('dialog')!.textContent).toContain('Suppressing hides this finding — matched by its fingerprint — from all future scans, reports, and the CI gate for this workspace.');
+      expect(host.querySelector('dialog')!.textContent).toContain('Suppressing hides this finding, matched by its fingerprint, from all future scans, reports, and the CI gate for this workspace.');
 
       await click([...host.querySelectorAll('button')].find((button) => button.textContent === 'Suppress finding')!);
       await flush();

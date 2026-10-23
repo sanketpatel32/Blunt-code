@@ -451,7 +451,7 @@ describe('HistoryTable server paging', () => {
     root = createRoot(host);
     const scans = Array.from({ length: 6 }, (_, index) => scan({ id: `s${index}`, state: 'completed', finished_at: '2026-03-15T10:00:00Z' }));
     await act(async () => { root.render(<HistoryTable scans={scans} go={vi.fn()} />); });
-    expect(host.querySelector('.history-pagination-count')?.textContent).toBe('Showing 1–6 of 6 scans');
+    expect(host.querySelector('.history-pagination-count')?.textContent).toBe('Showing 1 to 6 of 6 scans');
   });
 
   it('disables Previous on the first page and Next when the server reports no further pages', async () => {

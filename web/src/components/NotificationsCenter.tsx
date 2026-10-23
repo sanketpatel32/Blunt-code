@@ -124,9 +124,9 @@ export function NotificationsCenter({ routeKey = '' }: { routeKey?: string }) {
               role="tab"
               aria-selected={tab === t}
               onClick={() => setTab(t)}
-              className={`rounded-[var(--radius-pill)] px-2.5 py-1 text-xs font-semibold font-mono border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus)] ${tab === t ? 'bg-[var(--color-ink)] text-[var(--color-paper)] border-[var(--color-ink)]' : 'bg-[var(--color-surface-muted)] text-[var(--color-ink-faint)] border-[var(--color-rule)] hover:border-[var(--color-rule-strong)] hover:text-[var(--color-ink)]'}`}
+              className={`rounded-[var(--radius-pill)] px-2.5 py-1 text-xs font-semibold border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus)] ${tab === t ? 'bg-[var(--color-accent-soft)] text-[var(--color-ink)] border-[var(--color-accent)]' : 'bg-[var(--color-surface-muted)] text-[var(--color-ink-faint)] border-[var(--color-rule)] hover:border-[var(--color-rule-strong)] hover:text-[var(--color-ink)]'}`}
             >
-              {t === 'all' ? 'All' : t === 'unread' ? `Unread${unread ? ` · ${unread}` : ''}` : 'Scans'}
+              {t === 'all' ? 'All' : t === 'unread' ? `Unread${unread ? ` (${unread})` : ''}` : 'Scans'}
             </button>
           ))}
           {filtered.length > 0 && (
@@ -143,7 +143,7 @@ export function NotificationsCenter({ routeKey = '' }: { routeKey?: string }) {
             <div className="flex flex-col">
               {Array.from(grouped.entries()).map(([day, list]) => (
                 <div key={day}>
-                  <div className="sticky top-0 z-10 bg-[var(--color-surface-muted)] px-3 py-1 text-xs font-mono font-semibold uppercase tracking-widest text-[var(--color-ink-faint)] border-b border-[var(--color-rule-faint)]">{day}</div>
+                  <div className="sticky top-0 z-10 bg-[var(--color-surface-muted)] px-3 py-1 text-xs font-semibold text-[var(--color-ink-faint)] border-b border-[var(--color-rule-faint)]">{day}</div>
                   <ul className="flex flex-col" role="list" aria-label={day}>
                     {list.map((n) => (
                       <li

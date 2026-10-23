@@ -37,7 +37,7 @@ export function ErrorPanel({ error, retry }: { error: string; retry?: () => void
         </div>
         <h2 className="font-display text-xl font-bold">Could not load this view</h2>
         <p className="mt-2 text-sm text-[var(--color-ink-soft)]">{friendly.text}</p>
-        {friendly.code && <p className="mt-1 font-mono text-xs uppercase tracking-widest text-[var(--color-ink-faint)]">{friendly.code}</p>}
+        {friendly.code && <p className="mt-1 font-mono text-xs text-[var(--color-ink-faint)]">{friendly.code}</p>}
         {retry && <Button variant="outline" size="sm" className="mt-4" onClick={retry}>Try again</Button>}
       </CardContent>
     </Card>
@@ -139,7 +139,7 @@ export function SummaryCard({ label, value, tone }: { label: string; value: numb
   return (
     <Card className={`summary-card ${tone ?? ''} p-5`}>
       <strong className="font-display text-2xl font-extrabold tracking-tight">{shown}</strong>
-      <span className="mt-1 text-xs font-mono font-semibold tracking-wide text-[var(--color-ink-faint)] uppercase">{label}</span>
+      <span className="mt-1 text-xs font-medium text-[var(--color-ink-faint)]">{label}</span>
     </Card>
   );
 }

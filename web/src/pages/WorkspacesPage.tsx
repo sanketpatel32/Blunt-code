@@ -175,7 +175,7 @@ function SortHeader({ label, sortKey, sort, onSort }: { label: string; sortKey: 
     <th scope="col" aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}>
       <button type="button" className={`th-sort${active ? ' active' : ''}`} aria-pressed={active} onClick={() => onSort(sortKey)}>
         {label}
-        <span className="sort-arrow" aria-hidden="true">{active ? (sort.dir === 'asc' ? '▲' : '▼') : '↕'}</span>
+        <span className="sort-arrow" aria-hidden="true">{active ? (sort.dir === 'asc' ? '▲' : '▼') : ''}</span>
         {active && <span className="sr-only"> (sorted {sort.dir === 'asc' ? 'ascending' : 'descending'})</span>}
       </button>
     </th>
@@ -190,7 +190,7 @@ const MAX_LANG_DOTS = 3;
 /** Languages column: up to three color dots (lib/format languageColor) plus a "+N" tag; the full list lives in the tooltip and for screen readers. */
 function LanguagesCell({ languages }: { languages?: string[] }) {
   const langs = languages ?? [];
-  if (!langs.length) return <td className="ws-cell-langs"><span className="ws-none" title="No supported source languages found">—<span className="sr-only">No supported source languages found</span></span></td>;
+  if (!langs.length) return <td className="ws-cell-langs"><span className="ws-none" title="No supported source languages found">none<span className="sr-only">No supported source languages found</span></span></td>;
   const shown = langs.slice(0, MAX_LANG_DOTS);
   const extra = langs.length - shown.length;
   const names = langs.map((language) => languageNames[language] ?? language).join(', ');
@@ -225,9 +225,9 @@ function FindingsCell({ workspace }: { workspace: Workspace }) {
   const scan = gradedScan(workspace);
   if (!scan) {
     const latest = workspace.latest_scan;
-    if (!latest) return <td className="ws-cell-findings"><span className="ws-none">—</span></td>;
+    if (!latest) return <td className="ws-cell-findings"><span className="ws-none">none</span></td>;
     const display = scanStateDisplay(latest.state);
-    return <td className="ws-cell-findings"><span className={`ws-state state ${statePillClass[display.variant] ?? ''}`} title="This scan has not finished — findings appear once it does">{display.label}</span></td>;
+    return <td className="ws-cell-findings"><span className={`ws-state state ${statePillClass[display.variant] ?? ''}`} title="This scan has not finished; findings appear once it does">{display.label}</span></td>;
   }
   const finishedTime = new Date(scan.finished_at ?? '').getTime();
   const title = !Number.isNaN(finishedTime) ? `Latest finished scan · ${date(scan.finished_at)}` : undefined;
@@ -236,7 +236,7 @@ function FindingsCell({ workspace }: { workspace: Workspace }) {
   const medium = scan.medium_count ?? 0;
   const low = scan.low_count ?? 0;
   const total = scan.total_findings;
-  if (total == null) return <td className="ws-cell-findings"><span className="ws-none" title={title}>—</span></td>;
+  if (total == null) return <td className="ws-cell-findings"><span className="ws-none" title={title}>none</span></td>;
   if (!total) return <td className="ws-cell-findings"><span className="ws-findings-zero tabular-nums" title={title}>0</span></td>;
   const categorized = critical + high + medium + low;
   const severities = ([['critical', critical], ['high', high], ['medium', medium], ['low', low]] as const).filter(([, n]) => n > 0);

@@ -99,7 +99,7 @@ export function QueryBuilder({ group, onChange, onApply, facetCounts, analyzers 
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2" role="group" aria-label="Match logic">
-          <span className="text-xs font-mono font-semibold uppercase tracking-widest text-[var(--color-ink-faint)]">Match</span>
+          <span className="text-xs font-semibold text-[var(--color-ink-faint)]">Match</span>
           <div className="flex rounded-[var(--radius-button)] border border-[var(--color-rule)] bg-[var(--color-surface-muted)] p-0.5">
             {(['AND', 'OR'] as const).map((logic) => (
               <button
@@ -213,7 +213,7 @@ export function QueryBuilder({ group, onChange, onApply, facetCounts, analyzers 
       </div>
 
       <div className="rounded-[var(--radius-lg)] border border-[var(--color-rule-faint)] bg-[var(--color-surface-muted)] p-3">
-        <p className="text-xs font-mono font-semibold uppercase tracking-widest text-[var(--color-ink-faint)]">Preview</p>
+        <p className="text-xs font-semibold text-[var(--color-ink-faint)]">Preview</p>
         <p className="mt-1 font-mono text-xs text-[var(--color-ink)] break-all" aria-live="polite">
           {preview}
         </p>

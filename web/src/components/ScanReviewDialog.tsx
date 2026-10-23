@@ -23,8 +23,8 @@ export function ScanReviewDialog({ workspaceId, workspaceName, profile, confirmL
         <p>{review.error ?? 'The server did not return a scan plan.'}</p>
         <Button variant="outline" onClick={() => void review.reload()}>Retry review</Button>
       </div> : <>
-        <p><strong>{plan.selected_files}</strong> selected source files · {plan.candidate_files} candidates · {plan.dependency_inputs?.length ?? 0} dependency inputs</p>
-        <p className="text-xs text-[var(--color-ink-soft)]">{plan.exclusions?.length ?? 0} exclusion patterns · {Object.values(plan.skip_counts ?? {}).reduce((sum, count) => sum + count, 0)} skipped entries</p>
+        <p><strong>{plan.selected_files}</strong> selected source files, {plan.candidate_files} candidates, {plan.dependency_inputs?.length ?? 0} dependency inputs</p>
+        <p className="text-xs text-[var(--color-ink-soft)]">{plan.exclusions?.length ?? 0} exclusion patterns, {Object.values(plan.skip_counts ?? {}).reduce((sum, count) => sum + count, 0)} skipped entries</p>
         <div className="scan-review-list" aria-label="Analyzer plan">
           {plan.analyzers.map((row) => <section key={row.id} className="scan-review-row">
             <header><strong>{row.display_name}</strong><span>{row.planned ? row.ready ? 'Ready' : 'Setup required' : 'Skipped'}</span></header>

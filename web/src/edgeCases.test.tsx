@@ -167,7 +167,7 @@ describe('hostile API fixtures', () => {
     ]);
     const host = await renderAt('/scans/scan-1', fetchMock);
     expectClean(host);
-    expect(host.textContent).toContain('Scan ·'); // the scan hero eyebrow renders above a null-safe report
+    expect(host.textContent).toContain(' profile'); // the scan hero meta linebrow renders above a null-safe report
     expect(host.textContent).toContain('All clear'); // zero findings, no filters
     expect(host.textContent).toContain('0 findings fixed'); // fixed: null stays at zero
   });

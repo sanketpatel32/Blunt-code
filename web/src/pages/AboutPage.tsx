@@ -135,7 +135,7 @@ function UpdateCard({ version, onUpdateHandoff }: { version: string; onUpdateHan
     <p>Checks GitHub releases for a newer Blunt Code. Updating closes the app, installs the official package, and reopens the new version automatically; your data stays local.</p>
     <div aria-live="polite">
       {state.phase === 'idle' && <p style={{ margin: 'var(--space-md) 0 0' }}><button type="button" className="button" onClick={() => void check()} disabled={!version}>Check for updates</button></p>}
-      {state.phase === 'checking' && <p className="muted" style={{ margin: 'var(--space-md) 0 0' }}>Checking GitHub releases...</p>}
+      {state.phase === 'checking' && <p className="muted" style={{ margin: 'var(--space-md) 0 0' }}>Checking GitHub releases…</p>}
       {state.phase === 'current' && <p style={{ margin: 'var(--space-md) 0 0' }}>You are on the latest release ({state.latest}). <button type="button" className="button secondary" onClick={() => void check()}>Check again</button></p>}
       {(state.phase === 'available' || state.phase === 'applying') && <div style={{ margin: 'var(--space-md) 0 0', display: 'grid', gap: 'var(--space-sm)' }}>
         <p><strong>v{state.latest} is available.</strong>{state.notes ? <span className="muted"> {state.notes.split(NEWLINE).find((line: string) => line.trim()) ?? ''}</span> : null}</p>

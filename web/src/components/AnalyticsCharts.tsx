@@ -135,7 +135,7 @@ function LanguageBars({ items }: { items: LanguageCoverage[] }) {
         <div key={row.language} className="grid gap-1">
           <div className="flex items-center justify-between gap-3 text-xs">
             <span className="truncate font-medium text-[var(--color-ink)]">{row.language}</span>
-            <span className="shrink-0 font-mono tabular-nums text-[var(--color-ink-faint)]">{row.files} files</span>
+            <span className="shrink-0 tabular-nums text-[var(--color-ink-faint)]">{row.files} files</span>
           </div>
           <div className="h-2.5 overflow-hidden rounded-full bg-[var(--color-surface-muted)]">
             <div className="h-full rounded-full bg-[var(--color-accent)]" style={{ width: `${Math.round((row.files * 1000) / max) / 10}%` }} aria-hidden="true" />

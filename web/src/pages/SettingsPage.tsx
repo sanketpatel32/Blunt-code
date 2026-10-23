@@ -190,7 +190,7 @@ export function SettingsPage({ notify }: { notify: (n: Notice) => void }) {
           <div className="data-folders">
             <div>
               <h3>Open local folders</h3>
-              <p>Everything Blunt Code keeps — scan history, tool installs, reports — lives in one folder on this computer.</p>
+              <p>Everything Blunt Code keeps (scan history, tool installs, reports) lives in one folder on this computer.</p>
               <code>{meta.data?.data_directory ?? (meta.loading ? 'Loading…' : 'Available from local metadata')}</code>
             </div>
             <div className="folder-buttons">

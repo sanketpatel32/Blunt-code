@@ -1,8 +1,5 @@
-/* Hallmark · macrostructure: Split Ledger (master-detail) · genre: modern-minimal
- * theme: product tokens (system-managed — tokens.css) · enrichment: none (real data only)
- * motion: row-tint · pane-fade · instant-focus (3 primitives, transform/opacity only)
- * diversification: first master-detail split in this system (log had Marquee Hero, Workbench ×2, Component-scope, Index-First)
- */
+/* Hallmark · shape: app screen · theme: Blueprint · redesign: full (was Split Ledger, Cobalt)
+ * motion: row-tint · pane-fade · instant-focus (3 primitives, transform/opacity only) */
 
 /* ── Scan hero (terminal + live scans) ─────────────────────────── */
 .scan-hero {
@@ -58,9 +55,9 @@
   background: var(--color-surface-muted);
   color: var(--color-ink);
   font-family: var(--font-display);
-  font-weight: 800;
+  font-weight: var(--display-weight);
   font-size: 1.75rem;
-  letter-spacing: -.02em;
+  letter-spacing: var(--tracking-display);
   box-shadow: var(--shadow-xs);
 }
 
@@ -135,16 +132,16 @@
    reason gets its own line in the hero. */
 .scan-state-badge {
   margin-left: var(--space-2xs);
-  padding: 1px 6px;
+  padding: var(--space-3xs) var(--space-2xs);
   border-radius: var(--radius-button);
   border: 1px solid currentColor;
   font-size: var(--text-2xs);
   font-weight: 600;
-  letter-spacing: .02em;
+  letter-spacing: 0;
 }
-.scan-state-badge.variant-success { color: var(--color-positive-ink, var(--color-ink-soft)); }
-.scan-state-badge.variant-warning { color: var(--color-warning-ink, var(--color-ink-soft)); }
-.scan-state-badge.variant-danger { color: var(--color-danger-ink, var(--color-ink-soft)); }
+.scan-state-badge.variant-success { color: var(--color-success-text); }
+.scan-state-badge.variant-warning { color: var(--color-warning-text); }
+.scan-state-badge.variant-danger { color: var(--color-danger-text); }
 .scan-state-badge.variant-accent,
 .scan-state-badge.variant-outline { color: var(--color-ink-soft); }
 
@@ -263,9 +260,8 @@
 .verdict-stat dt {
   margin: 0;
   color: var(--color-ink-faint);
-  font: 700 var(--text-2xs) var(--font-mono);
-  letter-spacing: .08em;
-  text-transform: uppercase;
+  font: 500 var(--text-2xs) var(--font-body);
+  letter-spacing: 0;
 }
 
 /* Body-size, not --text-xl: the page's only oversized number is the finding
@@ -387,9 +383,8 @@
 .filter-group-label {
   flex: none;
   color: var(--color-ink-faint);
-  font: 700 var(--text-2xs) var(--font-mono);
-  letter-spacing: .08em;
-  text-transform: uppercase;
+  font: 600 var(--text-2xs) var(--font-body);
+  letter-spacing: 0;
 }
 
 .analysis-toolbar .chip-group { flex-wrap: wrap; }
@@ -397,10 +392,10 @@
 /* Severity chips double as legend: dot + count on the chip, pressed = filtered.
    Counts inherit the shared neutral .chip-count treatment (styles.css) — normal
    UI font, muted ink; no mono chip wall. */
-.sev-chip { display: inline-flex; align-items: center; gap: 6px; }
+.sev-chip { display: inline-flex; align-items: center; gap: var(--space-xs); }
 
 /* A run that succeeded with degraded coverage flags its chip without hiding the count. */
-.analysis-toolbar .chip .chip-flag { font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: var(--color-warning-ink, var(--color-warning)); }
+.analysis-toolbar .chip .chip-flag { font-family: var(--font-body); font-size: 12px; font-weight: 600; color: var(--color-warning-text); }
 
 /* The Type rail scrolls horizontally when long. */
 .analysis-toolbar .chip-rail { flex: 1; min-width: 0; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: thin; padding-bottom: 2px; }
@@ -418,7 +413,7 @@
    discover, and keyboard focus stays on the toolbar instead of escaping into
    an overlay that has to manage its own focus trap. */
 .analysis-toolbar .chip-more {
-  gap: 3px;
+  gap: var(--space-3xs);
   color: var(--color-accent-strong);
   border-color: color-mix(in oklch, var(--color-accent) 26%, var(--color-rule));
 }
@@ -482,7 +477,7 @@
 
   .findings-col[data-scoped='true'] .table-wrap { max-height: calc(100dvh - var(--nav-h) - 11rem); overflow-y: auto; overscroll-behavior: contain; }
 
-  .findings-col[data-scoped='true'] .findings-table thead th { position: sticky; top: 0; z-index: 2; background: var(--color-surface-muted); box-shadow: 0 1px 0 var(--color-rule-faint); }
+  .findings-col[data-scoped='true'] .findings-table thead th { position: sticky; top: var(--space-3xs); z-index: 2; background: var(--color-surface-muted); box-shadow: 0 1px 0 var(--color-rule-faint); }
 }
 
 /* ── Findings table ──────────────────────────────────────────────── */
@@ -545,7 +540,7 @@
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
-  padding: 3px var(--space-xs);
+  padding: var(--space-3xs) var(--space-xs);
   border-radius: var(--radius-xs);
   background: var(--color-surface-muted);
   font-size: 12px;
@@ -785,7 +780,7 @@
   transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
 }
 
-.export-inline .export-item small { font-family: var(--font-mono); font-weight: 500; color: var(--color-ink-faint); }
+.export-inline .export-item small { font-family: var(--font-body); font-weight: 500; color: var(--color-ink-faint); }
 
 .export-inline .export-item:hover { border-color: var(--color-accent); background: var(--color-accent-soft); color: var(--color-accent-strong); }
 .export-inline .export-item:hover small { color: inherit; }

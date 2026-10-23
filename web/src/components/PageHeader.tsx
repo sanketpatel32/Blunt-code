@@ -39,7 +39,7 @@ export function PageHeader({
         {children}
       </div>
       {actions && (
-        <div className="page-heading-actions flex items-center gap-2 shrink-0 self-start md:self-center">
+        <div className="page-heading-actions flex flex-wrap items-center gap-2 shrink-0 self-start md:self-center">
           {actions}
         </div>
       )}

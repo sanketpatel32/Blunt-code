@@ -15,7 +15,7 @@ const AccordionTrigger = React.forwardRef<React.ElementRef<typeof AccordionPrimi
     <AccordionPrimitive.Trigger
       ref={ref}
       className={cn(
-        'flex flex-1 items-center justify-between py-4 text-sm font-medium text-[var(--color-ink)] transition-all hover:text-[var(--color-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus)] focus-visible:ring-offset-2 [&[data-state=open]>svg]:rotate-180',
+        'flex flex-1 items-center justify-between py-4 text-sm font-medium text-[var(--color-ink)] transition-colors hover:text-[var(--color-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus)] focus-visible:ring-offset-2 [&[data-state=open]>svg]:rotate-180',
         className,
       )}
       {...props}

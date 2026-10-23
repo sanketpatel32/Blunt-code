@@ -9,8 +9,8 @@
 
 .history-filter-label {
   color: var(--color-ink-faint);
-  font: 700 var(--text-2xs) var(--font-mono);
-  letter-spacing: .08em; text-transform: uppercase;
+  font: 500 var(--text-2xs) var(--font-body);
+  letter-spacing: 0;
 }
 
 .history-filter-input-wrap {
@@ -33,8 +33,9 @@
 }
 :root[data-theme='dark'] .history-filter-input { color-scheme: dark; }
 .history-filter-input:focus {
-  outline: none; border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px var(--color-accent-glow);
+  border-color: var(--color-rule-strong);
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
 }
 /* The single calendar affordance, pulled into the design system instead of
    being duplicated by a second hand-drawn icon. */
@@ -67,8 +68,8 @@
   min-height: 2rem; padding: 0 var(--space-sm);
   border: var(--rule) solid transparent; border-radius: var(--radius-button);
   background: transparent; color: var(--color-ink-faint);
-  font: 600 var(--text-xs) var(--font-mono);
-  transition: all var(--dur-fast) var(--ease-out);
+  font: 600 var(--text-xs) var(--font-body);
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
 }
 .history-filter-clear:hover { background: var(--color-surface-muted); color: var(--color-ink); border-color: var(--color-rule); }
 .history-filter-clear:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
@@ -84,11 +85,11 @@
 .history-table-wrap table td {
   padding-top: var(--space-sm); padding-bottom: var(--space-sm);
 }
-.history-table-wrap thead { position: sticky; top: 0; z-index: 1; background: var(--color-surface-muted); }
+.history-table-wrap thead { position: sticky; top: var(--space-3xs); z-index: 1; background: var(--color-surface-muted); }
 .history-table-wrap thead th {
-  font: 700 var(--text-2xs) var(--font-mono);
-  letter-spacing: .08em; text-transform: uppercase;
-  color: var(--color-ink-faint);
+  font: 600 var(--text-2xs) var(--font-body);
+  letter-spacing: 0;
+  color: var(--color-ink-soft);
 }
 .history-table-wrap tbody { position: relative; }
 .history-table-wrap tbody tr.is-expanded { background: color-mix(in oklch, var(--color-surface-muted) 50%, transparent); }
@@ -127,11 +128,11 @@ tr.is-expanded .history-date::before { border-color: var(--color-accent); backgr
 /* Day band header — a real group boundary: strong weight, breathing room,
    muted background, sticky under the column header. */
 .history-band-row > .history-band {
-  position: sticky; top: 2.05rem; z-index: 1;
+  position: sticky; top: calc(2.05rem + var(--space-3xs)); z-index: 1;
   padding: var(--space-sm) var(--space-md) var(--space-2xs) 2.15rem;
   color: var(--color-ink-soft);
-  font: 700 var(--text-xs) var(--font-mono);
-  letter-spacing: .08em; text-transform: uppercase;
+  font: 600 var(--text-xs) var(--font-body);
+  letter-spacing: 0;
   background: var(--color-surface-muted);
   user-select: none;
   border-bottom: var(--rule) solid var(--color-rule-strong);
@@ -150,7 +151,7 @@ tr.is-expanded .history-date::before { border-color: var(--color-accent); backgr
 /* Date + disclose */
 .history-disclose {
   display: inline-flex; align-items: center; justify-content: center; flex: none;
-  width: 1.5rem; height: 1.5rem; margin-right: var(--space-2xs);
+  width: 2rem; height: 2rem; margin-right: var(--space-2xs);
   border: var(--rule) solid var(--color-rule); border-radius: 50%;
   background: var(--color-surface); color: var(--color-ink-faint); cursor: pointer;
   transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
@@ -194,7 +195,7 @@ tr.is-expanded .history-date::before { border-color: var(--color-accent); backgr
 @keyframes history-detail-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 .history-detail-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-sm) var(--space-xl); margin: 0; }
 @media (max-width: 38rem) { .history-detail-meta { grid-template-columns: 1fr; } }
-.history-detail-meta dt { color: var(--color-ink-faint); font: 700 var(--text-2xs) var(--font-mono); letter-spacing: .05em; text-transform: uppercase; }
+.history-detail-meta dt { color: var(--color-ink-faint); font: 500 var(--text-2xs) var(--font-body); letter-spacing: 0; }
 .history-detail-meta dd { margin: 2px 0 0; color: var(--color-ink); font-size: var(--text-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .history-analyzers { display: flex; flex-wrap: wrap; gap: var(--space-2xs) var(--space-sm); margin: 0; padding: 0; list-style: none; }
@@ -210,7 +211,7 @@ tr.is-expanded .history-date::before { border-color: var(--color-accent); backgr
   border: var(--rule) solid var(--color-rule-faint);
   border-left: 3px solid var(--color-accent);
   border-radius: var(--radius-pill);
-  color: var(--color-ink-soft); font: 600 var(--text-xs) var(--font-mono);
+  color: var(--color-ink-soft); font: 500 var(--text-xs) var(--font-mono);
 }
 
 /* Pagination — quiet footer. The scan total lives once, in the toolbar's
@@ -264,8 +265,8 @@ tr.is-expanded .history-date::before { border-color: var(--color-accent); backgr
   border-radius: var(--radius-pill);
   background: var(--color-surface-muted);
   color: var(--color-ink-faint);
-  font: 700 var(--text-2xs) var(--font-mono);
-  letter-spacing: .04em; text-transform: uppercase;
+  font: 500 var(--text-2xs) var(--font-body);
+  letter-spacing: 0;
 }
 
 /* Comparison panel — bento card above the table, sections reusing what-changed rows */

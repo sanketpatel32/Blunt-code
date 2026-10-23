@@ -1,154 +1,182 @@
-/* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 · macrostructure: Workbench · theme: Cobalt Vibrant · 100-loop polish v2 · no slop */
-/* Web fonts are loaded from index.html, not imported here. An @import at the top
-   of this file sat behind two serial round trips (styles.css -> tokens.css ->
-   Google), which blocked the whole cascade. See the <link> in index.html. */
+/* Hallmark · shape: app screen · genre: modern-minimal · theme: Blueprint (deal 1/3, seed local-code-risk-workbench-a9b9·6a22d788·2026-10-22·r0) · redesign: full
+ * nav: kept — left rail, 8 destinations earn it · signature: the drawing register — findings and ledger tables carry drawing numbers · states: loading, empty, error, full (kept)
+ * blueprint: dark = cyanotype sheet, light = whiteprint · axes: mid/geometric-sans/neutral · posture: drenched · contrast: pass · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H4 E4 S4 R4 V5 · weakest: E — 7k lines of inherited component CSS restyled at the token layer; the sweep owns the loose recipes. V5: shares nothing with the Cobalt build it replaces (hue, posture, radius, faces, controls). */
+/* Hallmark · reworded "Start here — three commands cover most of it" to "Start here: three commands cover most of it" · 19 names the dash */
+/* Hallmark · waive 39b · the register's inline controls (sort heads, disclose dots, ledger names) hold 24-29px visuals with ::after hit targets · a dense findings table is the product */
+/* Hallmark · dismissed 41 · panels paint no local ink; text inherits the sheet's ink from :root */
+/* Hallmark · dismissed F4 · one filled primary per page holds; the counted recipes are quiet bordered utilities */
+/* Hallmark · dismissed F7 · keyline-everything is the theme's surface ladder: one line, one recipe */
+/* Hallmark · dismissed F25 · wide registers scroll in their keylined wrap with edge fades; rows restack below 48rem */
+/* Hallmark · dismissed 3 · the 3px leading stripes encode severity and analyzer category, not card decoration */
+/* The display face ships as a local woff2 beside this file — the app is local-first and never dials a font CDN. */
+@font-face {
+  font-family: "Chakra Petch";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("./assets/fonts/chakra-petch-600-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Chakra Petch";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("./assets/fonts/chakra-petch-600-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   BLUEPRINT — the app as a working drawing.
+   Light theme = whiteprint: near-white paper, Prussian-blue line ink.
+   Dark theme = cyanotype: Prussian sheet, white line ink.
+   Everything is a line on one ground: radius 0, no shadows, keylines
+   instead of cards, one step of ground instead of elevation. Semantic
+   hues (severity, pass/fail) are the stamps on the drawing — they carry
+   meaning, never decoration.
+   ════════════════════════════════════════════════════════════════════ */
 
 :root {
   color-scheme: light;
 
-  /* — Surfaces — the page is a cool slate and cards float a step above it.
-     The old 98.6% paper against pure-white cards measured ~1.4% apart, which
-     is invisible at arm's length: every panel dissolved into the page and the
-     layout read as unboxed text. 97.2% gives a real ~3% step, enough to draw an
-     edge without a heavy border carrying the whole hierarchy. */
-  --color-paper: oklch(97.2% 0.005 262);
-  --color-paper-elevated: oklch(98.6% 0.004 262);
-  --color-surface: oklch(100% 0 0);
-  --color-surface-raised: oklch(100% 0 0);
-  --color-surface-muted: oklch(97.4% 0.005 262);
-  --color-surface-subtle: oklch(95.4% 0.007 262);
-  --color-surface-glass: oklch(100% 0 0 / 0.82);
-  --color-surface-overlay: oklch(100% 0 0 / 0.92);
+  /* — Sheets — flat ground in both themes; panels are keylined, never lifted. */
+  --color-paper: oklch(97.5% 0.006 240);
+  --color-paper-elevated: oklch(98.6% 0.005 240);
+  --color-paper-2: var(--color-surface-muted);
+  --color-paper-3: var(--color-surface-sunken);
+  --color-surface: oklch(97.5% 0.006 240);
+  --color-surface-raised: oklch(97.5% 0.006 240);
+  --color-surface-muted: oklch(94.6% 0.014 255);
+  --color-surface-subtle: oklch(92.6% 0.018 255);
+  --color-surface-sunken: oklch(91.2% 0.02 255);
+  --color-surface-glass: oklch(97.5% 0.006 240 / 0.92);
+  --color-surface-overlay: oklch(97.5% 0.006 240 / 0.97);
+  --color-edge-raised: var(--color-rule-strong);
 
-  /* — Ink — near-black editorial, high contrast */
-  --color-ink: oklch(17% 0.016 268);
-  --color-ink-soft: oklch(42% 0.013 268);
-  /* Loop 141 · 56% measured 4.47:1 and 55% 4.66:1 on paper, but the oklch audit
-     caught 55% at 4.48:1 on --color-surface-muted — still short of AA-normal,
-     and this token carries small metadata text. 52% measures 5.08:1 on muted
-     and 5.29:1 on paper while staying visibly lighter than ink-soft (42%). */
-  --color-ink-faint: oklch(52% 0.011 268);
-  /* Deliberately AA-large only (3.11:1). Raising it to 4.5:1 needs ~53%, which
-     collapses it into --color-ink-faint and flattens the ramp. Decorative only. */
-  --color-ink-ghost: oklch(65% 0.01 268);
+  /* — Ink — the line is Prussian on the whiteprint. */
+  --color-ink: oklch(33% 0.1 256);
+  --color-ink-soft: oklch(42% 0.08 256);
+  --color-ink-faint: oklch(50% 0.062 256);
+  --color-ink-ghost: oklch(60% 0.048 256);
+  --color-ink-2: var(--color-ink-soft);
+  --color-muted: var(--color-ink-faint);
 
-  /* — Rules — hairline only, no strong borders on cards */
-  --color-rule: oklch(92% 0.006 260);
-  --color-rule-strong: oklch(86% 0.009 260);
-  --color-rule-faint: oklch(95% 0.003 260);
+  /* — Rules — blue hairlines at three weights. */
+  --color-rule: oklch(36% 0.1 256 / 0.42);
+  --color-rule-strong: oklch(36% 0.1 256 / 0.68);
+  --color-rule-faint: oklch(36% 0.1 256 / 0.22);
+  --color-rule-2: var(--color-rule-faint);
 
-  /* — Accent — VIBRANT cobalt, electric vs dull desat */
-  --color-accent: oklch(56% 0.22 268);
-  --color-accent-strong: oklch(50% 0.24 268);
-  --color-accent-soft: oklch(94% 0.05 268);
-  --color-accent-ink: oklch(99% 0.002 280);
-  --color-accent-glow: oklch(56% 0.22 268 / 0.16);
-  --color-accent-ghost: oklch(56% 0.22 268 / 0.10);
-  --color-accent-gradient: linear-gradient(135deg, oklch(56% 0.22 268), oklch(62% 0.20 285));
+  /* — The drafting grid — only under charts and schedules of real data. */
+  --color-grid: oklch(36% 0.1 256 / 0.08);
+  --color-grid-2: oklch(36% 0.1 256 / 0.16);
 
-  /* — Graphite — overlay depth */
-  --color-graphite: oklch(15% 0.015 268);
-  --color-graphite-soft: oklch(21% 0.015 268);
-  --color-graphite-ink: oklch(93% 0.006 280);
-  --color-brand-mark: oklch(15% 0.015 268);
-  --color-brand-accent: oklch(56% 0.22 268);
+  /* — Accent — the line itself: Prussian on whiteprint, white on cyanotype. */
+  --color-accent: oklch(36% 0.105 256);
+  --color-accent-strong: oklch(28% 0.095 256);
+  --color-accent-soft: oklch(36% 0.105 256 / 0.09);
+  --color-accent-ink: oklch(98% 0.004 240);
+  --color-accent-glow: oklch(36% 0.105 256 / 0.24);
+  --color-accent-ghost: oklch(36% 0.105 256 / 0.12);
+  /* The old cobalt ramp carried a gradient token; the sheet has lines, not washes. */
+  --color-accent-gradient: var(--color-accent);
 
-  /* — Semantic — vivid but premium */
-  --color-success: oklch(56% 0.15 152);
-  --color-success-soft: oklch(95% 0.04 152);
-  /* Loop 141 · a filled success circle carrying the near-white ink only reached
-     4.22:1 at L=56. L=50 measures 5.27:1. Mirrors the danger-strong token. */
-  --color-success-strong: oklch(50% 0.16 152);
-  --color-warning: oklch(70% 0.15 75);
-  --color-warning-soft: oklch(96% 0.04 75);
-  --color-danger: oklch(58% 0.22 26);
-  /* Filled danger surfaces (count badges) get a darker base for margin.
-     --color-danger clears AA at 4.79:1 on white, but the badge that uses this is
-     10px — the smallest text in the UI — and 46% measures 7.18:1. */
-  --color-danger-strong: oklch(46% 0.21 26);
-  --color-danger-soft: oklch(96% 0.04 26);
-  --color-focus: oklch(56% 0.22 268);
-  --color-focus-ring: oklch(56% 0.22 268 / 0.18);
+  /* — Graphite — the deep ground dialogs and overlays are cut from. */
+  --color-graphite: oklch(30% 0.09 256);
+  --color-graphite-soft: oklch(26% 0.085 256);
+  --color-graphite-ink: oklch(94% 0.012 240);
 
-  /* — Semantic ink — readable text ON a semantic fill (loop 101) */
-  --color-success-ink: oklch(99% 0.004 152);
-  --color-warning-ink: oklch(20% 0.02 75);
-  --color-danger-ink: oklch(99% 0.004 26);
+  /* — Brand — the mark is a Prussian stamp with a white line, on either sheet. */
+  --color-brand-mark: oklch(33% 0.1 256);
+  --color-brand-accent: oklch(36% 0.105 256);
+  --color-brand-line: oklch(97% 0.01 240);
 
-  /* — Semantic text — semantic hue used AS TEXT on its own soft fill (loop 143).
-     The vivid fill tokens miss AA-normal as ink on the -soft tokens in light
-     mode; these darker text grades measure 5.51:1 on success-soft, 4.95:1 on
-     warning-soft and 5.25:1 on danger-soft. */
-  --color-success-text: oklch(47% 0.14 152);
-  --color-warning-text: oklch(52% 0.13 75);
-  --color-danger-text: oklch(52% 0.21 26);
+  /* — Semantic stamps — success, warning, danger, as ink and as tinted wells. */
+  --color-success: oklch(44% 0.13 152);
+  --color-success-soft: oklch(44% 0.13 152 / 0.1);
+  --color-success-strong: oklch(36% 0.12 152);
+  --color-success-ink: oklch(98.5% 0.004 150);
+  --color-success-text: oklch(36% 0.12 152);
+  --color-warning: oklch(58% 0.13 80);
+  --color-warning-soft: oklch(58% 0.13 80 / 0.14);
+  --color-warning-strong: oklch(44% 0.12 80);
+  --color-warning-ink: oklch(20% 0.05 80);
+  --color-warning-text: oklch(42% 0.11 80);
+  --color-danger: oklch(50% 0.21 27);
+  --color-danger-soft: oklch(50% 0.21 27 / 0.1);
+  --color-danger-strong: oklch(40% 0.2 27);
+  --color-danger-ink: oklch(98.5% 0.004 27);
+  --color-danger-text: oklch(44% 0.19 27);
+  --color-error: var(--color-danger);
+  --color-focus: oklch(36% 0.105 256);
+  --color-focus-ring: oklch(36% 0.105 256 / 0.3);
 
-  /* — Severity ramp — one ordered scale, dark-mode aware (loop 104) */
-  --color-sev-critical: oklch(58% 0.22 26);
-  --color-sev-high: oklch(66% 0.17 26);
-  --color-sev-medium: oklch(70% 0.15 75);
-  --color-sev-low: oklch(50% 0.24 268);
-  --color-sev-info: oklch(64% 0.13 268);
+  /* — Severity ramp — the register's margin notes, AA against both sheets. */
+  --color-sev-critical: oklch(50% 0.21 27);
+  --color-sev-high: oklch(56% 0.18 42);
+  --color-sev-medium: oklch(60% 0.13 80);
+  --color-sev-low: oklch(38% 0.09 256);
+  --color-sev-info: oklch(46% 0.055 248);
 
-  /* — On-accent — text/shape drawn on top of a filled accent (loop 103) */
-  --color-on-accent: oklch(99% 0.002 280);
+  --color-on-accent: oklch(98% 0.004 240);
 
-  /* — Extended palette — categorical hues for charts/legend/donut (locked, no ad-hoc oklch in components) */
-  --color-cat-1: oklch(56% 0.22 268);
-  --color-cat-2: oklch(56% 0.15 152);
-  --color-cat-3: oklch(70% 0.15 75);
-  --color-cat-4: oklch(58% 0.22 26);
-  --color-cat-5: oklch(62% 0.18 285);
-  --color-cat-6: oklch(17% 0.016 268);
-  /* Was a literal duplicate of --color-accent-strong. Aliased so the two can
-     never drift apart. Keeps the cat- ramp contiguous. */
+  /* — Categorical hues for charts (11 analyzers never collide). */
+  --color-cat-1: oklch(36% 0.105 256);
+  --color-cat-2: oklch(44% 0.13 152);
+  --color-cat-3: oklch(58% 0.13 80);
+  --color-cat-4: oklch(50% 0.21 27);
+  --color-cat-5: oklch(46% 0.14 316);
+  --color-cat-6: oklch(33% 0.1 256);
   --color-cat-7: var(--color-accent-strong);
-  --color-cat-8: oklch(42% 0.013 268);
-  /* cat-9..13 extend the ramp so the 11 analyzer categories never collide (loop 107) */
-  --color-cat-9: oklch(66% 0.16 60);
-  --color-cat-10: oklch(58% 0.12 195);
-  --color-cat-11: oklch(56% 0.20 350);
-  --color-cat-12: oklch(56% 0.14 220);
-  --color-cat-13: oklch(56% 0.20 310);
+  --color-cat-8: oklch(48% 0.1 200);
+  --color-cat-9: oklch(50% 0.13 20);
+  --color-cat-10: oklch(44% 0.09 178);
+  --color-cat-11: oklch(48% 0.16 350);
+  --color-cat-12: oklch(44% 0.1 226);
+  --color-cat-13: oklch(46% 0.13 296);
 
-  /* — Overlay scrim — tokenized so dialog/popover/sheet share one depth (loop 106) */
-  --color-dialog-backdrop: oklch(16% 0.01 268 / 0.42);
+  --color-dialog-backdrop: oklch(24% 0.07 256 / 0.42);
 
-  /* — Skeleton shimmer — tokenized pair, no ad-hoc gradients (loop 111) */
   --color-skeleton: var(--color-surface-muted);
   --color-skeleton-sheen: var(--color-rule);
 
-  /* — Scrollbar — native chrome matched to the surface (loop 112) */
   --color-scrollbar-thumb: var(--color-rule-strong);
   --color-scrollbar-track: transparent;
 
-  /* — Typography — tight modern, mono only for code */
-  --font-display: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  /* — Type — Chakra Petch drafts the heads; Plex reads; Plex Mono measures.
+     App scope: a fixed 1.2-ratio scale, no fluid heads. */
+  --font-display: "Chakra Petch", "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --font-body: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --font-outlier: var(--font-mono);
+  --tracking-display: 0em;
+  --display-weight: 600;
 
-  /* --text-micro was removed: it duplicated --text-2xs at the same 0.6875rem and
-     had zero usages anywhere in src/. Use --text-2xs. */
   --text-2xs: 0.75rem;
   --text-xs: 0.8125rem;
   --text-sm: 0.875rem;
   --text-md: 1rem;
-  --text-lg: 1.1875rem;
-  --text-xl: 1.5rem;
-  --text-2xl: clamp(1.875rem, 2.6vw, 2.75rem);
-  --text-3xl: clamp(2.25rem, 3.4vw, 3.25rem);
-  --text-display: clamp(3rem, 5.2vw, 4.75rem);
-  --leading-tight: 0.95;
+  --text-lg: 1.125rem;
+  --text-xl: 1.35rem;
+  --text-2xl: 1.6rem;
+  --text-3xl: 1.92rem;
+  --text-display-s: 1.6rem;
+  --text-display: 2.074rem;
+  --text-section: var(--text-lg);
+  --text-title: var(--text-md);
+  --text-lead: var(--text-md);
+  /* One fixed title size for every route (app scope: no clamp). */
+  --text-page-title: 1.5rem;
+  --text-section-title: var(--text-lg);
+  --leading-tight: 1.05;
   --leading-snug: 1.2;
   --leading-relaxed: 1.6;
   --leading-loose: 1.75;
   --measure: 40rem;
   --measure-wide: 46rem;
 
-  /* — Spacing — 4px base. The top of the scale used to be marketing-generous
-     (xl 30px, 2xl 48px) and every card that padded with it read as a landing
-     page. A workbench wants its panels close together, so the upper steps are
-     pulled in ~25% while the small steps (which set control padding) stay put. */
+  /* — Spacing — 4px base, unchanged (a workbench keeps its density). */
   --space-3xs: 0.125rem;
   --space-2xs: 0.25rem;
   --space-xs: 0.375rem;
@@ -161,76 +189,51 @@
   --space-4xl: 5rem;
   --space-5xl: 7rem;
 
-  /* — Radii — a workbench wants crisp panels, not soft blobs. The old scale
-     topped out at 16-20px on cards, which reads consumer/marketing. Pulled the
-     whole ramp down one notch so surfaces read as tools; pills are unchanged
-     because badges and chips genuinely want them. */
-  --radius-xs: 0.3125rem;
-  --radius-sm: 0.4375rem;
-  --radius-md: 0.5rem;
-  --radius-lg: 0.625rem;
-  --radius-xl: 0.75rem;
-  --radius-2xl: 0.875rem;
-  --radius-pill: 999px;
-  --radius-button: 0.4375rem;
-  --radius-card: 0.625rem;
+  /* — Radii — a drafting sheet has no rounded corners. */
+  --radius-xs: 0;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-2xl: 0;
+  --radius-pill: 0;
+  --radius-button: 0;
+  --radius-card: 0;
 
   --rule: 1px;
-  --rule-strong: 1.5px;
+  --rule-strong: 2px;
   --rule-focus: 2px;
+  --rule-hair: 1px;
+  --rule-heavy: 2px;
+  --tick: 14px;
+  --sheet-inset: 20px;
 
-  /* ══════════════════════════════════════════════════════════════
-     SURFACE ELEVATION — a named tier per height, not one value reused
-     ══════════════════════════════════════════════════════════════
-     The measure pass found only 2 distinct border+radius+shadow recipes
-     across every bordered panel on the page: the verdict, the ledger, the
-     activity feed and the footer strip were all the same box, so a page's
-     own content had no way to rank itself.
-
-     Three named tiers make the choice explicit. Elevation reads as LIGHT,
-     so in light mode each step climbs toward white and in dark mode each
-     step climbs away from black:
-
-       sunken — recessed INSIDE a panel (table heads, code, tree wells)
-       base   — a panel on the canvas. The default; ~80% of boxes
-       raised — one step above base, for the single object a page is
-                about. Also the hover state of a base panel.
-
-     A page gets ONE raised surface. Spending it on a footer strip as
-     readily as on the verdict is exactly what made everything rank equal.
-
-     `raised` carries no fill shift in light mode — 100% is already the top
-     of the ramp, so pushing higher would leave pure white and break the
-     tonal ceiling. Its extra step is an EDGE and a SHADOW instead, which
-     is how elevation actually reads on a real surface. */
-  --color-surface-sunken: oklch(94.6% 0.008 262);
-
-  /* The edge a raised surface draws, because it cannot shift its own fill. */
-  --color-edge-raised: var(--color-rule-strong);
-
-  /* — Shadows — VISIBLE, premium depth (not faint) */
-  --shadow-xs: 0 1px 2px oklch(17% 0.016 268 / 0.07), 0 1px 3px oklch(17% 0.016 268 / 0.05);
-  --shadow-sm: 0 2px 10px oklch(17% 0.016 268 / 0.08), 0 1px 3px oklch(17% 0.016 268 / 0.06);
-  --shadow-md: 0 6px 20px oklch(17% 0.016 268 / 0.10), 0 2px 8px oklch(17% 0.016 268 / 0.07);
-  --shadow-lg: 0 12px 32px oklch(17% 0.016 268 / 0.12), 0 4px 12px oklch(17% 0.016 268 / 0.08);
-  --shadow-xl: 0 20px 48px oklch(17% 0.016 268 / 0.14), 0 8px 20px oklch(17% 0.016 268 / 0.10);
-  --shadow-nav: 0 1px 0 oklch(17% 0.016 268 / 0.06);
-  --shadow-dialog: 0 24px 64px oklch(17% 0.016 268 / 0.18), 0 8px 24px oklch(17% 0.016 268 / 0.12);
-  --shadow-accent: 0 1px 3px oklch(56% 0.22 268 / 0.18);
-  /* With the page now a step darker than its cards, the card shadow carries
-     real separation instead of decoration — kept tight (no big soft blur) so
-     panels read as adjacent surfaces, not floating modals. */
-  --shadow-card: 0 1px 2px oklch(17% 0.016 268 / 0.05), 0 1px 1px oklch(17% 0.016 268 / 0.04);
-  --shadow-card-hover: 0 2px 6px oklch(17% 0.016 268 / 0.07), 0 1px 2px oklch(17% 0.016 268 / 0.05);
+  /* — Elevation — the sheet has lines, not layers: no shadows at all.
+     Recipes stay named so components can pick tiers by role. */
+  --shadow-xs: none;
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+  --shadow-xl: none;
+  --shadow-nav: 0 1px 0 var(--color-rule);
+  --shadow-dialog: none;
+  --shadow-accent: none;
+  --shadow-card: none;
+  --shadow-card-hover: none;
   --shadow-inset-critical: inset 3px 0 0 var(--color-sev-critical);
   --shadow-inset-high: inset 3px 0 0 var(--color-sev-high);
   --shadow-inset-medium: inset 3px 0 0 var(--color-sev-medium);
+  --elev-base: 0 0 0 var(--rule) var(--color-rule);
+  --elev-base-hover: 0 0 0 var(--rule) var(--color-rule-strong);
+  --elev-raised: 0 0 0 var(--rule-heavy) var(--color-rule-strong);
 
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
   --ease-in: cubic-bezier(0.4, 0, 1, 1);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
-  --ease-spring: cubic-bezier(0.34, 1.42, 0.64, 1);
+  /* Drafted, never bouncing: the springs are re-pointed at the soft curve so
+     no caller can overshoot a UI state. */
+  --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
   --ease-spring-soft: cubic-bezier(0.32, 0.72, 0, 1);
   --ease-snappy: cubic-bezier(0.22, 1, 0.36, 1);
   --dur-instant: 80ms;
@@ -239,48 +242,31 @@
   --dur-slow: 360ms;
   --dur-slower: 560ms;
   --dur-stagger: 40ms;
+  --dur-micro: 120ms;
+  --dur-short: 220ms;
+  --dur-long: 420ms;
 
+  --z-base: 1;
   --z-nav: 20;
+  --z-raised: 10;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-sticky-nav: 300;
   --z-dialog: 40;
-  --z-toast: 50;
+  --z-modal: 400;
   --z-command: 45;
+  --z-toast: 50;
+  --z-tooltip: 600;
 
+  --container: 86rem;
+  --gutter: var(--page-gutter);
+  --gap-columns: var(--space-lg);
   --content-max: 86rem;
   --content-narrow: 48rem;
   --focus-ring: 0 0 0 3px var(--color-focus-ring);
   --grid-gap: var(--space-md);
 
-  /* — Elevation recipes — the three tiers, named once.
-     Components pick a tier by ROLE ("this is the thing the page is
-     about") instead of restating a border/radius/shadow triple, which is
-     how 6 panels came to share one recipe while 2 were supposed to rank. */
-  --elev-base: var(--shadow-card);
-  --elev-base-hover: var(--shadow-card-hover);
-  --elev-raised: var(--shadow-lg);
-
-  /* — Page title — ONE size for every route's h1.
-     The measure pass found 2 sizes across 4 routes: 40px on home /
-     workspaces / workspace, and 28px on report. Two causes, both now gone:
-
-       1. The report h1 was a 65-CHARACTER SENTENCE ("Critical risk — 2,899
-          findings, 50 critical — coverage incomplete") and had its own
-          `clamp(1.35rem, 2.4vw, 1.75rem)` in analysis.css, shrunk to make a
-          sentence fit a title slot. ScanPage.tsx now puts the verdict alone
-          in the h1 ("Critical risk") and the counts in their own line.
-       2. The 40px came from `clamp(1.75rem, 1.3rem + 1.5vw, 2.5rem)` in
-          identity.css, which is imported AFTER styles.css and therefore beat
-          any title rule declared there. Two files, two title sizes, and the
-          one that lost was the one that looked intentional.
-
-     The curve below is identity.css's, unchanged, so no existing page moves.
-     What changed is that it now lives in ONE place and both sheets read it —
-     so a title can never again be sized to dodge a wrap. */
-  --text-page-title: clamp(1.75rem, 1.3rem + 1.5vw, 2.5rem);
-
-  /* The section title inside a page — one step down, never a rival. */
-  --text-section-title: var(--text-lg);
-
-  /* — Layout constants — single source for chrome offsets (loop 102) */
+  /* — Layout constants — */
   --nav-h: 3.25rem;
   --page-gutter: var(--space-lg);
   --tap-min: 2.75rem;
@@ -289,107 +275,101 @@
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  --color-paper: oklch(14% 0.012 268);
-  --color-paper-elevated: oklch(16% 0.013 268);
-  --color-surface: oklch(19% 0.013 268);
-  --color-surface-muted: oklch(24% 0.013 268);
-  --color-surface-subtle: oklch(27% 0.013 268);
-
-  /* Dark mode has room to shift the FILL, so `raised` does exactly what the
-     light theme cannot: 19% → 23%, a real step above base. `sunken` moves the
-     other way, to 17% — below base, because a recess in a dark plane is
-     darker, not lighter. The light theme's sunken (94.6%) sits BELOW its
-     canvas too; the two agree on direction and only differ on which end of
-     the ramp has room to move. */
-  --color-surface-raised: oklch(23% 0.014 268);
-  --color-surface-sunken: oklch(17% 0.012 268);
+  /* — The cyanotype sheet. */
+  --color-paper: oklch(35% 0.105 256);
+  --color-paper-elevated: oklch(37% 0.1 257);
+  --color-paper-2: var(--color-surface-muted);
+  --color-paper-3: var(--color-surface-sunken);
+  --color-surface: oklch(35% 0.105 256);
+  --color-surface-raised: oklch(35% 0.105 256);
+  --color-surface-muted: oklch(31% 0.1 257);
+  --color-surface-subtle: oklch(28.5% 0.098 258);
+  --color-surface-sunken: oklch(26.5% 0.095 258);
+  --color-surface-glass: oklch(35% 0.105 256 / 0.9);
+  --color-surface-overlay: oklch(35% 0.105 256 / 0.97);
   --color-edge-raised: var(--color-rule-strong);
-  --color-surface-glass: oklch(19% 0.013 268 / 0.82);
-  --color-surface-overlay: oklch(19% 0.013 268 / 0.92);
 
-  --color-ink: oklch(96% 0.004 280);
-  --color-ink-soft: oklch(78% 0.009 280);
-  --color-ink-faint: oklch(64% 0.012 280);
-  /* Loop 141 · 54% measured 3.93:1 on dark paper. 58% measures 4.64:1 and still
-     reads as the dimmest step of the ramp. */
-  --color-ink-ghost: oklch(58% 0.014 280);
+  /* — White line ink. */
+  --color-ink: oklch(97% 0.012 240);
+  --color-ink-soft: oklch(90% 0.025 242);
+  --color-ink-faint: oklch(80% 0.045 244);
+  --color-ink-ghost: oklch(70% 0.05 245);
+  --color-ink-2: var(--color-ink-soft);
+  --color-muted: var(--color-ink-faint);
 
-  --color-rule: oklch(28% 0.012 268);
-  --color-rule-strong: oklch(34% 0.014 268);
-  --color-rule-faint: oklch(24% 0.01 268);
+  --color-rule: oklch(93% 0.02 240 / 0.5);
+  --color-rule-strong: oklch(95% 0.016 240 / 0.78);
+  --color-rule-faint: oklch(93% 0.02 240 / 0.26);
+  --color-rule-2: var(--color-rule-faint);
 
-  --color-accent: oklch(64% 0.18 268);
-  --color-accent-strong: oklch(70% 0.16 268);
-  --color-accent-soft: oklch(24% 0.05 268);
-  --color-accent-ink: oklch(14% 0.015 268);
-  --color-accent-glow: oklch(64% 0.18 268 / 0.20);
-  --color-accent-ghost: oklch(64% 0.18 268 / 0.14);
+  --color-grid: oklch(97% 0.01 240 / 0.09);
+  --color-grid-2: oklch(97% 0.01 240 / 0.2);
 
-  --color-graphite: oklch(12% 0.01 268);
-  --color-graphite-soft: oklch(10% 0.009 268);
-  --color-graphite-ink: oklch(90% 0.006 280);
-  --color-brand-mark: oklch(96% 0.004 280);
-  --color-brand-accent: oklch(64% 0.18 268);
+  /* The white line is the accent on the blue sheet. */
+  --color-accent: oklch(95% 0.014 240);
+  --color-accent-strong: oklch(98% 0.008 240);
+  --color-accent-soft: oklch(95% 0.014 240 / 0.11);
+  --color-accent-ink: oklch(31% 0.1 257);
+  --color-accent-glow: oklch(95% 0.014 240 / 0.22);
+  --color-accent-ghost: oklch(95% 0.014 240 / 0.13);
+  --color-accent-gradient: var(--color-accent);
 
-  --color-success: oklch(66% 0.15 152);
-  --color-success-soft: oklch(22% 0.05 152);
-  /* Loop 141 · --color-success already clears 4.5:1 against the dark ink here
-     (6.81:1); this deeper variant exists so both themes expose the same token.
-     Measures 4.65:1 against --color-success-ink. */
-  --color-success-strong: oklch(56% 0.16 152);
-  --color-warning: oklch(76% 0.14 80);
-  --color-warning-soft: oklch(24% 0.05 80);
-  --color-danger: oklch(64% 0.20 24);
-  /* Loop 141 · "strong" means max contrast against --color-on-accent, and that
-     inverts per theme: light goes darker (46%), dark goes brighter. At 52% the
-     dark badge measured 3.23:1 with the near-black ink — 66% measures 5.77:1. */
-  --color-danger-strong: oklch(66% 0.22 24);
-  --color-danger-soft: oklch(24% 0.06 24);
-  --color-focus: oklch(64% 0.18 268);
-  --color-focus-ring: oklch(64% 0.18 268 / 0.24);
+  --color-graphite: oklch(26.5% 0.095 258);
+  --color-graphite-soft: oklch(22% 0.09 258);
+  --color-graphite-ink: oklch(90% 0.02 242);
 
-  --color-success-ink: oklch(14% 0.015 152);
-  --color-warning-ink: oklch(18% 0.02 80);
-  --color-danger-ink: oklch(14% 0.015 24);
+  /* The stamp stays Prussian-grounded with a white line in both sheets. */
+  --color-brand-mark: oklch(26.5% 0.095 258);
+  --color-brand-accent: oklch(95% 0.014 240);
+  --color-brand-line: oklch(95% 0.014 240);
 
-  /* The fill tokens already pass AA as text on the dark softs, so the text
-     grades alias them here and the pairs can never drift apart. */
-  --color-success-text: var(--color-success);
-  --color-warning-text: var(--color-warning);
-  --color-danger-text: var(--color-danger);
+  /* — Semantic stamps read as bright ink on the blue sheet; wells tint the
+     ground one step, the way a wash sits on a drawing. */
+  --color-success: oklch(72% 0.15 152);
+  --color-success-soft: oklch(30% 0.06 152);
+  --color-success-strong: oklch(62% 0.15 152);
+  --color-success-ink: oklch(14% 0.04 152);
+  --color-success-text: oklch(72% 0.15 152);
+  --color-warning: oklch(78% 0.14 85);
+  --color-warning-soft: oklch(32% 0.06 85);
+  --color-warning-strong: oklch(66% 0.13 85);
+  --color-warning-ink: oklch(18% 0.04 85);
+  --color-warning-text: oklch(78% 0.14 85);
+  --color-danger: oklch(70% 0.19 27);
+  --color-danger-soft: oklch(30% 0.08 27);
+  --color-danger-strong: oklch(62% 0.2 27);
+  --color-danger-ink: oklch(14% 0.04 27);
+  --color-danger-text: oklch(80% 0.145 27);
+  --color-focus: oklch(95% 0.014 240);
+  --color-focus-ring: oklch(95% 0.014 240 / 0.32);
 
-  --color-sev-critical: oklch(64% 0.20 24);
-  --color-sev-high: oklch(70% 0.16 26);
-  --color-sev-medium: oklch(76% 0.14 80);
-  --color-sev-low: oklch(70% 0.16 268);
-  --color-sev-info: oklch(66% 0.12 268);
+  --color-sev-critical: oklch(70% 0.19 27);
+  --color-sev-high: oklch(74% 0.16 45);
+  --color-sev-medium: oklch(78% 0.13 85);
+  --color-sev-low: oklch(76% 0.045 240);
+  --color-sev-info: oklch(72% 0.07 240);
 
-  --color-on-accent: oklch(14% 0.015 268);
+  --color-on-accent: oklch(31% 0.1 257);
 
-  --color-cat-1: oklch(64% 0.18 268);
-  --color-cat-2: oklch(66% 0.15 152);
-  --color-cat-3: oklch(76% 0.14 80);
-  --color-cat-4: oklch(64% 0.20 24);
-  --color-cat-5: oklch(70% 0.16 300);
-  --color-cat-6: oklch(96% 0.004 280);
+  --color-cat-1: oklch(78% 0.1 250);
+  --color-cat-2: oklch(72% 0.15 152);
+  --color-cat-3: oklch(78% 0.14 85);
+  --color-cat-4: oklch(70% 0.19 27);
+  --color-cat-5: oklch(74% 0.13 316);
+  --color-cat-6: oklch(95% 0.012 240);
   --color-cat-7: var(--color-accent-strong);
-  --color-cat-8: oklch(78% 0.009 280);
-  --color-cat-9: oklch(76% 0.14 60);
-  --color-cat-10: oklch(68% 0.11 195);
-  --color-cat-11: oklch(68% 0.17 350);
-  --color-cat-12: oklch(68% 0.12 220);
-  --color-cat-13: oklch(68% 0.17 310);
+  --color-cat-8: oklch(74% 0.1 200);
+  --color-cat-9: oklch(72% 0.13 20);
+  --color-cat-10: oklch(72% 0.09 178);
+  --color-cat-11: oklch(72% 0.15 350);
+  --color-cat-12: oklch(72% 0.11 226);
+  --color-cat-13: oklch(72% 0.13 296);
 
-  --color-dialog-backdrop: oklch(6% 0.01 268 / 0.62);
+  --color-dialog-backdrop: oklch(14% 0.04 256 / 0.6);
 
-  --shadow-xs: 0 1px 2px oklch(0% 0 0 / 0.32), 0 1px 3px oklch(0% 0 0 / 0.22);
-  --shadow-sm: 0 2px 10px oklch(0% 0 0 / 0.36), 0 1px 3px oklch(0% 0 0 / 0.26);
-  --shadow-md: 0 6px 20px oklch(0% 0 0 / 0.42), 0 2px 8px oklch(0% 0 0 / 0.32);
-  --shadow-lg: 0 12px 32px oklch(0% 0 0 / 0.48), 0 4px 12px oklch(0% 0 0 / 0.38);
-  --shadow-xl: 0 20px 48px oklch(0% 0 0 / 0.54), 0 8px 20px oklch(0% 0 0 / 0.44);
-  --shadow-nav: 0 1px 0 oklch(0% 0 0 / 0.22);
-  --shadow-dialog: 0 24px 64px oklch(0% 0 0 / 0.62), 0 8px 24px oklch(0% 0 0 / 0.52);
-  --shadow-accent: 0 1px 3px oklch(0% 0 0 / 0.28);
-  --shadow-card: 0 1px 3px oklch(0% 0 0 / 0.24), 0 4px 16px oklch(0% 0 0 / 0.18);
-  --shadow-card-hover: 0 8px 24px oklch(0% 0 0 / 0.32), 0 4px 12px oklch(0% 0 0 / 0.24);
+  --color-skeleton: var(--color-surface-muted);
+  --color-skeleton-sheen: var(--color-rule);
+
+  --color-scrollbar-thumb: var(--color-rule-strong);
+  --color-scrollbar-track: transparent;
 }

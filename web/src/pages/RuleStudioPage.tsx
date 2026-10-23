@@ -312,7 +312,7 @@ export function RuleStudioPage() {
                 <CardTitle>Rule editor</CardTitle>
                 <CardDescription>
           Fields: id, languages, pattern, severity, message. Saved to localStorage{' '}
-          <code className="font-mono text-xs">bluntcode.customRules</code> — a local scratchpad, never sent to the backend.
+          <code className="font-mono text-xs">bluntcode.customRules</code>, a local scratchpad, never sent to the backend.
         </CardDescription>
               </div>
               <div className="flex items-center gap-2">
@@ -342,14 +342,14 @@ export function RuleStudioPage() {
               onSave={handleSave}
               minHeight="14rem"
             />
-            {patternLint && <p role="status" className="text-xs text-[var(--color-warning)]">{patternLint} — fix the pattern to enable save and preview.</p>}
+            {patternLint && <p role="status" className="text-xs text-[var(--color-warning)]">{patternLint}. Fix the pattern to enable save and preview.</p>}
             {(!parsed.id || !parsed.pattern || !parsed.message) && <p className="text-xs text-[var(--color-ink-faint)]">Add at least <code>id</code>, <code>pattern</code>, and <code>message</code> to enable save.</p>}
             <div className="flex flex-wrap gap-2">
               <Button onClick={handleSave} disabled={!canSave} aria-label="Save rule">Save rule</Button>
               <Button variant="outline" onClick={handleReset} aria-label="Reset editor">Reset</Button>
               <Button variant="secondary" onClick={handleInsertSnippet} aria-label="Insert test snippet">Test snippet</Button>
             </div>
-            <p className="text-xs text-[var(--color-ink-faint)]">Tip: Tab inserts 2 spaces · Press <kbd className="rounded border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-1 py-0.5 font-mono text-xs">Esc</kbd>, then <kbd className="rounded border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-1 py-0.5 font-mono text-xs">Tab</kbd> to move focus out of the editor · <kbd className="rounded border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-1 py-0.5 font-mono text-xs">Ctrl</kbd> + <kbd className="rounded border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-1 py-0.5 font-mono text-xs">S</kbd> inside the editor saves. Monaco loads automatically if installed.</p>
+            <p className="text-xs text-[var(--color-ink-faint)]">Tip: Tab inserts 2 spaces. Press <kbd className="rounded border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-1 py-0.5 font-mono text-xs">Esc</kbd>, then <kbd className="rounded border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-1 py-0.5 font-mono text-xs">Tab</kbd> to move focus out of the editor. <kbd className="rounded border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-1 py-0.5 font-mono text-xs">Ctrl</kbd> + <kbd className="rounded border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-1 py-0.5 font-mono text-xs">S</kbd> inside the editor saves. Monaco loads automatically if installed.</p>
           </CardContent>
         </Card>
 

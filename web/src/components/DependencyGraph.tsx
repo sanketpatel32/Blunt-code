@@ -280,12 +280,12 @@ export function DependencyGraph({
             >
               <strong className="block text-[var(--color-ink)]">{hoveredNode.label}</strong>
               <span className="text-[var(--color-ink-soft)]">
-                {hoveredNode.kind} {hoveredNode.language ? `· ${hoveredNode.language}` : ""} · {hoveredNode.findingCount ?? 0} {hoveredNode.findingCount === 1 ? "finding" : "findings"}
+                {[hoveredNode.kind, hoveredNode.language, `${hoveredNode.findingCount ?? 0} ${hoveredNode.findingCount === 1 ? 'finding' : 'findings'}`].filter(Boolean).join(', ')}
               </span>
             </div>
           )}
         </div>
-        <p className="mt-2 text-xs text-[var(--color-ink-faint)]">Drag nodes to reposition · drag background to pan · use zoom controls · hover or focus a node for its finding count.</p>
+        <p className="mt-2 text-xs text-[var(--color-ink-faint)]">Drag nodes to reposition, drag the background to pan, use the zoom controls, and hover or focus a node for its finding count.</p>
       </CardContent>
     </Card>
   );

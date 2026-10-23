@@ -69,7 +69,7 @@ const DropdownMenuSeparator = React.forwardRef<React.ElementRef<typeof DropdownM
 ));
 DropdownMenuSeparator.displayName = DropdownMenuPrimitive.Separator.displayName;
 
-const DropdownMenuShortcut = ({ className, ...props }: React.HTMLAttributes<HTMLSpanElement>) => <span className={cn('ml-auto text-xs tracking-widest text-[var(--color-ink-faint)]', className)} {...props} />;
+const DropdownMenuShortcut = ({ className, ...props }: React.HTMLAttributes<HTMLSpanElement>) => <span className={cn('ml-auto text-xs text-[var(--color-ink-faint)]', className)} {...props} />;
 DropdownMenuShortcut.displayName = 'DropdownMenuShortcut';
 
 export { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuCheckboxItem, DropdownMenuRadioItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuGroup, DropdownMenuPortal, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuRadioGroup };

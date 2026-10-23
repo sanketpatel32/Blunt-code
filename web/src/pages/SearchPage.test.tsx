@@ -317,6 +317,6 @@ describe('SearchPage', () => {
     await act(async () => {
       row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     });
-    expect(document.body.textContent).toContain('Diagnostic Message'); // drawer is portaled to the body
+    expect(document.body.textContent).toContain('Diagnostic message'); // drawer is portaled to the body
   });
 });

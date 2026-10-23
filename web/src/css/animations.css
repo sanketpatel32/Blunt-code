@@ -6,7 +6,7 @@
 @keyframes anim-slideIn { from { opacity: 0; transform: translate3d(0, 10px, 0) scale(0.98); } to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); } }
 @keyframes anim-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 @keyframes anim-filterDrawerIn { from { opacity: 0; transform: translate3d(100%, 0, 0); } to { opacity: 1; transform: translate3d(0, 0, 0); } }
-@keyframes anim-backdropIn { from { opacity: 0; backdrop-filter: blur(0); } to { opacity: 1; backdrop-filter: blur(8px); } }
+@keyframes anim-backdropIn { from { opacity: 0; } to { opacity: 1; } }
 
 /* Utility classes */
 .anim-fadeIn { animation: anim-fadeIn var(--dur-slow) var(--ease-out) both; will-change: opacity; }
@@ -19,12 +19,13 @@
 
 .trend-chart .trend-bar { transform-origin: bottom; }
 
-/* FilterDrawer slideInRight 200ms ease-out-quart */
-.filter-drawer-backdrop { animation: anim-backdropIn 200ms var(--ease-out-quart) both; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+/* FilterDrawer slideInRight 200ms ease-out-quart. No glass: the scrim is a
+   solid translucent sheet colour (29). */
+.filter-drawer-backdrop { animation: anim-backdropIn 200ms var(--ease-out-quart) both; }
 .filter-drawer { animation: anim-filterDrawerIn 200ms var(--ease-out-quart) both; will-change: transform, opacity; }
 
-/* Progress bar width */
-.progress-fill { transition: width var(--dur-slow) var(--ease-out-quart); will-change: width; }
+/* Progress fill — scaleX of a full-width bar, never width (10a). */
+.progress-fill { transition: transform var(--dur-slow) var(--ease-out-quart); will-change: transform; }
 
 /* Flow marker spring */
 .flow-marker-spring { transition: transform var(--dur-slow) var(--ease-spring), border-color var(--dur-base) var(--ease-out), background var(--dur-base) var(--ease-out); will-change: transform; }

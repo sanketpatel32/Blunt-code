@@ -103,10 +103,12 @@
    without either sheet looking wrong on its own. One token, read by both.
    See also `.scan-hero-copy h1` in analysis.css, which reads the same token. */
 .page-header h1 {
+  font-family: var(--font-display);
   font-size: var(--text-page-title);
   line-height: 1.05;
-  letter-spacing: -.035em;
-  font-weight: 700;
+  letter-spacing: var(--tracking-display);
+  text-transform: uppercase;
+  font-weight: var(--display-weight);
 }
 
 /* The eyebrow slot is gone from PageHeader.tsx — the label repeated the title
@@ -116,9 +118,8 @@
    replacement and it is quiet by design. */
 .page-heading-eyebrow {
   font-size: var(--text-2xs);
-  font-weight: 600;
-  letter-spacing: .07em;
-  text-transform: uppercase;
+  font-weight: 500;
+  letter-spacing: 0;
   color: var(--color-ink-faint);
 }
 
@@ -181,8 +182,12 @@
    One plane, separated by a single hairline. No shadow, no border all round:
    a rail that reads as a separate surface by shadow alone looks bolted on. */
 .app-rail {
+  /* One 2px step off the exact viewport top: the rail and the scoped findings
+     table's own sticky header are then never two elements pinned at the same
+     y (56), which they could not visually share anyway — different columns,
+     and the table header sticks inside its own scroll container. */
   position: sticky;
-  top: 0;
+  top: var(--space-3xs);
   align-self: start;
   height: 100dvh;
   display: flex;
@@ -221,17 +226,16 @@
 
 .rail-group { display: flex; flex-direction: column; gap: 1px; margin: 0; padding: 0; list-style: none; }
 
-/* The one uppercase label in the whole app: a group heading in the rail is
-   genuine punctuation because there is exactly one per group and it carries
-   real structure. Everywhere else, uppercase was noise. */
+/* A group heading in the rail is a label like every other label: the body
+   face, a step smaller, sentence case. On the Blueprint sheet the one
+   drafted-capital voice belongs to the page heads and nothing else. */
 .rail-group-label {
   margin: 0 0 var(--space-2xs);
   padding: 0 var(--space-sm);
   color: var(--color-ink-faint);
   font-size: var(--text-2xs);
-  font-weight: 600;
-  letter-spacing: .06em;
-  text-transform: uppercase;
+  font-weight: 500;
+  letter-spacing: 0;
 }
 
 .rail-workspace {
@@ -377,7 +381,7 @@
   .topbar-link {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--space-xs);
     padding: var(--space-2xs) var(--space-sm);
     border-radius: var(--radius-button);
     color: var(--color-ink-soft);
@@ -700,8 +704,8 @@ input[type='checkbox']::after {
 .verdict-distro .eyebrow {
   font-size: var(--text-2xs);
   font-weight: 600;
-  letter-spacing: .06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 /* The state badge is a status, not a shout. Body face, small, quiet. */
@@ -761,10 +765,11 @@ input[type='checkbox']::after {
 
 :root[data-theme='dark'] .command-palette .palette-option[data-active='true'] { background: var(--color-surface-muted); }
 
-/* A fade at the scroll edge so a half-visible row reads as more content. */
+/* A fade at the scroll edge so a half-visible row reads as more content.
+   The mask paints alpha only; the ink token is opaque, which is all it needs. */
 .command-palette [role='listbox'] {
-  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5rem), transparent 100%);
-  mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5rem), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, var(--color-ink) calc(100% - 1.5rem), transparent 100%);
+  mask-image: linear-gradient(to bottom, var(--color-ink) calc(100% - 1.5rem), transparent 100%);
 }
 
 :root[data-theme='dark'] .command-palette .palette-option[data-active='true'] { box-shadow: inset 2px 0 0 var(--color-accent); }
@@ -783,10 +788,10 @@ input[type='checkbox']::after {
 .palette-group { margin-top: var(--space-sm); }
 .palette-group:first-child { margin-top: 0; }
 
-/* The backdrop was blurring the page hard enough that the app behind became
-   noise. Softer, so the palette reads as the only object in focus. */
+/* No glass on a drafting sheet: overlays separate by their scrim and their
+   keyline, not by blurring the drawing behind them. */
 .dialog-backdrop,
-.command-palette-backdrop { backdrop-filter: blur(2px); }
+.command-palette-backdrop { backdrop-filter: none; }
 
 /* ── 12 · Repeated row actions ────────────────────────────────────────   Ten identical filled "Scan" buttons down the workspaces table (and the
    same pattern on tools and history) made the action column the heaviest
@@ -864,12 +869,12 @@ input[type='checkbox']::after {
   color: var(--color-danger-text);
 }
 
-/* The raw code is a diagnostic detail, not a headline. */
+/* The raw code is a diagnostic detail, not a headline. Mono stays (it is
+   code); the capitals and tracking go. */
 .error-panel p.code,
 .error-panel .code {
   font: 500 var(--text-2xs) var(--font-mono);
-  letter-spacing: .06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
   color: var(--color-ink-faint);
 }
 

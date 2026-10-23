@@ -579,7 +579,7 @@ export function CLIPage() {
           {!search.trim() && (
             <section className="cli-start" aria-label="Start here">
               <div className="cli-start-header">
-                <h3 className="cli-start-title">Start here — three commands cover most of it</h3>
+                <h3 className="cli-start-title">Start here: three commands cover most of it</h3>
                 <span className="cli-start-tag">Quick Start</span>
               </div>
               <ol className="cli-start-steps">
@@ -631,10 +631,10 @@ export function CLIPage() {
               </ol>
               <p className="cli-start-profiles">
                 <strong>Pick a depth with <code>--profile</code>:</strong>{' '}
-                <code>quick</code> linters only, under a minute ·{' '}
-                <code>standard</code> adds secrets, security patterns and SonarQube (default) ·{' '}
-                <code>deep</code> adds dependencies, containers and infrastructure, 10+ min ·{' '}
-                <code>pentest</code> standard plus OWASP checks.
+                <code>quick</code> linters only, under a minute.{' '}
+                <code>standard</code> adds secrets, security patterns and SonarQube (default).{' '}
+                <code>deep</code> adds dependencies, containers and infrastructure, 10+ min.{' '}
+                <code>pentest</code> is standard plus OWASP checks.
               </p>
             </section>
           )}

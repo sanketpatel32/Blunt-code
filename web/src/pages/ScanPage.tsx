@@ -180,10 +180,6 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
   return <div className="page scan-page">
     <header className="scan-hero" data-tone={heroTone}>
       <div className="scan-hero-main">
-        <p className="eyebrow">
-          Scan · {current.profile} profile
-          <span className={`scan-state-badge variant-${state.variant}`}>{state.label}</span>
-        </p>
         <div className="scan-hero-title-row">
           {graded && grade
             ? <span className="scan-grade" data-grade={grade} aria-hidden="true">{grade}</span>
@@ -203,6 +199,10 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
               </p>
             )}
             <p className="scan-hero-meta">
+              {/* The scan's identity rides the meta line under the verdict,
+                  not an eyebrow above it (54): profile, outcome, then times. */}
+              <span className={`scan-state-badge variant-${state.variant}`}>{state.label}</span>
+              <span>{current.profile} profile</span>
               <span>Started {startedText}</span>
               <span aria-hidden="true">·</span>
               <span>{live ? `elapsed ${durationText}` : durationText}</span>
@@ -246,8 +246,7 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
       <ScanStageList scan={current} events={events} />
       <aside className="scan-side" aria-busy={!terminal ? 'true' : 'false'}>
         <div className="scan-side-head">
-          <p className="eyebrow">Results so far</p>
-          <h2 className="scan-metric"><span className="scan-metric-value">{count(findingsSoFar)}</span> <span className="scan-metric-label">{findingsSoFar === 1 ? 'finding' : 'findings'}</span></h2>
+          <h2 className="scan-metric"><span className="scan-metric-value">{count(findingsSoFar)}</span> <span className="scan-metric-label">{findingsSoFar === 1 ? 'finding' : 'findings'} so far</span></h2>
         </div>
         <SeverityCounts counts={liveSeverity} pending={completions.size === 0} />
         <LiveAnalyzerStrip runs={current.analyzer_runs} events={events} />
@@ -303,18 +302,15 @@ function ScanProgressBar({ scan, events }: { scan: Scan; events: ScanEvent[] }) 
   const label = percent !== undefined ? `Scan progress: ${percent}%` : 'Scan in progress';
   return <div className={`scan-progress-card ${state}`} aria-hidden={false}>
     <div className={`scan-progress ${state}`} role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent ?? undefined} aria-busy={!terminal}>
-      <i className="progress-fill" style={{ width: percent !== undefined ? `${percent}%` : undefined, willChange: 'width, transform' } as never} />
+      {/* scaleX, never width: the fill is a transform of a full-width bar (10a). */}
+      <i className="progress-fill" style={percent !== undefined ? ({ transform: `scaleX(${percent / 100})`, willChange: 'transform' } as never) : undefined} />
     </div>
     {percent !== undefined && <span className="scan-progress-meta" style={{ fontVariantNumeric: 'tabular-nums' } as never}>{percent}%</span>}
   </div>;
 }
 
-/** Lightweight confetti — 12 dots burst stagger 35ms, will-change for compositor */
-function ConfettiStub({ show }: { show: boolean }) {
-  const reduced = useReducedMotion();
-  if (!show || reduced) return null;
-  return <div aria-hidden="true" className="confetti-stub" style={{ display: 'flex', gap: '4px', marginTop: '8px', flexWrap: 'wrap' }}>{Array.from({ length: 12 }, (_, i) => <i key={i} className="confetti-dot" style={{ width: '6px', height: '6px', borderRadius: '50%', background: ['var(--color-accent)','var(--color-success)','var(--color-warning)'][i % 3], display: 'block', animation: 'scan-confetti 520ms var(--ease-out-quart) both', animationDelay: `${i * 35}ms`, willChange: 'transform, opacity' } as never} />)}</div>;
-}
+/** A completed scan is stated, not celebrated: the drafted sheet carries no
+ *  confetti. The old 12-dot burst lived here. */
 
 /** Live per-analyzer pills grouped by category with colored left border per category, stagger fadeIn. */
 export function LiveAnalyzerStrip({ runs, events }: { runs?: AnalyzerRun[]; events: ScanEvent[] }) {
@@ -402,9 +398,8 @@ function ScanStageList({ scan, events }: { scan: Scan; events: ScanEvent[] }) {
   const status = active?.type === 'analyzer.started' ? `${active.name ?? active.analyzer_id ?? 'Analyzer'} is checking your code` : active ? eventCopy(active) : scan.state === 'interrupted' ? 'Scan interrupted — completed checks are still available.' : scan.state.replaceAll('_', ' ');
   const reduced = useReducedMotion();
   const terminal = isTerminalScanState(scan.state);
-  const terminalDone = scan.state === 'completed';
   // On completed/failed scans the status line just repeats the page title's
   // outcome; interrupted keeps it — it carries the "partial report saved" note.
   const showStatus = !terminal || scan.state === 'interrupted';
-  return <section className="stage-list"><header><div><p className="eyebrow">Analysis flow</p><h2>{terminal ? 'How the analysis ran' : 'What is happening now'}</h2></div><span>{entries.length} update{entries.length === 1 ? '' : 's'}</span></header>{showStatus && <p className={`flow-now ${active ? 'active' : ''}`} role="status" aria-live="polite"><i aria-hidden="true" />{status}</p>}{terminalDone && <ConfettiStub show={terminalDone} />}<ol className="scan-flow">{entries.map((event, index) => { const state = event.type.includes('failed') ? 'failed' : event.type.includes('completed') ? 'done' : event.type.includes('cancelled') ? 'interrupted' : index === entries.length - 1 && !isTerminalScanState(scan.state) ? 'current' : ''; return <li className={`${state} ${reduced ? '' : 'stage-enter'}`} key={event.seq ?? `${event.type}-${event.at}`} style={reduced ? undefined : { animationDelay: `${index * 40}ms`, willChange: 'transform, opacity' } as never}><i className={`flow-marker flow-marker-spring ${state === 'current' ? 'current' : ''}`} aria-hidden="true" style={reduced ? undefined : { willChange: 'transform' } as never} /><div><strong>{eventCopy(event)}</strong><small style={{ fontVariantNumeric: 'tabular-nums' } as never}>{mediumTime.format(event.at)}</small></div></li>; })}</ol></section>;
+  return <section className="stage-list"><header><div><h2>{terminal ? 'How the analysis ran' : 'What is happening now'}</h2></div><span>{entries.length} update{entries.length === 1 ? '' : 's'}</span></header>{showStatus && <p className={`flow-now ${active ? 'active' : ''}`} role="status" aria-live="polite"><i aria-hidden="true" />{status}</p>}<ol className="scan-flow">{entries.map((event, index) => { const state = event.type.includes('failed') ? 'failed' : event.type.includes('completed') ? 'done' : event.type.includes('cancelled') ? 'interrupted' : index === entries.length - 1 && !isTerminalScanState(scan.state) ? 'current' : ''; return <li className={`${state} ${reduced ? '' : 'stage-enter'}`} key={event.seq ?? `${event.type}-${event.at}`} style={reduced ? undefined : { animationDelay: `${index * 40}ms`, willChange: 'transform, opacity' } as never}><i className={`flow-marker flow-marker-spring ${state === 'current' ? 'current' : ''}`} aria-hidden="true" style={reduced ? undefined : { willChange: 'transform' } as never} /><div><strong>{eventCopy(event)}</strong><small style={{ fontVariantNumeric: 'tabular-nums' } as never}>{mediumTime.format(event.at)}</small></div></li>; })}</ol></section>;
 }

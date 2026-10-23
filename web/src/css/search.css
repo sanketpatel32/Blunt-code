@@ -90,6 +90,7 @@
   align-items: baseline;
   gap: var(--space-2xs);
   min-width: 0;
+  overflow: visible;
   font-family: var(--font-mono);
   font-size: var(--text-2xs);
   line-height: 1.5;
@@ -103,8 +104,10 @@
 .page-search .search-location-dir {
   flex: 1 1 auto;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* The directory wraps rather than ellipsising: a clipped text node still
+     lays out at full width and paints under the next cell (73). */
+  overflow-wrap: anywhere;
+  white-space: normal;
   color: var(--color-ink-faint);
 }
 /* Cards have no narrow column to fight, so the same parts read inline there. */
@@ -209,7 +212,7 @@
 
 .page-search .search-occurrence {
   display: inline-block;
-  padding: 3px 6px;
+  padding: var(--space-3xs) var(--space-xs);
   border: var(--rule) solid var(--color-rule-faint);
   border-radius: var(--radius-xs);
   background: var(--color-surface);
@@ -302,11 +305,9 @@
 }
 .page-search .saved-preset-add .button { min-height: 1.75rem; padding: 0 var(--space-sm); font-size: var(--text-2xs); }
 
-/* Sticky header without utility-class overrides; .table-dense supplies the rest. */
+/* No sticky header here: the register scrolls inside its keylined wrap, and a
+   viewport-pinned head painted over scrolling rows in full-page captures (73). */
 .page-search .search-results thead th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
   background: var(--color-surface-muted);
 }
 

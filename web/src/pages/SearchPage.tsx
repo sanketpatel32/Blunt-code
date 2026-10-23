@@ -413,7 +413,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
       {/* Severities */}
       <div className="facet-section">
         <div className="flex items-center justify-between">
-          <p className="facet-title text-xs font-semibold uppercase tracking-wider text-[var(--color-ink-faint)]">Severity</p>
+          <p className="facet-title text-xs font-semibold text-[var(--color-ink-faint)]">Severity</p>
           {severities.size > 0 && (
             <button type="button" onClick={() => setSeverities(new Set())} className="text-xs text-[var(--color-accent-strong)] hover:underline">
               Reset
@@ -427,7 +427,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
               <button
                 key={sev}
                 type="button"
-                className={`severity-pill flex items-center justify-between rounded-[var(--radius-button)] px-2.5 py-1.5 text-xs font-medium transition-all ${
+                className={`severity-pill flex items-center justify-between rounded-[var(--radius-button)] px-2.5 py-1.5 text-xs font-medium transition-colors ${
                   isSelected
                     ? 'bg-[var(--color-surface-subtle)] border border-[var(--color-accent)] text-[var(--color-ink)] font-semibold shadow-xs'
                     : 'border border-transparent text-[var(--color-ink-soft)] hover:bg-[var(--color-surface-muted)] hover:text-[var(--color-ink)]'
@@ -480,7 +480,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
 
       {/* Workspaces */}
       <div className="facet-section">
-        <p className="facet-title text-xs font-semibold uppercase tracking-wider text-[var(--color-ink-faint)]">Workspace Scope</p>
+        <p className="facet-title text-xs font-semibold text-[var(--color-ink-faint)]">Workspace Scope</p>
         <div className="mt-2 space-y-2">
           {/* Names, not raw ids: the URL keeps persisting the workspace id, the
               select displays the human name for it. A deep-linked id stays an
@@ -512,7 +512,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
           last place still saying "engine". */}
       <div className="facet-section">
         <div className="flex items-center justify-between">
-          <p className="facet-title text-xs font-semibold uppercase tracking-wider text-[var(--color-ink-faint)]">
+          <p className="facet-title text-xs font-semibold text-[var(--color-ink-faint)]">
             Analyzer <span className="search-facet-hint">· this page</span>
           </p>
           {analyzer && (
@@ -554,7 +554,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
           string — and it now lives where its heading already was. */}
       <div className="facet-saved pt-3 border-t border-[var(--color-rule-faint)]">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-ink-faint)] flex items-center gap-1.5">
+          <p className="text-xs font-semibold text-[var(--color-ink-faint)] flex items-center gap-1.5">
             <Bookmark className="h-3 w-3" /> Saved Searches
           </p>
           {/* Opening the name form is the only way to create a preset, so the
@@ -647,7 +647,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
           <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--color-ink-faint)]" aria-hidden="true" />
           <input
             type="search"
-            className="search-input w-full rounded-[var(--radius-md)] border border-[var(--color-rule)] bg-[var(--color-surface)] py-2 pl-9 pr-10 text-xs sm:text-sm text-[var(--color-ink)] shadow-xs transition-all placeholder:text-[var(--color-ink-faint)] focus:border-[var(--color-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--color-focus)]"
+            className="search-input w-full rounded-[var(--radius-md)] border border-[var(--color-rule)] bg-[var(--color-surface)] py-2 pl-9 pr-10 text-xs sm:text-sm text-[var(--color-ink)] shadow-xs transition-colors placeholder:text-[var(--color-ink-faint)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)]"
             placeholder="Search message text, vulnerability rules (e.g. sqli, xss, cwe), file paths, or CWE IDs…"
             aria-label="Search findings"
             value={query}
@@ -727,7 +727,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
         {/* Mobile Filter Drawer */}
         {facetsOpen && (
           <div
-            className="filter-drawer-backdrop fixed inset-0 z-50 bg-black/50 backdrop-blur-xs md:hidden"
+            className="filter-drawer-backdrop fixed inset-0 z-50 md:hidden"
             role="presentation"
             onMouseDown={(e) => {
               if (e.target === e.currentTarget) setFacetsOpen(false);
@@ -841,7 +841,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                   </Button>
                 }
               >
-                Add a workspace and run your first scan — findings from every scan land here.
+                Add a workspace and run your first scan; findings from every scan land here.
               </Empty>
             ) : (
               <Empty title="No matching findings" icon={<MagnifierIcon />}>
@@ -863,7 +863,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                 return (
                   <Card
                     key={`${finding.scan_id}:${finding.id}`}
-                    className="p-3.5 hover:border-[var(--color-rule)] transition-all cursor-pointer group"
+                    className="p-3.5 hover:border-[var(--color-rule)] transition-colors cursor-pointer group"
                     role="button"
                     tabIndex={0}
                     aria-label={findingActionLabel(finding)}
@@ -873,7 +873,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                     <div className="flex items-start justify-between gap-3">
                       <div className="space-y-1.5 min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className={`severity ${finding.severity} text-xs uppercase font-mono px-2 py-0.5 rounded font-semibold`}>
+                          <span className={`severity ${finding.severity} text-xs px-2 py-0.5 rounded font-semibold`}>
                             {finding.severity}
                           </span>
                           <LocationCell finding={finding} />
@@ -956,7 +956,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                           )}
                           {visibleCols.severity && (
                             <td className="search-cell-severity">
-                              <span className={`severity ${finding.severity} text-xs uppercase font-mono px-2 py-0.5 rounded font-semibold`}>
+                              <span className={`severity ${finding.severity} text-xs px-2 py-0.5 rounded font-semibold`}>
                                 {finding.severity}
                               </span>
                             </td>
@@ -1072,7 +1072,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
             <>
               <SheetHeader>
                 <div className="flex items-center gap-2">
-                  <span className={`severity ${selectedFinding.severity} text-xs uppercase font-mono px-2 py-0.5 rounded font-semibold`}>
+                  <span className={`severity ${selectedFinding.severity} text-xs px-2 py-0.5 rounded font-semibold`}>
                     {selectedFinding.severity}
                   </span>
                   {selectedFinding.rule_id && selectedFinding.rule_id !== findingDisplayTitle(selectedFinding) && (
@@ -1089,7 +1089,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
 
               <div className="space-y-3 pt-2">
                 <div>
-                  <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--color-ink-faint)]">Diagnostic Message</h4>
+                  <h4 className="text-xs font-semibold text-[var(--color-ink-faint)]">Diagnostic message</h4>
                   <p className="mt-1 text-xs text-[var(--color-ink)] leading-relaxed bg-[var(--color-surface-muted)] p-3 rounded-[var(--radius-sm)]">
                     {stripMessagePrefix(selectedFinding)}
                   </p>
@@ -1097,7 +1097,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
 
                 {selectedFinding.remediation && (
                   <div>
-                    <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--color-ink-faint)]">Remediation Guidance</h4>
+                    <h4 className="text-xs font-semibold text-[var(--color-ink-faint)]">Remediation guidance</h4>
                     <p className="mt-1 text-xs text-[var(--color-accent-strong)] leading-relaxed bg-[var(--color-accent-soft)] p-3 rounded-[var(--radius-sm)] font-mono">
                       {selectedFinding.remediation}
                     </p>

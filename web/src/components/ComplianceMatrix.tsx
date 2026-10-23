@@ -99,7 +99,7 @@ export function ComplianceMatrix({ findings, scanId }: { findings: Finding[]; sc
               <TableCell className="tabular-nums font-mono">{r.count}</TableCell>
               <TableCell className="min-w-[8rem]">
                 <div className="h-2 w-full rounded-full bg-[var(--color-surface-muted)] overflow-hidden" role="progressbar" aria-valuenow={r.pct} aria-valuemin={0} aria-valuemax={100} aria-label={`${r.id} share of loaded findings ${r.pct}%`}>
-                  <div className="h-full bg-[var(--color-accent)] transition-all" style={{ width: `${r.pct}%` }} />
+                  <div className="h-full bg-[var(--color-accent)]" style={{ width: `${r.pct}%` }} />
                 </div>
                 <span className="text-xs text-[var(--color-ink-faint)]">{r.pct}%</span>
               </TableCell>

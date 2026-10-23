@@ -270,7 +270,7 @@ export function DataTable<T>({
                     >
                       {col.header}
                       <span className="sort-arrow" aria-hidden="true">
-                        {sortKey === (col.sortKey ?? col.id) ? (sortDir === 'asc' ? '▲' : '▼') : '↕'}
+                        {sortKey === (col.sortKey ?? col.id) ? (sortDir === 'asc' ? '▲' : '▼') : ''}
                       </span>
                     </button>
                   ) : col.header}
@@ -393,7 +393,7 @@ export function DataTable<T>({
             >
               <ChevronLeft className="h-4 w-4" /> Previous
             </button>
-            <output aria-live="polite" className="min-w-[7rem] text-center font-mono text-xs font-semibold text-[var(--color-ink-faint)] tabular-nums">
+            <output aria-live="polite" className="min-w-[7rem] text-center text-xs font-semibold text-[var(--color-ink-faint)] tabular-nums">
               Page {page} of {pageCount}
             </output>
             <button

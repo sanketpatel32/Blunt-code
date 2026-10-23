@@ -155,8 +155,11 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
       }
       description={
         <div className="workspace-path-row flex items-center gap-1.5 font-mono text-xs">
-          {/* w-fit keeps the code element hugging the text; a reserved max-width left the copy button floating far from short paths. */}
-          <code className="workspace-path w-fit max-w-full text-[var(--color-ink-faint)] truncate" title={item.root_path}>
+          {/* flex-1 + break-all, not truncate: an ellipsized text node still
+              lays out at full width and runs under the copy button (73), and
+              past the screen on a phone (34). A path is one unbroken string;
+              it breaks anywhere and never clips. */}
+          <code className="workspace-path min-w-0 flex-1 break-all text-left text-[var(--color-ink-faint)]" title={item.root_path}>
             {item.root_path || 'No root path configured'}
           </code>
           {item.root_path && (
@@ -380,7 +383,7 @@ export function AnalyzerStatuses({ runs }: { runs?: AnalyzerRun[] }) {
     const skipped = run.status === 'skipped';
     // Display names read like products ("Gitleaks", not "gitleaks-secrets"); an
     // id missing from the map falls back to itself, and the raw id stays on hover.
-    return <div className="analyzer-row" key={run.analyzer_id}><span title={run.analyzer_id}>{analyzerName(run.analyzer_id)}</span><span className={`state ${run.status}`}>{run.status}</span>{skipped ? <small role="note" className="text-amber-600">Skipped — {run.message || 'no applicable files or profile excluded this analyzer'}</small> : run.message ? <small>{run.message}</small> : null}</div>;
+    return <div className="analyzer-row" key={run.analyzer_id}><span title={run.analyzer_id}>{analyzerName(run.analyzer_id)}</span><span className={`state ${run.status}`}>{run.status}</span>{skipped ? <small role="note" className="text-amber-600">Skipped: {run.message || 'no applicable files or profile excluded this analyzer'}</small> : run.message ? <small>{run.message}</small> : null}</div>;
   })}</div>)}</div>;
 }
 
@@ -396,7 +399,7 @@ function LanguageDistributionDonut({ names, coverage, workspaceId, go }: { names
       <section aria-label="Language distribution" className="workspace-section-card lang-donut-card">
         <div className="mb-3 flex items-center justify-between">
           <h3 className="font-display text-sm font-semibold tracking-tight">Language distribution</h3>
-          <span className="rounded-full border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-2 py-0.5 font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-ink-faint)]">click to filter files</span>
+          <span className="rounded-full border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-2 py-0.5 text-xs font-semibold text-[var(--color-ink-faint)]">Click to filter files</span>
         </div>
         <ul className="lang-pill-legend" aria-label="Languages, select to filter files">
           {names.map((language) => (
@@ -433,7 +436,7 @@ function LanguageDistributionDonut({ names, coverage, workspaceId, go }: { names
     <section aria-label="Language distribution" className="workspace-section-card lang-donut-card">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="font-display text-sm font-semibold tracking-tight">Language distribution</h3>
-        <span className="rounded-full border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-2 py-0.5 font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-ink-faint)]">click to filter files</span>
+        <span className="rounded-full border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-2 py-0.5 text-xs font-semibold text-[var(--color-ink-faint)]">Click to filter files</span>
       </div>
       <div className="flex flex-wrap items-center gap-6">
         <svg viewBox="0 0 120 120" width={180} height={180} role="img" aria-label={`Language distribution: ${coverage.map((l) => `${l.language} ${l.files}`).join(', ')}`} className="shrink-0">
@@ -571,7 +574,7 @@ function WorkspacePentestInsight({ workspaceId, scanId, go }: { workspaceId: str
           </p>
         </div>
         <button type="button" className="button ghost" onClick={() => go({ page: 'pentest', id: workspaceId })}>
-          Open full Pentest Suite →
+          Open full Pentest Suite
         </button>
       </div>
 
@@ -595,7 +598,7 @@ function WorkspacePentestInsight({ workspaceId, scanId, go }: { workspaceId: str
 
       {secFindings.length > 0 ? (
         <div className="space-y-2">
-          <h4 className="text-xs font-semibold text-[var(--color-ink)] uppercase tracking-wide">Top Identified Security Issues</h4>
+          <h4 className="text-xs font-semibold text-[var(--color-ink)]">Top identified security issues</h4>
           <div className="space-y-1.5">
             {secFindings.slice(0, 5).map((f) => (
               <div key={f.id || f.fingerprint} className="flex items-center justify-between gap-2 p-2.5 rounded-[var(--radius-sm)] border border-[var(--color-rule-faint)] bg-[var(--color-surface)] text-xs">
@@ -603,7 +606,7 @@ function WorkspacePentestInsight({ workspaceId, scanId, go }: { workspaceId: str
                   <span className="font-semibold text-[var(--color-ink)]">{f.relative_path}:{f.start_line}</span>
                   <span className="text-[var(--color-ink-soft)] ml-2">{f.message}</span>
                 </div>
-                <span className={`state ${f.severity} text-xs uppercase font-mono px-2 py-0.5 rounded`}>{f.severity}</span>
+                <span className={`state ${f.severity} text-xs px-2 py-0.5 rounded`}>{f.severity}</span>
               </div>
             ))}
           </div>

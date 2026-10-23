@@ -194,12 +194,12 @@ describe('Blunt Code home', () => {
 
     const host = await render(fetchMock);
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
-    expect(host.textContent).toContain('Showing 1–6 of 7 scans');
+    expect(host.textContent).toContain('Showing 1 to 6 of 7 scans');
     expect([...host.querySelectorAll('button')].filter((button) => button.textContent === 'Open report')).toHaveLength(6);
     const next = [...host.querySelectorAll('button')].find((button) => button.textContent === 'Next');
     expect(next).toBeDefined();
     await act(async () => { next!.click(); });
-    expect(host.textContent).toContain('Showing 7–7 of 7 scans');
+    expect(host.textContent).toContain('Showing 7 to 7 of 7 scans');
     expect([...host.querySelectorAll('button')].filter((button) => button.textContent === 'Open report')).toHaveLength(1);
   });
 

@@ -23,15 +23,14 @@
 .board-live {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 2px 10px;
+  gap: var(--space-xs);
+  padding: var(--space-3xs) var(--space-sm);
   border-radius: var(--radius-pill);
   border: var(--rule) solid color-mix(in oklch, var(--color-success) 40%, var(--color-rule));
   background: var(--color-success-soft);
   color: var(--color-success);
-  font: 600 var(--text-2xs) var(--font-mono);
-  letter-spacing: .04em;
-  text-transform: uppercase;
+  font: 500 var(--text-2xs) var(--font-body);
+  letter-spacing: 0;
 }
 
 .board-live-dot {
@@ -39,12 +38,6 @@
   height: .45rem;
   border-radius: 50%;
   background: var(--color-success);
-  animation: board-pulse 2.2s var(--ease-in-out) infinite;
-}
-
-@keyframes board-pulse {
-  0% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-success) 45%, transparent); }
-  70%, 100% { box-shadow: 0 0 0 .45rem transparent; }
 }
 
 /* ── The verdict, as a hero rather than a widget ────────────────────
@@ -112,9 +105,9 @@
   border-radius: var(--radius-lg);
   font-family: var(--font-display);
   font-size: 3.75rem;
-  font-weight: 800;
+  font-weight: var(--display-weight);
   line-height: 1;
-  letter-spacing: -.05em;
+  letter-spacing: var(--tracking-display);
   background: var(--grade-bg);
   color: var(--grade-ink);
 }
@@ -144,7 +137,7 @@
 .verdict-bandlabel {
   font-family: var(--font-display);
   font-size: var(--text-md);
-  font-weight: 700;
+  font-weight: var(--display-weight);
   line-height: 1.2;
   color: var(--color-ink);
 }
@@ -199,7 +192,7 @@
   color: var(--color-ink-faint);
   background: var(--color-surface-muted);
   border-radius: var(--radius-pill);
-  padding: 0 6px;
+  padding: 0 var(--space-xs);
   white-space: nowrap;
   cursor: help;
 }
@@ -250,13 +243,13 @@
 .verdict-hero-num {
   font-family: var(--font-display);
   /* The largest number in the app, and it should be: this is the answer to
-     "how much is wrong". At 36px it was only 2.6x body copy and read as a
-     value in a table rather than a headline. */
-  font-size: clamp(3rem, 2rem + 3vw, 4.5rem);
-  font-weight: 800;
-  line-height: .9;
-  letter-spacing: -.045em;
+     "how much is wrong". Fixed size, app scope — no fluid display figures. */
+  font-size: 3.5rem;
+  font-weight: var(--display-weight);
+  line-height: .95;
+  letter-spacing: var(--tracking-display);
   color: var(--color-ink);
+  font-variant-numeric: tabular-nums;
 }
 
 .verdict-hero-unit { font-size: var(--text-xl); font-weight: 600; color: var(--color-ink); letter-spacing: -.02em; }
@@ -336,7 +329,7 @@
 .verdict-legend li {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-2xs);
   font-size: var(--text-xs);
   color: var(--color-ink-soft);
 }
@@ -369,9 +362,8 @@
 .rail-stat { display: flex; align-items: baseline; gap: var(--space-xs); min-width: 0; }
 
 .rail-stat dt {
-  font: 600 var(--text-2xs) var(--font-mono);
-  letter-spacing: .05em;
-  text-transform: uppercase;
+  font: 500 var(--text-2xs) var(--font-body);
+  letter-spacing: 0;
   color: var(--color-ink-faint);
   white-space: nowrap;
 }
@@ -456,12 +448,13 @@
 .board-panel-title {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--space-xs);
   margin: 0;
   font-family: var(--font-display);
   font-size: var(--text-md);
-  font-weight: 700;
-  letter-spacing: -.015em;
+  font-weight: var(--display-weight);
+  letter-spacing: var(--tracking-display);
+  text-transform: uppercase;
   color: var(--color-ink);
   white-space: nowrap;
 }
@@ -495,7 +488,7 @@
 
 .board-filter input {
   width: 10rem;
-  padding: 4px 10px;
+  padding: var(--space-2xs) var(--space-sm);
   border-radius: var(--radius-xs);
   border: var(--rule) solid var(--color-rule-strong);
   background: var(--color-surface);
@@ -535,9 +528,8 @@
   margin: 0;
   padding: 0;
   list-style: none;
-  max-height: 44rem;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  /* No inner scroll cap: the readable window is rendered in the DOM (see
+     HomePage), so nothing is ever clipped under the panel foot (73). */
 }
 
 .ledger-row {
@@ -661,10 +653,10 @@
 .ledger-identity .path-copy code { font-size: 12px; }
 
 .ledger-languages {
+  /* Wraps, never ellipsises: a clipped text node still lays out at full width
+     and the "+N" tail ran under the score cell beside it (73). */
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
   color: var(--color-ink-faint);
 }
 
@@ -676,7 +668,7 @@
 
 .ledger-mid .ledger-bar { width: 100%; }
 
-.ledger-mid-meta { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2xs) var(--space-xs); min-width: 0; overflow: hidden; }
+.ledger-mid-meta { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2xs) var(--space-xs); min-width: 0; overflow: hidden; pointer-events: none; }
 
 .ledger-bar { height: .375rem; background: var(--color-surface-muted); border-radius: var(--radius-button); overflow: hidden; }
 
@@ -685,13 +677,11 @@
 /* Neutral ink on purpose: the row's grade tile owns the color, so the
    fixed/new trajectory never competes with it (green-next-to-red incoherence). */
 .ledger-delta {
-  display: inline-flex;
-  align-items: center;
+  /* Plain inline text, no pill, single line, and transparent to hit-testing
+     so it can never be the element a neighbour's text lands on (73). */
+  pointer-events: none;
   white-space: nowrap;
-  padding: 1px 7px;
-  border-radius: var(--radius-pill);
-  background: var(--color-surface-muted);
-  color: var(--color-ink-soft);
+  color: var(--color-ink-faint);
   font: 500 var(--text-2xs) var(--font-body);
   font-variant-numeric: tabular-nums;
 }
@@ -707,7 +697,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 3px;
+  gap: var(--space-3xs);
   min-width: 0;
 }
 
@@ -718,12 +708,12 @@
 /* The state badge repeated in full ("Completed with warnings") down every row
    was the loudest thing in the ledger. StateTag reduces it to a coloured dot
    plus a short word, so a column of them reads as metadata. */
-.ledger-last { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.ledger-last { display: inline-flex; align-items: center; gap: var(--space-2xs); min-width: 0; }
 
 .state-tag {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-2xs);
   font-size: var(--text-2xs);
   font-weight: 600;
   color: var(--color-ink-soft);
@@ -794,10 +784,10 @@
 .ledger-confirm { grid-column: 1 / -1; }
 
 /* ── Activity feed ───────────────────────────────────────────────── */
-.feed-filters { display: inline-flex; gap: 3px; padding: 2px; border-radius: var(--radius-xs); border: var(--rule) solid var(--color-rule-faint); background: var(--color-surface); }
+.feed-filters { display: inline-flex; gap: var(--space-3xs); padding: 2px; border-radius: var(--radius-xs); border: var(--rule) solid var(--color-rule-faint); background: var(--color-surface); }
 
 .feed-filter-btn {
-  padding: 3px 9px;
+  padding: var(--space-3xs) var(--space-sm);
   border: none;
   border-radius: calc(var(--radius-xs) - 1px);
   background: none;
@@ -812,7 +802,7 @@
 
 .board-trend { padding: var(--space-md) var(--space-lg) 0; }
 
-.board-trend-label { margin: 0 0 6px; font: 600 var(--text-2xs) var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--color-ink-faint); }
+.board-trend-label { margin: 0 0 var(--space-2xs); font: 500 var(--text-2xs) var(--font-body); letter-spacing: 0; color: var(--color-ink-faint); }
 
 .trend-bars {
   display: flex;
@@ -879,7 +869,7 @@
 .feed-state {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-2xs);
   font: 600 var(--text-2xs) var(--font-body);
   white-space: nowrap;
   max-width: 11rem;
@@ -906,7 +896,7 @@
    in the shared two-column board it crowds out the state and findings. */
 .feed-profile {
   display: none;
-  padding: 1px 7px;
+  padding: var(--space-3xs) var(--space-xs);
   border-radius: var(--radius-pill);
   border: var(--rule) solid var(--color-rule);
   background: var(--color-surface-muted);
@@ -918,7 +908,7 @@
   text-overflow: ellipsis;
 }
 
-.feed-findings { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-xs); color: var(--color-ink-soft); min-width: 8rem; }
+.feed-findings { display: inline-flex; align-items: center; gap: var(--space-xs); font-size: var(--text-xs); color: var(--color-ink-soft); min-width: 8rem; }
 
 .feed-findings-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
