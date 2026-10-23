@@ -233,7 +233,7 @@
 .verdict-bar-count {
   font-family: var(--font-mono);
   font-size: var(--text-sm);
-  font-weight: 700;
+  font-weight: 600;
   color: var(--color-ink);
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -272,7 +272,7 @@
   margin: 0;
   font-family: var(--font-display);
   font-size: var(--text-md);
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -.01em;
   color: var(--color-ink);
   font-variant-numeric: tabular-nums;
@@ -316,7 +316,7 @@
   flex: 1 1 auto;
   min-width: 0;
   padding: var(--space-2xs) var(--space-sm);
-  border: var(--rule) solid var(--color-rule);
+  border: var(--rule) solid var(--color-field-edge);
   border-radius: var(--radius-button);
   background: var(--color-surface);
   transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
@@ -516,7 +516,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--text-sm);
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: -.005em;
   color: var(--color-ink);
 }

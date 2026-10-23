@@ -367,7 +367,7 @@ export function RuleStudioPage() {
       </div>
 
       <section className="mt-8" aria-labelledby="saved-rules-heading">
-        <h2 id="saved-rules-heading" className="font-display text-lg font-bold">Saved rules</h2>
+        <h2 id="saved-rules-heading" className="font-display text-lg font-semibold">Saved rules</h2>
         <p className="text-sm text-[var(--color-ink-soft)]">{rules.length} rule{rules.length === 1 ? '' : 's'} stored locally.</p>
         {!rules.length ? <p className="mt-4 rounded-[var(--radius-md)] border border-dashed border-[var(--color-rule)] p-6 text-sm text-[var(--color-ink-faint)]">No custom rules yet. Save one from the editor above.</p> : (
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

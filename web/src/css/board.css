@@ -66,7 +66,7 @@
   padding: var(--space-xl) var(--space-lg) var(--space-lg);
   border: var(--rule) solid var(--color-rule);
   border-radius: var(--radius-card);
-  background: var(--color-surface);
+  background: var(--color-paper-elevated);
   box-shadow: var(--shadow-sm);
 }
 
@@ -338,7 +338,7 @@
 
 .verdict-legend li i { width: .55rem; height: .55rem; border-radius: 2px; }
 
-.legend-count { font-weight: 700; color: var(--color-ink); }
+.legend-count { font-weight: 600; color: var(--color-ink); }
 
 .verdict-legend li.zero .legend-count { color: var(--color-ink-faint); font-weight: 500; }
 
@@ -400,7 +400,7 @@
   align-items: stretch;
   border: var(--rule) solid var(--color-rule);
   border-radius: var(--radius-card);
-  background: var(--color-surface);
+  background: var(--color-paper-elevated);
   box-shadow: var(--shadow-card);
   overflow: hidden;
 }
@@ -454,7 +454,6 @@
   font-size: var(--text-md);
   font-weight: var(--display-weight);
   letter-spacing: var(--tracking-display);
-  text-transform: uppercase;
   color: var(--color-ink);
   white-space: nowrap;
 }
@@ -490,7 +489,7 @@
   width: 10rem;
   padding: var(--space-2xs) var(--space-sm);
   border-radius: var(--radius-xs);
-  border: var(--rule) solid var(--color-rule-strong);
+  border: var(--rule) solid var(--color-field-edge);
   background: var(--color-surface);
   font-size: var(--text-xs);
   color: var(--color-ink);
@@ -578,7 +577,7 @@
   background: var(--grade-bg);
   color: var(--grade-ink);
   font-family: var(--font-display);
-  font-weight: 800;
+  font-weight: 600;
   font-size: var(--text-sm);
   position: relative;
   overflow: hidden;
@@ -703,7 +702,7 @@
 
 /* Row risk score, now the small number under the grade tile — the board's
    hero count outranks it, and the tile's letter already owns the color. */
-.ledger-score { font-family: var(--font-display); font-weight: 700; font-size: var(--text-2xs); color: var(--color-ink-faint); white-space: nowrap; }
+.ledger-score { font-family: var(--font-display); font-weight: 600; font-size: var(--text-2xs); color: var(--color-ink-faint); white-space: nowrap; }
 
 /* The state badge repeated in full ("Completed with warnings") down every row
    was the loudest thing in the ledger. StateTag reduces it to a coloured dot

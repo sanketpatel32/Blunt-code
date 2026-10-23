@@ -4,14 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/bluntcode-mark.svg" />
-    <meta name="theme-color" content="#ffffff" />
+    <meta name="theme-color" content="#f4f0ea" />
     <title>Blunt Code — Local code analysis</title>
-    <!--
-      No webfont requests: this is a local-first desktop app, so the UI never
-      dials fonts.googleapis.com. The font stacks in tokens.css lead with
-      "IBM Plex Sans"/"IBM Plex Mono" (used when installed locally) and fall
-      back to system-ui/ui-monospace otherwise.
-    -->
+  <!--
+    No webfont requests: this is a local-first desktop app, so the UI never
+    dials a fonts CDN. The font stacks in tokens.css lead with the bundled
+    "General Sans"/"Geist Mono" woff2 files and fall back to
+    system-ui/ui-monospace otherwise.
+  -->
     <script>
       (function () {
         try {
@@ -23,20 +23,20 @@
               : 'light';
           document.documentElement.dataset.theme = theme;
           var meta = document.querySelector('meta[name="theme-color"]');
-          if (meta) meta.setAttribute('content', theme === 'dark' ? '#11141a' : '#ffffff');
+          if (meta) meta.setAttribute('content', theme === 'dark' ? '#241e19' : '#f4f0ea');
         } catch (error) {
           document.documentElement.dataset.theme = 'light';
         }
       })();
     </script>
-    <script type="module" crossorigin src="/assets/index-CrOg6X0R.js"></script>
+    <script type="module" crossorigin src="/assets/index-CBFyPcHZ.js"></script>
     <link rel="modulepreload" crossorigin href="/assets/vendor-DEobeHgB.js">
-    <link rel="modulepreload" crossorigin href="/assets/chunk-charts-CS4xiGpd.js">
-    <link rel="modulepreload" crossorigin href="/assets/chunk-compliance-B2tvpyLd.js">
-    <link rel="modulepreload" crossorigin href="/assets/chunk-pentest-BVhJTUfG.js">
-    <link rel="modulepreload" crossorigin href="/assets/chunk-editor-LJwcR6Ol.js">
-    <link rel="stylesheet" crossorigin href="/assets/chunk-charts-DofsCkz3.css">
-    <link rel="stylesheet" crossorigin href="/assets/index-DKsXkz3I.css">
+    <link rel="modulepreload" crossorigin href="/assets/chunk-charts-DCU9e0jK.js">
+    <link rel="modulepreload" crossorigin href="/assets/chunk-compliance-DApKHQ7X.js">
+    <link rel="modulepreload" crossorigin href="/assets/chunk-pentest-BueIXonD.js">
+    <link rel="modulepreload" crossorigin href="/assets/chunk-editor-Cnx64CN6.js">
+    <link rel="stylesheet" crossorigin href="/assets/chunk-charts-CUPv4V81.css">
+    <link rel="stylesheet" crossorigin href="/assets/index-BnidmIg4.css">
   </head>
   <body>
     <div id="root"></div>

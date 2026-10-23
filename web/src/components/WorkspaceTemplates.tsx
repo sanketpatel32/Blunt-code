@@ -36,7 +36,7 @@ export function WorkspaceTemplates({ onUseTemplate }: { onUseTemplate?: () => vo
   return (
     <section aria-labelledby="workspace-templates-heading" className="mt-8">
       <header className="mb-4">
-        <h2 id="workspace-templates-heading" className="font-display text-lg font-bold">Start from a template</h2>
+        <h2 id="workspace-templates-heading" className="font-display text-lg font-semibold">Start from a template</h2>
         <p className="text-sm text-[var(--color-ink-soft)]">Pick a stack: we pre-fill the workspace dialog with the right languages and analyzers.</p>
       </header>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

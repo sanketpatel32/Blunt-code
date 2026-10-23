@@ -581,17 +581,17 @@ function WorkspacePentestInsight({ workspaceId, scanId, go }: { workspaceId: str
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="p-3 rounded-[var(--radius-md)] border border-[var(--color-rule-faint)] bg-[var(--color-surface)]">
           <span className="text-xs font-semibold text-[var(--color-danger)]">Critical Flaws</span>
-          <p className="font-display text-2xl font-bold mt-1 text-[var(--color-danger)]">{critical}</p>
+          <p className="font-display text-2xl font-semibold mt-1 text-[var(--color-danger)]">{critical}</p>
           <span className="text-xs text-[var(--color-ink-faint)]">RCE, SQLi, Hardcoded JWT, XXE</span>
         </div>
         <div className="p-3 rounded-[var(--radius-md)] border border-[var(--color-rule-faint)] bg-[var(--color-surface)]">
           <span className="text-xs font-semibold text-[var(--color-warning)]">High Severity</span>
-          <p className="font-display text-2xl font-bold mt-1 text-[var(--color-warning)]">{high}</p>
+          <p className="font-display text-2xl font-semibold mt-1 text-[var(--color-warning)]">{high}</p>
           <span className="text-xs text-[var(--color-ink-faint)]">SSRF, XSS, Path Traversal, CORS</span>
         </div>
         <div className="p-3 rounded-[var(--radius-md)] border border-[var(--color-rule-faint)] bg-[var(--color-surface)]">
           <span className="text-xs font-semibold text-[var(--color-ink-soft)]">Medium / Warnings</span>
-          <p className="font-display text-2xl font-bold mt-1 text-[var(--color-ink)]">{medium}</p>
+          <p className="font-display text-2xl font-semibold mt-1 text-[var(--color-ink)]">{medium}</p>
           <span className="text-xs text-[var(--color-ink-faint)]">Weak Hashes, Missing Headers, Debug</span>
         </div>
       </div>

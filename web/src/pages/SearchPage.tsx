@@ -647,7 +647,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
           <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--color-ink-faint)]" aria-hidden="true" />
           <input
             type="search"
-            className="search-input w-full rounded-[var(--radius-md)] border border-[var(--color-rule)] bg-[var(--color-surface)] py-2 pl-9 pr-10 text-xs sm:text-sm text-[var(--color-ink)] shadow-xs transition-colors placeholder:text-[var(--color-ink-faint)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)]"
+            className="search-input w-full rounded-[var(--radius-md)] border border-[var(--color-field-edge)] bg-[var(--color-surface)] py-2 pl-9 pr-10 text-xs sm:text-sm text-[var(--color-ink)] shadow-xs transition-colors placeholder:text-[var(--color-ink-faint)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)]"
             placeholder="Search message text, vulnerability rules (e.g. sqli, xss, cwe), file paths, or CWE IDs…"
             aria-label="Search findings"
             value={query}

@@ -95,7 +95,7 @@ export function NotificationsCenter({ routeKey = '' }: { routeKey?: string }) {
         <Button variant="ghost" size="icon" className="nav-bell relative" aria-label={unread ? `Notifications, ${unread} unread` : 'Notifications'}>
           <Bell className="h-4 w-4" aria-hidden="true" />
           {unread > 0 && (
-            <span className="absolute -right-0.5 -top-0.5 flex h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-full bg-[var(--color-danger-strong)] px-1 text-xs font-bold leading-none text-[var(--color-on-accent)] ring-2 ring-[var(--color-surface-muted)]">
+            <span className="absolute -right-0.5 -top-0.5 flex h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-full bg-[var(--color-danger-strong)] px-1 text-xs font-semibold leading-none text-[var(--color-on-accent)] ring-2 ring-[var(--color-surface-muted)]">
               {unread > 99 ? '99+' : unread}
             </span>
           )}

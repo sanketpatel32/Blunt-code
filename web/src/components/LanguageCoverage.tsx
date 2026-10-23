@@ -68,7 +68,7 @@ export function LanguageCoverage({ compact }: { compact?: boolean }) {
             placeholder="Filter languages"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            className="rounded-md border border-[var(--color-rule)] bg-[var(--color-surface)] px-2 py-1 text-xs w-36"
+            className="rounded-md border border-[var(--color-field-edge)] bg-[var(--color-surface)] px-2 py-1 text-xs w-36"
             aria-label="Search languages"
           />
         </label>

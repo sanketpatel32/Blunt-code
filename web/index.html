@@ -4,14 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/bluntcode-mark.svg" />
-    <meta name="theme-color" content="#ffffff" />
+    <meta name="theme-color" content="#f4f0ea" />
     <title>Blunt Code — Local code analysis</title>
-    <!--
-      No webfont requests: this is a local-first desktop app, so the UI never
-      dials fonts.googleapis.com. The font stacks in tokens.css lead with
-      "IBM Plex Sans"/"IBM Plex Mono" (used when installed locally) and fall
-      back to system-ui/ui-monospace otherwise.
-    -->
+  <!--
+    No webfont requests: this is a local-first desktop app, so the UI never
+    dials a fonts CDN. The font stacks in tokens.css lead with the bundled
+    "General Sans"/"Geist Mono" woff2 files and fall back to
+    system-ui/ui-monospace otherwise.
+  -->
     <script>
       (function () {
         try {
@@ -23,7 +23,7 @@
               : 'light';
           document.documentElement.dataset.theme = theme;
           var meta = document.querySelector('meta[name="theme-color"]');
-          if (meta) meta.setAttribute('content', theme === 'dark' ? '#11141a' : '#ffffff');
+          if (meta) meta.setAttribute('content', theme === 'dark' ? '#241e19' : '#f4f0ea');
         } catch (error) {
           document.documentElement.dataset.theme = 'light';
         }

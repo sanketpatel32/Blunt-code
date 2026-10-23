@@ -5,6 +5,19 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.44.0] - 2026-10-23
+
+### Changed
+- **Full UI re-theme — "Coral", replacing 0.43.0's Blueprint.** One pass over the same token layer, the opposite direction: warm paper ground with cotton letterpress cards (lit top edge, soft cast, 8px radii) instead of prussian keyline drafting; General Sans (bundled locally, no webfont fetch) for text with Geist Mono reserved for figures, paths, and code; deep coral as the single accent voice in both themes, and a warm ink board for dark mode rather than a cyanotype sheet. Content and wiring untouched: all links, fields, handlers, and test hooks kept (49/49, 40/40, 429/429), 561 web tests green.
+- **Fields are ruled, not whispered.** Every input, select, textarea, and code editor now draws its edge in one `--color-field-edge` ink (3:1 minimum), replacing the near-invisible hairlines Blueprint used on controls; skip-link and warning callouts follow the same rule.
+- **The active rail marker is part of its pill.** The current-page indicator in the side rail was a detached coral tick floating in the gutter (and it disappeared entirely under `prefers-reduced-motion`); it is now an inset accent edge on the pill itself, present in every motion preference.
+- **Dark-theme legibility for warning and severity text.** Amber warning text was raised to AA contrast against the warm board, and the "low" severity segment of the mini severity bar carries enough chroma to read against its track.
+
+### Fixed
+- **Light-theme card separation.** Cards sat at ~2% lightness above the ground with 90%-lightness dividers, so panels and the activity feed barely separated from the page and the verdict card's stat row had no visible divider; cards are now cotton stock a clear step off the paper, and rule tokens were deepened so hairlines draw.
+- **Ground hue drift.** The light theme's paper leaned pink at hue 55–60; the desk and stock were re-anchored to hue 70–78 (neutral warm grey).
+- **Rule editor field contrast.** The code editor's frame (Monaco container and textarea fallback) drew a 1.6:1 edge; both now use the field-edge ink.
+
 ## [0.43.0] - 2026-10-23
 
 ### Changed

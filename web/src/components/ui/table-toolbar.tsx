@@ -123,7 +123,7 @@ export function TableToolbar({
       <div className="ml-auto flex flex-wrap items-center gap-1.5">
         {hasSelection && (
           <>
-            <span className="inline-flex items-center rounded-[var(--radius-button)] bg-[var(--color-accent)] px-2 py-1 text-xs font-bold text-[var(--color-accent-ink)] shadow-[var(--shadow-card)]" aria-live="polite" aria-label={`${selectedCount} selected`}>
+            <span className="inline-flex items-center rounded-[var(--radius-button)] bg-[var(--color-accent)] px-2 py-1 text-xs font-semibold text-[var(--color-accent-ink)] shadow-[var(--shadow-card)]" aria-live="polite" aria-label={`${selectedCount} selected`}>
               {selectedCount} selected
             </span>
             {onBulkSuppress && (

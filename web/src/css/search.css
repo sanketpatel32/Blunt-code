@@ -297,7 +297,7 @@
   flex: 1 1 auto;
   min-width: 0;
   padding: var(--space-2xs) var(--space-xs);
-  border: var(--rule) solid var(--color-rule-strong);
+  border: var(--rule) solid var(--color-field-edge);
   border-radius: var(--radius-xs);
   background: var(--color-surface);
   color: var(--color-ink);

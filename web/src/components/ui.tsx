@@ -35,7 +35,7 @@ export function ErrorPanel({ error, retry }: { error: string; retry?: () => void
         <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-[var(--color-danger-soft)] border border-[var(--color-danger)]/20 text-[var(--color-danger)]">
           <AlertTriangle className="h-5 w-5" />
         </div>
-        <h2 className="font-display text-xl font-bold">Could not load this view</h2>
+        <h2 className="font-display text-xl font-semibold">Could not load this view</h2>
         <p className="mt-2 text-sm text-[var(--color-ink-soft)]">{friendly.text}</p>
         {friendly.code && <p className="mt-1 font-mono text-xs text-[var(--color-ink-faint)]">{friendly.code}</p>}
         {retry && <Button variant="outline" size="sm" className="mt-4" onClick={retry}>Try again</Button>}
@@ -86,7 +86,7 @@ export function Empty({ title, children, action, icon, tone = 'neutral' }: { tit
     <Card className={`empty${tone === 'positive' ? ' positive' : ''} border-dashed bg-[var(--color-surface)] p-8 text-center`}>
       <CardContent className="p-0 flex flex-col items-center">
         {icon && <span className={`empty-icon ${tone === 'positive' ? 'border-[color-mix(in_oklch,var(--color-success)_40%,var(--color-rule))] bg-[var(--color-success-soft)] text-[var(--color-success)]' : ''}`}>{icon}</span>}
-        <h2 className="font-display text-lg font-bold mt-2">{title}</h2>
+        <h2 className="font-display text-lg font-semibold mt-2">{title}</h2>
         <p className="mt-1.5 text-sm text-[var(--color-ink-soft)] max-w-[38rem]">{children}</p>
         {action && <div className="mt-5">{action}</div>}
       </CardContent>

@@ -89,7 +89,7 @@
 .settings-editor select {
   min-height: 2.35rem;
   padding: 0 var(--space-sm);
-  border: var(--rule) solid var(--color-rule-strong);
+  border: var(--rule) solid var(--color-field-edge);
   border-radius: var(--radius-button);
   background: var(--color-surface);
   color: var(--color-ink);

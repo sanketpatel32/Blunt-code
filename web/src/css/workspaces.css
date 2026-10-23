@@ -27,7 +27,7 @@
 .page-workspaces .ws-table tbody tr:hover td:first-child { background: color-mix(in oklch, var(--color-accent) 3%, var(--color-surface)); }
 
 /* — Name cell: bold name, muted truncated path, at most two tag chips + "+N" — */
-.page-workspaces .ws-name { display: block; max-width: 18rem; overflow: hidden; text-overflow: ellipsis; color: var(--color-ink); font-weight: 650; }
+.page-workspaces .ws-name { display: block; max-width: 18rem; overflow: hidden; text-overflow: ellipsis; color: var(--color-ink); font-weight: 600; }
 .page-workspaces .ws-sub { display: flex; align-items: center; gap: var(--space-3xs); min-width: 0; margin-top: 1px; }
 .page-workspaces .ws-path { min-width: 0; max-width: 15rem; overflow: hidden; text-overflow: ellipsis; color: var(--color-ink-faint); font-family: var(--font-mono); font-size: var(--text-2xs); }
 .page-workspaces .ws-tags { display: inline-flex; flex: none; gap: 4px; }
@@ -39,7 +39,7 @@
 .page-workspaces .ws-langs .tag { justify-content: center; min-width: 1.35rem; }
 
 /* — Risk: compact grade chip colored by grade (.state success/warning/failed) — */
-.page-workspaces .ws-risk { justify-content: center; min-width: 1.6rem; font-weight: 700; }
+.page-workspaces .ws-risk { justify-content: center; min-width: 1.6rem; font-weight: 600; }
 
 /* — Unfinished-scan state pill (Findings cell when nothing has completed yet) — */
 .page-workspaces .ws-state { padding: 1px var(--space-2xs); font-size: var(--text-2xs); }
@@ -48,7 +48,7 @@
 .page-workspaces .ws-findings { display: inline-flex; align-items: baseline; white-space: nowrap; }
 .page-workspaces .ws-findings > * + * { margin-left: var(--space-sm); }
 .page-workspaces .ws-findings > * + *::before { content: '·'; margin-right: var(--space-sm); color: var(--color-ink-faint); font-weight: 400; }
-.page-workspaces .ws-findings-total { color: var(--color-ink); font-weight: 650; }
+.page-workspaces .ws-findings-total { color: var(--color-ink); font-weight: 600; }
 .page-workspaces .ws-findings em { font-style: normal; color: var(--color-ink-faint); font-weight: 500; }
 .page-workspaces .ws-sev-critical { color: var(--color-sev-critical); }
 .page-workspaces .ws-sev-high { color: var(--color-sev-high); }

@@ -185,7 +185,7 @@ export function QueryBuilder({ group, onChange, onApply, facetCounts, analyzers 
                       onChange={(e) => updateRow(row.id, { value: e.target.value })}
                       placeholder={row.field === 'path' ? 'src/' : row.field === 'category' ? 'security' : 'value'}
                       aria-label={`Value for ${row.field} condition ${idx + 1}`}
-                      className="h-8 w-full rounded-[var(--radius-button)] border border-[var(--color-rule-strong)] bg-[var(--color-surface)] px-3 text-sm text-[var(--color-ink)] placeholder:text-[var(--color-ink-faint)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)] focus:border-[var(--color-accent)]"
+                      className="h-8 w-full rounded-[var(--radius-button)] border border-[var(--color-field-edge)] bg-[var(--color-surface)] px-3 text-sm text-[var(--color-ink)] placeholder:text-[var(--color-ink-faint)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)] focus:border-[var(--color-accent)]"
                     />
                   ) : (
                     <Combobox

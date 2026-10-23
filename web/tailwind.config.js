@@ -6,7 +6,7 @@ export default {
     extend: {
       colors: {
         border: 'var(--color-rule)',
-        input: 'var(--color-rule-strong)',
+        input: 'var(--color-field-edge)',
         ring: 'var(--color-focus)',
         background: 'var(--color-paper)',
         foreground: 'var(--color-ink)',

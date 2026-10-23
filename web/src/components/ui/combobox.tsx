@@ -45,7 +45,7 @@ export function Combobox({ options, value, onValueChange, placeholder = 'Selectâ
           aria-haspopup="listbox"
           disabled={disabled}
           className={cn(
-            'flex h-10 w-full items-center justify-between rounded-[var(--radius-button)] border border-[var(--color-rule-strong)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-ink)] shadow-xs transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)] focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none',
+            'flex h-10 w-full items-center justify-between rounded-[var(--radius-button)] border border-[var(--color-field-edge)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-ink)] shadow-xs transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)] focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none',
             !value && 'text-[var(--color-ink-faint)]',
             triggerClassName,
             className,

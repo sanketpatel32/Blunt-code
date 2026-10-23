@@ -238,7 +238,7 @@ export function AppShell({ workspace, route, onNavigate, onClose, theme, onToggl
                     {LOCALES.map((l) => (
                       <DropdownMenuItem key={l.value} onSelect={() => setLocale(l.value as never)} className="flex items-center justify-between gap-2 cursor-pointer">
                         <span className="flex items-center gap-2">
-                          <span className="font-mono font-bold">{l.label}</span>
+                          <span className="font-mono font-semibold">{l.label}</span>
                           <span className="text-[var(--color-ink-soft)]">{l.name}</span>
                         </span>
                         {locale === l.value && <Check className="h-3.5 w-3.5 text-[var(--color-accent-strong)]" />}

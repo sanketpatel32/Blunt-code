@@ -105,9 +105,8 @@
 .page-header h1 {
   font-family: var(--font-display);
   font-size: var(--text-page-title);
-  line-height: 1.05;
+  line-height: 1.08;
   letter-spacing: var(--tracking-display);
-  text-transform: uppercase;
   font-weight: var(--display-weight);
 }
 
@@ -131,7 +130,7 @@
 .settings-list h2,
 .about-card h2 {
   font-size: var(--text-md);
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: -.01em;
 }
 
@@ -209,7 +208,7 @@
   color: var(--color-ink);
   font-family: var(--font-display);
   font-size: 0.95rem;
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: -.02em;
   text-decoration: none;
   white-space: nowrap;
@@ -270,11 +269,15 @@
 
 /* Active: a filled soft pill plus an accent bar on the leading edge. A rail is
    read by position, so the marker has to be unambiguous and it must not
-   shout — the page's own content is the loudest thing on screen. */
+   shout — the page's own content is the loudest thing on screen. The bar is an
+   inset edge, not a detached tick floating in the rail gutter: it hugs the
+   pill's own rounding, and it survives reduced-motion (a current-page marker
+   is a state, not an animation). */
 .rail-link.active {
   background: var(--color-surface-muted);
   color: var(--color-ink);
   font-weight: 600;
+  box-shadow: inset 2px 0 0 var(--color-accent);
 }
 
 .rail-link.active .rail-link-icon { color: var(--color-accent-strong); }
@@ -358,7 +361,7 @@
     color: var(--color-ink);
     font-family: var(--font-display);
     font-size: 0.95rem;
-    font-weight: 650;
+    font-weight: 600;
     letter-spacing: -.02em;
     text-decoration: none;
     white-space: nowrap;
@@ -453,27 +456,6 @@
    asked for reduced motion. The stagger is capped so a 30-row list does not
    spend a second making the last item appear. */
 @media (prefers-reduced-motion: no-preference) {
-  /* The rail's current page indicator: a small, single, non-repeating cue. */
-  .rail-link.active::before {
-    content: '';
-    position: absolute;
-    left: -0.55rem;
-    top: 50%;
-    width: 2px;
-    height: 1.1rem;
-    margin-top: -0.55rem;
-    border-radius: 2px;
-    background: var(--color-accent);
-    animation: rail-marker 260ms var(--ease-out) both;
-  }
-
-  .rail-link { position: relative; }
-
-  @keyframes rail-marker {
-    from { transform: scaleY(0.2); opacity: 0; }
-    to { transform: scaleY(1); opacity: 1; }
-  }
-
   /* Hovering a data row should feel like touching it, not like a repaint. */
   .ledger-row,
   .feed-row,
@@ -520,8 +502,6 @@
 /* Reduced motion is not "no animation" for content that teleports: it is
    instant, correct, and never a fade into nothing. */
 @media (prefers-reduced-motion: reduce) {
-  .rail-link.active::before { animation: none; }
-
   .command-palette,
   .confirmation-dialog,
   .toast { animation: none !important; }

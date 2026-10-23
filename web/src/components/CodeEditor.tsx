@@ -283,7 +283,7 @@ export function CodeEditor({
           className="overflow-hidden rounded-[var(--radius-md)] border bg-[var(--color-surface)]"
           style={{
             minHeight,
-            borderColor: hasError ? 'var(--color-danger)' : 'var(--color-rule)',
+            borderColor: hasError ? 'var(--color-danger)' : 'var(--color-field-edge)',
             boxShadow: hasError ? '0 0 0 2px var(--color-danger-soft)' : undefined,
           }}
         />
@@ -303,7 +303,7 @@ export function CodeEditor({
         tabIndex={-1}
         className="flex overflow-hidden rounded-[var(--radius-md)] border bg-[var(--color-surface-muted)] focus-within:ring-2 focus-within:ring-[var(--color-focus)] focus-within:ring-offset-2"
         style={{
-          borderColor: hasError ? 'var(--color-danger)' : 'var(--color-rule)',
+          borderColor: hasError ? 'var(--color-danger)' : 'var(--color-field-edge)',
           transition: reduced ? 'none' : 'border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out)',
           ...(hasError ? { boxShadow: '0 0 0 2px var(--color-danger-soft)' } : {}),
         }}

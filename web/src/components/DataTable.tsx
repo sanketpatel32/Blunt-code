@@ -224,7 +224,7 @@ export function DataTable<T>({
 
       {showBulkBar && (
         <div role="toolbar" aria-label="Bulk actions" className="flex flex-wrap items-center gap-2 rounded-[var(--radius-button)] border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-3 py-2 shadow-[var(--shadow-card)]">
-          <span className="inline-flex items-center rounded-[var(--radius-button)] bg-[var(--color-accent)] px-2 py-0.5 text-xs font-bold text-[var(--color-accent-ink)] shadow-[var(--shadow-card)]" aria-live="polite">{selectedCount} selected</span>
+          <span className="inline-flex items-center rounded-[var(--radius-button)] bg-[var(--color-accent)] px-2 py-0.5 text-xs font-semibold text-[var(--color-accent-ink)] shadow-[var(--shadow-card)]" aria-live="polite">{selectedCount} selected</span>
           <button type="button" onClick={() => onBulkSuppress?.()} className="inline-flex h-7 items-center gap-1.5 rounded-[var(--radius-button)] border border-[var(--color-rule)] bg-[var(--color-surface)] px-3 text-xs font-semibold shadow-[var(--shadow-card)]">
             <EyeOff className="h-3.5 w-3.5" aria-hidden="true" /> Suppress selected
           </button>
@@ -475,7 +475,7 @@ export function DataTableSearch({ value, onChange, placeholder }: { value: strin
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder ?? 'Search…'}
         aria-label="Search"
-        className="h-8 w-full rounded-[var(--radius-button)] border border-[var(--color-rule-strong)] bg-[var(--color-surface)] py-1 pl-8 pr-3 text-sm focus:border-[var(--color-accent)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent-glow)]"
+        className="h-8 w-full rounded-[var(--radius-button)] border border-[var(--color-field-edge)] bg-[var(--color-surface)] py-1 pl-8 pr-3 text-sm focus:border-[var(--color-accent)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent-glow)]"
       />
     </div>
   );
