@@ -31,8 +31,10 @@
 </p>
 
 <p align="center">
-  <video src="marketing/market-video.mp4" controls muted loop playsinline width="720"></video><br/>
-  <sub><strong>▶ The 35-second tour</strong> — scan to graded risk board, all on your machine. <a href="marketing/market-video.mp4">Direct link</a></sub>
+  <a href="marketing/market-video.mp4">
+    <img src="marketing/market-video-poster.jpg" alt="Blunt Code market video — the 35-second tour" width="720" />
+  </a><br/>
+  <sub><strong>▶ Watch the 35-second tour</strong> — scan to graded risk board, all on your machine. <a href="marketing/market-video.mp4">Direct link</a></sub>
 </p>
 
 ---

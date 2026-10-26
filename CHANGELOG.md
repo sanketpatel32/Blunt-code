@@ -5,6 +5,11 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.45.1] - 2026-10-26
+
+### Fixed
+- **The README's video embed renders as a clickable poster.** GitHub's markdown sanitizer strips the inline `<video>` element, so the 0.45.0 README shipped the caption and links with no player; the embed is now a poster frame from the film linking to `marketing/market-video.mp4`, which renders everywhere GitHub renders images.
+
 ## [0.45.0] - 2026-10-26
 
 ### Added
