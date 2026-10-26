@@ -19,6 +19,7 @@
 
 <p align="center">
   <a href="https://sanketpatel32.github.io/Blunt-code/">Website</a> ·
+  <a href="marketing/market-video.mp4">▶ Video</a> ·
   <a href="#-install">Install</a> ·
   <a href="#-quick-start">Quick start</a> ·
   <a href="#-features">Features</a> ·
@@ -27,6 +28,11 @@
   <a href="#-privacy">Privacy</a> ·
   <a href="docs/ci.md">CI guide</a> ·
   <a href="CHANGELOG.md">Changelog</a>
+</p>
+
+<p align="center">
+  <video src="marketing/market-video.mp4" controls muted loop playsinline width="720"></video><br/>
+  <sub><strong>▶ The 35-second tour</strong> — scan to graded risk board, all on your machine. <a href="marketing/market-video.mp4">Direct link</a></sub>
 </p>
 
 ---

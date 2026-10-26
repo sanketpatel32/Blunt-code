@@ -5,6 +5,11 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.45.0] - 2026-10-26
+
+### Added
+- **Market video, embedded in the README.** A 35-second product tour (1920×1080, 30 fps, muted autoplay) rendered in the shipping Coral look — the README hook, a `bluntcode scan` terminal run with all twelve analyzer chips lighting up and severity counts ticking up, the Risk Board grade tile and ledger building live, the four headline capabilities, and the one-line install command held for reading. The film ships in-repo at `marketing/market-video.mp4` (playable straight from the README, with a "▶ Video" link in the header row); the HyperFrames project that renders it is kept outside the repository.
+
 ## [0.44.0] - 2026-10-23
 
 ### Changed
