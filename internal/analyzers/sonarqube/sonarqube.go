@@ -237,7 +237,7 @@ var binaryExclusions = []string{
 
 func ScannerProperties(dataDir, root, key, serverURL, token string, exclusions any) (string, func(), error) {
 	if dataDir == "" {
-		return "", nil, fmt.Errorf("Blunt Code application data directory is required for temporary scanner configuration")
+		return "", nil, fmt.Errorf("the application data directory is required for temporary scanner configuration")
 	}
 	if err := os.MkdirAll(filepath.Join(dataDir, "tmp"), 0o700); err != nil {
 		return "", nil, err

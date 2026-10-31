@@ -25,7 +25,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-var ErrAlreadyRunning = errors.New("Blunt Code is already running for this data directory")
+var ErrAlreadyRunning = errors.New("another Blunt Code instance is already running for this data directory")
 
 // Guard owns the per-data-directory named mutex until Close is called.
 type Guard struct{ handle windows.Handle }
