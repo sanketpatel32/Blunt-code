@@ -4,7 +4,6 @@ import (
 	"bluntcode/internal/analyzers"
 	"fmt"
 	"html/template"
-	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -301,7 +300,7 @@ func severityClass(severity analyzers.Severity) string {
 // findings into file sections and for display; project-level findings keep a
 // word instead of a bare "." so the cell is never empty or cryptic.
 func htmlFilePath(f analyzers.Finding) string {
-	path := strings.TrimPrefix(filepath.ToSlash(strings.TrimSpace(f.RelativePath)), "./")
+	path := strings.TrimPrefix(slashPath(strings.TrimSpace(f.RelativePath)), "./")
 	if path == "" || path == "." {
 		return "project"
 	}

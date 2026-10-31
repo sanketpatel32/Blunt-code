@@ -7,7 +7,6 @@ import (
 	"bluntcode/internal/analyzers"
 	"encoding/json"
 	"net/url"
-	"path/filepath"
 	"strings"
 	"unicode/utf8"
 )
@@ -370,7 +369,7 @@ func TestSARIFSurvivesHostileCorpus(t *testing.T) {
 		if err != nil {
 			t.Fatalf("result %d artifact uri %q does not decode: %v", i, uri, err)
 		}
-		expectedPath := strings.TrimPrefix(filepath.ToSlash(strings.TrimSpace(want.RelativePath)), "./")
+		expectedPath := strings.TrimPrefix(strings.ReplaceAll(strings.TrimSpace(want.RelativePath), `\`, "/"), "./")
 		expectedPath = strings.TrimPrefix(expectedPath, "/")
 		if decoded != expectedPath {
 			t.Fatalf("result %d artifact uri %q decodes to %q, want %q", i, uri, decoded, expectedPath)

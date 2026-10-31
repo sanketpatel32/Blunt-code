@@ -3,7 +3,6 @@ package reports
 import (
 	"bluntcode/internal/analyzers"
 	"encoding/json"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -314,5 +313,12 @@ func jsonTime(t time.Time) string {
 // leading "./" so the document is platform-stable, mirroring the SARIF and
 // Markdown exports.
 func jsonFilePath(path string) string {
-	return strings.TrimPrefix(filepath.ToSlash(path), "./")
+	return strings.TrimPrefix(slashPath(path), "./")
+}
+
+// slashPath turns every backslash into '/'. Stored paths come from Windows
+// scans, so the conversion must not depend on the exporting OS the way
+// filepath.ToSlash does (a no-op off Windows); every export uses this.
+func slashPath(path string) string {
+	return strings.ReplaceAll(path, `\`, "/")
 }

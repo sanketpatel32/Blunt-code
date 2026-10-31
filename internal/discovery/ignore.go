@@ -56,7 +56,7 @@ func parseIgnoreFile(data []byte) (patterns []string, negated int) {
 		if len(patterns) >= ignoreFileMaxPatterns {
 			break
 		}
-		patterns = append(patterns, filepath.ToSlash(line))
+		patterns = append(patterns, strings.ReplaceAll(line, `\`, "/")) // .bluntcodeignore is shared text; normalize on every OS
 	}
 	return patterns, negated
 }
@@ -108,7 +108,7 @@ func WorkspaceExcludes(root string, userExcludes []string) []string {
 	merged := make([]string, 0, len(userExcludes)+len(filePatterns))
 	seen := make(map[string]struct{}, len(userExcludes)+len(filePatterns))
 	for _, pattern := range append(append([]string(nil), userExcludes...), filePatterns...) {
-		key := strings.ToLower(filepath.ToSlash(strings.TrimSpace(pattern)))
+		key := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(pattern), `\`, "/"))
 		if key == "" {
 			continue
 		}
