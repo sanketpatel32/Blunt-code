@@ -280,8 +280,9 @@ func runDoctor(args []string) {
 // applies at first paint without re-opening scripts to 'unsafe-inline'.
 // style-src needs 'unsafe-inline' because Radix UI positions dropdowns with
 // inline style attributes. If the bootstrap script changes, recompute the
-// hash over the exact bytes between <script> and </script>.
-const staticCSP = "default-src 'self'; script-src 'self' 'sha256-mOPhT864bFfna/DIOUP/k3m5V3MsQvJPSfsIB3Tt+UQ='; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'"
+// hash over the exact bytes between <script> and </script>;
+// TestStaticCSPPinsEveryInlineScript fails until you do.
+const staticCSP = "default-src 'self'; script-src 'self' 'sha256-gMFUVisKoRJ8huq/bU22WXwXuGkvf3qxmHf5PFpFc/I='; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'"
 
 // Cache policy for the embedded UI. Bundle names under /assets/ carry a Vite
 // content hash, so their bytes never change for a given URL and browsers may
