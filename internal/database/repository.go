@@ -1730,6 +1730,37 @@ func (d *DB) AnalyzerRuns(ctx context.Context, scanID string) ([]reports.Run, er
 	}
 	return output, rows.Err()
 }
+
+// AnalyzerRunsForScans loads the analyzer runs of several scans in one
+// query, keyed by scan id, in the same per-scan order AnalyzerRuns returns.
+func (d *DB) AnalyzerRunsForScans(ctx context.Context, scanIDs []string) (map[string][]reports.Run, error) {
+	output := make(map[string][]reports.Run, len(scanIDs))
+	if len(scanIDs) == 0 {
+		return output, nil
+	}
+	placeholders := make([]string, len(scanIDs))
+	args := make([]any, len(scanIDs))
+	for i, id := range scanIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	rows, err := d.SQL.QueryContext(ctx, `SELECT scan_id,analyzer_id,COALESCE(version,''),state,COALESCE(error_summary,''),finding_count,COALESCE(warning_count,0),COALESCE(duration_ms,0) FROM analyzer_runs WHERE scan_id IN (`+strings.Join(placeholders, ",")+`) ORDER BY scan_id, started_at`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var scanID string
+		var run reports.Run
+		var duration int64
+		if err := rows.Scan(&scanID, &run.AnalyzerID, &run.Version, &run.State, &run.ErrorSummary, &run.FindingCount, &run.WarningCount, &duration); err != nil {
+			return nil, err
+		}
+		run.Duration = time.Duration(duration) * time.Millisecond
+		output[scanID] = append(output[scanID], run)
+	}
+	return output, rows.Err()
+}
 func (d *DB) ReportPath(ctx context.Context, scanID string) (string, error) {
 	var path sql.NullString
 	err := d.SQL.QueryRowContext(ctx, `SELECT report_markdown_path FROM scans WHERE id=?`, scanID).Scan(&path)

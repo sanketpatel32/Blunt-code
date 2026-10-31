@@ -55,6 +55,7 @@ type Server struct {
 	mux        *http.ServeMux
 	shutdown   func()
 	openFolder func(dir string) error
+	cache      *workspaceCaches
 }
 
 // scanDetail is a scan payload enriched for single-scan views: the analyzer
@@ -89,7 +90,7 @@ func New(db *database.DB, bus *events.Bus, scanService *scans.Service, toolServi
 	if logger == nil {
 		logger = slog.Default()
 	}
-	s := &Server{db: db, bus: bus, scans: scanService, tools: toolService, paths: paths, version: version, log: logger, mux: http.NewServeMux(), openFolder: openFolderInExplorer}
+	s := &Server{db: db, bus: bus, scans: scanService, tools: toolService, paths: paths, version: version, log: logger, mux: http.NewServeMux(), openFolder: openFolderInExplorer, cache: newWorkspaceCaches()}
 	s.routes()
 	return s
 }
@@ -315,11 +316,14 @@ func (s *Server) listWorkspaces(w http.ResponseWriter, r *http.Request) {
 	// pays nothing for it.
 	var completedByWorkspace map[string]core.Scan
 	completedLoaded := false
-	views := make([]workspaceView, 0, len(items))
-	for _, item := range items {
+	type pair struct{ latest, lastCompleted *core.Scan }
+	pairs := make([]pair, len(items))
+	var scanIDs []string
+	for i, item := range items {
 		var latest *core.Scan
 		if scan, ok := latestByWorkspace[item.ID]; ok {
 			latest = &scan
+			scanIDs = append(scanIDs, scan.ID)
 		}
 		var lastCompleted *core.Scan
 		if latest == nil || (latest.State != "completed" && latest.State != "completed_with_warnings") {
@@ -333,9 +337,21 @@ func (s *Server) listWorkspaces(w http.ResponseWriter, r *http.Request) {
 			}
 			if scan, ok := completedByWorkspace[item.ID]; ok {
 				lastCompleted = &scan
+				scanIDs = append(scanIDs, scan.ID)
 			}
 		}
-		view, err := s.workspaceView(r.Context(), item, latest, lastCompleted)
+		pairs[i] = pair{latest, lastCompleted}
+	}
+	// One query for every card's analyzer runs instead of one per scan, and
+	// no directory walk: never-scanned workspaces read cached languages.
+	runsByScan, err := s.db.AnalyzerRunsForScans(r.Context(), scanIDs)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load workspace analysis.")
+		return
+	}
+	views := make([]workspaceView, 0, len(items))
+	for i, item := range items {
+		view, err := s.buildWorkspaceView(r.Context(), item, pairs[i].latest, pairs[i].lastCompleted, &viewPrefetch{runs: runsByScan, list: true})
 		if err != nil {
 			fail(w, 500, "DATABASE_ERROR", "Could not load workspace analysis.")
 			return
@@ -382,6 +398,9 @@ func (s *Server) createWorkspace(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, "DATABASE_ERROR", "Could not save workspace.")
 		return
 	}
+	// Warm the language cache so the new card's chips appear on the next
+	// list refresh without the list itself walking the folder.
+	s.workspaceLanguages(context.WithoutCancel(r.Context()), created, false)
 	writeJSON(w, 201, created)
 }
 
@@ -429,7 +448,18 @@ func (s *Server) getWorkspace(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, view)
 }
 
+// viewPrefetch carries what the list endpoint loaded in bulk: analyzer runs
+// keyed by scan id, and list mode, which never walks the filesystem.
+type viewPrefetch struct {
+	runs map[string][]reports.Run
+	list bool
+}
+
 func (s *Server) workspaceView(ctx context.Context, workspace core.Workspace, latest *core.Scan, lastCompleted *core.Scan) (workspaceView, error) {
+	return s.buildWorkspaceView(ctx, workspace, latest, lastCompleted, nil)
+}
+
+func (s *Server) buildWorkspaceView(ctx context.Context, workspace core.Workspace, latest *core.Scan, lastCompleted *core.Scan, pre *viewPrefetch) (workspaceView, error) {
 	view := workspaceView{Workspace: workspace}
 	attach := func(scan *core.Scan) (*scanDetail, error) {
 		if scan == nil {
@@ -443,11 +473,16 @@ func (s *Server) workspaceView(ctx context.Context, workspace core.Workspace, la
 		// serves), so both are loaded while the immutable snapshot is still
 		// at hand; the snapshot itself is then dropped because the dashboard
 		// does not need every selected path from it.
-		runs, err := s.db.AnalyzerRuns(ctx, scan.ID)
-		if err != nil {
-			return nil, err
+		var runs []reports.Run
+		if pre != nil && pre.runs != nil {
+			runs = pre.runs[scan.ID]
+		} else {
+			var err error
+			if runs, err = s.db.AnalyzerRuns(ctx, scan.ID); err != nil {
+				return nil, err
+			}
 		}
-		newCount, fixedCount, err := s.scanComparisonCounts(ctx, *scan)
+		newCount, fixedCount, err := s.cachedComparisonCounts(ctx, *scan)
 		if err != nil {
 			return nil, err
 		}
@@ -478,12 +513,7 @@ func (s *Server) workspaceView(ctx context.Context, workspace core.Workspace, la
 		view.AssessmentCoverage = &coverage
 	}
 	if len(view.Languages) == 0 {
-		patterns, err := s.userExcludes(ctx, workspace.ID)
-		if err == nil {
-			if discovered, err := discovery.Discover(ctx, workspace.RootPath, patterns); err == nil {
-				view.Languages = languageNames(discovered.Languages)
-			}
-		}
+		view.Languages = s.workspaceLanguages(ctx, workspace, pre == nil || !pre.list)
 	}
 	return view, nil
 }
@@ -606,6 +636,7 @@ func (s *Server) deleteWorkspace(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, "DATABASE_ERROR", "Could not delete workspace.")
 		return
 	}
+	s.cache.invalidate(workspace.ID)
 	w.WriteHeader(http.StatusNoContent)
 }
 func (s *Server) selectFolder(w http.ResponseWriter, r *http.Request) {
@@ -1056,6 +1087,7 @@ func (s *Server) addSuppression(w http.ResponseWriter, r *http.Request) {
 // suppression is added, removed or imported. A failure only leaves the old
 // counts in place until the next scan, so it is logged, not surfaced.
 func (s *Server) suppressionsChanged(ctx context.Context, workspaceID string) {
+	s.cache.invalidate(workspaceID)
 	if err := s.db.RecountWorkspaceScans(ctx, workspaceID); err != nil {
 		s.log.Warn("recount scans after suppression change failed", "workspace", workspaceID, "error", err)
 	}
@@ -1632,6 +1664,7 @@ func (s *Server) deleteScan(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, "DATABASE_ERROR", "Could not delete scan.")
 		return
 	}
+	s.cache.invalidate(scan.WorkspaceID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
