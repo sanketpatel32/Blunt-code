@@ -516,20 +516,6 @@ func FilesForLanguagesInside(root string, files []string, langs ...Language) []s
 	return out
 }
 
-func SortedFindings(in []Finding) []Finding {
-	out := append([]Finding(nil), in...)
-	sort.SliceStable(out, func(i, j int) bool {
-		if out[i].RelativePath != out[j].RelativePath {
-			return out[i].RelativePath < out[j].RelativePath
-		}
-		if out[i].StartLine != out[j].StartLine {
-			return out[i].StartLine < out[j].StartLine
-		}
-		return out[i].RuleID < out[j].RuleID
-	})
-	return out
-}
-
 func ValidateFinding(f Finding) error {
 	if f.AnalyzerID == "" || f.RuleID == "" || f.Message == "" || f.RelativePath == "" {
 		return fmt.Errorf("finding requires analyzer, rule, message, and relative path")

@@ -216,7 +216,7 @@ func Discover(ctx context.Context, root string, userExcludes []string) (Result, 
 		if entry.IsDir() {
 			return nil
 		}
-		if entry.Type().IsRegular() == false {
+		if !entry.Type().IsRegular() {
 			return nil
 		}
 		resolved, err := filepath.EvalSymlinks(path)

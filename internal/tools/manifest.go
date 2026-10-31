@@ -119,17 +119,6 @@ func (m Manifest) Validate() error {
 	}
 	return nil
 }
-func LoadManifest(path string) (Manifest, error) {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return Manifest{}, err
-	}
-	var m Manifest
-	if err := json.Unmarshal(b, &m); err != nil {
-		return Manifest{}, err
-	}
-	return m, m.Validate()
-}
 func (m Manifest) Find(toolID, platform string) (Artifact, bool) {
 	for _, a := range m.Artifacts {
 		if a.ToolID == toolID && a.Platform == platform {
