@@ -1,4 +1,4 @@
-import { count } from './format';
+import { count, isMissingToolMessage } from './format';
 
 export type ScanEvent = { type: string; stage?: string; status?: string; message?: string; analyzer_id?: string; name?: string; findings?: number; /** Per-severity finding counts the backend attaches to analyzer.completed, so live panels can show real severity totals before the final summary lands. */ severities?: Record<string, number>; error?: string; state?: string; at: number; /** Receive-order sequence assigned by the live stream; a stable React key even when two events share a millisecond. */ seq?: number };
 
@@ -34,6 +34,7 @@ export function liveHeadline(events: ScanEvent[], state: string) {
 export function eventCopy(event: ScanEvent) {
   if (event.type === 'analyzer.started') return `${event.name ?? event.analyzer_id ?? 'Analyzer'} started`;
   if (event.type === 'analyzer.completed') return `${event.analyzer_id ?? 'Analyzer'} finished${event.findings === undefined ? '' : ` · ${count(event.findings)} findings`}`;
+  if (event.type === 'analyzer.failed' && isMissingToolMessage(event.error)) return `${event.analyzer_id ?? 'Analyzer'} isn’t installed · skipped (set it up from Tools)`;
   if (event.type === 'analyzer.failed') return `${event.analyzer_id ?? 'Analyzer'} needs attention${event.error ? ` · ${event.error}` : ''}`;
   if (event.type === 'analyzer.skipped') return `${event.analyzer_id ?? 'Analyzer'} skipped${event.message ? ` · ${event.message}` : ''}`;
   if (event.type === 'scan.cancelled') return 'Scan cancelled';

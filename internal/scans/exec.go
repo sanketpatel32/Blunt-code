@@ -16,6 +16,7 @@ import (
 	"bluntcode/internal/analyzers"
 	"bluntcode/internal/core"
 	"bluntcode/internal/database"
+	"bluntcode/internal/tools"
 )
 
 // ScanOptions tunes the execution of a single scan. The zero value keeps the
@@ -61,6 +62,10 @@ type scanCounters struct {
 	mu           sync.Mutex
 	succeededIDs map[string]bool
 }
+
+// NotInstalledDetail is the analyzer error recorded when a tool is missing and
+// cannot be set up automatically. The UI matches it to group missing tools.
+const NotInstalledDetail = "Not installed on this computer. Set it up from Tools."
 
 func newScanCounters() *scanCounters {
 	return &scanCounters{succeededIDs: map[string]bool{}}
@@ -197,6 +202,8 @@ func (s *Service) executeAnalyzer(ctx context.Context, scan core.Scan, work core
 		s.emit(scan.ID, "scan.stage", map[string]any{"stage": "Preparing " + adapter.DisplayName()})
 		if installErr := s.tools.Ensure(ctx, adapter.ID()); installErr == nil {
 			status = adapter.Check(ctx, analyzers.ToolEnvironment{ToolsDir: s.toolsDir})
+		} else if notInstallable := (*tools.NotInstallableError)(nil); errors.As(installErr, &notInstallable) {
+			status.Detail = NotInstalledDetail
 		} else {
 			status.Detail = installErr.Error()
 		}

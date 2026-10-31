@@ -5,7 +5,7 @@ import type { AnalyzerRun, RiskProfile, Scan } from '../types';
 import type { Route } from '../lib/router';
 import type { Notice } from '../lib/notice';
 import { message } from '../lib/notice';
-import { analyzerName, date, findingLocation, languageColor } from '../lib/format';
+import { analyzerName, date, findingLocation, isMissingToolMessage, languageColor } from '../lib/format';
 import { useLoad } from '../hooks/useLoad';
 import { Empty, ErrorPanel, LanguageBadges, Loading } from '../components/ui';
 import { ScanIcon } from '../components/icons';
@@ -271,7 +271,7 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
     {/* 5 · Activity — what ran, and what it found. The panel shows the scan that actually
         ran last (even a cancelled one — that is the truthful "latest attempt"); when the
         verdict cards above grade on an older completed scan instead, the notice says so. */}
-    <section className="split-section workspace-history-section"><div className="workspace-section-card"><h2>Latest scan</h2>{(rawLatest ?? latest) ? <>{fallbackNotice && <p className="muted" role="note">{fallbackNotice}</p>}<p className="muted">{(rawLatest ?? latest)!.state.replaceAll('_', ' ')} · {date((rawLatest ?? latest)!.finished_at ?? (rawLatest ?? latest)!.started_at)}</p>{(rawLatest ?? latest)!.error_summary && <div className="inline-warning">Warning: {(rawLatest ?? latest)!.error_summary}</div>}<AnalyzerStatuses runs={(rawLatest ?? latest)!.analyzer_runs} /></> : <Empty title="Ready when you are" icon={<ScanIcon />}>Run the first scan to get a combined report.</Empty>}</div><div className="workspace-section-card"><h2>Scan history</h2>{scans.loading ? <SkeletonTable rows={4} cols={10} /> : scans.error ? <ErrorPanel error={scans.error} retry={scans.reload} /> : <HistoryTable scans={scans.data ?? []} go={go} />}</div></section>
+    <section className="split-section workspace-history-section"><div className="workspace-section-card"><h2>Latest scan</h2>{(rawLatest ?? latest) ? <>{fallbackNotice && <p className="muted" role="note">{fallbackNotice}</p>}<p className="muted">{(rawLatest ?? latest)!.state.replaceAll('_', ' ')} · {date((rawLatest ?? latest)!.finished_at ?? (rawLatest ?? latest)!.started_at)}</p>{(rawLatest ?? latest)!.error_summary && <div className="inline-warning">Warning: {(rawLatest ?? latest)!.error_summary}</div>}<AnalyzerStatuses runs={(rawLatest ?? latest)!.analyzer_runs} go={go} /></> : <Empty title="Ready when you are" icon={<ScanIcon />}>Run the first scan to get a combined report.</Empty>}</div><div className="workspace-section-card"><h2>Scan history</h2>{scans.loading ? <SkeletonTable rows={4} cols={10} /> : scans.error ? <ErrorPanel error={scans.error} retry={scans.reload} /> : <HistoryTable scans={scans.data ?? []} go={go} />}</div></section>
 
     {/* 6 · Housekeeping — set once, then ignored. The gloss keeps "Suppress" from reading as jargon. */}
     <p className="muted suppressions-gloss">Suppress = “not an issue for us” — hides a finding from all future scans and reports for this workspace.</p>
@@ -372,7 +372,10 @@ function PremiumSummaryCard({ label, value, tone, spark, delay }: { label: strin
   </div>;
 }
 
-export function AnalyzerStatuses({ runs }: { runs?: AnalyzerRun[] }) {
+/** Analyzer status for the latest scan: one summary line (ran / not installed
+ *  / failed, with a Set up tools action) and the per-analyzer rows folded
+ *  into a disclosure, so a clean scan does not push history down the page. */
+export function AnalyzerStatuses({ runs, go }: { runs?: AnalyzerRun[]; go?: (r: Route) => void }) {
   if (!runs?.length) return <div className="analyzers"><h3>Analyzer status</h3><p className="muted">Analyzer detail appears after a scan.</p></div>;
   const grouped = new Map<string, typeof runs>();
   for (const r of runs) {
@@ -381,12 +384,26 @@ export function AnalyzerStatuses({ runs }: { runs?: AnalyzerRun[] }) {
     arr.push(r);
     grouped.set(cat, arr);
   }
-  return <div className="analyzers"><h3>Analyzer status</h3>{[...grouped.entries()].map(([cat, items]) => <div key={cat} className="analyzer-group"><span className="analyzer-group-label" style={{ borderLeftColor: categoryColor(cat as never) }}>{(CATEGORY_LABELS as Record<string, string>)[cat] ?? cat}</span>{items.map((run) => {
-    const skipped = run.status === 'skipped';
+  const missing = runs.filter((run) => run.status === 'failed' && isMissingToolMessage(run.message));
+  const failed = runs.filter((run) => run.status === 'failed' && !isMissingToolMessage(run.message));
+  const ran = runs.filter((run) => ['completed', 'succeeded', 'success'].includes(run.status));
+  const skipped = runs.filter((run) => run.status === 'skipped');
+  const parts = [`${ran.length} of ${runs.length - skipped.length} ran`];
+  if (missing.length) parts.push(`${missing.length} not installed`);
+  if (failed.length) parts.push(`${failed.length} failed`);
+  if (skipped.length) parts.push(`${skipped.length} not needed`);
+  return <div className="analyzers"><h3>Analyzer status</h3>
+    <p className="analyzer-summary" role="note">{parts.join(' · ')}{missing.length > 0 && go && <> <button type="button" className="text-button" onClick={() => go({ page: 'tools' })}>Set up tools →</button></>}</p>
+    <details className="analyzer-details" open={failed.length > 0 || undefined}><summary>Show each analyzer</summary>
+    {[...grouped.entries()].map(([cat, items]) => <div key={cat} className="analyzer-group"><span className="analyzer-group-label" style={{ borderLeftColor: categoryColor(cat as never) }}>{(CATEGORY_LABELS as Record<string, string>)[cat] ?? cat}</span>{items.map((run) => {
+    const isSkipped = run.status === 'skipped';
+    const notInstalled = run.status === 'failed' && isMissingToolMessage(run.message);
     // Display names read like products ("Gitleaks", not "gitleaks-secrets"); an
     // id missing from the map falls back to itself, and the raw id stays on hover.
-    return <div className="analyzer-row" key={run.analyzer_id}><span title={run.analyzer_id}>{analyzerName(run.analyzer_id)}</span><span className={`state ${run.status}`}>{run.status}</span>{skipped ? <small role="note" className="text-amber-600">Skipped: {run.message || 'no applicable files or profile excluded this analyzer'}</small> : run.message ? <small>{run.message}</small> : null}</div>;
-  })}</div>)}</div>;
+    return <div className="analyzer-row" key={run.analyzer_id}><span title={run.analyzer_id}>{analyzerName(run.analyzer_id)}</span><span className={`state ${notInstalled ? 'not-installed' : run.status}`}>{notInstalled ? 'not installed' : run.status}</span>{isSkipped ? <small role="note" className="text-amber-600">Skipped: {run.message || 'no applicable files or profile excluded this analyzer'}</small> : notInstalled ? <small>Checks skipped until it is set up in Tools.</small> : run.message ? <small>{run.message}</small> : null}</div>;
+  })}</div>)}
+    </details>
+  </div>;
 }
 
 function LanguageDistributionDonut({ names, coverage, workspaceId, go }: { names: string[]; coverage: LanguageCoverage[]; workspaceId: string; go: (r: Route) => void }) {

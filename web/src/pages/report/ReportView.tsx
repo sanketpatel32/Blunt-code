@@ -6,7 +6,7 @@ import type { AnalyzerRun, Finding, FindingPage, Report, Scan, Severity } from '
 import type { Route } from '../../lib/router';
 import type { Notice } from '../../lib/notice';
 import { message } from '../../lib/notice';
-import { SEVERITY_LABELS, analyzerName, compactDuration, findingLocation, friendlyFindingTitle, humanizeAnalyzerError, shortFindingLocation } from '../../lib/format';
+import { SEVERITY_LABELS, analyzerName, compactDuration, findingLocation, friendlyFindingTitle, humanizeAnalyzerError, isMissingToolMessage, shortFindingLocation } from '../../lib/format';
 import { copyToClipboard } from '../../lib/clipboard';
 import { useLoad } from '../../hooks/useLoad';
 import { findingCategoryLabel } from '../../lib/analyzerCatalog';
@@ -433,7 +433,7 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
   return <section className="report">
     {/* Loop 145 · the raw engine text is still there, on `title`, for anyone
         debugging it. What is on screen is the part a reader can act on. */}
-    {data.warnings?.length ? <div className="inline-warning report-warnings"><strong>Incomplete analysis</strong>{groupAnalyzerWarnings(data.warnings).map((group) => <span key={group.key} title={group.raw.join('\n')}>{group.tools.length ? <><b>{group.tools.join(', ')}</b> — {group.reason}</> : group.reason}</span>)}</div> : null}
+    {data.warnings?.length ? <ReportWarnings warnings={data.warnings} go={go} /> : null}
     <div className="analysis-toolbar" role="search">
       <div className="toolbar-top">
         <label className="analysis-search"><MagnifierIcon aria-hidden="true" /><span className="sr-only">Search findings</span><input value={filters.q} onChange={(event) => updateFilters({ ...filters, q: event.target.value })} placeholder="Search message, rule, or file" /></label>
@@ -722,17 +722,36 @@ function FindingsTable({ findings, sort, onSort, activeKey, onSelect, canSuppres
     </tr></thead><tbody>{findings.map((finding, index) => { const rowKey = findingKey(finding, index); const rowTitle = rowTitleFor(finding); const rowBody = rowMessage(finding); const suppressed = finding.status === 'suppressed'; const isSelected = selectedIds.has(rowKey); const isActive = activeKey === rowKey; const rowMenuItems = [{ label: 'Copy details', onSelect: () => { void copyFinding(finding); } }, ...(canSuppress && finding.fingerprint ? [suppressed ? { label: 'Restore', onSelect: () => onRestore(finding) } : { label: 'Suppress…', onSelect: () => onSuppress(finding) }] : [])]; return <tr key={rowKey} data-index={index} className={`${severityEdgeClass(finding.severity)}${isSelected ? ' selected' : ''}${isActive ? ' active' : ''}`} aria-label={`${finding.severity} ${rowTitle}${finding.relative_path ? ` in ${finding.relative_path}` : ''} — open in the source pane`} tabIndex={0} onClick={()=>onSelect(finding, index)} onKeyDown={(e)=>onRowKeyDown(e, index)}><td className="sticky left-0 z-[1] bg-[var(--color-surface)] shadow-[var(--shadow-card)]" style={headerStyle('severity')} onClick={(e)=>e.stopPropagation()} onKeyDown={(e)=>e.stopPropagation()}><span className="flex items-center gap-2"><input type="checkbox" role="checkbox" aria-label={'Select row '+rowKey} checked={isSelected} onChange={(e)=>toggleRowSelect(rowKey,e.target.checked)} onClick={(e)=>e.stopPropagation()} /><span className={'severity '+finding.severity}><i className="sev-dot" aria-hidden="true" />{SEVERITY_LABELS[finding.severity] ?? finding.severity}</span></span></td><td className="finding-summary" style={headerStyle('finding')} title={finding.message ?? rowTitle}><strong>{rowTitle}</strong>{rowBody && <span className="finding-message">{rowBody}</span>}</td><td data-label="File" style={headerStyle('path')}><code className="finding-path" title={findingLocation(finding)}>{shortFindingLocation(finding)}</code></td><td data-label="Tool" style={headerStyle('analyzer')}><span className="tag">{analyzerName(finding.analyzer_id)}</span></td><td data-label="Status" style={headerStyle('status')} onClick={(e)=>e.stopPropagation()} onKeyDown={(e)=>e.stopPropagation()}><div className="finding-actions-cell">{finding.status ? <span className={'status-text'+(suppressed ? ' suppressed' : '')}>{finding.status}</span> : '—'}{suppressed && finding.fingerprint && suppressionReasons?.has(finding.fingerprint) && <span className="suppression-reason" title={`Suppressed: ${suppressionReasons.get(finding.fingerprint)}`}>{suppressionReasons.get(finding.fingerprint)}</span>}<span className="finding-row-actions"><RowMenu label={'Actions for '+rowTitle} items={rowMenuItems} /></span></div></td></tr>; })}</tbody></table></div></div>;
 }
 
+/** The incomplete-analysis banner. Every "tool is not installed" warning,
+ *  whatever its wording, folds into ONE line naming the tools with a single
+ *  Set up tools action; other reasons keep the per-reason grouping below. */
+export function ReportWarnings({ warnings, go }: { warnings: string[]; go?: (r: Route) => void }) {
+  const groups = groupAnalyzerWarnings(warnings);
+  const missing = groups.filter((group) => group.missing);
+  const missingTools = missing.flatMap((group) => group.tools);
+  const rest = groups.filter((group) => !group.missing);
+  return <div className="inline-warning report-warnings" role="note">
+    <strong>Incomplete analysis</strong>
+    {missingTools.length > 0 && <span className="missing-tools" title={missing.flatMap((group) => group.raw).join('\n')}>
+      <b>{missingTools.length === 1 ? '1 tool isn’t installed' : `${missingTools.length} tools aren’t installed`}</b>{' '}({missingTools.join(', ')}), so {missingTools.length === 1 ? 'its checks were' : 'their checks were'} skipped and this report covers fewer checks.
+      {go ? <> <button type="button" className="text-button" onClick={() => go({ page: 'tools' })}>Set up tools →</button></> : <> <a href="/tools">Set up tools →</a></>}
+    </span>}
+    {rest.map((group) => <span key={group.key} title={group.raw.join('\n')}>{group.tools.length ? <><b>{group.tools.join(', ')}</b> — {group.reason}</> : group.reason}</span>)}
+  </div>;
+}
+
 /** Seven analyzers failing for the same reason read as one line, not seven:
- *  "Ruff, Biome, Gitleaks — No pinned managed artifact is configured." */
-function groupAnalyzerWarnings(warnings: string[]) {
-  const groups = new Map<string, { key: string; reason: string; tools: string[]; raw: string[] }>();
+ *  "Ruff, Biome, Gitleaks — Not installed on this computer." */
+export function groupAnalyzerWarnings(warnings: string[]) {
+  const groups = new Map<string, { key: string; reason: string; tools: string[]; raw: string[]; missing: boolean }>();
   for (const warning of warnings) {
     const text = humanizeAnalyzerError(warning);
     const split = /^([^:]{1,40}): (.+)$/.exec(text);
     const tool = split && !/\s{2,}/.test(split[1]) ? split[1] : null;
     const reason = tool ? split![2] : text;
-    const key = tool ? `t:${reason}` : `r:${text}`;
-    const group = groups.get(key) ?? { key, reason, tools: [], raw: [] };
+    const missing = Boolean(tool) && isMissingToolMessage(reason);
+    const key = missing ? 'missing' : tool ? `t:${reason}` : `r:${text}`;
+    const group = groups.get(key) ?? { key, reason, tools: [], raw: [], missing };
     if (tool && !group.tools.includes(tool)) group.tools.push(tool);
     group.raw.push(warning);
     groups.set(key, group);

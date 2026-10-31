@@ -166,6 +166,13 @@ export function analyzerName(id: string) {
  *
  *  Returns a short sentence; the untouched text stays available to the caller
  *  for a title attribute, so nothing is actually hidden. */
+/** Analyzer errors that mean "this tool is not on this computer": the current
+ *  server wording plus the older managed-artifact phrasings stored in past scans. */
+const MISSING_TOOL_RE = /not installed on this computer|no pinned managed artifact|pinned managed artifact is not installed|isn['’]t installed|is not installed/i;
+export function isMissingToolMessage(text?: string | null): boolean {
+  return Boolean(text && MISSING_TOOL_RE.test(text));
+}
+
 export function humanizeAnalyzerError(raw: string): string {
   let text = raw.trim();
 

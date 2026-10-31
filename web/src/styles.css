@@ -1776,7 +1776,7 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .severity.info { color: var(--color-sev-info); border-color: color-mix(in oklch, var(--color-sev-info) 30%, var(--color-rule)); background: color-mix(in oklch, var(--color-sev-info) 10%, transparent); }
 .state { text-transform: capitalize; }
 .state.completed, .state.success, .state.ready { border-color: color-mix(in oklch, var(--color-success) 40%, var(--color-rule)); color: var(--color-success-text); background: var(--color-success-soft); }
-.state.completed_with_warnings, .state.warning { border-color: color-mix(in oklch, var(--color-warning) 40%, var(--color-rule)); color: var(--color-warning-text); background: var(--color-warning-soft); }
+.state.completed_with_warnings, .state.warning, .state.not-installed { border-color: color-mix(in oklch, var(--color-warning) 40%, var(--color-rule)); color: var(--color-warning-text); background: var(--color-warning-soft); }
 .state.failed, .state.error, .state.cancelled { border-color: color-mix(in oklch, var(--color-danger) 40%, var(--color-rule)); color: var(--color-danger-text); background: var(--color-danger-soft); }
 .state.running, .state.installing { border-color: color-mix(in oklch, var(--color-accent) 40%, var(--color-rule)); color: var(--color-accent-strong); background: var(--color-accent-soft); }
 .dot { margin-right: var(--space-xs); width: .5rem; height: .5rem; border-radius: 50%; background: var(--color-success); display: inline-block; }
@@ -1864,6 +1864,9 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .analyzer-group-label { display: inline-flex; align-items: center; gap: var(--space-xs); padding-left: var(--space-sm); border-left: 3px solid var(--color-accent); color: var(--color-ink-soft); font: 500 var(--text-xs) var(--font-body); letter-spacing: 0; }
 .analyzer-row { display: grid; grid-template-columns: minmax(5.6rem, 1fr) auto; gap: var(--space-sm); padding: var(--space-sm) 0; border-bottom: var(--rule) solid var(--color-rule-faint); color: var(--color-ink); font-size: var(--text-sm); }
 .analyzer-row small { grid-column: 1 / -1; color: var(--color-ink-soft); }
+.analyzer-summary { margin: var(--space-2xs) 0 var(--space-xs); color: var(--color-ink); font-size: var(--text-sm); }
+.analyzer-details > summary { cursor: pointer; color: var(--color-accent-strong); font-size: var(--text-sm); font-weight: 600; padding: var(--space-2xs) 0; }
+.report-warnings .missing-tools { display: block; }
 
 /* ── L5 · Tables · premium ─────────────────────────────────────── */
 .table-wrap { overscroll-behavior-x: contain;

@@ -79,13 +79,20 @@ func Build(in Input) Model {
 		counts[f.Severity]++
 	}
 	m := Model{Input: in, Counts: counts, Warnings: []string{}}
+	failed := map[string]bool{}
 	for _, r := range in.Runs {
 		if r.State != "completed" && r.State != "success" && r.State != "succeeded" {
 			m.Partial = true
-			m.Warnings = append(m.Warnings, fmt.Sprintf("%s: %s", display(r), strings.TrimSpace(r.ErrorSummary)))
+			failed[r.AnalyzerID] = true
+			m.Warnings = append(m.Warnings, fmt.Sprintf("%s: %s", display(r), runErrorText(r)))
 		}
 	}
 	for _, id := range in.Comparison.NotEvaluatedAnalyzerIDs {
+		// A failed analyzer already has its own line above; repeating it as
+		// "could not be fully evaluated" doubled every missing tool.
+		if failed[id] {
+			continue
+		}
 		m.Warnings = append(m.Warnings, fmt.Sprintf("%s could not be fully evaluated in this scan (analyzer did not complete successfully, or some of its files were not part of the scan); its previous findings are not considered fixed.", id))
 	}
 	if in.Provenance != nil && in.Provenance.DriftDetected {
@@ -95,6 +102,22 @@ func Build(in Input) Model {
 	m.Summary = summary(counts, m.Partial)
 	return m
 }
+// runErrorText is the run's error without a leading "<id>: " or
+// "<name>: " echo (older scans stored "ruff: ruff: …"), so the warning reads
+// "Ruff: <reason>" once.
+func runErrorText(r Run) string {
+	text := strings.TrimSpace(r.ErrorSummary)
+	for _, prefix := range []string{r.AnalyzerID, r.DisplayName} {
+		for prefix != "" && len(text) > len(prefix)+1 && strings.EqualFold(text[:len(prefix)+1], prefix+":") {
+			text = strings.TrimSpace(text[len(prefix)+1:])
+		}
+	}
+	if text == "" {
+		return "did not finish."
+	}
+	return text
+}
+
 func display(r Run) string {
 	if r.DisplayName != "" {
 		return r.DisplayName
