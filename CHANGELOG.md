@@ -5,6 +5,24 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.49.0] - 2026-11-01
+
+### Added
+- **Desktop bento layouts.** At 1440px and wider the page canvas grows to 1640px (1760px at 1920). Settings is a two-column grid of section cards with icons. Files gives the tree the wide column and keeps the include/exclude panel sticky, with a language composition bar.
+- **Workspaces summary strip.** Tiles show tracked and graded workspaces, open findings with a severity bar, and critical + high counts.
+- **Pentest checks in columns.** The 22 checks are grouped by OWASP category. Each group can be collapsed and shows a row of severity dots. Groups are laid out in two balanced columns on desktop and three at 1700px and wider.
+- **Analyzer tiles.** On a workspace's Latest scan, analyzers are grouped by category into small tiles instead of one long column.
+- Smoke tests now also cover 1920×1080, including a check that the canvas fills the width and Settings shows two columns. Axe also runs at 1440 and 1920.
+
+### Changed
+- Language coverage marks uncovered cells with a faint dot instead of the word "none". The analyzer column stays pinned while you scroll sideways, and the duplicate family legend is gone.
+- A summary card whose history never changes shows "steady · N scans" instead of a flat sparkline.
+- The active sidebar item has an accent marker on desktop.
+- The Overview tools footer lists up to three missing tools and puts the full list in a tooltip. Removed the suppressions glossary line and the long Pentest intro.
+
+### Fixed
+- The "Reset all filters" button in the Search empty state no longer renders in the middle of the sentence.
+
 ## [0.48.0] - 2026-11-01
 
 ### Added

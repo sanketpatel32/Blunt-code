@@ -5886,3 +5886,9 @@ a.stat-tile:hover { border-color: var(--color-rule-strong); }
 /* Home: missing-tool list stays one quiet line. */
 .board-foot-missing { color: var(--color-ink-faint); }
 .premium-card-steady { display: inline-flex; align-self: flex-start; margin-top: var(--space-xs); padding: 1px 8px; border-radius: 999px; background: var(--color-surface-muted); color: var(--color-ink-soft); font-size: var(--text-2xs); }
+/* Sidebar: the active item carries a small accent pip; desktop only (tablet rail is icon-only). */
+@media (min-width: 1280px) {
+  .rail-link { position: relative; }
+  .rail-link.active { font-weight: 600; }
+  .rail-link.active::before { content: ''; position: absolute; left: 0; top: 28%; bottom: 28%; width: 3px; border-radius: 0 3px 3px 0; background: var(--color-accent); }
+}
