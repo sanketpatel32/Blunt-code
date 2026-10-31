@@ -150,7 +150,7 @@ describe('HomePage risk board — verdict', () => {
     // whitespace between them collapses and textContent has no word boundary.
     // The sentence a screen reader gets lives on the aria-label instead — this
     // asserts that string, and the two visible halves below.
-    expect(host.querySelector('.verdict-hero')?.getAttribute('aria-label')).toBe('21 findings across the latest completed scan of 1 workspace.');
+    expect(host.querySelector('.verdict-hero .sr-only')?.textContent).toBe('21 findings across the latest completed scan of 1 workspace.');
     expect(host.querySelector('.verdict-hero-num')?.textContent).toBe('21');
     expect(host.querySelector('.verdict-hero-unit')?.textContent).toBe('findings');
     expect(host.querySelector('.verdict-hero-ctx')?.textContent).toContain('across the latest completed scan of 1 workspace.');
@@ -340,7 +340,7 @@ describe('HomePage cancelled-scan fallback and trajectory', () => {
     // The verdict and the "N of M workspaces" count use the same rule.
     expect(host.querySelector('.verdict-letter')?.textContent).toBe('C');
     expect(host.querySelector('.verdict-rail')?.textContent).toContain('1 of 1');
-    expect(host.querySelector('.verdict-hero')?.getAttribute('aria-label')).toBe('7 findings across the latest completed scan of 1 workspace.');
+    expect(host.querySelector('.verdict-hero .sr-only')?.textContent).toBe('7 findings across the latest completed scan of 1 workspace.');
     // Honest note + honest state badge about the cancelled run.
     const note = host.querySelector('.ledger-fallback-note');
     expect(note?.textContent).toContain('Latest scan cancelled');

@@ -201,7 +201,7 @@ export function AppShell({ workspace, route, onNavigate, onClose, theme, onToggl
               weight as Settings. It is now an icon button in the utility
               cluster below, which is what it is: a preference, not a place. */}
           <ul className="rail-group">
-            {items(SETTINGS_PAGES).map(link)}
+            {items(SETTINGS_PAGES).map((item) => <li key={item.route.page}>{link(item)}</li>)}
           </ul>
 
           <div className="rail-util">

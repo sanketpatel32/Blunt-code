@@ -88,7 +88,7 @@ export function LanguageCoverage({ compact }: { compact?: boolean }) {
         {q && <span className="text-xs text-[var(--color-ink-soft)]" aria-live="polite">{visibleLangs.length} match{q ? ` for "${filter}"` : ''}</span>}
       </div>
 
-      <div className="table-wrap overflow-auto">
+      <div className="table-wrap overflow-auto" tabIndex={0} role="region" aria-label="Language coverage by analyzer">
         <table className="coverage-table text-xs">
           <thead>
             <tr>
@@ -112,7 +112,7 @@ export function LanguageCoverage({ compact }: { compact?: boolean }) {
                   <td><span className="badge text-xs">{a.displayName}</span> <small className="text-[var(--color-ink-faint)] hidden sm:inline">{a.category}</small></td>
                   {visibleLangs.map((lang) => {
                     const covered = a.languages.includes(lang);
-                    return <td key={lang} className="text-center">{covered ? <span aria-label={`${a.displayName} covers ${lang}`} title="covered" className="inline-block w-2 h-2 rounded-full bg-[var(--color-success)]" /> : <span className="text-[var(--color-ink-faint)]">none</span>}</td>;
+                    return <td key={lang} className="text-center">{covered ? <span role="img" aria-label={`${a.displayName} covers ${lang}`} title="covered" className="inline-block w-2 h-2 rounded-full bg-[var(--color-success)]" /> : <span className="text-[var(--color-ink-faint)]">none</span>}</td>;
                   })}
                   <td className="text-center font-mono text-[var(--color-ink-soft)]">{total}</td>
                 </tr>

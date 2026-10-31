@@ -279,6 +279,9 @@ export function DataTable<T>({
                       role="separator"
                       aria-orientation="vertical"
                       aria-label={`Resize ${col.header} column`}
+                      aria-valuenow={Math.round((w as number) ?? 160)}
+                      aria-valuemin={0}
+                      aria-valuemax={1200}
                       onPointerDown={(e) => onResizeStart(e, col.id, (w as number) ?? 160)}
                       className="absolute right-0 top-0 h-full w-2 cursor-col-resize touch-none select-none hover:bg-[var(--color-accent-ghost)] focus-visible:bg-[var(--color-accent-ghost)] focus-visible:outline-none"
                       tabIndex={0}

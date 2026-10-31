@@ -354,18 +354,18 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
                 // panel and the qualification is the second, which is also how
                 // a caption should read.
                 //
-                // The aria-label is load-bearing and was not optional. Putting
+                // The hidden sentence is load-bearing and was not optional. Putting
                 // two things on two lines means the whitespace between them
                 // collapses (a flex container ignores whitespace-only text), so
                 // the accessible name went from one sentence to the three
                 // fragments "21" / "findings" / "across the latest completed
-                // scan of 1 workspace." — no word boundaries at all. One label
-                // on the parent, children hidden, gives assistive tech a
-                // single clean sentence and costs the sighted reader nothing.
-                <p
-                  className="verdict-hero"
-                  aria-label={`${verdict.totalFindings} finding${verdict.totalFindings === 1 ? '' : 's'} across the latest completed scan${verdict.scanned === 1 ? '' : 's'} of ${verdict.scanned} workspace${verdict.scanned === 1 ? '' : 's'}.`}
-                >
+                // scan of 1 workspace." — no word boundaries at all. One
+                // visually hidden sentence, visible children aria-hidden, gives
+                // assistive tech a single clean sentence and costs the sighted
+                // reader nothing. (It was an aria-label, which a <p> may not
+                // carry: axe aria-prohibited-attr.)
+                <p className="verdict-hero">
+                  <span className="sr-only">{`${verdict.totalFindings} finding${verdict.totalFindings === 1 ? '' : 's'} across the latest completed scan${verdict.scanned === 1 ? '' : 's'} of ${verdict.scanned} workspace${verdict.scanned === 1 ? '' : 's'}.`}</span>
                   <span className="verdict-hero-figure" aria-hidden="true">
                     <span className="verdict-hero-num tabular-nums">{verdict.totalFindings}</span>
                     <span className="verdict-hero-unit">finding{verdict.totalFindings === 1 ? '' : 's'}</span>
