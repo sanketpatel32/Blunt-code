@@ -16,7 +16,11 @@ import { PathCopy } from '../components/PathCopy';
 import { ScanActionDropdown } from '../components/ScanActionDropdown';
 import { RowMenu } from '../components/RowMenu';
 import { FolderIcon, ScanIcon } from '../components/icons';
-import { Activity, ChevronRight, FolderOpen, FolderPlus } from 'lucide-react';
+import { Activity, AlertTriangle, CalendarDays, ChevronRight, Clock3, FolderCheck, FolderOpen, FolderPlus, Wrench } from 'lucide-react';
+import { StatTile } from '../components/viz/StatTile';
+import { Sparkline } from '../components/viz/Sparkline';
+import { Ring } from '../components/viz/Ring';
+import { SeverityDonut } from '../components/viz/Charts';
 
 import { SEVERITY_ORDER, trendPointsFromScans } from '../lib/chartData';
 import { isActiveScanState } from '../lib/scanEvents';
@@ -71,6 +75,8 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
   const workspaces = useLoad(api.workspaces, []);
   const tools = useLoad(api.tools, []);
   const recent = useLoad(api.recentScans, []);
+  const stats = useLoad(api.stats, []);
+  const byDay = stats.data?.scans_by_day ?? [];
 
   const scans = recent.data?.scans ?? [];
   const summary = recent.data?.summary;
@@ -362,8 +368,8 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
                     <span className="verdict-hero-num tabular-nums">{verdict.totalFindings}</span>
                     <span className="verdict-hero-unit">finding{verdict.totalFindings === 1 ? '' : 's'}</span>
                   </span>
-                  <span className="verdict-hero-ctx" aria-hidden="true">
-                    across the latest completed scan{verdict.scanned === 1 ? '' : 's'} of {verdict.scanned} workspace{verdict.scanned === 1 ? '' : 's'}.
+                  <span className="verdict-hero-ctx" aria-hidden="true" title={`Latest completed scan of ${verdict.scanned} workspace${verdict.scanned === 1 ? '' : 's'}`}>
+                    <FolderCheck className="h-3.5 w-3.5" /> {verdict.scanned} workspace{verdict.scanned === 1 ? '' : 's'}
                   </span>
                 </p>
               ) : (
@@ -387,6 +393,12 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
                 through the bands in order so the wording always points at the
                 worst thing present. */}
             {verdictTallied && verdict.totalFindings > 0 && (
+              <div className="verdict-donut">
+                <SeverityDonut counts={verdict.counts} size={112} onSelect={(sev) => go({ page: 'search', q: `severity=${sev}` })} />
+              </div>
+            )}
+
+            {verdictTallied && verdict.totalFindings > 0 && (
               <button
                 type="button"
                 className="verdict-explore"
@@ -399,9 +411,10 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
           </div>
 
           {verdictTallied && verdict.partialScans > 0 && (
-            <p className="verdict-caveat">
-              {verdict.partialScans} of {verdict.scanned} scanned workspace{verdict.partialScans === 1 ? '' : 's'} ran
-              with partial analyzer coverage; their grades reflect only what completed.
+            <p className="verdict-caveat" title="Some analyzers did not finish; those grades reflect only what completed.">
+              <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>Partial coverage</span>
+              <b className="tabular-nums">{verdict.partialScans}/{verdict.scanned}</b>
             </p>
           )}
 
@@ -411,30 +424,31 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
 
           {/* Without the workspace list these would be invented zeros
               ("Workspaces scanned 0 of 0"), so a failed load shows none. */}
-          {!boardFailed && <dl className="verdict-rail" aria-label="Scan activity at a glance">
+          {!boardFailed && <div className="verdict-tiles stat-tiles" role="group" aria-label="Scan activity at a glance">
             {/* Active scans deliberately absent: the header's live pill already
                 carries that count, and a count must never appear twice. */}
-            <div className="rail-stat">
-              <dt>Scans this week</dt>
-              <dd className="tabular-nums">{summary?.scans_last_7d ?? 0}</dd>
-            </div>
-            <div className="rail-stat">
-              <dt>Workspaces scanned</dt>
-              <dd className="tabular-nums">
-                {verdict.scanned} <span className="rail-of">of {workspaces.data?.length ?? 0}</span>
-              </dd>
-            </div>
-            <div className="rail-stat">
-              <dt>Last completed scan</dt>
-              <dd>{verdict.lastFinished ? relativeTime(verdict.lastFinished) : '—'}</dd>
-            </div>
-            <div className="rail-stat">
-              <dt>Optional tools</dt>
-              <dd className="tabular-nums">
-                {readyTools} <span className="rail-of">of {totalTools}</span>
-              </dd>
-            </div>
-          </dl>}
+            <StatTile
+              icon={CalendarDays}
+              value={summary?.scans_last_7d ?? 0}
+              label="Scans · 7 days"
+              extra={byDay.length ? <Sparkline values={byDay.map((d) => d.total)} width={64} height={24} label={`Scans per day, last 7 days: ${byDay.map((d) => d.total).join(', ')}`} /> : undefined}
+            />
+            <StatTile
+              icon={FolderCheck}
+              value={`${verdict.scanned}/${workspaces.data?.length ?? 0}`}
+              label="Scanned"
+              title={`${verdict.scanned} of ${workspaces.data?.length ?? 0} workspaces have a completed scan`}
+              extra={<Ring value={verdict.scanned} max={workspaces.data?.length ?? 0} size={36} stroke={4} label={`${verdict.scanned} of ${workspaces.data?.length ?? 0} workspaces scanned`}><span /></Ring>}
+            />
+            <StatTile icon={Clock3} value={verdict.lastFinished ? relativeTime(verdict.lastFinished) : '—'} label="Last scan" />
+            <StatTile
+              icon={Wrench}
+              value={`${readyTools}/${totalTools}`}
+              label="Tools ready"
+              tone={totalTools && readyTools === totalTools ? 'ok' : undefined}
+              extra={<Ring value={readyTools} max={totalTools} size={36} stroke={4} tone="var(--color-success)" label={`${readyTools} of ${totalTools} optional tools ready`}><span /></Ring>}
+            />
+          </div>}
         </section>
       )}
 
@@ -455,9 +469,6 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
           <header className="board-panel-head">
             <div>
               <h2 id="ledger-heading" className="board-panel-title">Workspace assessments</h2>
-              <p className="board-panel-sub">
-                Worst first · the score weights critical ×10, high ×5, medium ×2, low ×1.
-              </p>
             </div>
             {ledgerBase.length > 4 && (
               <label className="board-filter">
@@ -536,7 +547,6 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
                   <Activity className="h-4 w-4 text-[var(--color-accent)]" />
                   What happened lately
                 </h2>
-                <p className="board-panel-sub">Every scan lands here, newest first.</p>
               </div>
               {scans.length > 0 && (
                 <div className="feed-filters" role="group" aria-label="Filter recent activity">
@@ -970,6 +980,9 @@ function LedgerRow({
                 {total} {total === 1 ? 'finding' : 'findings'}
               </span>
               <DeltaChip scan={current} />
+              {workspace.trend && workspace.trend.length >= 2 && (
+                <Sparkline values={workspace.trend} width={56} height={18} label={`Findings over the last ${workspace.trend.length} completed scans: ${workspace.trend.join(', ')}`} />
+              )}
               {partialCoverage && coverage && (
                 <span
                   className="ledger-partial-badge"

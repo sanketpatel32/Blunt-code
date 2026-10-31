@@ -94,12 +94,13 @@ export function trendPointsFromScans(scans: Array<{ total_findings?: number; fin
   }));
 }
 
-type SparkScan = { total_findings?: number; critical_count?: number; high_count?: number; medium_count?: number; low_count?: number; info_count?: number; new_count?: number; fixed_count?: number };
+type SparkScan = { total_findings?: number; critical_count?: number; high_count?: number; medium_count?: number; low_count?: number; info_count?: number; new_count?: number; fixed_count?: number; state?: string };
 
 /** Real per-scan series for a summary-card sparkline, oldest first. Scans that
  *  do not report the metric are skipped, and fewer than two points returns null
  *  — one number is not a trend, so the card hides the line instead of drawing one. */
 export function sparkSeries(scans: SparkScan[], pick: (scan: SparkScan) => number | undefined): number[] | null {
-  const values = scans.slice().reverse().map((scan) => pick(scan)).filter((value): value is number => typeof value === 'number');
+  // Failed/cancelled/running scans store zeros, which would plot as a fake dip.
+  const values = scans.filter((scan) => !scan.state || scan.state === 'completed' || scan.state === 'completed_with_warnings').slice().reverse().map((scan) => pick(scan)).filter((value): value is number => typeof value === 'number');
   return values.length >= 2 ? values : null;
 }

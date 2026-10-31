@@ -89,8 +89,8 @@ describe('hostile API fixtures', () => {
     const host = await renderAt('/', fetchMock);
     expectClean(host);
     expect(host.textContent).toContain('1 scan running');
-    expect(host.textContent).toContain('Scans this week0');
-    expect(host.textContent).toContain('Workspaces scanned0 of 0');
+    expect(host.textContent).toContain('Scans · 7 days');
+    expect(host.textContent).toContain('0/0');
   });
 
   it('HomePage survives feed rows with invalid dates, missing counts, unknown states', async () => {

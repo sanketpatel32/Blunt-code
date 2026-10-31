@@ -54,7 +54,7 @@ export function TrendArea({ data, height = 180, stacked = true }: { data: TrendD
 }
 
 /** Severity donut with the total in the middle. */
-export function SeverityDonut({ counts, size = 148, onSelect }: { counts: Partial<Record<Severity, number>>; size?: number; onSelect?: (sev: Severity) => void }) {
+export function SeverityDonut({ counts, size = 148, onSelect }: { counts: Partial<Record<Severity, number | null>>; size?: number; onSelect?: (sev: Severity) => void }) {
   const reduced = useReducedMotion();
   const rows = SEVERITY_ORDER.map((sev) => ({ sev, value: counts[sev] ?? 0 })).filter((r) => r.value > 0);
   const total = rows.reduce((s, r) => s + r.value, 0);

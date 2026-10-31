@@ -5,7 +5,7 @@ import { SEVERITY_COLOR, SEVERITY_ORDER } from '../../lib/chartData';
 /** Stacked severity bar with compact count chips; replaces "N critical, N
  *  high…" sentences. Zero bands are skipped in the bar but kept in chips when
  *  `showZero` is set, so a clean scan still reads as a full legend. */
-export function SeverityBar({ counts, showZero = false, chips = true, height = 10, onSelect }: { counts: Partial<Record<Severity, number>>; showZero?: boolean; chips?: boolean; height?: number; onSelect?: (sev: Severity) => void }) {
+export function SeverityBar({ counts, showZero = false, chips = true, height = 10, onSelect }: { counts: Partial<Record<Severity, number | null>>; showZero?: boolean; chips?: boolean; height?: number; onSelect?: (sev: Severity) => void }) {
   const reduced = useReducedMotion();
   const total = SEVERITY_ORDER.reduce((sum, k) => sum + (counts[k] ?? 0), 0);
   const label = `Severity: ${SEVERITY_ORDER.map((k) => `${counts[k] ?? 0} ${k}`).join(', ')}`;
