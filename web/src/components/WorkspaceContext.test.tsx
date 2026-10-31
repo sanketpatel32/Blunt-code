@@ -44,7 +44,7 @@ describe('WorkspaceContextSidebar', () => {
   it('navigates when a section is clicked', () => {
     const onNavigate = vi.fn();
     const dom = render(<WorkspaceContextSidebar id="ws-1" current={{ page: 'workspace', id: 'ws-1' }} onNavigate={onNavigate} />);
-    const files = [...dom.querySelectorAll('button')].find((b) => b.textContent === 'Files & rules')!;
+    const files = [...dom.querySelectorAll('button')].find((b) => b.textContent === 'Files & paths')!;
     act(() => files.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })));
     expect(onNavigate).toHaveBeenCalledWith({ page: 'files', id: 'ws-1' });
   });
