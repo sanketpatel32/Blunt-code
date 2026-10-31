@@ -183,7 +183,7 @@ func (m Manager) Uninstall(ctx context.Context, id string) error {
 	}
 
 	if len(m.Manifest.Artifacts) > 0 {
-		if _, ok := m.Manifest.Find(canonical, platform()); !ok {
+		if !m.Manifest.Knows(canonical) {
 			return fmt.Errorf("unknown tool %q", id)
 		}
 	}
