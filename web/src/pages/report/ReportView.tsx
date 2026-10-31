@@ -392,7 +392,7 @@ export function ReportView({ scanId, notify, runs: runsProp, go, onCountsChanged
   const clearFilters = () => updateFilters({ severity: '', category: '', analyzer: '', rule: '', path: '', status: '', q: '' });
   const counts = severityCounts(dataScan);
   const selectedSeverities = filters.severity ? filters.severity.split(',').filter(Boolean) : [];
-  /** Tool chips carry each engine's finding count (from the report payload, which holds every finding). The report's scan object omits analyzer_runs, so the hosting ScanPage passes its /scans/{id} runs down; zero-finding engines stay visible with a 0 count. */
+  /** Tool chips carry each engine's finding count (from the report payload, which holds every finding). The report's scan object omits analyzer_runs, so the hosting ScanPage passes its /scans/{id} runs down; engines that ran clean stay visible with a 0 count; failed engines with nothing to filter are left to the incomplete-analysis notice. */
   const runs = runsProp ?? dataScan.analyzer_runs ?? [];
   const runById = new Map<string, AnalyzerRun | undefined>(runs.map((run) => [run.analyzer_id, run] as const));
   const countByAnalyzer = new Map<string, number>();
@@ -402,7 +402,9 @@ export function ReportView({ scanId, notify, runs: runsProp, go, onCountsChanged
     if (finding.status) countByStatus.set(finding.status, (countByStatus.get(finding.status) ?? 0) + 1);
     if (!runById.has(finding.analyzer_id)) runById.set(finding.analyzer_id, undefined);
   }
-  const tools = [...runById.keys()];
+  // A tool that failed and reported nothing gets no chip: "Ruff 0" read as
+  // "ran clean". The incomplete-analysis notice above already names it.
+  const tools = [...runById.keys()].filter((tool) => runById.get(tool)?.status !== 'failed' || (countByAnalyzer.get(tool) ?? 0) > 0);
   /** The foot prints the same "X of Y analyzers ran" as the scan header, from the run rows. */
   const footCoverage = coverageFromRuns(runs);
   /** Type rail: the categories actually present in this scan, most findings first. */

@@ -260,7 +260,10 @@ export function ruleDocsUrl(finding: Pick<Finding, 'analyzer_id' | 'rule_id' | '
 
 /** First sentence/clause of a message (cut at the first "." or ":"), capped near 80 chars — heading material. */
 function firstMessageClause(text: string): string {
-  const cut = text.search(/[.:]/);
+  // A clause ends at "." or ":" followed by whitespace or the end — not at
+  // the dot inside "package.json" or "v1.2", which split titles into
+  // "package" / "json declares GPL-3.0".
+  const cut = text.search(/[.:](?=\s|$)/);
   const clause = (cut > 0 ? text.slice(0, cut) : text).trim();
   if (clause.length > 80) return `${clause.slice(0, 79).trimEnd()}…`;
   return clause;

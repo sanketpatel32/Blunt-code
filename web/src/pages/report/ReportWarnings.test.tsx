@@ -37,6 +37,6 @@ describe('missing-tool warnings', () => {
     host.remove();
   });
   it('words a missing tool in the live timeline as not installed', () => {
-    expect(eventCopy({ type: 'analyzer.failed', analyzer_id: 'ruff', error: 'Not installed on this computer. Set it up from Tools.', at: 0 })).toBe('ruff isn’t installed · skipped (set it up from Tools)');
+    expect(eventCopy({ type: 'analyzer.failed', analyzer_id: 'ruff', error: 'Not installed on this computer. Set it up from Tools.', at: 0 })).toBe('Ruff isn’t installed · skipped (set it up from Tools)');
   });
 });

@@ -225,6 +225,18 @@ describe('ReportView toolbar filters', () => {
     });
   });
 
+  it('gives a failed tool with no findings no "0" chip; a clean tool keeps its 0', async () => {
+    await fetchMock.withImplementation((input: string) => {
+      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan: { ...scan, analyzer_runs: [{ analyzer_id: 'ruff', status: 'succeeded' }, { analyzer_id: 'biome', status: 'failed', message: 'not installed' }, { analyzer_id: 'gitleaks-secrets', status: 'succeeded' }] }, warnings: [], findings: [finding] }));
+      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: [finding], total: 1, limit: 100, offset: 0, has_more: false, has_next: false }));
+      return Promise.resolve(json({ items: [] }));
+    }, async () => {
+      const host = await render();
+      const labels = [...host.querySelectorAll('fieldset[aria-label="Tool"] .chip')].map((chip) => chip.textContent);
+      expect(labels).toEqual(['Ruff1', 'Gitleaks0']);
+    });
+  });
+
   it('tool chips carry per-tool finding counts and toggle the analyzer filter', async () => {
     await fetchMock.withImplementation((input: string) => {
       if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan: { ...scan, analyzer_runs: [{ analyzer_id: 'ruff', status: 'succeeded', duration_ms: 1500 }, { analyzer_id: 'biome', status: 'succeeded', duration_ms: 40 }] }, warnings: [], findings: [finding, { ...finding, id: 'finding-2', analyzer_id: 'biome' }, { ...finding, id: 'finding-3', analyzer_id: 'biome' }] }));
