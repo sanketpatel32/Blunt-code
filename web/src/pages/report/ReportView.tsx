@@ -433,7 +433,7 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
   return <section className="report">
     {/* Loop 145 · the raw engine text is still there, on `title`, for anyone
         debugging it. What is on screen is the part a reader can act on. */}
-    {data.warnings?.length ? <div className="inline-warning"><strong>Incomplete analysis</strong>{data.warnings.map((warning) => <span key={warning} title={warning}>{humanizeAnalyzerError(warning)}</span>)}</div> : null}
+    {data.warnings?.length ? <div className="inline-warning report-warnings"><strong>Incomplete analysis</strong>{groupAnalyzerWarnings(data.warnings).map((group) => <span key={group.key} title={group.raw.join('\n')}>{group.tools.length ? <><b>{group.tools.join(', ')}</b> — {group.reason}</> : group.reason}</span>)}</div> : null}
     <div className="analysis-toolbar" role="search">
       <div className="toolbar-top">
         <label className="analysis-search"><MagnifierIcon aria-hidden="true" /><span className="sr-only">Search findings</span><input value={filters.q} onChange={(event) => updateFilters({ ...filters, q: event.target.value })} placeholder="Search message, rule, or file" /></label>
@@ -720,4 +720,22 @@ function FindingsTable({ findings, sort, onSort, activeKey, onSelect, canSuppres
       <th scope="col" className="relative" style={headerStyle('analyzer')} aria-sort={sort.key==='analyzer'?(sort.dir==='asc'?'ascending':'descending'):'none'}><button type="button" className={'th-sort'+(sort.key==='analyzer'?' active':'')} onClick={()=>onSort('analyzer')}>Tool<span className="sort-arrow" aria-hidden="true">{sort.key==='analyzer'?(sort.dir==='asc'?'▲':'▼'):''}</span>{sort.key==='analyzer' && <span className="sr-only"> (sorted {sort.dir==='asc'?'ascending':'descending'})</span>}</button>{resizeHandle('analyzer')}</th>
       <th scope="col" className="relative" style={headerStyle('status')} aria-sort={sort.key==='status'?(sort.dir==='asc'?'ascending':'descending'):'none'}><button type="button" className={'th-sort'+(sort.key==='status'?' active':'')} onClick={()=>onSort('status')}>Status<span className="sort-arrow" aria-hidden="true">{sort.key==='status'?(sort.dir==='asc'?'▲':'▼'):''}</span>{sort.key==='status' && <span className="sr-only"> (sorted {sort.dir==='asc'?'ascending':'descending'})</span>}</button>{resizeHandle('status')}</th>
     </tr></thead><tbody>{findings.map((finding, index) => { const rowKey = findingKey(finding, index); const rowTitle = rowTitleFor(finding); const rowBody = rowMessage(finding); const suppressed = finding.status === 'suppressed'; const isSelected = selectedIds.has(rowKey); const isActive = activeKey === rowKey; const rowMenuItems = [{ label: 'Copy details', onSelect: () => { void copyFinding(finding); } }, ...(canSuppress && finding.fingerprint ? [suppressed ? { label: 'Restore', onSelect: () => onRestore(finding) } : { label: 'Suppress…', onSelect: () => onSuppress(finding) }] : [])]; return <tr key={rowKey} data-index={index} className={`${severityEdgeClass(finding.severity)}${isSelected ? ' selected' : ''}${isActive ? ' active' : ''}`} aria-label={`${finding.severity} ${rowTitle}${finding.relative_path ? ` in ${finding.relative_path}` : ''} — open in the source pane`} tabIndex={0} onClick={()=>onSelect(finding, index)} onKeyDown={(e)=>onRowKeyDown(e, index)}><td className="sticky left-0 z-[1] bg-[var(--color-surface)] shadow-[var(--shadow-card)]" style={headerStyle('severity')} onClick={(e)=>e.stopPropagation()} onKeyDown={(e)=>e.stopPropagation()}><span className="flex items-center gap-2"><input type="checkbox" role="checkbox" aria-label={'Select row '+rowKey} checked={isSelected} onChange={(e)=>toggleRowSelect(rowKey,e.target.checked)} onClick={(e)=>e.stopPropagation()} /><span className={'severity '+finding.severity}><i className="sev-dot" aria-hidden="true" />{SEVERITY_LABELS[finding.severity] ?? finding.severity}</span></span></td><td className="finding-summary" style={headerStyle('finding')} title={finding.message ?? rowTitle}><strong>{rowTitle}</strong>{rowBody && <span className="finding-message">{rowBody}</span>}</td><td style={headerStyle('path')}><code className="finding-path" title={findingLocation(finding)}>{shortFindingLocation(finding)}</code></td><td style={headerStyle('analyzer')}><span className="tag">{analyzerName(finding.analyzer_id)}</span></td><td style={headerStyle('status')} onClick={(e)=>e.stopPropagation()} onKeyDown={(e)=>e.stopPropagation()}><div className="finding-actions-cell">{finding.status ? <span className={'status-text'+(suppressed ? ' suppressed' : '')}>{finding.status}</span> : '—'}{suppressed && finding.fingerprint && suppressionReasons?.has(finding.fingerprint) && <span className="suppression-reason" title={`Suppressed: ${suppressionReasons.get(finding.fingerprint)}`}>{suppressionReasons.get(finding.fingerprint)}</span>}<span className="finding-row-actions"><RowMenu label={'Actions for '+rowTitle} items={rowMenuItems} /></span></div></td></tr>; })}</tbody></table></div></div>;
+}
+
+/** Seven analyzers failing for the same reason read as one line, not seven:
+ *  "Ruff, Biome, Gitleaks — No pinned managed artifact is configured." */
+function groupAnalyzerWarnings(warnings: string[]) {
+  const groups = new Map<string, { key: string; reason: string; tools: string[]; raw: string[] }>();
+  for (const warning of warnings) {
+    const text = humanizeAnalyzerError(warning);
+    const split = /^([^:]{1,40}): (.+)$/.exec(text);
+    const tool = split && !/\s{2,}/.test(split[1]) ? split[1] : null;
+    const reason = tool ? split![2] : text;
+    const key = tool ? `t:${reason}` : `r:${text}`;
+    const group = groups.get(key) ?? { key, reason, tools: [], raw: [] };
+    if (tool && !group.tools.includes(tool)) group.tools.push(tool);
+    group.raw.push(warning);
+    groups.set(key, group);
+  }
+  return [...groups.values()];
 }
