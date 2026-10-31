@@ -4238,8 +4238,8 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .findings-col { min-width: 0; }
 /* Wide layout: the list scrolls inside its own viewport so the header row
    stays put and the docked pane holds its position while rows scroll. */
-@media (min-width: 72rem) {
-  .analysis-split[data-pane='open'] { grid-template-columns: minmax(0, 1fr) minmax(21rem, 30rem); }
+@media (min-width: 100rem) {
+  .analysis-split[data-pane='open'] { grid-template-columns: minmax(0, 1fr) minmax(26rem, 34rem); }
   .findings-col[data-scoped='true'] .table-wrap { max-height: calc(100dvh - var(--nav-h) - 11rem); overflow-y: auto; overscroll-behavior: contain; }
   .findings-col[data-scoped='true'] .findings-table thead th { position: sticky; top: var(--space-3xs); z-index: 2; background: var(--color-surface-muted); box-shadow: 0 1px 0 var(--color-rule-faint); }
 }
@@ -4391,16 +4391,16 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
   direction: rtl;
   text-align: left;
 }
-.source-pane-body {
+.source-pane-scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
+.source-pane-body { border-top: var(--rule) solid var(--color-rule-faint); }
 .source-pane-body pre.code-preview { margin: 0; max-height: none; border-radius: 0; }
 .source-pane-context {
   padding: var(--space-sm) var(--space-md);
-  border-top: var(--rule) solid var(--color-rule-faint);
   font-size: var(--text-xs);
   color: var(--color-ink-soft);
   display: flex;
@@ -4444,19 +4444,44 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
   from { opacity: 0; }
   to { opacity: 1; }
 }
-/* Narrow widths: the pane docks to the bottom as a sheet over the list. */
-@media (max-width: 71.99rem) {
+/* Below 100rem a docked column would squeeze the table until Tool/Status
+   fall off, so the pane becomes a drawer over the right edge instead: the
+   table keeps its full width and every column stays readable. */
+.source-pane-backdrop { display: none; }
+@media (max-width: 99.99rem) {
   .analysis-split[data-pane='open'] .source-pane {
     position: fixed;
-    left: var(--space-sm);
+    top: var(--space-sm);
     right: var(--space-sm);
     bottom: var(--space-sm);
-    top: auto;
+    left: auto;
     z-index: 60;
-    max-height: min(58dvh, 30rem);
-    min-height: 12rem;
+    width: min(36rem, calc(100vw - 2 * var(--space-sm)));
+    max-height: none;
+    min-height: 0;
     box-shadow: var(--shadow-lg, var(--shadow-card));
   }
+}
+/* Phones: a near-full-height sheet over a dimmed list, title and fix first. */
+@media (max-width: 700px) {
+  .analysis-split[data-pane='open'] .source-pane-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 59;
+    background: color-mix(in oklab, var(--color-ink) 38%, transparent);
+  }
+  .analysis-split[data-pane='open'] .source-pane {
+    top: 6dvh;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: auto;
+    border-radius: var(--radius-card) var(--radius-card) 0 0;
+    border-bottom: 0;
+  }
+  .source-pane-foot { padding-bottom: max(var(--space-xs), env(safe-area-inset-bottom)); }
+  .source-pane-foot .button, .source-pane-foot .text-button { min-height: 2.75rem; }
 }
 
 /* ── Report foot: exports after triage ───────────────────────────── */
@@ -5326,10 +5351,6 @@ input, select, textarea { color: var(--color-ink); }
 @media (min-width: 701px) {
   .app-topbar { display: none; }
   .app-rail { display: flex; }
-}
-@media (max-width: 1250px) {
-  .analysis-split[data-pane='open'] { grid-template-columns: minmax(0, 1fr); }
-  .analysis-split[data-pane='open'] .source-pane { position: relative; inset: auto; z-index: auto; max-height: none; min-height: 0; box-shadow: var(--shadow-card); }
 }
 @media (max-width: 950px) {
   .board-columns, .split-section { grid-template-columns: minmax(0, 1fr); }
