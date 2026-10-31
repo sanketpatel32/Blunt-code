@@ -389,6 +389,18 @@
 
 .analysis-toolbar .chip-group { flex-wrap: wrap; }
 
+/* Phones: the groups sat on one clipped line (toolbar is overflow: hidden),
+   hiding Status and most Tool chips, and the sticky toolbar covered most of
+   the viewport. Each group gets its own row and the toolbar scrolls away. */
+@media (max-width: 40rem) {
+  .analysis-toolbar { position: static; }
+  .toolbar-top { flex-wrap: wrap; }
+  .toolbar-top .analysis-search { flex-basis: 100%; }
+  /* .toolbar-groups is a column below 60rem, so no flex-basis here (100% would become height). */
+  .filter-group { flex: none; flex-wrap: wrap; }
+  .filter-group + .filter-group { border-left: 0; border-top: var(--rule) solid var(--color-rule-faint); }
+}
+
 /* Severity chips double as legend: dot + count on the chip, pressed = filtered.
    Counts inherit the shared neutral .chip-count treatment (styles.css) — normal
    UI font, muted ink; no mono chip wall. */

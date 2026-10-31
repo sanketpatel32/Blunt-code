@@ -649,7 +649,12 @@
   color: var(--color-ink-faint);
 }
 
-.ledger-identity .path-copy code { font-size: 12px; }
+.ledger-sub { flex-wrap: wrap; row-gap: 0; }
+.ledger-identity .path-copy { flex: 0 1 auto; max-width: 100%; }
+/* The path broke every few characters ("/worksp ace/blu ntcode-") in the
+   ~128px identity column; one truncated line reads, and the full path stays
+   in the title and behind the copy button. */
+.ledger-identity .path-copy code { font-size: 12px; overflow: hidden; overflow-wrap: normal; white-space: nowrap; text-overflow: ellipsis; }
 
 .ledger-languages {
   /* Wraps, never ellipsises: a clipped text node still lays out at full width

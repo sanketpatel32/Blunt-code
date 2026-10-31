@@ -337,7 +337,10 @@
 @media (max-width: 64rem) {
   :root { --rail-w: 0rem; }
 
-  .app-shell { grid-template-columns: minmax(0, 1fr); }
+  /* One column, two rows: the sticky bar, then the page. Without explicit
+     rows the grid shared a short page's spare height between both auto rows,
+     so the bar grew to 200-260px on Workspaces and the 404 page. */
+  .app-shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); align-content: start; }
 
   .app-rail { display: none; }
 

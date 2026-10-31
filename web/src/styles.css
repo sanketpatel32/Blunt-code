@@ -640,7 +640,9 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .severity-pill:hover { border-color: var(--color-rule-strong); }
 .severity-pill.selected { background: var(--color-accent-soft); color: var(--color-accent-strong); border-color: var(--color-accent); }
 .severity-pill:disabled { opacity: .4; cursor: not-allowed; }
-.findings-table table { min-width: 48rem; }
+/* The fixed Severity/File/Tool/Status widths sum to ~46rem; 48rem left the
+   Finding column 16-40px. 64rem guarantees it ~18rem; narrower screens scroll. */
+.findings-table table { min-width: 64rem; }
 .table-wrap tbody tr.row-critical > td:first-child { box-shadow: var(--shadow-inset-critical); }
 .table-wrap tbody tr.row-high > td:first-child { box-shadow: var(--shadow-inset-high); }
 .table-wrap tbody tr.row-medium > td:first-child { box-shadow: var(--shadow-inset-medium); }
@@ -742,6 +744,11 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
   gap: var(--space-lg);
   padding: var(--space-md) 0;
   border-bottom: var(--rule) solid var(--color-rule-faint);
+}
+/* Phones: the 20rem value column left the label ~40px, one word per line,
+   with the switch drawn over the description. Stack label over control. */
+@media (max-width: 40rem) {
+  .setting { grid-template-columns: minmax(0, 1fr); gap: var(--space-sm); }
 }
 .setting h3 { margin: 0 0 var(--space-2xs); font-size: var(--text-sm); font-weight: 600; }
 .setting p { max-width: 36rem; margin: 0; color: var(--color-ink-soft); font-size: var(--text-sm); line-height: 1.5; }
@@ -1271,7 +1278,7 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
    is reserved for severity/state/grade — metadata stays neutral. */
 .tag { display: inline-flex; align-items: center; gap: var(--space-3xs); max-width: 100%; padding: 1px var(--space-sm); border: var(--rule) solid var(--color-rule-faint); border-radius: var(--radius-pill); background: var(--color-surface-muted); color: var(--color-ink-soft); font: 500 var(--text-2xs) var(--font-body); letter-spacing: 0; white-space: nowrap; }
 .tag > span, .tag > code { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.toolbar-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); margin: 0 0 var(--space-md); }
+.toolbar-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-sm); margin: 0 0 var(--space-md); }
 .toolbar-row .toolbar-filters { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap; min-width: 0; }
 .toolbar-row .toolbar-meta { margin-left: auto; color: var(--color-ink-faint); font: 600 var(--text-xs) var(--font-mono); white-space: nowrap; }
 .table-dense { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
