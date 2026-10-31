@@ -268,6 +268,11 @@ describe('humanizeAnalyzerError', () => {
     expect(humanizeAnalyzerError(SONAR)).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}/i);
   });
 
+  it('drops a repeated analyzer id after the display name', () => {
+    expect(humanizeAnalyzerError('ruff: ruff: No pinned managed artifact is configured.')).toBe('Ruff: No pinned managed artifact is configured.');
+    expect(humanizeAnalyzerError('gitleaks-secrets: gitleaks-secrets: failed')).not.toMatch(/gitleaks-secrets/i);
+  });
+
   it('drops the Java object dump', () => {
     const out = humanizeAnalyzerError(SONAR);
     expect(out).not.toContain('Visit of Component');
