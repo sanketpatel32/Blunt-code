@@ -12,7 +12,7 @@ function compareFinding(id: string): Finding {
 
 vi.mock('../api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api')>();
-  return { ...actual, api: { ...actual.api, workspace: vi.fn(), scansPage: vi.fn(), scan: vi.fn(), compareScans: vi.fn() } };
+  return { ...actual, api: { ...actual.api, workspace: vi.fn(), scansPage: vi.fn(), scan: vi.fn(), compareScans: vi.fn(), trends: vi.fn(async () => []) } };
 });
 
 declare global {

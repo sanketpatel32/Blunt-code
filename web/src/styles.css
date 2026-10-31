@@ -5815,3 +5815,6 @@ a.stat-tile:hover { border-color: var(--color-rule-strong); }
   [role='tablist']::-webkit-scrollbar { display: none; }
   [role='tablist'] > [role='tab'] { flex-shrink: 0; }
 }
+
+/* v0.48 · phone tap targets: the split-button chevron is a full 40px target */
+@media (max-width: 700px) { .scan-options-trigger { min-width: 40px; min-height: 40px; } }
