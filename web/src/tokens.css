@@ -99,7 +99,7 @@
      The deep coral is the voice (links, focus, the pressed state);
      the light coral is its wash. Never a band behind text. */
   --color-accent: oklch(74% 0.125 30);
-  --color-accent-strong: oklch(54% 0.165 29);
+  --color-accent-strong: oklch(51% 0.165 29);
   --color-accent-soft: oklch(74% 0.125 30 / 0.12);
   --color-accent-ink: oklch(23% 0.012 38);
   --color-accent-glow: oklch(54% 0.165 29 / 0.22);

@@ -315,7 +315,10 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .severity-counts small { display: block; color: var(--color-ink-faint); font: 500 var(--text-2xs) var(--font-body); letter-spacing: 0; }
 .severity-counts .critical, .severity-counts .high, .severity.critical, .severity.high { color: var(--color-danger-text); border-color: color-mix(in oklch, var(--color-danger) 30%, var(--color-rule)); background: var(--color-danger-soft); }
 .severity-counts .medium, .severity.medium { color: var(--color-warning-text); border-color: color-mix(in oklch, var(--color-warning) 30%, var(--color-rule)); background: var(--color-warning-soft); }
-.severity.low, .severity.info { color: var(--color-accent-strong); border-color: color-mix(in oklch, var(--color-accent) 20%, var(--color-rule)); background: var(--color-accent-soft); }
+/* Low/Info badges follow the severity ramp the bars and legend already use;
+   the coral accent made a Low badge look like a danger stamp. */
+.severity.low { color: var(--color-sev-low); border-color: color-mix(in oklch, var(--color-sev-low) 30%, var(--color-rule)); background: color-mix(in oklch, var(--color-sev-low) 10%, transparent); }
+.severity.info { color: var(--color-sev-info); border-color: color-mix(in oklch, var(--color-sev-info) 30%, var(--color-rule)); background: color-mix(in oklch, var(--color-sev-info) 10%, transparent); }
 .state { text-transform: capitalize; }
 .state.completed, .state.success, .state.ready { border-color: color-mix(in oklch, var(--color-success) 40%, var(--color-rule)); color: var(--color-success-text); background: var(--color-success-soft); }
 .state.completed_with_warnings, .state.warning { border-color: color-mix(in oklch, var(--color-warning) 40%, var(--color-rule)); color: var(--color-warning-text); background: var(--color-warning-soft); }
@@ -780,7 +783,8 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .switch { position: relative; display: inline-grid; place-items: center; width: 2.85rem; height: 1.6rem; padding: var(--space-3xs); border: var(--rule) solid var(--color-rule-strong); border-radius: var(--radius-button); background: var(--color-surface-muted); transition: background var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease-out); }
 .switch .knob { display: block; width: 1.2rem; height: 1.2rem; border-radius: 50%; background: var(--color-surface); box-shadow: var(--shadow-xs); transition: transform var(--dur-base) var(--ease-spring), background var(--dur-base) var(--ease-out); transform: translateX(-.55rem); }
 .switch.on { border-color: var(--color-ink); background: var(--color-ink); }
-.switch.on .knob { transform: translateX(.55rem); background: var(--color-on-accent); }
+/* The knob was on-accent ink on an ink track, so On read as a solid black pill. */
+.switch.on .knob { transform: translateX(.55rem); background: var(--color-surface); }
 .switch-state { min-width: 1.8rem; color: var(--color-ink-faint); font: 700 var(--text-xs) var(--font-mono); }
 
 /* ── Skeletons ─────────────────────────────────────────────────── */

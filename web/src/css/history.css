@@ -175,7 +175,7 @@ tr.is-expanded .history-date::before { border-color: var(--color-accent); backgr
 .findings-sev em { font-style: normal; color: var(--color-ink-faint); font-weight: 500; }
 .findings-sev.sev-critical, .findings-sev.sev-high { color: var(--color-danger-text); }
 .findings-sev.sev-medium { color: var(--color-warning-text); }
-.findings-sev.sev-low { color: var(--color-accent-strong); }
+.findings-sev.sev-low { color: var(--color-sev-low); }
 .findings-zero { color: var(--color-ink-faint); font-variant-numeric: tabular-nums; font-weight: 600; }
 
 /* Row actions — one visible control ("Open report"), overflow menu right. */
