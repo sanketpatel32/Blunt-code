@@ -29,10 +29,6 @@ export function nextRowId(): string {
   return `qr-${Date.now()}-${idSeq}`;
 }
 
-export function emptyQueryGroup(): QueryGroup {
-  return { logic: 'AND', rows: [{ id: nextRowId(), field: 'severity', op: '=', value: '' }] };
-}
-
 export function filterToQueryGroup(filter: FindingFilter): QueryGroup {
   const rows: QueryRow[] = [];
   const push = (field: QueryField, value: string) => {
@@ -116,20 +112,6 @@ export function buildUrlSearchFromFilter(filters: FindingFilter, sort?: SortStat
 
 export function buildUrlSearch(group: QueryGroup, sort?: SortState, page?: number): string {
   return buildUrlSearchFromFilter(queryGroupToFilter(group), sort, page);
-}
-
-export function urlSearchToQueryGroup(search: string): QueryGroup {
-  const sp = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
-  const f: FindingFilter = {
-    severity: sp.get('severity') ?? '',
-    category: sp.get('category') ?? '',
-    analyzer: sp.get('tool') ?? sp.get('analyzer') ?? '',
-    rule: sp.get('rule') ?? '',
-    path: sp.get('path') ?? '',
-    status: sp.get('status') ?? '',
-    q: sp.get('q') ?? '',
-  };
-  return filterToQueryGroup(f);
 }
 
 export function previewSql(group: QueryGroup): string {

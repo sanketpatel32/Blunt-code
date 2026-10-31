@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ANALYZER_CATALOG, LANGUAGE_FAMILIES, ALL_LANGUAGES, type AnalyzerCategory } from '../lib/analyzerCatalog';
+import { ANALYZER_CATALOG, LANGUAGE_FAMILIES, ALL_LANGUAGES } from '../lib/analyzerCatalog';
 
 const FAMILY_ORDER = ['Systems', 'Web', 'Mobile', 'Script', 'Data', 'Functional'] as const;
 
@@ -130,9 +130,4 @@ export function LanguageCoverage({ compact }: { compact?: boolean }) {
       </div>
     </section>
   );
-}
-
-export function LanguageChips({ languages }: { languages?: string[] }) {
-  if (!languages?.length) return null;
-  return <span className="flex flex-wrap gap-1">{languages.map((l) => <span key={l} className="badge text-xs">{l}</span>)}</span>;
 }

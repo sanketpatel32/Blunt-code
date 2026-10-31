@@ -1,5 +1,4 @@
 import { Fragment, useState } from 'react';
-import '../css/tools.css';
 import { api } from '../api';
 import type { AnalyzerStatus } from '../types';
 import type { Notice } from '../lib/notice';
@@ -226,7 +225,7 @@ export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r
                       </td>
                     </tr>
                     {open && (
-                      <tr className="tools-details-row">
+                      <tr className="tools-details-row rtable-sub">
                         <td colSpan={5} id={detailsId}>
                           <div className="tools-details">
                             <p className="tools-detail-desc">{analyzer.detail || analyzer.description}</p>

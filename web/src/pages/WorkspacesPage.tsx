@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import '../css/workspaces.css';
 import { Plus } from 'lucide-react';
 import { ApiError, api } from '../api';
 import type { Scan, Workspace } from '../types';

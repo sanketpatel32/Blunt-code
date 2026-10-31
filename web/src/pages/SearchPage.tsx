@@ -1,4 +1,3 @@
-import '../css/search.css';
 import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { api } from '../api';
 import type { SearchedFinding, Severity, Workspace } from '../types';
@@ -906,7 +905,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
             /* Table View — dense single-line rows; consecutive same rule+file
                results collapse into a group header with deduped occurrence lines. */
             <div className="table-wrap overflow-x-auto rounded-[var(--radius-md)] border border-[var(--color-rule-faint)] bg-[var(--color-surface)]">
-              <table className="search-results table-dense w-full text-left">
+              <table className="search-results table-dense rtable w-full text-left">
                 <caption className="sr-only">Global search results</caption>
                 <colgroup>
                   {visibleCols.finding && <col />}
@@ -950,18 +949,18 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                             </td>
                           )}
                           {visibleCols.location && (
-                            <td className="search-cell-location">
+                            <td className="search-cell-location" data-label="Location">
                               <LocationCell finding={finding} />
                             </td>
                           )}
                           {visibleCols.severity && (
-                            <td className="search-cell-severity">
+                            <td className="search-cell-severity" data-label="Severity">
                               <span className={`severity ${finding.severity} text-xs px-2 py-0.5 rounded font-semibold`}>
                                 {finding.severity}
                               </span>
                             </td>
                           )}
-                          {visibleCols.actions && <td className="search-cell-action">{openLink(finding)}</td>}
+                          {visibleCols.actions && <td className="search-cell-action rtable-actions">{openLink(finding)}</td>}
                         </tr>
                       );
                     }
@@ -1006,7 +1005,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                             findings off screen. The lines are now one indented row
                             of individually-clickable line links under the header. */}
                         {lines.length > 0 && (
-                          <tr className="search-occurrence-row">
+                          <tr className="search-occurrence-row rtable-sub">
                             <td colSpan={visibleColCount}>
                               <span className="search-occurrence-line">
                                 {lines.map((finding) => (

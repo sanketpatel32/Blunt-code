@@ -1,4 +1,4 @@
-import type { Severity, SeverityTrendPoint } from '../types';
+import type { Severity } from '../types';
 
 export type TrendPoint = { label: string; total: number };
 export type SeverityCounts = Record<Severity, number>;
@@ -81,32 +81,4 @@ type SparkScan = { total_findings?: number; critical_count?: number; high_count?
 export function sparkSeries(scans: SparkScan[], pick: (scan: SparkScan) => number | undefined): number[] | null {
   const values = scans.slice().reverse().map((scan) => pick(scan)).filter((value): value is number => typeof value === 'number');
   return values.length >= 2 ? values : null;
-}
-
-export function trendsToPoints(trends: SeverityTrendPoint[]): TrendPoint[] {
-  return trends.map((t) => ({ label: t.finished_at ?? t.scan_id, total: t.total }));
-}
-
-/** Mock helpers for preview / storybook / tests */
-export function mockTrendPoints(count = 7): TrendPoint[] {
-  const base = [12, 18, 14, 22, 19, 25, 21];
-  return base.slice(0, count).map((total, i) => ({ label: `2026-03-0${i + 1}`, total }));
-}
-
-export function mockSeverityCounts(): SeverityCounts {
-  return { critical: 4, high: 9, medium: 14, low: 22, info: 8 };
-}
-
-export function mockLanguageCoverage(): LanguageCoverage[] {
-  return [
-    { language: 'TypeScript', files: 42 },
-    { language: 'Go', files: 28 },
-    { language: 'Python', files: 18 },
-    { language: 'CSS', files: 11 },
-    { language: 'Shell', files: 6 },
-  ];
-}
-
-export function mockWorkspaceHistory(): number[] {
-  return [8, 12, 9, 15, 11, 14, 10];
 }

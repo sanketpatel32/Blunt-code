@@ -13,5 +13,4 @@ export * from './popover';
 export * from './tooltip';
 export * from './sheet';
 export * from './accordion';
-export * from './calendar';
 export * from './combobox';

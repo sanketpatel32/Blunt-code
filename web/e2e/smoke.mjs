@@ -211,6 +211,43 @@ await check('phone: workspaces table renders as cards', async () => {
   assert(!scrolls, 'page scrolls sideways');
 });
 
+async function assertCards(selector, label) {
+  const row = page.locator(`${selector} tbody tr`).first();
+  await row.waitFor({ timeout: 8000 });
+  const display = await row.evaluate((el) => getComputedStyle(el).display);
+  assert(display === 'block', `${label}: row display is ${display}`);
+  const box = await row.boundingBox();
+  assert(box && box.x >= 0 && box.x + box.width <= 391, `${label}: card overflows the viewport (${JSON.stringify(box)})`);
+  const hasText = await row.evaluate((el) => el.innerText.trim().length > 0);
+  assert(hasText, `${label}: card is empty`);
+  const scrolls = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+  assert(!scrolls, `${label}: page scrolls sideways`);
+}
+await check('phone: search results render as cards', async () => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await visit('/search?q=a');
+  const tableToggle = page.getByRole('button', { name: /table view/i });
+  if (await tableToggle.count()) await tableToggle.first().click();
+  await assertCards('table.search-results', 'search');
+});
+await check('phone: scan findings render as cards with labelled fields', async () => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await visit(`/scans/${scanId}`);
+  await assertCards('.findings-table table', 'findings');
+  const labels = await page.locator('.findings-table tbody tr').first().locator('td[data-label]').evaluateAll((tds) => tds.map((td) => td.dataset.label));
+  assert(['File', 'Tool', 'Status'].every((l) => labels.includes(l)), `labels: ${labels.join(',')}`);
+});
+await check('phone: workspace profile picker keeps its options on one row', async () => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await visit(`/workspaces/${wsId}`);
+  const tops = await page.locator('.profile-picker.segmented > button').evaluateAll((bs) => bs.map((b) => Math.round(b.getBoundingClientRect().top)));
+  assert(tops.length === 4, `found ${tops.length} profile options`);
+  assert(new Set(tops).size === 1, `options wrap across rows: ${tops.join(',')}`);
+  const pressed = page.locator('.profile-picker.segmented > button', { hasText: 'deep' });
+  await pressed.click();
+  assert((await pressed.getAttribute('aria-pressed')) === 'true', 'tapping "deep" did not select it');
+});
+
 await check('no console errors across the run', async () => {
   assert(!consoleErrors.length, `${consoleErrors.length}: ${consoleErrors.slice(0, 3).join(' || ')}`);
 });

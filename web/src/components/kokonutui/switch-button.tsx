@@ -13,7 +13,7 @@
  *    new theme (useTheme then applies the same value);
  *  - icon-only; the label is the caller's aria-label/title;
  *  - colours come from the caller's className (app tokens), not zinc;
- *  - the sun/moon parts' light/dark looks live in css/playful.css as plain
+ *  - the sun/moon parts' light/dark looks live in styles.css as plain
  *    CSS individual-transform properties (`scale`, `translate`) — the
  *    original's Tailwind 4 `dark:` utilities don't exist on Tailwind 3;
  *  - jsdom / old-browser guards for `matchMedia` and `Element.animate`.

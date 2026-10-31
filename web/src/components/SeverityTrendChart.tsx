@@ -4,7 +4,6 @@ import { useLoad } from '../hooks/useLoad';
 import { date } from '../lib/format';
 import type { Severity, SeverityTrendPoint } from '../types';
 import { SkeletonLines } from './skeletons';
-import '../css/components.css';
 
 const SEVERITY_ORDER: Severity[] = ['critical', 'high', 'medium', 'low', 'info'];
 

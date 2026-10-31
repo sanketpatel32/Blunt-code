@@ -48,15 +48,11 @@
      than the warm sheet they sit on. */
   --color-paper: oklch(98.2% 0.004 260);
   --color-paper-elevated: oklch(100% 0 0);
-  --color-paper-2: var(--color-surface-muted);
-  --color-paper-3: var(--color-surface-sunken);
   --color-surface: oklch(100% 0 0);
   --color-surface-raised: oklch(100% 0 0);
   --color-surface-muted: oklch(96.6% 0.006 260);
   --color-surface-subtle: oklch(95% 0.007 260);
   --color-surface-sunken: oklch(93.6% 0.008 260);
-  --color-surface-glass: oklch(100% 0 0 / 0.92);
-  --color-surface-overlay: oklch(100% 0 0 / 0.97);
   --color-edge-raised: var(--color-rule);
 
   /* — Ink — warm print ink on cotton. */
@@ -64,8 +60,6 @@
   --color-ink-soft: oklch(36% 0.022 265);
   --color-ink-faint: oklch(46% 0.02 265);
   --color-ink-ghost: oklch(58% 0.018 265);
-  --color-ink-2: var(--color-ink-soft);
-  --color-muted: var(--color-ink-faint);
 
   /* — Rules — warm hairlines at three weights. Fields draw one step
      deeper (Coral: inputs are ruled in the muted ink, 3:1 minimum). */
@@ -73,11 +67,8 @@
   --color-rule: oklch(91.5% 0.007 265);
   --color-rule-strong: oklch(84% 0.01 265);
   --color-rule-faint: oklch(94.5% 0.005 265);
-  --color-rule-2: var(--color-rule-faint);
 
   /* — The pressing grid — only under charts and schedules of real data. */
-  --color-grid: oklch(22% 0.025 265 / 0.06);
-  --color-grid-2: oklch(22% 0.025 265 / 0.12);
 
   /* — Accent — coral ink, pressed in where something is settled.
      The deep coral is the voice (links, focus, the pressed state);
@@ -89,11 +80,9 @@
   --color-accent-glow: oklch(72% 0.16 33 / 0.28);
   --color-accent-ghost: oklch(72% 0.16 33 / 0.1);
   /* The stationery has no washes: the old gradient token is one flat ink. */
-  --color-accent-gradient: var(--color-accent-strong);
 
   /* — Graphite — the ink board dialogs and overlays are cut from. */
   --color-graphite: oklch(22% 0.025 265);
-  --color-graphite-soft: oklch(17% 0.022 265);
   --color-graphite-ink: oklch(97% 0.005 265);
 
   /* — Brand — the mark is a deep-coral stamp with a cotton line. */
@@ -109,7 +98,6 @@
   --color-success-text: oklch(45% 0.085 192);
   --color-warning: oklch(76% 0.15 75);
   --color-warning-soft: oklch(80% 0.15 80 / 0.18);
-  --color-warning-strong: oklch(50% 0.11 65);
   --color-warning-ink: oklch(22% 0.04 75);
   --color-warning-text: oklch(46% 0.1 62);
   --color-danger: oklch(56% 0.2 25);
@@ -117,9 +105,7 @@
   --color-danger-strong: oklch(47% 0.18 25);
   --color-danger-ink: oklch(98.5% 0.004 27);
   --color-danger-text: oklch(48% 0.18 25);
-  --color-error: var(--color-danger);
   --color-focus: oklch(52% 0.18 30);
-  --color-focus-ring: oklch(72% 0.16 33 / 0.35);
 
   /* — Severity ramp — the register's margin notes, AA against the stock. */
   --color-sev-critical: oklch(48% 0.19 25);
@@ -136,8 +122,6 @@
   --color-cat-3: oklch(62% 0.13 75);
   --color-cat-4: oklch(53% 0.19 27);
   --color-cat-5: oklch(48% 0.13 320);
-  --color-cat-6: oklch(38% 0.07 45);
-  --color-cat-7: var(--color-accent-strong);
   --color-cat-8: oklch(50% 0.1 195);
   --color-cat-9: oklch(48% 0.12 15);
   --color-cat-10: oklch(46% 0.09 170);
@@ -155,17 +139,12 @@
 
   /* — Light, from the left: every paper object takes a lit top edge,
      a shade bottom edge, and a cast falling right. */
-  --edge-stock: 0 0 0 1px var(--color-rule);
-  --cast-stock: 0 1px 2px oklch(22% 0.025 265 / 0.05);
-  --cast-stock-lift: 0 8px 24px -8px oklch(22% 0.025 265 / 0.16);
-  --press-groove: inset 0 1px 2px oklch(22% 0.025 265 / 0.08), 0 0 0 1px var(--color-rule);
 
   /* — Type — General Sans reads and heads; Geist Mono measures.
      App scope: a fixed 1.2-ratio scale, no fluid heads. */
   --font-display: "General Sans", ui-sans-serif, system-ui, sans-serif;
   --font-body: var(--font-display);
   --font-mono: "Geist Mono", ui-monospace, monospace;
-  --font-outlier: var(--font-mono);
   --tracking-display: -0.022em;
   --display-weight: 600;
 
@@ -176,21 +155,11 @@
   --text-lg: 1.1875rem;
   --text-xl: 1.5rem;
   --text-2xl: 1.875rem;
-  --text-3xl: 2.375rem;
-  --text-display-s: 2rem;
-  --text-display: 2.75rem;
-  --text-section: var(--text-lg);
-  --text-title: var(--text-md);
-  --text-lead: var(--text-md);
   /* One fixed title size for every route (app scope: no clamp). */
   --text-page-title: 2rem;
   --text-section-title: var(--text-lg);
-  --leading-tight: 1.08;
-  --leading-snug: 1.25;
   --leading-relaxed: 1.6;
-  --leading-loose: 1.75;
   --measure: 40rem;
-  --measure-wide: 46rem;
 
   /* — Spacing — 4px base, unchanged (a workbench keeps its density). */
   --space-3xs: 0.125rem;
@@ -202,8 +171,6 @@
   --space-xl: 1.375rem;
   --space-2xl: 2.25rem;
   --space-3xl: 3.5rem;
-  --space-4xl: 5rem;
-  --space-5xl: 7rem;
 
   /* — Radii — stationery corners: cards 8, inputs 6, pills round. */
   --radius-xs: 4px;
@@ -211,7 +178,6 @@
   --radius-md: 10px;
   --radius-lg: 14px;
   --radius-xl: 16px;
-  --radius-2xl: 20px;
   --radius-pill: 999px;
   --radius-button: 10px;
   --radius-card: 14px;
@@ -219,10 +185,7 @@
   --rule: 1px;
   --rule-strong: 2px;
   --rule-focus: 2px;
-  --rule-hair: 1px;
   --rule-heavy: 2px;
-  --tick: 14px;
-  --sheet-inset: 20px;
 
   /* — Elevation — cotton stock on the desk: one lit edge, one cast.
      Recipes stay named so components pick tiers by role. */
@@ -231,7 +194,6 @@
   --shadow-md: 0 4px 12px -4px oklch(22% 0.025 265 / 0.12);
   --shadow-lg: 0 10px 28px -10px oklch(22% 0.025 265 / 0.18);
   --shadow-xl: 0 18px 40px -14px oklch(22% 0.025 265 / 0.22);
-  --shadow-nav: 0 1px 0 var(--color-rule);
   --shadow-dialog: 0 24px 60px -16px oklch(22% 0.025 265 / 0.3);
   --shadow-accent: 0 2px 0 oklch(52% 0.18 30 / 0.35);
   --shadow-card: 0 1px 2px oklch(22% 0.025 265 / 0.04);
@@ -251,47 +213,22 @@
      no caller can overshoot a UI state. */
   --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
   --ease-spring-soft: cubic-bezier(0.32, 0.72, 0, 1);
-  --ease-snappy: cubic-bezier(0.22, 1, 0.36, 1);
-  --dur-instant: 80ms;
   --dur-fast: 140ms;
   --dur-base: 200ms;
   --dur-slow: 360ms;
-  --dur-slower: 560ms;
   --dur-stagger: 40ms;
-  --dur-micro: 120ms;
-  --dur-short: 220ms;
-  --dur-long: 420ms;
-
-  --z-base: 1;
   --z-nav: 20;
-  --z-raised: 10;
-  --z-dropdown: 100;
-  --z-sticky: 200;
-  --z-sticky-nav: 300;
   --z-dialog: 40;
-  --z-modal: 400;
   --z-command: 45;
   --z-toast: 50;
-  --z-tooltip: 600;
-
-  --container: 86rem;
-  --gutter: var(--page-gutter);
-  --gap-columns: var(--space-lg);
-  --content-max: 86rem;
-  --content-narrow: 48rem;
-  --focus-ring: 0 0 0 3px var(--color-focus-ring);
-  --grid-gap: var(--space-md);
 
   /* — Layout constants — */
-  --nav-h: 3.25rem;
+  --nav-h: 3rem;
   --page-gutter: var(--space-lg);
   --tap-min: 2.75rem;
 
   /* — Playful instrument additions — teal is the second voice (fixed, ready,
      low risk); grades own one hue each across every page. */
-  --color-teal: oklch(64% 0.11 188);
-  --color-teal-strong: oklch(45% 0.085 192);
-  --color-teal-soft: oklch(64% 0.11 188 / 0.13);
   --grade-a: oklch(80% 0.11 182);
   --grade-b: oklch(88% 0.14 95);
   --grade-c: oklch(80% 0.13 60);
@@ -299,6 +236,16 @@
   --grade-none: oklch(93.6% 0.008 260);
   --grade-tile-ink: oklch(22% 0.025 265);
   --grade-tile-edge: oklch(22% 0.025 265 / 0.85);
+  --rail-w: 13.5rem;
+  /* Primary button: hover brightens, the lip is the pressed edge. */
+  --color-accent-hover: color-mix(in oklch, var(--color-accent) 86%, white);
+  --color-accent-lip: color-mix(in oklch, var(--color-accent-strong) 72%, black);
+  /* Severity fills: bars and meters take a brighter ramp than the AA text tones. */
+  --sev-fill-critical: oklch(60% 0.2 25);
+  --sev-fill-high: oklch(69% 0.17 45);
+  --sev-fill-medium: oklch(80% 0.15 82);
+  --sev-fill-low: oklch(70% 0.1 190);
+  --sev-fill-info: oklch(74% 0.05 255);
 }
 
 :root[data-theme='dark'] {
@@ -307,15 +254,11 @@
   /* — The ink board — warm near-black; cotton cards become lit wells. */
   --color-paper: oklch(17.5% 0.02 265);
   --color-paper-elevated: oklch(22% 0.022 265);
-  --color-paper-2: var(--color-surface-muted);
-  --color-paper-3: var(--color-surface-sunken);
   --color-surface: oklch(21.5% 0.022 265);
   --color-surface-raised: oklch(24.5% 0.024 265);
   --color-surface-muted: oklch(19.5% 0.021 265);
   --color-surface-subtle: oklch(18% 0.02 265);
   --color-surface-sunken: oklch(15.5% 0.018 265);
-  --color-surface-glass: oklch(21.5% 0.022 265 / 0.92);
-  --color-surface-overlay: oklch(21.5% 0.022 265 / 0.97);
   --color-edge-raised: var(--color-rule);
 
   /* — Cotton-white ink on the board. */
@@ -323,17 +266,11 @@
   --color-ink-soft: oklch(88% 0.012 265);
   --color-ink-faint: oklch(77% 0.016 265);
   --color-ink-ghost: oklch(65% 0.018 265);
-  --color-ink-2: var(--color-ink-soft);
-  --color-muted: var(--color-ink-faint);
 
   --color-field-edge: oklch(70% 0.016 265);
   --color-rule: oklch(97% 0.01 265 / 0.12);
   --color-rule-strong: oklch(97% 0.01 265 / 0.26);
   --color-rule-faint: oklch(97% 0.01 265 / 0.07);
-  --color-rule-2: var(--color-rule-faint);
-
-  --color-grid: oklch(96.5% 0.006 70 / 0.07);
-  --color-grid-2: oklch(96.5% 0.006 70 / 0.15);
 
   /* Coral stays the voice: brightened one step for the board. */
   --color-accent: oklch(76% 0.15 33);
@@ -342,10 +279,8 @@
   --color-accent-ink: oklch(20% 0.03 30);
   --color-accent-glow: oklch(78% 0.125 30 / 0.24);
   --color-accent-ghost: oklch(78% 0.125 30 / 0.15);
-  --color-accent-gradient: var(--color-accent-strong);
 
   --color-graphite: oklch(15.5% 0.018 265);
-  --color-graphite-soft: oklch(12% 0.016 265);
   --color-graphite-ink: oklch(88% 0.01 68);
 
   /* The stamp stays deep coral with a cotton line on the board. */
@@ -362,7 +297,6 @@
   --color-success-text: oklch(82% 0.1 185);
   --color-warning: oklch(80% 0.13 80);
   --color-warning-soft: oklch(32% 0.06 80);
-  --color-warning-strong: oklch(68% 0.12 80);
   --color-warning-ink: oklch(18% 0.04 80);
   --color-warning-text: oklch(83% 0.135 82);
   --color-danger: oklch(72% 0.16 27);
@@ -371,7 +305,6 @@
   --color-danger-ink: oklch(14% 0.04 27);
   --color-danger-text: oklch(78% 0.145 27);
   --color-focus: oklch(80% 0.13 33);
-  --color-focus-ring: oklch(76% 0.15 33 / 0.38);
 
   --color-sev-critical: oklch(72% 0.16 27);
   --color-sev-high: oklch(76% 0.14 45);
@@ -386,8 +319,6 @@
   --color-cat-3: oklch(80% 0.12 80);
   --color-cat-4: oklch(72% 0.15 27);
   --color-cat-5: oklch(74% 0.12 320);
-  --color-cat-6: oklch(84% 0.02 70);
-  --color-cat-7: var(--color-accent-strong);
   --color-cat-8: oklch(74% 0.1 195);
   --color-cat-9: oklch(72% 0.12 15);
   --color-cat-10: oklch(72% 0.09 170);
@@ -405,17 +336,12 @@
 
   /* On the board the light comes from within: lit top edges on wells,
      deeper casts to the same right. */
-  --edge-stock: 0 0 0 1px var(--color-rule);
-  --cast-stock: 0 1px 2px oklch(5% 0.01 265 / 0.4);
-  --cast-stock-lift: 0 10px 28px -10px oklch(5% 0.01 265 / 0.6);
-  --press-groove: inset 0 1px 2px oklch(5% 0.01 265 / 0.5), 0 0 0 1px var(--color-rule);
 
   --shadow-xs: 0 1px 2px oklch(5% 0.01 265 / 0.4);
   --shadow-sm: 0 1px 2px oklch(5% 0.01 265 / 0.45);
   --shadow-md: 0 4px 12px -4px oklch(5% 0.01 265 / 0.55);
   --shadow-lg: 0 10px 28px -10px oklch(5% 0.01 265 / 0.6);
   --shadow-xl: 0 18px 40px -14px oklch(5% 0.01 265 / 0.65);
-  --shadow-nav: 0 1px 0 var(--color-rule);
   --shadow-dialog: 0 24px 48px -12px oklch(5% 0.008 40 / 0.65);
   --shadow-accent: 0 2px 0 oklch(52% 0.15 30 / 0.6);
   --shadow-card: 0 1px 2px oklch(5% 0.01 265 / 0.35);
@@ -423,10 +349,6 @@
   --elev-base: 0 0 0 1px var(--color-rule);
   --elev-base-hover: 0 0 0 1px var(--color-rule-strong), var(--shadow-sm);
   --elev-raised: 0 0 0 1px var(--color-rule), var(--shadow-md);
-
-  --color-teal: oklch(78% 0.11 185);
-  --color-teal-strong: oklch(84% 0.09 185);
-  --color-teal-soft: oklch(78% 0.11 185 / 0.15);
   --grade-a: oklch(78% 0.11 182);
   --grade-b: oklch(86% 0.14 95);
   --grade-c: oklch(78% 0.13 60);
@@ -434,4 +356,34 @@
   --grade-none: oklch(28% 0.022 265);
   --grade-tile-ink: oklch(18% 0.025 265);
   --grade-tile-edge: oklch(8% 0.015 265 / 0.9);
+  /* Primary button: hover brightens, the lip is the pressed edge. */
+  --color-accent-hover: color-mix(in oklch, var(--color-accent) 88%, white);
+  --color-accent-lip: color-mix(in oklch, var(--color-accent) 45%, black);
+  /* Severity fills: bars and meters take a brighter ramp than the AA text tones. */
+  --sev-fill-critical: oklch(66% 0.19 25);
+  --sev-fill-high: oklch(73% 0.15 45);
+  --sev-fill-medium: oklch(82% 0.14 85);
+  /* Low shares the hue of its text tone so a Low dot, pill and bar read as one colour. */
+  --sev-fill-low: oklch(76% 0.09 195);
+  --sev-fill-info: oklch(70% 0.05 255);
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --color-ink-soft: oklch(30% 0.014 40);
+    --color-ink-faint: oklch(40% 0.013 44);
+    --color-ink-ghost: oklch(50% 0.012 46);
+    --color-rule: var(--color-rule-strong);
+    --color-rule-faint: var(--color-rule-strong);
+    --color-accent: var(--color-accent-strong);
+  }
+  /* Specificity: :root[data-theme='dark'] outranks the plain :root above, so the
+     rule promotion has to be restated here or dark mode keeps its hairlines. */
+  :root[data-theme='dark'] {
+    --color-ink-soft: oklch(90% 0.008 70);
+    --color-ink-faint: oklch(82% 0.01 70);
+    --color-ink-ghost: oklch(74% 0.012 68);
+    --color-rule: var(--color-rule-strong);
+    --color-rule-faint: var(--color-rule-strong);
+  }
 }

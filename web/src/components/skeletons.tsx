@@ -48,11 +48,3 @@ export function SkeletonLines({ lines = 3 }: { lines?: number }) {
   const shimmer = shimmerStyle(reduced);
   return <SkeletonStatus><div className="skeleton-lines">{Array.from({ length: lines }, (_, line) => <span key={LINE_KEYS[line]} className={`skeleton ${shimmer} ${reduced ? '' : 'anim-fadeIn anim-stagger'}`} style={{ width: line === lines - 1 ? '55%' : '100%', ...(reduced ? {} : { animationDelay: `${line * 40}ms` } as never) }} />)}</div></SkeletonStatus>;
 }
-
-// Explicit chart variant export for dashboard (alias)
-export function SkeletonChart({ count = 1 }: { count?: number }) {
-  return <SkeletonCards count={count} variant="chart" />;
-}
-export function SkeletonMetric({ count = 4 }: { count?: number }) {
-  return <SkeletonCards count={count} variant="metric" />;
-}

@@ -65,14 +65,3 @@ export function clearNotifications() {
   safeWrite([]);
   try { window.dispatchEvent(new CustomEvent('bluntcode:notifications', { detail: [] })); } catch { }
 }
-
-// Optional stubs for scan lifecycle hooks
-export function notifyScanCompleted(scanId: string, findings: number) {
-  return pushNotification({ title: 'Scan completed', message: `${findings} finding${findings === 1 ? '' : 's'} collected · ${scanId.slice(0, 8)}`, kind: 'success' });
-}
-export function notifyNewCritical(count: number) {
-  return pushNotification({ title: 'New critical finding', message: `${count} critical issue${count === 1 ? '' : 's'} detected`, kind: 'critical' });
-}
-export function notifyFixReady(ruleId: string) {
-  return pushNotification({ title: 'Fix suggestion ready', message: `AI fix available for ${ruleId}`, kind: 'info' });
-}

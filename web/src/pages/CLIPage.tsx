@@ -15,7 +15,6 @@ import {
   Sliders,
   GitBranch,
 } from 'lucide-react';
-import '../css/cli.css';
 
 interface CLICommand {
   id: string;

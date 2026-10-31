@@ -1,9 +1,7 @@
 import type { ReactNode } from 'react';
-import type { Scan, Severity, Tool } from '../types';
+import type { Scan, Severity } from '../types';
 import { count, languageNames, languageColor } from '../lib/format';
-import { useCountUp } from '../hooks/useCountUp';
 import { Card, CardContent } from './ui/card';
-import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { SkeletonTable } from './skeletons';
 import { ShieldCheck, AlertTriangle } from 'lucide-react';
@@ -128,18 +126,4 @@ export function SeverityCounts({ scan, counts, pending }: { scan?: Scan; counts?
     ['low', source.low, 'low'],
   ];
   return <div className="severity-counts flex gap-6" data-pending={pending ? 'true' : undefined}>{values.map(([severity, value]) => <span key={severity} className={`${severity}${severity === 'critical' && (value ?? 0) > 0 ? ' critical-live' : ''}`}>{count(value ?? 0)} <small>{severity}</small></span>)}</div>;
-}
-
-export function ToolSummary({ tools }: { tools: Tool[] }) {
-  return <div className="tool-summary flex flex-wrap gap-3">{tools.length ? tools.map((tool) => <Badge key={tool.id} variant={tool.ready ? 'success' : 'danger'} className="gap-1.5"><i className={`dot ${tool.ready ? 'ready' : 'not-ready'} !m-0`} />{tool.id}: {tool.ready ? 'ready' : 'not installed'}</Badge>) : <span className="muted">Tool status will appear once the backend is ready.</span>}</div>;
-}
-
-export function SummaryCard({ label, value, tone }: { label: string; value: number; tone?: string }) {
-  const shown = useCountUp(value);
-  return (
-    <Card className={`summary-card ${tone ?? ''} p-5`}>
-      <strong className="font-display text-2xl font-extrabold tracking-tight">{shown}</strong>
-      <span className="mt-1 text-xs font-medium text-[var(--color-ink-faint)]">{label}</span>
-    </Card>
-  );
 }

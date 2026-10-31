@@ -66,10 +66,6 @@ export function categoryColor(category: AnalyzerCategory): string {
   return map[category] ?? 'var(--color-ink-faint)';
 }
 
-export function allCategories(): AnalyzerCategory[] {
-  return [...new Set(ANALYZER_CATALOG.map((a) => a.category))] as AnalyzerCategory[];
-}
-
 export const CATEGORY_LABELS: Record<AnalyzerCategory, string> = {
   lint: 'Lint',
   style: 'Style',
