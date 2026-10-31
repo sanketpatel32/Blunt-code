@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyzerStatusLabels, eventCopy, isActiveScanState, latestAnalyzerCompletions, severityTotalsSoFar, stageLabels, type ScanEvent } from './scanEvents';
+import { analyzerProgress, analyzerStatusLabels, effectiveLiveState, eventCopy, liveHeadline, isActiveScanState, latestAnalyzerCompletions, severityTotalsSoFar, stageLabels, type ScanEvent } from './scanEvents';
 
 const completed = (analyzer_id: string, findings: number, severities?: Record<string, number>): ScanEvent =>
   ({ type: 'analyzer.completed', analyzer_id, findings, severities, at: 0 });
@@ -75,5 +75,29 @@ describe('isActiveScanState', () => {
   it('treats an unknown state as active rather than silently finished', () => {
     expect(isActiveScanState('archiving_artifacts')).toBe(true);
     expect(isActiveScanState('')).toBe(true);
+  });
+});
+
+describe('live headline consistency', () => {
+  const at = 0;
+  it('never names one analyzer as "the" running one and agrees with the badge', () => {
+    const events: ScanEvent[] = [
+      { type: 'scan.stage', stage: 'Preparing workspace', at },
+      { type: 'analyzer.started', analyzer_id: 'ruff', at },
+      { type: 'analyzer.failed', analyzer_id: 'ruff', error: 'not installed', at },
+      { type: 'analyzer.started', analyzer_id: 'biome', at },
+      { type: 'analyzer.started', analyzer_id: 'pentest-suite', name: 'Pentest & Vulnerability Suite', at },
+    ];
+    expect(effectiveLiveState(events, 'preparing')).toBe('running');
+    expect(liveHeadline(events, 'preparing')).toBe('Running analyzers · 1 of 3 finished · 1 needs attention');
+    expect(analyzerProgress(events)).toEqual({ started: 3, finished: 1, failed: 1 });
+  });
+  it('keeps the setup stage before any analyzer starts', () => {
+    expect(effectiveLiveState([], 'preparing')).toBe('preparing');
+    expect(liveHeadline([], 'preparing')).toBe('Preparing workspace');
+    expect(liveHeadline([{ type: 'analyzer.started', analyzer_id: 'ruff', at }], 'normalizing')).toBe('Combining results');
+  });
+  it('uses display names in the event list', () => {
+    expect(eventCopy({ type: 'analyzer.started', analyzer_id: 'gitleaks-secrets', at })).toBe('Gitleaks started');
   });
 });

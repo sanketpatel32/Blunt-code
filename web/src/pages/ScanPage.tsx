@@ -5,7 +5,7 @@ import type { Route } from '../lib/router';
 import type { Notice } from '../lib/notice';
 import { message } from '../lib/notice';
 import { SEVERITY_LABELS, analyzerName, count, date, elapsed, findingLocation, scanStateDisplay } from '../lib/format';
-import { analyzerStatusLabels, eventCopy, isTerminalScanState, latestAnalyzerCompletions, liveHeadline, severityTotalsSoFar, stageLabels, type ScanEvent } from '../lib/scanEvents';
+import { analyzerStatusLabels, eventCopy, isTerminalScanState, latestAnalyzerCompletions, effectiveLiveState, liveHeadline, severityTotalsSoFar, stageLabels, type ScanEvent } from '../lib/scanEvents';
 import { bandFor, coverageFromRuns, coveragePartial, coverageText, gradeExplanation, riskGrade, riskScore, severityCountsOf } from '../lib/risk';
 import { useLoad } from '../hooks/useLoad';
 import { useTicker } from '../hooks/useTicker';
@@ -117,8 +117,10 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
   if (scan.loading && !scan.data) return <div className="page"><Loading /></div>;
   if (scan.error && !scan.data) return <div className="page"><ErrorPanel error={scan.error} retry={scan.reload} /></div>;
   if (!current) return <div className="page"><Loading /></div>;
-  const state = scanStateDisplay(current.state);
   const live = !terminal;
+  // The badge follows the event log: analyzers running means "Running", not
+  // the stale "Preparing" the last persisted state carried.
+  const state = scanStateDisplay(live ? effectiveLiveState(events, current.state) : current.state);
   const counts = severityCountsOf(current);
   const total = current.total_findings ?? 0;
   const critical = counts.critical ?? 0;
@@ -318,12 +320,24 @@ function ScanProgressBar({ scan, events }: { scan: Scan; events: ScanEvent[] }) 
 
 /** Live per-analyzer pills grouped by category with colored left border per category, stagger fadeIn. */
 export function LiveAnalyzerStrip({ runs, events }: { runs?: AnalyzerRun[]; events: ScanEvent[] }) {
-  const started = new Map<string, boolean>();
+  // Latest outcome per analyzer from the live log, so a pill never reads
+  // "Running" after the event list already said it finished or failed.
+  const live = new Map<string, { status: string; message?: string }>();
   for (const event of events) {
-    if (event.type === 'analyzer.started') started.set(event.analyzer_id ?? event.name ?? '', true);
+    const id = event.analyzer_id ?? event.name;
+    if (!id) continue;
+    if (event.type === 'analyzer.started') live.set(id, { status: 'running' });
+    else if (event.type === 'analyzer.completed') live.set(id, { status: 'succeeded' });
+    else if (event.type === 'analyzer.failed') live.set(id, { status: 'failed', message: event.error });
+    else if (event.type === 'analyzer.skipped') live.set(id, { status: 'skipped', message: event.message });
   }
   const completions = latestAnalyzerCompletions(events);
-  const pills = (runs?.length ? runs.map((run) => ({ id: run.analyzer_id, status: run.status, message: run.message })) : [...started.keys()].map((id) => ({ id, status: 'running', message: undefined as string | undefined })));
+  const pills = runs?.length
+    ? runs.map((run) => {
+      const seen = live.get(run.analyzer_id);
+      return seen && (run.status === 'running' || run.status === 'pending') ? { id: run.analyzer_id, status: seen.status, message: seen.message ?? run.message } : { id: run.analyzer_id, status: run.status, message: run.message };
+    })
+    : [...live.entries()].map(([id, seen]) => ({ id, status: seen.status, message: seen.message }));
   if (!pills.length) return null;
   const grouped = new Map<string, typeof pills>();
   for (const p of pills) {
@@ -399,7 +413,7 @@ function ScanStageList({ scan, events }: { scan: Scan; events: ScanEvent[] }) {
   const fallback = scan.state === 'queued' ? 'Waiting for the scan to begin.' : scan.state === 'interrupted' ? 'Scan interrupted before every analyzer finished.' : stageLabels[scan.state] ?? 'Working';
   const entries = journey.length ? journey : [{ type: 'scan.stage', stage: fallback, at: Date.now() } as ScanEvent];
   const active = !isTerminalScanState(scan.state) ? entries.at(-1) : undefined;
-  const status = active?.type === 'analyzer.started' ? `${active.name ?? active.analyzer_id ?? 'Analyzer'} is checking your code` : active ? eventCopy(active) : scan.state === 'interrupted' ? 'Scan interrupted — completed checks are still available.' : scan.state.replaceAll('_', ' ');
+  const status = active ? `Latest: ${eventCopy(active)}` : scan.state === 'interrupted' ? 'Scan interrupted — completed checks are still available.' : scan.state.replaceAll('_', ' ');
   const reduced = useReducedMotion();
   const terminal = isTerminalScanState(scan.state);
   // On completed/failed scans the status line just repeats the page title's

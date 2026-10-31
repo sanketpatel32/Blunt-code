@@ -293,8 +293,8 @@ describe('ScanPage live results panel', () => {
     expect(metric).toBe('10771');
     expect(metric).not.toBe('21542');
     const flow = [...host.querySelectorAll('.scan-flow li strong')].map((node) => node.textContent);
-    expect(flow.filter((text) => text?.includes('biome finished'))).toHaveLength(1);
-    expect(flow.filter((text) => text?.includes('gitleaks-secrets finished'))).toHaveLength(1);
+    expect(flow.filter((text) => text?.includes('Biome finished'))).toHaveLength(1);
+    expect(flow.filter((text) => text?.includes('Gitleaks finished'))).toHaveLength(1);
   });
 
   it('shows live severity totals and per-analyzer findings from completion events', async () => {
