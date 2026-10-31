@@ -5,6 +5,30 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.47.0] - 2026-10-31
+
+### Added
+- **Finding details open in a drawer.** On desktop a finding opens in a side drawer, and on a phone it opens in a sheet, so it no longer appears far below the list. The problem is shown first, with an Open in editor link.
+- **Better exports.** The Markdown export opens with a verdict summary. The HTML report carries the grade tile and a coverage line, and "Open HTML report in a new tab" uses `?inline=1` under a sandboxed CSP. JSON is now in the export menu, and `report.json` works as an alias of `findings.json`.
+- **"Compare latest two scans" in History**, plus a Close button and timestamps with seconds. Notifications name the workspace instead of a scan ID.
+- **One feature-flag file (`web/src/lib/features.ts`)** for parts of the UI that aren't finished yet (see Changed).
+
+### Changed
+- **Unfinished features are hidden.** The ZAP, Nuclei and Burp template tabs, the pentest "Execute Check" runner, the Rules page and the workspace Dependencies tab are gone from the UI, the navigation, the command palette and the docs. `/rules` now shows the not-found page. The backend code is unchanged, and each feature returns with a one-line flag change once it works end to end. The `bluntcode rules` CLI command for path overrides is unaffected.
+- **Search shows each workspace's latest scan by default.** `scope=all` keeps the old behaviour.
+- **The grade explains itself.** You get one analyzer-coverage count, a plain-language reason for the grade, and a "provisional" flag when analyzers didn't run.
+- **Clearer scan state.** A live scan's headline, badge and pills tell one story ("Running analyzers · X of Y finished"). Missing tools appear as one grouped notice with Set up tools.
+- **"Files & rules" is now "Files & paths"** (Include / exclude paths).
+- **Faster pages.** The workspace list never walks folders, analyzer runs are batched, and scan comparisons are cached.
+- **staticcheck is clean** on Linux and Windows. The e2e smoke suite also covers the regressions fixed in this release and checks that the hidden features stay hidden.
+
+### Fixed
+- **Add workspace shows plain-language path errors** inline in the dialog instead of raw Go `stat`/`getwd` text.
+- **Suppressing a finding updates the counts, the grade and the status chips.** The UI asks for a reason.
+- **OWASP matrix:** TODO markers no longer go under A09, A07/A10 matching is tighter, and percentages are of security-relevant findings.
+- **Report:** failed tools no longer show "0" chips, and titles no longer break inside file names.
+- **Error states:** a missing item shows "Nothing here anymore" with ways back instead of Try again. When workspaces fail to load, Home shows "grade unavailable" instead of fake zero stats. The Search Columns panel and the CLI tabs no longer overflow on phones.
+
 ## [0.46.0] - 2026-10-31
 
 ### Added
