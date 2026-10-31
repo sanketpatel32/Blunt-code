@@ -224,7 +224,7 @@ async function overflowingElements() {
     return out;
   });
 }
-const VIEWPORTS = [{ name: 'wide', width: 1440, height: 900 }, { name: 'laptop', width: 1280, height: 800 }, { name: 'tablet', width: 820, height: 1180 }, { name: 'phone', width: 390, height: 844 }];
+const VIEWPORTS = [{ name: 'desktop-hd', width: 1920, height: 1080 }, { name: 'wide', width: 1440, height: 900 }, { name: 'laptop', width: 1280, height: 800 }, { name: 'tablet', width: 820, height: 1180 }, { name: 'phone', width: 390, height: 844 }];
 for (const viewport of VIEWPORTS) {
   await check(`every route renders at ${viewport.name} ${viewport.width}px with no element past the right edge`, async () => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
@@ -237,6 +237,15 @@ for (const viewport of VIEWPORTS) {
     assert(!bad.length, bad.slice(0, 3).join(' | '));
   });
 }
+
+await check('desktop: 1920 canvas fills the width and Settings lays out as a two-column bento', async () => {
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await visit('/settings');
+  const width = await page.locator('main .page').first().evaluate((el) => el.getBoundingClientRect().width);
+  assert(width >= 1600, `page column only ${Math.round(width)}px at 1920`);
+  const tops = await page.locator('.settings-list > section').evaluateAll((els) => els.slice(0, 2).map((el) => Math.round(el.getBoundingClientRect().top)));
+  assert(tops.length === 2 && tops[0] === tops[1], `settings sections not side by side: ${tops}`);
+});
 
 await check('tablet: icon rail shows, labels hidden, nav links still named', async () => {
   await page.setViewportSize({ width: 820, height: 1180 });

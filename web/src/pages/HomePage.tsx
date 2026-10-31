@@ -1071,6 +1071,7 @@ function ToolsFoot({
   retry: () => void;
   go: (r: Route) => void;
 }) {
+  const missingTools = tools.filter((tool) => !tool.ready).map((tool) => tool.id);
   return (
     <footer className="board-foot" aria-label="Analyzers">
       {loading ? (
@@ -1088,9 +1089,9 @@ function ToolsFoot({
                 A chip wall of tool ids used to follow this sentence; the one fact
                 the footer owes a reader who cannot open the Tools page is WHICH
                 tools are missing, so the sentence names exactly those. */}
-            <strong>{ready} of {total}</strong> optional tools ready · managed locally, nothing leaves this computer
-            {tools.some((tool) => !tool.ready) && (
-              <>: {tools.filter((tool) => !tool.ready).map((tool) => tool.id).join(', ')} not installed</>
+            <strong>{ready} of {total}</strong> optional tools ready
+            {missingTools.length > 0 && (
+              <span className="board-foot-missing" title={`Not installed: ${missingTools.join(', ')}`}> · not installed: {missingTools.slice(0, 3).join(', ')}{missingTools.length > 3 ? ` +${missingTools.length - 3}` : ''}</span>
             )}
           </p>
           <Button variant="ghost" size="sm" onClick={() => go({ page: 'tools' })}>

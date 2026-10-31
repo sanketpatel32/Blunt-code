@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { FolderOpen, HardDrive, Power, ScanSearch, ShieldCheck, SlidersHorizontal } from 'lucide-react';
 import { api, ApiError } from '../api';
 import type { Notice } from '../lib/notice';
 import { message } from '../lib/notice';
@@ -100,7 +101,7 @@ export function SettingsPage({ notify }: { notify: (n: Notice) => void }) {
       {meta.error && <ErrorPanel error={meta.error} retry={meta.reload} />}
       <div className="settings-list">
         <section>
-          <h2>General</h2>
+          <h2><SlidersHorizontal className="settings-h2-icon" aria-hidden="true" />General</h2>
           <div className="setting">
             <div>
               <h3>Open browser automatically</h3>
@@ -154,7 +155,7 @@ export function SettingsPage({ notify }: { notify: (n: Notice) => void }) {
         </section>
 
         <section>
-          <h2>Analysis</h2>
+          <h2><ScanSearch className="settings-h2-icon" aria-hidden="true" />Analysis</h2>
           <Setting
             label="Default scan profile"
             description="Workspace scans use the saved profile unless you choose another profile."
@@ -168,7 +169,7 @@ export function SettingsPage({ notify }: { notify: (n: Notice) => void }) {
         </section>
 
         <section>
-          <h2>Privacy</h2>
+          <h2><ShieldCheck className="settings-h2-icon" aria-hidden="true" />Privacy</h2>
           <Setting
             label="Telemetry"
             description="Blunt Code does not send usage analytics or repository data to a cloud service."
@@ -184,7 +185,7 @@ export function SettingsPage({ notify }: { notify: (n: Notice) => void }) {
             name it — a settings row that only reports a value is not worth its
             own heading. */}
         <section>
-          <h2>Data folders</h2>
+          <h2><FolderOpen className="settings-h2-icon" aria-hidden="true" />Data folders</h2>
           <div className="data-folders">
             <div>
               <h3>Open local folders</h3>
@@ -209,7 +210,7 @@ export function SettingsPage({ notify }: { notify: (n: Notice) => void }) {
         </section>
 
         <section>
-          <h2>Storage & Cleanup</h2>
+          <h2><HardDrive className="settings-h2-icon" aria-hidden="true" />Storage & Cleanup</h2>
           <div className="setting">
             <div>
               <h3>Clean caches and compact database</h3>
@@ -227,7 +228,7 @@ export function SettingsPage({ notify }: { notify: (n: Notice) => void }) {
         </section>
 
         <section>
-          <h2>Server</h2>
+          <h2><Power className="settings-h2-icon" aria-hidden="true" />Server</h2>
           <div className="setting danger-setting">
             <div>
               <h3>Stop local server</h3>

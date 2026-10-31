@@ -856,13 +856,12 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                 Add a workspace and run your first scan; findings from every scan land here.
               </Empty>
             ) : (
-              <Empty title="No matching findings" icon={<MagnifierIcon />}>
-                No findings match your current query or filters. Try clearing some filters or running a fresh scan across your workspaces.
-                {activeFiltersCount > 0 && (
-                  <Button variant="outline" size="sm" onClick={clearAll} className="mt-4 gap-1.5">
+              <Empty title="No matching findings" icon={<MagnifierIcon />} action={activeFiltersCount > 0 ? (
+                  <Button variant="outline" size="sm" onClick={clearAll} className="gap-1.5">
                     <RotateCcw className="h-3.5 w-3.5" /> Reset all filters
                   </Button>
-                )}
+                ) : undefined}>
+                Nothing matches this query or these filters.
               </Empty>
             )
           ) : viewMode === 'cards' ? (

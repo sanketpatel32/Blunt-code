@@ -283,8 +283,7 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
         verdict cards above grade on an older completed scan instead, the notice says so. */}
     <section className="split-section workspace-history-section"><div className="workspace-section-card"><h2>Latest scan</h2>{(rawLatest ?? latest) ? <>{fallbackNotice && <p className="muted" role="note">{fallbackNotice}</p>}<p className="muted">{(rawLatest ?? latest)!.state.replaceAll('_', ' ')} · {date((rawLatest ?? latest)!.finished_at ?? (rawLatest ?? latest)!.started_at)}</p>{(rawLatest ?? latest)!.error_summary && <div className="inline-warning">Warning: {(rawLatest ?? latest)!.error_summary}</div>}<AnalyzerStatuses runs={(rawLatest ?? latest)!.analyzer_runs} go={go} /></> : <Empty title="Ready when you are" icon={<ScanIcon />}>Run the first scan to get a combined report.</Empty>}</div><div className="workspace-section-card"><h2>Scan history</h2>{scans.loading ? <SkeletonTable rows={4} cols={10} /> : scans.error ? <ErrorPanel error={scans.error} retry={scans.reload} /> : <HistoryTable scans={scans.data ?? []} go={go} />}</div></section>
 
-    {/* 6 · Housekeeping — set once, then ignored. The gloss keeps "Suppress" from reading as jargon. */}
-    <p className="muted suppressions-gloss">Suppress = “not an issue for us” — hides a finding from all future scans and reports for this workspace.</p>
+    {/* 6 · Housekeeping — set once, then ignored. The section's own subtitle explains "Suppress". */}
     <SuppressionsSection workspaceId={id} notify={notify} />
   </div>
   {deleteOpen && <ConfirmationDialog title="Remove this workspace?" description="This removes the saved workspace, file rules, and local scan history from Blunt Code. Your project files will not be changed." confirmLabel="Remove workspace" busy={deleting} onCancel={() => setDeleteOpen(false)} onConfirm={remove} />}</div>;
@@ -377,8 +376,9 @@ function PremiumSummaryCard({ label, value, tone, spark, delay }: { label: strin
   return <div className={`summary-card premium-card ${tone ?? ''}`} style={{ animationDelay: `${delay*40}ms` }}>
     <strong>{unscanned ? '—' : value}</strong>
     <span className="premium-card-label">{unscanned ? 'no scan yet' : label}</span>
-    {/* Only a real multi-scan trend draws a line (sparkSeries returns null below two points). */}
-    {spark && spark.length > 1 && <MiniSparkline values={spark} />}
+    {/* Only a real multi-scan trend draws a line (sparkSeries returns null below two
+        points). A flat series is a word, not a line glued to the card floor. */}
+    {spark && spark.length > 1 && (new Set(spark).size > 1 ? <MiniSparkline values={spark} /> : <small className="premium-card-steady">steady · {spark.length} scans</small>)}
   </div>;
 }
 
@@ -405,13 +405,13 @@ export function AnalyzerStatuses({ runs, go }: { runs?: AnalyzerRun[]; go?: (r: 
   return <div className="analyzers"><h3>Analyzer status</h3>
     <p className="analyzer-summary" role="note">{parts.join(' · ')}{missing.length > 0 && go && <> <button type="button" className="text-button" onClick={() => go({ page: 'tools' })}>Set up tools →</button></>}</p>
     <details className="analyzer-details" open={failed.length > 0 || undefined}><summary>Show each analyzer</summary>
-    {[...grouped.entries()].map(([cat, items]) => <div key={cat} className="analyzer-group"><span className="analyzer-group-label" style={{ borderLeftColor: categoryColor(cat as never) }}>{(CATEGORY_LABELS as Record<string, string>)[cat] ?? cat}</span>{items.map((run) => {
+    <div className="analyzer-grid">{[...grouped.entries()].map(([cat, items]) => <div key={cat} className="analyzer-group"><span className="analyzer-group-label" style={{ borderLeftColor: categoryColor(cat as never) }}>{(CATEGORY_LABELS as Record<string, string>)[cat] ?? cat}</span>{items.map((run) => {
     const isSkipped = run.status === 'skipped';
     const notInstalled = run.status === 'failed' && isMissingToolMessage(run.message);
     // Display names read like products ("Gitleaks", not "gitleaks-secrets"); an
     // id missing from the map falls back to itself, and the raw id stays on hover.
     return <div className="analyzer-row" key={run.analyzer_id}><span title={run.analyzer_id}>{analyzerName(run.analyzer_id)}</span><span className={`state ${notInstalled ? 'not-installed' : run.status}`}>{notInstalled ? 'not installed' : run.status}</span>{isSkipped ? <small role="note" className="text-amber-600">Skipped: {run.message || 'no applicable files or profile excluded this analyzer'}</small> : notInstalled ? <small>Checks skipped until it is set up in Tools.</small> : run.message ? <small>{run.message}</small> : null}</div>;
-  })}</div>)}
+  })}</div>)}</div>
     </details>
   </div>;
 }

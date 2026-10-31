@@ -13,6 +13,7 @@ import { SkeletonLines } from '../components/skeletons';
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { PathCopy } from '../components/PathCopy';
+import { languageColor } from '../lib/format';
 
 interface RuleDraft { uid: number; rule_type: 'include' | 'exclude'; pattern: string; enabled?: boolean }
 
@@ -226,6 +227,7 @@ export function FilesPage({ id, go, notify }: { id: string; go?: (r: Route) => v
             </div>
           }
         />
+    {langEntries.length > 1 && <LanguageMixBar entries={langEntries} />}
     <section className="file-layout"><div className="tree-panel"><div className="tree-panel-head"><div><h2 className="tree-panel-title">Workspace files</h2></div>{/* No count badge in this head. It used to read "35 top-level" here, and "35 paths loaded" sat 340px below it — two different numbers (entries in the root listing vs paths currently expanded into the tree) that coincide on first load and then diverge the moment you open a folder. Seeing the same figure twice, in two different treatments, read as a rendering bug. The loaded count is the one that changes and therefore the one worth watching, so it is the only one that stayed. */}</div><div className="tree-panel-controls"><label className="search file-search"><span className="sr-only">Search paths</span><span className="file-search-wrap"><Search size={14} className="file-search-icon" aria-hidden /><input ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') { setQuery(''); event.currentTarget.blur(); } }} placeholder="src or package.json" className="file-search-input" /><kbd className="kbd-hint">/</kbd></span></label><fieldset className="tree-toolbar chip-group chip-rail" aria-label="Filter by language">
           <button type="button" className="chip" aria-pressed={lang === ''} onClick={() => setLangFilter('')}>All languages</button>
           {langEntries.map(([l, count]) => {
@@ -458,4 +460,17 @@ function BulkBar({ targets, selected, overrides, onOverrides, filtered }: { targ
 function RuleEditor({ rules, setRules }: { rules: RuleDraft[]; setRules: (next: RuleDraft[]) => void }) {
   function edit(uid: number, patch: Partial<RuleDraft>) { setRules(rules.map((rule) => rule.uid === uid ? { ...rule, ...patch } : rule)); }
   return <aside className="rule-editor"><header className="rule-editor-head"><div><h2>Include / exclude paths</h2></div></header><p className="muted rule-editor-desc">Path patterns apply to new files too. Include or exclude paths beyond the defaults.</p>{rules.length === 0 ? <div className="rule-empty-illustration"><FolderCog size={40} className="rule-empty-icon" aria-hidden /><p className="muted">No path patterns yet. Add one to include or exclude paths beyond the defaults.</p></div> : <div className="rule-list">{rules.map((rule) => <div className="rule" key={rule.uid}><div className="segmented" role="group" aria-label="Include or exclude"><button type="button" className={`segmented-btn${rule.rule_type === 'include' ? ' active' : ''}`} aria-pressed={rule.rule_type === 'include'} onClick={() => edit(rule.uid, { rule_type: 'include' })}>Include</button><button type="button" className={`segmented-btn${rule.rule_type === 'exclude' ? ' active' : ''}`} aria-pressed={rule.rule_type === 'exclude'} onClick={() => edit(rule.uid, { rule_type: 'exclude' })}>Exclude</button></div><input className="rule-pattern" value={rule.pattern} onChange={(event) => edit(rule.uid, { pattern: event.target.value })} placeholder="**/generated/**" aria-label="Path pattern" /><button type="button" className="icon-button rule-remove" onClick={() => setRules(rules.filter((item) => item.uid !== rule.uid))} aria-label="Remove path pattern"><X size={14} /></button></div>)}</div>}<button type="button" className="rule-add" onClick={() => setRules([...rules, { uid: nextRuleUid(), rule_type: 'exclude', pattern: '' }])}><Plus size={14} aria-hidden /> Add path pattern</button><p className="rule-help">Use glob patterns like <code>**/generated/**</code> or <code>src/legacy/**</code>. Include wins over exclude for the matched path.</p></aside>;
+}
+
+/** One stacked bar of the loaded files by language: the tree's composition at a
+ *  glance on wide screens, with the same colours as the language chips. */
+function LanguageMixBar({ entries }: { entries: [string, number][] }) {
+  const total = entries.reduce((n, [, c]) => n + c, 0);
+  if (!total) return null;
+  const label = entries.map(([l, c]) => `${LANG_LABELS[l] ?? l} ${c}`).join(', ');
+  return (
+    <div className="files-langbar" role="img" aria-label={`Loaded files by language: ${label}`}>
+      {entries.map(([l, c]) => <span key={l} style={{ flexGrow: c, background: languageColor(l) }} title={`${LANG_LABELS[l] ?? l}: ${c}`} />)}
+    </div>
+  );
 }
