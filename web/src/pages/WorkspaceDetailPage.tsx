@@ -25,6 +25,7 @@ import { ScanActionDropdown } from '../components/ScanActionDropdown';
 import { PreScanSummary } from '../components/PreScanSummary';
 import { PageHeader } from '../components/PageHeader';
 import { GradeTile } from '../components/GradeTile';
+import { FEATURES } from '../lib/features';
 
 const AnalyticsCharts = lazy(() => import('../components/AnalyticsCharts').then((m) => ({ default: m.AnalyticsCharts })));
 const DependencyGraph = lazy(() => import('../components/DependencyGraph').then((m) => ({ default: m.DependencyGraph })) );
@@ -237,7 +238,7 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
           <TabsTrigger value="pentest">Pentest &amp; OWASP</TabsTrigger>
           <TabsTrigger value="severity">Severity</TabsTrigger>
           <TabsTrigger value="languages">Languages</TabsTrigger>
-          <TabsTrigger value="dependencies">Dependencies</TabsTrigger>
+          {FEATURES.workspaceDependencies && <TabsTrigger value="dependencies">Dependencies</TabsTrigger>}
           <TabsTrigger value="compliance">Compliance</TabsTrigger>
         </TabsList>
       </div>
@@ -257,11 +258,11 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
           ? <LanguageDistributionDonut names={item.languages} coverage={coverage} workspaceId={id} go={go} />
           : <Empty title="No languages detected" icon={<FileSearch />}>Run a scan to see how this project is split across languages.</Empty>}
       </TabsContent>
-      <TabsContent value="dependencies">
+      {FEATURES.workspaceDependencies && <TabsContent value="dependencies">
         <Suspense fallback={<SkeletonCards count={1} variant="chart" />}>
           <DependencyGraph languages={item.languages} />
         </Suspense>
-      </TabsContent>
+      </TabsContent>}
       <TabsContent value="compliance">
         {latest
           ? <ComplianceSection scanId={latest.id} go={go} />

@@ -34,6 +34,7 @@ const RuleStudioPage = lazy(() => import('./pages/RuleStudioPage').then((m) => (
 import { AboutPage } from './pages/AboutPage';
 import { CLIPage } from './pages/CLIPage';
 import { NotFoundPage } from './pages/NotFoundPage';
+import { FEATURES } from './lib/features';
 
 /** Keys that complete a "g" navigation sequence: g h/w/t/s/c/a -> the matching page. */
 const SEQUENCE_TARGETS: Partial<Record<string, Route['page']>> = { h: 'home', w: 'workspaces', t: 'tools', s: 'settings', c: 'cli', a: 'about' };
@@ -184,7 +185,7 @@ export function App() {
     { id: 'nav-settings', label: 'Go to Settings', keywords: 'preferences', hint: 'g s', group: 'Navigation', run: () => go({ page: 'settings' }) },
     { id: 'nav-about', label: 'Go to About', keywords: 'version info', hint: 'g a', group: 'Navigation', run: () => go({ page: 'about' }) },
     { id: 'nav-search', label: 'Go to findings', keywords: 'search findings', group: 'Navigation', run: () => go({ page: 'search' }) },
-    { id: 'nav-pentest', label: 'Go to Pentest', keywords: 'pentest zap nuclei burp hacking', group: 'Navigation', run: () => go({ page: 'pentest' }) },
+    { id: 'nav-pentest', label: 'Go to Pentest', keywords: FEATURES.pentestTemplateLibraries ? 'pentest zap nuclei burp hacking' : 'pentest dast owasp hacking', group: 'Navigation', run: () => go({ page: 'pentest' }) },
     { id: 'filter-critical', label: 'Filter critical', keywords: 'severity critical', group: 'Filters', run: () => go({ page: 'search', q: 'severity=critical' }) },
     { id: 'filter-findings', label: 'Go to findings', keywords: 'findings', group: 'Filters', run: () => go({ page: 'search', q: 'severity=critical' }) },
     { id: 'action-add-workspace', label: 'Add workspace', keywords: 'new project folder scan', hint: 'N', group: 'Navigation', run: () => setAddOpen(true) },
@@ -256,7 +257,7 @@ function Page({ route, go, notify, onAdd, onUpdateHandoff }: { route: Route; go:
     // The key remounts the page when the workspace id in the URL changes, so
     // per-workspace state never survives into another workspace's view.
     case 'pentest': return <Suspense fallback={<SkeletonCards count={3} variant="chart" />}><PentestPage key={id ?? 'pentest'} workspaceId={id} go={go} notify={notify} /></Suspense>;
-    case 'rules': return <Suspense fallback={<SkeletonCards count={2} />}><RuleStudioPage /></Suspense>;
+    case 'rules': if (!FEATURES.ruleStudio) return <NotFoundPage go={go} />; return <Suspense fallback={<SkeletonCards count={2} />}><RuleStudioPage /></Suspense>;
     case 'settings': return <SettingsPage notify={notify} />;
     case 'about': return <AboutPage onUpdateHandoff={onUpdateHandoff} />;
     case 'not-found': return <NotFoundPage go={go} />;

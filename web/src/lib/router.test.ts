@@ -20,6 +20,10 @@ describe('parseRoute', () => {
     expect(parseRoute('/about')).toEqual({ page: 'about' });
   });
 
+  it('sends a hidden feature\'s address to the 404 page instead of a dead page', () => {
+    expect(parseRoute('/rules')).toEqual({ page: 'not-found' });
+  });
+
   it('supports the documented aliases and tolerates trailing separators', () => {
     expect(parseRoute('/docs')).toEqual({ page: 'cli' });
     expect(parseRoute('/findings')).toEqual({ page: 'search' });

@@ -126,9 +126,19 @@ await check('tools page + filter', async () => {
 });
 
 // 6 · Rules editor validates a draft.
-await check('rules editor renders and validates', async () => {
+await check('hidden features: /rules is a graceful 404 and nothing links to it', async () => {
   await visit('/rules');
-  await page.getByText(/Draft validation/i).first().waitFor();
+  await page.getByText(/Page not found|not found/i).first().waitFor();
+  await visit('/');
+  assert(!(await page.locator('a[href="/rules"]').count()), 'a link to /rules is still on screen');
+});
+await check('hidden features: no ZAP/Nuclei/Burp tabs or Execute Check on the pentest page', async () => {
+  await visit(`/workspaces/${wsId}/pentest`);
+  const tabs = await page.getByRole('tab').allInnerTexts();
+  assert(!tabs.some((t) => /ZAP|Nuclei|Burp/.test(t)), `tabs: ${tabs.join(' | ')}`);
+  assert(!(await page.getByRole('button', { name: /Execute Check/ }).count()), 'Execute Check is still shown');
+  await visit(`/workspaces/${wsId}`);
+  assert(!(await page.getByRole('tab', { name: 'Dependencies' }).count()), 'Dependencies tab is still shown');
 });
 
 // 7 · Settings: language switch and back.
@@ -193,7 +203,7 @@ await check('404 page', async () => {
 });
 
 // 12 · Every route renders, light, desktop + phone.
-const routes = ['/', '/workspaces', `/workspaces/${wsId}`, `/workspaces/${wsId}/files`, `/workspaces/${wsId}/scans`, `/workspaces/${wsId}/pentest`, `/scans/${scanId}`, '/search', '/tools', '/rules', '/settings', '/about', '/cli'];
+const routes = ['/', '/workspaces', `/workspaces/${wsId}`, `/workspaces/${wsId}/files`, `/workspaces/${wsId}/scans`, `/workspaces/${wsId}/pentest`, `/scans/${scanId}`, '/search', '/tools', '/settings', '/about', '/cli'];
 for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {
   await check(`every route renders at ${viewport.width}px`, async () => {
     await page.setViewportSize(viewport);

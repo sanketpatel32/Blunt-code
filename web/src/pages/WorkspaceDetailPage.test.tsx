@@ -88,6 +88,12 @@ afterEach(async () => {
 });
 
 describe('WorkspaceDetailPage per-language coverage', () => {
+  it('hides the unfinished Dependencies insight tab without leaving a gap', async () => {
+    const host = await render(detailFetchMock({ scans: [scanRow({ snapshot: { languages: { Go: 3 } } })] }));
+    const tabs = [...host.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent);
+    expect(tabs).toEqual(['Trends', 'Pentest & OWASP', 'Severity', 'Languages', 'Compliance']);
+  });
+
   it('backfills the workspace latest_scan snapshot from the scans list so the Languages tab shows real counts', async () => {
     const host = await render(detailFetchMock({
       scans: [scanRow({ snapshot: { languages: { TypeScript: 42, Go: 28 } } })],
