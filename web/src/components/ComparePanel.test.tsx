@@ -144,6 +144,7 @@ describe('ComparePanel', () => {
     vi.mocked(api.scan).mockRejectedValue(new Error('SCAN_NOT_FOUND: Scan was not found.'));
     const host = await renderPanel('newer', 'missing');
     expect(api.compareScans).not.toHaveBeenCalled();
-    expect(host.textContent).toContain('Could not load this view');
+    expect(host.textContent).toContain('Nothing here anymore'); // a missing scan is final: no retry
+    expect([...host.querySelectorAll('button')].some((b) => b.textContent === 'Try again')).toBe(false);
   });
 });

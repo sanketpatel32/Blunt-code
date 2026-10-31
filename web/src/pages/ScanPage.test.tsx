@@ -345,6 +345,9 @@ describe('ScanPage terminal and action states (IMP-14)', () => {
     // resolves the error panel shows and no reconnect may ever be scheduled.
     expect(DispatchingEventSource.instances).toHaveLength(1);
     expect(host.querySelector('.error-panel')).not.toBeNull();
+    // A missing scan is final: a way back instead of a retry that cannot work.
+    const buttons = [...host.querySelectorAll('.error-panel button')].map((button) => button.textContent);
+    expect(buttons).toEqual(['Back to overview', 'Workspaces']);
     const source = DispatchingEventSource.instances[0]!;
     await act(async () => { source.onerror?.(new Event('error')); });
     await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });

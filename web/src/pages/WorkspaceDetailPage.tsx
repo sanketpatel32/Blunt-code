@@ -110,7 +110,7 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
   async function remove() { setDeleting(true); try { await api.deleteWorkspace(id); go({ page: 'workspaces' }); notify({ kind: 'info', text: 'Workspace removed from Blunt Code.' }); } catch (e) { notify({ kind: 'error', text: message(e) }); setDeleting(false); } }
   if (workspace.loading) return <div className="page"><Loading /></div>;
   // A NOT_FOUND workspace never loads, so "Try again" alone is a dead end — offer the way back.
-  if (workspace.error) return <div className="page"><ErrorPanel error={workspace.error} retry={workspace.reload} />{workspace.error.includes('NOT_FOUND') && <div className="mt-4 flex justify-center"><button type="button" className="button secondary" onClick={() => go({ page: 'workspaces' })}>Back to Workspaces</button></div>}</div>;
+  if (workspace.error) return <div className="page"><ErrorPanel error={workspace.error} retry={workspace.reload} actions={workspace.error.includes('NOT_FOUND') && <button type="button" className="button secondary" onClick={() => go({ page: 'workspaces' })}>Back to Workspaces</button>} /></div>;
   if (!item) return <div className="page"><Loading /></div>;
   // Null (not 0) when nothing has completed: an unscanned workspace must not read as "all clear".
   const criticalHigh = latest ? (latest.critical_count ?? 0) + (latest.high_count ?? 0) : null;

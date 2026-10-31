@@ -129,7 +129,10 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
   }
   // A background reload (after suppress/restore) keeps the page mounted.
   if (scan.loading && !scan.data) return <div className="page"><Loading /></div>;
-  if (scan.error && !scan.data) return <div className="page"><ErrorPanel error={scan.error} retry={scan.reload} /></div>;
+  if (scan.error && !scan.data) return <div className="page"><ErrorPanel error={scan.error} retry={scan.reload} actions={go && <>
+    <Button size="sm" onClick={() => go({ page: 'home' })}>Back to overview</Button>
+    <Button variant="outline" size="sm" onClick={() => go({ page: 'workspaces' })}>Workspaces</Button>
+  </>} /></div>;
   if (!current) return <div className="page"><Loading /></div>;
   const live = !terminal;
   // The badge follows the event log: analyzers running means "Running", not

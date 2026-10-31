@@ -25,18 +25,25 @@ function friendlyErrorText(error: string): { text: string; code?: string } {
   return { text: error };
 }
 
-export function ErrorPanel({ error, retry }: { error: string; retry?: () => void }) {
+/** Error card. A *_NOT_FOUND error is final — retrying cannot bring a deleted
+ *  scan or workspace back — so it drops "Try again" and shows `actions` (the
+ *  way back) instead; other errors keep retry and show actions beside it. */
+export function ErrorPanel({ error, retry, actions }: { error: string; retry?: () => void; actions?: ReactNode }) {
   const friendly = friendlyErrorText(error);
+  const notFound = /\b[A-Z_]*NOT_FOUND\b/.test(error);
   return (
     <Card className="error-panel border-[var(--color-danger)] bg-[var(--color-danger-soft)]" role="alert">
       <CardContent className="p-8 text-center">
         <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-[var(--color-danger-soft)] border border-[var(--color-danger)]/20 text-[var(--color-danger)]">
           <AlertTriangle className="h-5 w-5" />
         </div>
-        <h2 className="font-display text-xl font-semibold">Could not load this view</h2>
+        <h2 className="font-display text-xl font-semibold">{notFound ? 'Nothing here anymore' : 'Could not load this view'}</h2>
         <p className="mt-2 text-sm text-[var(--color-ink-soft)]">{friendly.text}</p>
         {friendly.code && <p className="mt-1 font-mono text-xs text-[var(--color-ink-faint)]">{friendly.code}</p>}
-        {retry && <Button variant="outline" size="sm" className="mt-4" onClick={retry}>Try again</Button>}
+        {((retry && !notFound) || actions) && <div className="error-panel-actions mt-4 flex flex-wrap justify-center gap-2">
+          {retry && !notFound && <Button variant="outline" size="sm" onClick={retry}>Try again</Button>}
+          {actions}
+        </div>}
       </CardContent>
     </Card>
   );

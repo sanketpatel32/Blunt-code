@@ -125,6 +125,17 @@ afterEach(async () => {
 });
 
 describe('HomePage risk board — verdict', () => {
+  it('shows no invented zeros when the workspace list fails to load', async () => {
+    const base = homeFetchMock({ scans: [], total: 0, summary });
+    const fetchMock = vi.fn((input: string, init?: RequestInit) => input.endsWith('/workspaces') && !init?.method
+      ? Promise.resolve(json({ error: { code: 'INTERNAL', message: 'database is locked' } }, 500))
+      : base(input, init));
+    const host = await render(fetchMock);
+    expect(host.querySelector('.verdict-rail')).toBeNull(); // no "Workspaces scanned 0 of 0"
+    expect(host.querySelector('.verdict-score')?.textContent).toBe('grade unavailable');
+    expect(host.textContent).toContain("Couldn't load your workspaces");
+  });
+
   it('grades the whole board with the backend formula (3c+4h+9m+5l → score 73, grade D)', async () => {
     const host = await render(homeFetchMock({ scans: [scanItem()], total: 1, summary }));
 

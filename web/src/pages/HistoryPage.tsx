@@ -199,7 +199,7 @@ export function HistoryPage({ workspaceId, go }: { workspaceId: string; go: (r: 
         </div>
         {(pendingPartial || compareSelecting) && stripBaseId && <CompareStrip baseId={stripBaseId} baseScan={stripBaseScan} pendingScan={pendingPartial} onCancel={cancelCompare} onAccept={acceptPartial} />}
         {pair.a && pair.b && <ComparePanel aId={pair.a} bId={pair.b} onClose={cancelCompare} />}
-        {view.loading ? <SkeletonTable rows={6} cols={5} /> : view.error ? <ErrorPanel error={view.error} retry={view.reload} /> : filtering
+        {view.loading ? <SkeletonTable rows={6} cols={5} /> : view.error ? <ErrorPanel error={view.error} retry={view.reload} actions={view.error.includes('NOT_FOUND') && <button type="button" className="button secondary" onClick={() => go({ page: 'workspaces' })}>Back to Workspaces</button>} /> : filtering
           ? <HistoryTable scans={allPages.data?.items ?? []} go={go} paging={{ page: 1, pageSize: historyPageSize, total: allPages.data?.total ?? 0, hasNext: false, onPage: () => {}, filtered: true }} dateFrom={dateFilter.from} dateTo={dateFilter.to} {...tableCompareProps} />
           : <HistoryTable scans={state.data?.items ?? []} go={go} paging={{ page, pageSize: historyPageSize, total: state.data?.total ?? 0, hasNext: state.data?.has_next ?? false, onPage: gotoPage }} dateFrom={dateFilter.from} dateTo={dateFilter.to} {...tableCompareProps} />}
       </div>
