@@ -1,5 +1,4 @@
 import { useReducedMotion } from '../hooks/useReducedMotion';
-import type { Severity } from '../types';
 import type { LanguageCoverage, SeverityCounts, TrendPoint } from '../lib/chartData';
 import { SEVERITY_COLOR, SEVERITY_ORDER } from '../lib/chartData';
 

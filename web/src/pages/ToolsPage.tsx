@@ -1,5 +1,4 @@
 import { Fragment, useState } from 'react';
-import '../css/tools.css';
 import { api } from '../api';
 import type { AnalyzerStatus } from '../types';
 import type { Notice } from '../lib/notice';
@@ -165,7 +164,7 @@ export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r
           </span>
         </div>
         {analyzers.loading ? <SkeletonTable rows={ANALYZER_CATALOG.length} cols={5} className="tool-table" /> : !rows.length ? <Empty title="Nothing to set up" icon={<WrenchIcon />}>Analyzers appear automatically. Optional tools can be installed from here.</Empty> : <div className="tool-table table-wrap">
-          <table>
+          <table className="rtable">
             <thead>
               <tr>
                 <th scope="col">Tool</th>
@@ -193,10 +192,10 @@ export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r
                           <ChevronDown className="tools-caret" aria-hidden="true" />
                         </button>
                       </td>
-                      <td className="tools-version" title={analyzer.version ? `v${analyzer.version}` : undefined}>{analyzer.version ? `v${analyzer.version}` : '—'}</td>
-                      <td><span className={statusStateClass(status.tone)}>{status.tone !== 'ok' && <i className={statusDotClass(status.tone)} aria-hidden="true" />}{status.text}</span></td>
-                      <td className="tools-source">{analyzer.execution === 'in-process' ? 'Built-in' : 'Managed'}</td>
-                      <td className="tools-cell-actions" aria-busy={activeOperation ? true : undefined}>
+                      <td data-label="Version" className="tools-version" title={analyzer.version ? `v${analyzer.version}` : undefined}>{analyzer.version ? `v${analyzer.version}` : '—'}</td>
+                      <td data-label="Status"><span className={statusStateClass(status.tone)}>{status.tone !== 'ok' && <i className={statusDotClass(status.tone)} aria-hidden="true" />}{status.text}</span></td>
+                      <td data-label="Source" className="tools-source">{analyzer.execution === 'in-process' ? 'Built-in' : 'Managed'}</td>
+                      <td className="tools-cell-actions rtable-actions" aria-busy={activeOperation ? true : undefined}>
                         {/* The flex layout lives on a div INSIDE the cell, not on the
                             cell itself. A <td> with display:flex stops being a
                             table cell: it drops out of the row's layout, so
@@ -226,7 +225,7 @@ export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r
                       </td>
                     </tr>
                     {open && (
-                      <tr className="tools-details-row">
+                      <tr className="tools-details-row rtable-sub">
                         <td colSpan={5} id={detailsId}>
                           <div className="tools-details">
                             <p className="tools-detail-desc">{analyzer.detail || analyzer.description}</p>

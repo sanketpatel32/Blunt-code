@@ -53,10 +53,12 @@ const MaxConcurrentScans = 3
 // the API surfaces it as 503 and the CLI as an operational failure (exit 3).
 var ErrTooManyScans = errors.New("scan capacity reached: too many concurrent scans")
 
-const (
+const diagnosticLogCap = int64(500 << 20)
+
+// Per-run analyzer deadlines. Variables only so tests can shrink them.
+var (
 	fastAnalyzerTimeout  = 10 * time.Minute
 	sonarAnalyzerTimeout = 30 * time.Minute
-	diagnosticLogCap     = int64(500 << 20)
 )
 
 func New(db *database.DB, registry *analyzers.Registry, bus *events.Bus, reportsDir, toolsDir string, toolService *tools.Service) *Service {

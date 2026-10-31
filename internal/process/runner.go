@@ -100,6 +100,16 @@ func Run(ctx context.Context, req Request) (Result, error) {
 	}
 	err = cmd.Wait()
 	result := Result{Stdout: out.Bytes(), Stderr: errout.Bytes(), Duration: time.Since(started), Truncated: out.truncated || errout.truncated}
+	// A child ended by cancellation or a deadline exits "non-zero" too, but
+	// its output is a fragment: report the context error so callers never
+	// parse it as a finished run. (A natural exit that merely raced the
+	// deadline keeps its real outcome.)
+	if ctxErr := ctx.Err(); ctxErr != nil && err != nil {
+		if exit, ok := err.(*exec.ExitError); ok {
+			result.ExitCode = exit.ExitCode()
+		}
+		return result, fmt.Errorf("process stopped: %w", ctxErr)
+	}
 	if exit, ok := err.(*exec.ExitError); ok {
 		result.ExitCode = exit.ExitCode()
 		return result, nil

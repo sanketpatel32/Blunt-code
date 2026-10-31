@@ -35,8 +35,3 @@ export function CheckShieldIcon(props: IconProps) {
 export function WrenchIcon(props: IconProps) {
   return <Svg {...props}><path d="M14.7 6.3a1.1 1.1 0 0 0 0 1.5l1.5 1.5a1.1 1.1 0 0 0 1.5 0l3.7-3.7a5.9 5.9 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a5.9 5.9 0 0 1 7.9-7.9l-3.7 3.7z" /></Svg>;
 }
-
-/** Celebration accents — a four-point sparkle. */
-export function SparkleIcon(props: IconProps) {
-  return <Svg {...props}><path d="M12 5.5c.65 3.3 2.7 5.35 6 6-3.3.65-5.35 2.7-6 6-.65-3.3-2.7-5.35-6-6 3.3-.65 5.35-2.7 6-6z" /></Svg>;
-}

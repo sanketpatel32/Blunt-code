@@ -281,12 +281,3 @@ export const HACKING_TESTS: HackingTest[] = [
 ];
 
 export const HACKING_OWASP_GROUPS = [...new Set(HACKING_TESTS.map((t) => t.owasp))].sort();
-
-export function hackingStats() {
-  return {
-    total: HACKING_TESTS.length,
-    critical: HACKING_TESTS.filter((t) => t.severity === 'critical').length,
-    high: HACKING_TESTS.filter((t) => t.severity === 'high').length,
-    enabled: HACKING_TESTS.filter((t) => t.enabled).length,
-  };
-}

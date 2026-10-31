@@ -173,6 +173,8 @@ export function humanizeAnalyzerError(raw: string): string {
   const prefix = /^([a-z][a-z0-9-]*):\s*/i.exec(text);
   if (prefix && analyzerDisplayNames[prefix[1]]) {
     text = text.slice(prefix[0].length);
+    // The backend can repeat the id ("ruff: ruff: No pinned…"); drop the echo.
+    if (text.toLowerCase().startsWith(`${prefix[1].toLowerCase()}:`)) text = text.slice(prefix[1].length + 1).trimStart();
     text = `${analyzerDisplayNames[prefix[1]]}: ${text}`;
   }
 

@@ -2,6 +2,7 @@ package process
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -172,4 +173,25 @@ func runFlooderProcess() {
 		fmt.Println(block)
 	}
 	os.Exit(0)
+}
+
+// TestRunReportsDeadlineAsError pins the timeout contract: a child killed
+// because its context expired must surface as an error wrapping the context
+// error, not as an ordinary non-zero exit. Callers parse the output of a
+// normal exit, so a killed analyzer that "exited 1" would have its truncated
+// output normalized into a successful run with missing findings.
+func TestRunReportsDeadlineAsError(t *testing.T) {
+	if os.Getenv("GO_PROCESS_TEST_ROLE") != "" {
+		runHelperProcess()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	result, err := Run(ctx, Request{
+		Command: os.Args[0],
+		Args:    []string{"-test.run=TestRunReportsDeadlineAsError"},
+		Env:     append(os.Environ(), "GO_PROCESS_TEST_ROLE=grandchild"),
+	})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v (exit %d), want context.DeadlineExceeded", err, result.ExitCode)
+	}
 }

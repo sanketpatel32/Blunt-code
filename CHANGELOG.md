@@ -5,6 +5,26 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.46.0] - 2026-10-31
+
+### Added
+- **"Playful instrument" UI on Kokonut UI.** The redesign from the `ui/playful-redesign` branch ships: Kokonut UI parts (the animated sun/moon theme switch and split-flap grade letters) over the existing token layer, with a 13/14/16 px type floor, friendlier severity fills for bars and meters, and the earlier UI polish fixes (`ui/polish-safe-fixes`) merged in.
+- **Phone layouts for Search and scan findings.** On narrow screens, Search results and the scan findings table turn into cards with labelled File, Tool, Status, Location and Severity lines, so you no longer scroll sideways. The workspace profile picker keeps quick, standard, deep and pentest on one row.
+- **Playwright smoke suite (`npm run smoke`).** It runs end to end against a live app: add a workspace, scan, filter, history, tools, rules, settings, theme, axe in dark mode, the command palette, pentest, 404, every route at 1280 px and 390 px, the phone card layouts and the profile picker, and zero console errors.
+
+### Changed
+- **One stylesheet.** The old base sheet plus fourteen override and page sheets are now one `styles.css` that reads `tokens.css`. In the process we removed 101 dead rules, 41 dead selectors, 124 declarations that a later rule always overrode, 84 unused custom properties, and an unused keyframe set. Colour literals now live only in `tokens.css`. Rendering stayed pixel-identical across 60 reference screenshots (15 routes, desktop and phone, light and dark).
+- **Dead front-end code removed.** We deleted the unused `DataTable`, `StatsOverview`, `TableToolbar`, `MiniSparkline`, `Calendar`, `useStagger` and `filterPresets` modules, the mock chart data and notification helpers, and imports nothing read.
+- **The workspace list loads faster.** `GET /api/v1/workspaces` reads the latest and latest-completed scan for each workspace in one query, and scan comparisons load only finding identities, not full rows. With 20 workspaces of 2,000 findings each, the list went from about 650 ms to about 250 ms.
+
+### Fixed
+- **The theme applies at first paint again.** Since 0.44.0 the Content-Security-Policy pinned the hash of an older inline theme script, so browsers blocked it and logged a CSP violation on every page load. The hash now matches, and a new test fails whenever the inline script and the pinned hash drift apart.
+- **An analyzer that hits its time limit now fails its run.** Previously a killed analyzer could exit cleanly with partial output, which was then treated as a complete result. The run now records "timed out after … and was stopped" and drops the partial findings.
+- **`bluntcode tools uninstall` accepts any tool in the manifest**, even one with no artifact for the current platform.
+- **Report and fingerprint paths always use forward slashes** in JSON, HTML, Markdown and SARIF output, and in ignore patterns, whichever OS produced the scan.
+- **Update apply checks offline mode first:** it returns 409 when offline, before the "not supported on this OS" check.
+- **Dark-mode Low severity reads as one colour.** The Low bar fill now matches the Low text tone, and the Low pill border no longer drifts blue.
+
 ## [0.45.1] - 2026-10-26
 
 ### Fixed

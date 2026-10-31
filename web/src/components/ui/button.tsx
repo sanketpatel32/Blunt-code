@@ -21,17 +21,17 @@ const buttonVariants = cva(
            like the most important control on screen, beside a perfectly healthy
            "Reset" that read as the secondary. Nothing about a disabled primary
            should still be shouting, so the fill goes and the outline stays. */
-        default: 'bg-[var(--color-accent)] text-[var(--color-accent-ink)] hover:bg-[var(--color-accent-strong)] shadow-[var(--shadow-accent)] hover:shadow-[var(--shadow-accent)] disabled:opacity-100 disabled:bg-[var(--color-surface)] disabled:text-[var(--color-ink-faint)] disabled:border disabled:border-[var(--color-rule)] disabled:shadow-none',
+        default: 'bg-[var(--color-accent)] text-[var(--color-accent-ink)] hover:bg-[var(--color-accent-hover)] shadow-[0_2px_0_var(--color-accent-lip)] active:shadow-[0_1px_0_var(--color-accent-lip)] active:translate-y-px active:scale-100 disabled:opacity-100 disabled:bg-[var(--color-surface)] disabled:text-[var(--color-ink-faint)] disabled:border disabled:border-[var(--color-rule)] disabled:shadow-none',
         destructive: 'bg-[var(--color-danger)] text-[var(--color-danger-ink)] hover:bg-[var(--color-danger)]/90 shadow-sm disabled:opacity-100 disabled:bg-[var(--color-surface)] disabled:text-[var(--color-ink-faint)] disabled:border disabled:border-[var(--color-rule)] disabled:shadow-none',
         outline: 'border border-[var(--color-rule)] bg-[var(--color-surface)] text-[var(--color-ink)] hover:bg-[var(--color-surface-muted)] hover:border-[var(--color-rule-strong)] shadow-xs',
-        secondary: 'bg-[var(--color-surface-muted)] text-[var(--color-ink)] hover:bg-[var(--color-surface-subtle)] border border-[var(--color-rule-faint)]',
+        secondary: 'border border-[var(--color-rule)] bg-[var(--color-surface)] text-[var(--color-ink)] hover:bg-[var(--color-surface-muted)] hover:border-[var(--color-rule-strong)]',
         ghost: 'hover:bg-[var(--color-accent-soft)] hover:text-[var(--color-accent-strong)] text-[var(--color-ink-soft)]',
         link: 'text-[var(--color-accent-strong)] underline-offset-4 hover:underline shadow-none',
       },
       size: {
         default: 'h-10 px-5 py-2',
-        sm: 'h-8 rounded-[var(--radius-button)] px-3.5 text-[13px]',
-        lg: 'h-11 rounded-[var(--radius-button)] px-8 text-[15px]',
+        sm: 'h-8 rounded-[var(--radius-button)] px-3.5 text-sm',
+        lg: 'h-11 rounded-[var(--radius-button)] px-8 text-base',
         icon: 'h-9 w-9 rounded-[var(--radius-button)]',
       },
     },

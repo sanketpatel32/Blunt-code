@@ -216,7 +216,7 @@ func Discover(ctx context.Context, root string, userExcludes []string) (Result, 
 		if entry.IsDir() {
 			return nil
 		}
-		if entry.Type().IsRegular() == false {
+		if !entry.Type().IsRegular() {
 			return nil
 		}
 		resolved, err := filepath.EvalSymlinks(path)
@@ -341,7 +341,7 @@ func ExcludedByUser(rel string, patterns []string) bool {
 func excludedByUser(rel string, patterns []string) bool {
 	rel = strings.ToLower(filepath.ToSlash(rel))
 	for _, pattern := range patterns {
-		pattern = strings.ToLower(filepath.ToSlash(strings.TrimSpace(pattern)))
+		pattern = strings.ToLower(strings.ReplaceAll(strings.TrimSpace(pattern), `\`, "/"))
 		if pattern == "" {
 			continue
 		}

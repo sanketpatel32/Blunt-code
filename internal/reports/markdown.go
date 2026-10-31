@@ -4,7 +4,6 @@ import (
 	"bluntcode/internal/analyzers"
 	"fmt"
 	"math"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -67,7 +66,7 @@ func findingsTable(b *strings.Builder, title string, findings []analyzers.Findin
 			line = fmt.Sprintf("%d", f.StartLine)
 		}
 		b.WriteString(fmt.Sprintf("| %s | %s | %s | %s | %s | %s | %s |\n",
-			cell(f.AnalyzerID), cell(displaySeverity(f)), cell(findingType(f)), cell(filepath.ToSlash(f.RelativePath)), line, cell(f.RuleID), cell(f.Message)))
+			cell(f.AnalyzerID), cell(displaySeverity(f)), cell(findingType(f)), cell(slashPath(f.RelativePath)), line, cell(f.RuleID), cell(f.Message)))
 	}
 	b.WriteString("\n")
 }

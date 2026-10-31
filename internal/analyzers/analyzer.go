@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	pathpkg "path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -155,7 +156,9 @@ func MarkSeverityUnmapped(f *Finding) {
 // SetFingerprint creates the V1-compatible base identity.  Do not include line
 // numbers: a moved issue should remain comparable across scans.
 func (f *Finding) SetFingerprint() {
-	path := filepath.ToSlash(filepath.Clean(f.RelativePath))
+	// Separators are folded explicitly (not filepath.ToSlash, a no-op off
+	// Windows) so a fingerprint does not depend on the OS that computes it.
+	path := pathpkg.Clean(strings.ReplaceAll(f.RelativePath, `\`, "/"))
 	path = strings.TrimPrefix(path, "./")
 	if path == "." {
 		path = ""
@@ -510,20 +513,6 @@ func FilesForLanguagesInside(root string, files []string, langs ...Language) []s
 			out = append(out, file)
 		}
 	}
-	return out
-}
-
-func SortedFindings(in []Finding) []Finding {
-	out := append([]Finding(nil), in...)
-	sort.SliceStable(out, func(i, j int) bool {
-		if out[i].RelativePath != out[j].RelativePath {
-			return out[i].RelativePath < out[j].RelativePath
-		}
-		if out[i].StartLine != out[j].StartLine {
-			return out[i].StartLine < out[j].StartLine
-		}
-		return out[i].RuleID < out[j].RuleID
-	})
 	return out
 }
 

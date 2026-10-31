@@ -306,7 +306,3 @@ func (r Result) WriteHuman(w io.Writer) {
 		fmt.Fprintln(w, line)
 	}
 }
-
-// DatabasePath is intentionally exposed only for focused tests and never
-// printed by the JSON protocol beyond the configured data-directory check.
-func DatabasePath(paths config.Paths) string { return filepath.Clean(paths.DBPath) }

@@ -2074,8 +2074,13 @@ func TestCreateWorkspaceReusesJunctionAndCaseVariants(t *testing.T) {
 	if code, body := post(target); code != http.StatusCreated {
 		t.Fatalf("first create = %d, want 201: %s", code, body)
 	}
-	if code, body := post(strings.ToUpper(target)); code != http.StatusOK {
-		t.Fatalf("case-variant create = %d, want 200: %s", code, body)
+	// Case variants only name the same folder on a case-insensitive file
+	// system (Windows, default macOS); elsewhere the upper-cased path is a
+	// different, missing directory and 400 is the correct answer.
+	if _, err := os.Stat(strings.ToUpper(target)); err == nil {
+		if code, body := post(strings.ToUpper(target)); code != http.StatusOK {
+			t.Fatalf("case-variant create = %d, want 200: %s", code, body)
+		}
 	}
 	if runtime.GOOS == "windows" {
 		link := filepath.Join(t.TempDir(), "junction-link")

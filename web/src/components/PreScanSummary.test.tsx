@@ -44,16 +44,16 @@ describe('PreScanSummary — what this profile will run before it runs (IMP-14)'
     const text = host.textContent ?? '';
     // python + yaml at standard: ruff, semgrep, sonarqube, gitleaks, secrets,
     // pentest, todo — license-scan's languages (json/toml/markdown/text) miss.
-    expect(text).toContain('3 ready of 4 language-matched analyzers');
-    expect(text).toContain('semgrep (setup required)');
-    expect(text).toContain('2 exclusions active');
-    expect(text).toContain('Missing status is not counted as ready.');
+    expect(text).toContain('3 of 4 analyzers ready');
+    expect(host.querySelector('.pre-scan-groups')?.textContent).toContain('Needs setupsemgrep');
+    expect(text).toContain('2 exclusions');
+    expect(host.querySelector('.pre-scan-groups')?.textContent).toContain('Readyruff, sonarqube, gitleaks-secrets');
   });
 
   it('claims all ready when every matched engine is installed', async () => {
     const host = await render({ profile: 'quick', languages: ['python'], analyzers: [status('ruff', true), status('biome', true)], exclusionCount: 0 });
-    expect(host.textContent).toContain('2 ready of 2');
-    expect(host.textContent).toContain('0 exclusions active');
+    expect(host.textContent).toContain('2 of 2 analyzers ready');
+    expect(host.textContent).toContain('0 exclusions');
   });
 
   it('warns when no engine matches the languages — the scan would select nothing', async () => {
@@ -62,7 +62,7 @@ describe('PreScanSummary — what this profile will run before it runs (IMP-14)'
     // discovery detected nothing.
     const host = await render({ profile: 'deep', languages: [], analyzers: [], exclusionCount: 0 });
     expect(host.querySelector('.pre-scan-summary')?.getAttribute('data-tone')).toBe('warning');
-    expect(host.textContent).toContain('No language-matched analyzers reported.');
-    expect(host.textContent).toContain('dependency inputs, and network use');
+    expect(host.textContent).toContain("No analyzers match this project's languages yet.");
+    expect(host.textContent).toContain('dependencies, and network use');
   });
 });

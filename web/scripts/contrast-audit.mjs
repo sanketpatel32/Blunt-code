@@ -45,54 +45,33 @@ const white = [1, 1, 1];
 const nearWhite = oklchToLinear(99, 0.002, 280);
 const nearBlack = oklchToLinear(14, 0.015, 268);
 
-// Every pairing below is one that actually ships. Each entry names the CSS rule
-// that creates it, so a regression here points straight at the culprit.
-const checks = [
-  // Light theme
-  ['LIGHT accent bg + accent-ink          (.button.primary, .segmented-btn.active)', [56, 0.22, 268], nearWhite],
-  ['LIGHT accent-strong bg + accent-ink   (.button.primary:hover)', [50, 0.24, 268], nearWhite],
-  ['LIGHT danger bg + danger-ink          (.button.danger:hover)', [58, 0.22, 26], nearWhite],
-  ['LIGHT danger-strong bg + on-accent    (NotificationsCenter unread badge, 10px)', [46, 0.21, 26], nearWhite],
-  ['LIGHT success-strong bg + success-ink (.scan-flow li.done .flow-marker)', [50, 0.16, 152], oklchToLinear(99, 0.004, 152)],
-  ['LIGHT warning bg + warning-ink        (badge fill)', [70, 0.15, 75], oklchToLinear(20, 0.02, 75)],
-  // Dark theme
-  ['DARK accent bg + on-accent            (.button.primary, .segmented-btn.active)', [64, 0.18, 268], nearBlack],
-  ['DARK danger bg + danger-ink           (.button.danger:hover)', [64, 0.2, 24], oklchToLinear(14, 0.015, 24)],
-  ['DARK danger-strong bg + on-accent     (NotificationsCenter unread badge, 10px)', [66, 0.22, 24], nearBlack],
-  ['DARK success-strong bg + success-ink  (.scan-flow li.done .flow-marker)', [56, 0.16, 152], oklchToLinear(14, 0.015, 152)],
-];
-
-const design = readFileSync(new URL('../src/css/design-system.css', import.meta.url), 'utf8');
-const lightBlock = design.slice(design.indexOf(':root {'), design.indexOf(":root[data-theme='dark']"));
-const darkBlock = design.slice(design.indexOf(":root[data-theme='dark']"), design.indexOf('body {'));
+// The palette lives in tokens.css (oklch). Every pairing below is one that
+// actually ships; each names the rule that creates it.
+const tokensCss = readFileSync(new URL('../src/tokens.css', import.meta.url), 'utf8');
+const darkStart = tokensCss.indexOf(":root[data-theme='dark']");
+const lightBlock = tokensCss.slice(tokensCss.indexOf(':root {'), darkStart);
+const darkBlock = tokensCss.slice(darkStart);
 function token(block, name) {
-  const match = block.match(new RegExp(`--color-${name}:\\s*(#[0-9a-f]{3,6})`, 'i'));
-  if (!match) throw new Error(`Missing design token ${name}`);
-  let hex = match[1].slice(1);
-  if (hex.length === 3) hex = [...hex].map((c) => c+c).join('');
-  return [0,2,4].map((i) => {
-    const c = parseInt(hex.slice(i,i+2),16)/255;
-    return c <= .04045 ? c/12.92 : ((c+.055)/1.055)**2.4;
-  });
+  const match = block.match(new RegExp(`--${name}:\\s*oklch\\(([\\d.]+)%\\s+([\\d.]+)\\s+([\\d.]+)\\)`));
+  if (!match) throw new Error(`Missing oklch token --${name}`);
+  return oklchToLinear(+match[1], +match[2], +match[3]);
 }
 let failures = 0;
-function check(name, bg, fg) {
+function check(name, bg, fg, min = 4.5) {
   const r = ratio(bg, fg);
-  const pass = r >= 4.5;
+  const pass = r >= min;
   if (!pass) failures++;
-  console.log(name.padEnd(74), r.toFixed(2).padStart(5), '  ', pass ? 'PASS' : 'FAIL');
+  console.log(name.padEnd(64), r.toFixed(2).padStart(5), '  ', pass ? 'PASS' : 'FAIL', min !== 4.5 ? `(min ${min})` : '');
 }
-console.log('pair'.padEnd(74), 'ratio   AA-normal(4.5)');
-for (const [name, bg, fg] of checks) {
-  const block = name.startsWith('DARK') ? darkBlock : lightBlock;
-  const isAccent = name.includes('accent bg') || name.includes('accent-strong bg');
-  check(name, isAccent ? token(block, name.includes('accent-strong') ? 'accent-strong' : 'accent') : oklchToLinear(...bg), isAccent ? token(block, 'accent-ink') : fg);
-}
+console.log('pair'.padEnd(64), 'ratio   AA-normal(4.5)');
 for (const [theme, block] of [['LIGHT', lightBlock], ['DARK', darkBlock]]) {
-  for (const ink of ['ink','ink-soft','ink-faint','ink-ghost','accent-strong']) {
-    for (const surface of ['paper','surface','surface-muted']) {
-      check(`${theme} ${ink} on ${surface} (design-system.css)`, token(block, surface), token(block, ink));
-    }
+  // Body text on every surface. ink-ghost is decorative (placeholders, rules) and not text-bearing.
+  for (const ink of ['color-ink', 'color-ink-soft', 'color-ink-faint', 'color-accent-strong', 'color-success-text', 'color-warning-text', 'color-danger-text']) {
+    for (const surface of ['color-paper', 'color-surface', 'color-surface-muted']) check(`${theme} ${ink} on ${surface}`, token(block, surface), token(block, ink));
   }
+  // The one primary button: coral fill, dark ink (Button default, .button.primary).
+  check(`${theme} accent-ink on accent (primary button)`, token(block, 'color-accent'), token(block, 'color-accent-ink'));
+  // Grade tiles: dark ink on each grade fill (GradeTile).
+  for (const g of ['a', 'b', 'c', 'd']) check(`${theme} grade-tile-ink on grade-${g} (GradeTile)`, token(block, `grade-${g}`), token(block, 'grade-tile-ink'));
 }
 if (failures) { console.error(`${failures} pairing(s) below WCAG AA.`); process.exitCode = 1; }

@@ -360,10 +360,10 @@ func relative(p analyzers.AnalyzerPlan, path string) string {
 	}
 	if filepath.IsAbs(path) && len(p.Commands) > 0 {
 		if r, err := filepath.Rel(p.Commands[0].Dir, path); err == nil {
-			return filepath.ToSlash(r)
+			return strings.ReplaceAll(r, `\`, "/")
 		}
 	}
-	return filepath.ToSlash(filepath.Clean(path))
+	return strings.ReplaceAll(filepath.Clean(path), `\`, "/")
 }
 
 func truncate(s string, max int) string {

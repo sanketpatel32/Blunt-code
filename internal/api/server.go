@@ -342,42 +342,45 @@ func (s *Server) createWorkspace(w http.ResponseWriter, r *http.Request) {
 	if input.Name == "" {
 		input.Name = filepath.Base(root)
 	}
-	if existing, err := s.db.WorkspaceByRoot(r.Context(), root); err == nil {
+	if existing, ok := s.registeredWorkspace(r.Context(), root); ok {
 		writeJSON(w, 200, existing)
 		return
 	}
-	// Windows lookup is exact-byte in SQLite; tolerate case and 8.3 spelling
-	// variants of an already-registered root so re-adding never duplicates.
-	key := workspace.CanonicalKey(root)
-	if all, listErr := s.db.Workspaces(r.Context()); listErr == nil {
-		for _, existing := range all {
-			if workspace.CanonicalKey(existing.RootPath) == key {
-				writeJSON(w, 200, existing)
-				return
-			}
-		}
-	}
 	created, err := s.db.CreateWorkspace(r.Context(), core.Workspace{Name: input.Name, RootPath: root})
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "unique") || strings.Contains(err.Error(), "UNIQUE") {
-			if existing, lookupErr := s.db.WorkspaceByRoot(r.Context(), root); lookupErr == nil {
+		// A concurrent add of the same folder can win the UNIQUE race between
+		// the lookup above and the insert; answer with the row it created.
+		if strings.Contains(strings.ToLower(err.Error()), "unique") {
+			if existing, ok := s.registeredWorkspace(r.Context(), root); ok {
 				writeJSON(w, 200, existing)
 				return
-			}
-			key := workspace.CanonicalKey(root)
-			if all, listErr := s.db.Workspaces(r.Context()); listErr == nil {
-				for _, existing := range all {
-					if workspace.CanonicalKey(existing.RootPath) == key {
-						writeJSON(w, 200, existing)
-						return
-					}
-				}
 			}
 		}
 		fail(w, 500, "DATABASE_ERROR", "Could not save workspace.")
 		return
 	}
 	writeJSON(w, 201, created)
+}
+
+// registeredWorkspace finds the workspace already registered for root. The
+// exact lookup is exact-byte in SQLite, so case and 8.3 spelling variants of
+// a registered Windows root are matched by canonical key, and re-adding a
+// folder never duplicates it.
+func (s *Server) registeredWorkspace(ctx context.Context, root string) (core.Workspace, bool) {
+	if existing, err := s.db.WorkspaceByRoot(ctx, root); err == nil {
+		return existing, true
+	}
+	key := workspace.CanonicalKey(root)
+	all, err := s.db.Workspaces(ctx)
+	if err != nil {
+		return core.Workspace{}, false
+	}
+	for _, existing := range all {
+		if workspace.CanonicalKey(existing.RootPath) == key {
+			return existing, true
+		}
+	}
+	return core.Workspace{}, false
 }
 func (s *Server) getWorkspace(w http.ResponseWriter, r *http.Request) {
 	workspace, ok := s.workspace(r)
@@ -390,25 +393,10 @@ func (s *Server) getWorkspace(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodHead {
 		_ = s.db.TouchWorkspace(r.Context(), workspace.ID)
 	}
-	latestByWorkspace, err := s.db.LatestScans(r.Context())
+	latest, lastCompleted, err := s.db.WorkspaceLatestScans(r.Context(), workspace.ID)
 	if err != nil {
 		fail(w, 500, "DATABASE_ERROR", "Could not load workspace analysis.")
 		return
-	}
-	var latest *core.Scan
-	if scan, ok := latestByWorkspace[workspace.ID]; ok {
-		latest = &scan
-	}
-	var lastCompleted *core.Scan
-	if latest == nil || (latest.State != "completed" && latest.State != "completed_with_warnings") {
-		completedByWorkspace, err := s.db.LatestCompletedScans(r.Context())
-		if err != nil {
-			fail(w, 500, "DATABASE_ERROR", "Could not load workspace analysis.")
-			return
-		}
-		if scan, ok := completedByWorkspace[workspace.ID]; ok {
-			lastCompleted = &scan
-		}
 	}
 	view, err := s.workspaceView(r.Context(), workspace, latest, lastCompleted)
 	if err != nil {
@@ -484,7 +472,7 @@ func (s *Server) workspaceView(ctx context.Context, workspace core.Workspace, la
 // scan. Without a previous completed scan the pair is 0/0 — the same
 // "no comparison" outcome the report shows.
 func (s *Server) scanComparisonCounts(ctx context.Context, scan core.Scan) (int, int, error) {
-	findings, err := s.db.Findings(ctx, scan.ID)
+	findings, err := s.db.FindingIdentities(ctx, scan.ID)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -500,7 +488,7 @@ func (s *Server) scanComparisonCounts(ctx context.Context, scan core.Scan) (int,
 	if err != nil {
 		return 0, 0, err
 	}
-	previous, err := s.db.Findings(ctx, previousID)
+	previous, err := s.db.FindingIdentities(ctx, previousID)
 	if err != nil {
 		return 0, 0, err
 	}

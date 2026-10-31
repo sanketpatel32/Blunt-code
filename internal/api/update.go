@@ -169,12 +169,14 @@ func fetchInstallerScript() ([]byte, error) {
 // starts the freshly installed exe, so the handoff reads: click Update → app
 // closes → installer swaps the binary → the new version opens on its own.
 func (s *Server) updateApply(w http.ResponseWriter, r *http.Request) {
-	if runtime.GOOS != "windows" {
-		fail(w, http.StatusNotImplemented, "UNSUPPORTED_PLATFORM", "In-app updates are Windows-only.")
-		return
-	}
+	// Offline is checked first, matching updateCheck: it is the gate the user
+	// can act on, and it must hold on every platform.
 	if s.offlineEnabled(r) {
 		fail(w, http.StatusConflict, "UPDATE_OFFLINE", "Offline mode is enabled; turn it off in Settings to update.")
+		return
+	}
+	if runtime.GOOS != "windows" {
+		fail(w, http.StatusNotImplemented, "UNSUPPORTED_PLATFORM", "In-app updates are Windows-only.")
 		return
 	}
 	raw, err := fetchInstallerScript()

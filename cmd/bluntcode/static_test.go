@@ -1,9 +1,12 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -140,12 +143,44 @@ func TestStaticHandlerSetsUICSP(t *testing.T) {
 	// the baseline guarantees (default-src, frame-ancestors) must survive.
 	for _, want := range []string{
 		"default-src 'self'",
-		"script-src 'self' 'sha256-mOPhT864bFfna/DIOUP/k3m5V3MsQvJPSfsIB3Tt+UQ='",
+		"script-src 'self' 'sha256-gMFUVisKoRJ8huq/bU22WXwXuGkvf3qxmHf5PFpFc/I='",
 		"style-src 'self' 'unsafe-inline'",
 		"frame-ancestors 'none'",
 	} {
 		if !strings.Contains(csp, want) {
 			t.Fatalf("UI Content-Security-Policy must contain %q, got %q", want, csp)
 		}
+	}
+}
+
+// TestStaticCSPPinsEveryInlineScript recomputes the SHA-256 of each inline
+// <script> in the embedded index.html and requires staticCSP to allow it.
+// Without it, editing the theme bootstrap silently made the browser block it
+// (the UI then painted in the wrong theme and logged a CSP violation).
+func TestStaticCSPPinsEveryInlineScript(t *testing.T) {
+	requireIndexAsset(t)
+	content, err := fs.Sub(staticFiles, "static")
+	if err != nil {
+		t.Fatalf("static subtree: %v", err)
+	}
+	html, err := fs.ReadFile(content, "index.html")
+	if err != nil {
+		t.Fatalf("read index.html: %v", err)
+	}
+	inline := regexp.MustCompile(`(?s)<script(?:\s[^>]*)?>(.*?)</script>`)
+	found := 0
+	for _, match := range inline.FindAllSubmatch(html, -1) {
+		if regexp.MustCompile(`<script[^>]*\ssrc=`).Match(match[0]) {
+			continue
+		}
+		found++
+		sum := sha256.Sum256(match[1])
+		want := "'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) + "'"
+		if !strings.Contains(staticCSP, want) {
+			t.Fatalf("staticCSP does not allow inline script %d; add %s", found, want)
+		}
+	}
+	if found == 0 {
+		t.Fatal("expected the inline theme-bootstrap script in index.html")
 	}
 }

@@ -496,20 +496,7 @@ func (d *DB) ScansPage(ctx context.Context, workspaceID string, page, pageSize i
 // just to read scans[0] (measured at 50 workspaces: 51 queries loading all
 // rows and snapshots vs 2 queries here).
 func (d *DB) LatestScans(ctx context.Context) (map[string]core.Scan, error) {
-	rows, err := d.SQL.QueryContext(ctx, `SELECT `+scanSelectColumns("")+` FROM scans WHERE id IN (SELECT id FROM (SELECT id,ROW_NUMBER() OVER (PARTITION BY workspace_id ORDER BY started_at DESC,id DESC) AS recency FROM scans) ranked WHERE recency=1)`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	result := make(map[string]core.Scan)
-	for rows.Next() {
-		var s core.Scan
-		if err := hydrateScanRow(rows, &s); err != nil {
-			return nil, err
-		}
-		result[s.WorkspaceID] = s
-	}
-	return result, rows.Err()
+	return d.latestScans(ctx, false, "")
 }
 
 // LatestCompletedScans resolves each workspace's most recent scan that actually
@@ -517,7 +504,54 @@ func (d *DB) LatestScans(ctx context.Context) (map[string]core.Scan, error) {
 // dashboards pair it with LatestScans so a cancelled or interrupted re-scan
 // cannot erase a workspace's last good numbers from boards keyed on "latest".
 func (d *DB) LatestCompletedScans(ctx context.Context) (map[string]core.Scan, error) {
-	rows, err := d.SQL.QueryContext(ctx, `SELECT `+scanSelectColumns("")+` FROM scans WHERE state IN ('completed','completed_with_warnings') AND id IN (SELECT id FROM (SELECT id,ROW_NUMBER() OVER (PARTITION BY workspace_id ORDER BY started_at DESC,id DESC) AS recency FROM scans WHERE state IN ('completed','completed_with_warnings')) ranked WHERE recency=1)`)
+	return d.latestScans(ctx, true, "")
+}
+
+// WorkspaceLatestScans is LatestScans plus LatestCompletedScans for a single
+// workspace, so the workspace detail view no longer ranks every workspace's
+// history to read one row. Either result is nil when no such scan exists;
+// completed is only looked up when latest itself did not finish.
+func (d *DB) WorkspaceLatestScans(ctx context.Context, workspaceID string) (latest, completed *core.Scan, err error) {
+	byWorkspace, err := d.latestScans(ctx, false, workspaceID)
+	if err != nil {
+		return nil, nil, err
+	}
+	scan, ok := byWorkspace[workspaceID]
+	if !ok {
+		return nil, nil, nil
+	}
+	latest = &scan
+	if scan.State == "completed" || scan.State == "completed_with_warnings" {
+		return latest, nil, nil
+	}
+	byWorkspace, err = d.latestScans(ctx, true, workspaceID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if done, ok := byWorkspace[workspaceID]; ok {
+		completed = &done
+	}
+	return latest, completed, nil
+}
+
+// latestScans is the one ranking query behind the latest-scan lookups: the
+// newest scan per workspace (started_at DESC, id DESC), optionally limited to
+// finished states and/or to one workspace.
+func (d *DB) latestScans(ctx context.Context, completedOnly bool, workspaceID string) (map[string]core.Scan, error) {
+	var where []string
+	var args []any
+	if completedOnly {
+		where = append(where, "state IN ('completed','completed_with_warnings')")
+	}
+	if workspaceID != "" {
+		where = append(where, "workspace_id=?")
+		args = append(args, workspaceID)
+	}
+	filter := ""
+	if len(where) > 0 {
+		filter = " WHERE " + strings.Join(where, " AND ")
+	}
+	rows, err := d.SQL.QueryContext(ctx, `SELECT `+scanSelectColumns("")+` FROM scans WHERE id IN (SELECT id FROM (SELECT id,ROW_NUMBER() OVER (PARTITION BY workspace_id ORDER BY started_at DESC,id DESC) AS recency FROM scans`+filter+`) ranked WHERE recency=1)`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -1065,6 +1099,27 @@ func (d *DB) Findings(ctx context.Context, scanID string) ([]analyzers.Finding, 
 		f.Severity = analyzers.Severity(severity)
 		f.Category = analyzers.Category(category)
 		_ = json.Unmarshal([]byte(metadata), &f.Metadata)
+		output = append(output, f)
+	}
+	return output, rows.Err()
+}
+
+// FindingIdentities returns one scan's findings with only the fields a
+// new/fixed comparison reads (fingerprint, analyzer, path). Dashboard cards
+// need just the counts, so this skips the message, metadata JSON decode, and
+// ORDER BY that Findings pays for every row.
+func (d *DB) FindingIdentities(ctx context.Context, scanID string) ([]analyzers.Finding, error) {
+	rows, err := d.SQL.QueryContext(ctx, `SELECT fingerprint,analyzer_id,COALESCE(relative_path,'') FROM findings WHERE scan_id=?`, scanID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	output := make([]analyzers.Finding, 0)
+	for rows.Next() {
+		var f analyzers.Finding
+		if err := rows.Scan(&f.Fingerprint, &f.AnalyzerID, &f.RelativePath); err != nil {
+			return nil, err
+		}
 		output = append(output, f)
 	}
 	return output, rows.Err()

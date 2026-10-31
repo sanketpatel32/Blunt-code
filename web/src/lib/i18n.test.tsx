@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { I18nProvider, LOCALES, dictionaries, useT, type Locale } from './i18n';
+import { I18nProvider, LOCALES, dictionaries, useT } from './i18n';
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;

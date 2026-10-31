@@ -6,7 +6,6 @@ import (
 
 	"bluntcode/internal/analyzers"
 	"net/url"
-	"path/filepath"
 	"strings"
 )
 
@@ -244,7 +243,7 @@ func sarifMessage(f analyzers.Finding) string {
 // treated as project-level because some analyzers use it for whole-project
 // results.
 func sarifArtifactURI(path string) string {
-	path = strings.TrimPrefix(filepath.ToSlash(strings.TrimSpace(path)), "./")
+	path = strings.TrimPrefix(slashPath(strings.TrimSpace(path)), "./")
 	path = strings.TrimPrefix(path, "/")
 	if path == "" || path == "." {
 		return ""
