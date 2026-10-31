@@ -638,7 +638,7 @@ describe('HomePage optional tools foot', () => {
       { items: [{ id: 'ruff', ready: true }, { id: 'semgrep', ready: true }, { id: 'gitleaks', ready: false }] },
     ));
     expect(host.querySelector('.board-foot-note')?.textContent).toContain('2 of 3 optional tools ready');
-    expect(host.querySelector('.board-foot-note')?.textContent).toContain('gitleaks not installed');
+    expect(host.querySelector('.board-foot-note')?.textContent).toContain('not installed: gitleaks');
     expect(host.querySelector('.board-foot-chip')).toBeNull();
   });
 });

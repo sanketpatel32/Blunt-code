@@ -5818,3 +5818,77 @@ a.stat-tile:hover { border-color: var(--color-rule-strong); }
 
 /* v0.48 · phone tap targets: the split-button chevron is a full 40px target */
 @media (max-width: 700px) { .scan-options-trigger { min-width: 40px; min-height: 40px; } }
+
+/* ==========================================================================
+   v0.49 desktop polish. Wider canvas and bento layouts at >=1280px. Long
+   lists become grids. Tablet and phone rules above are untouched: every rule
+   here sits behind a min-width query or styles an element new in this release.
+   ========================================================================== */
+@media (min-width: 1440px) { .page { max-width: 1640px; } }
+@media (min-width: 1800px) { .page { max-width: 1760px; padding-inline: 40px; } }
+
+/* Workspace: the scan meta chips sit as quiet inline pills, not a grey bar. */
+.ws-scan-chips { background: transparent; border: 0; padding: 0; box-shadow: none; }
+
+/* Workspace → Latest scan: analyzers grouped as small tiles instead of one long column. */
+.analyzer-grid { display: grid; gap: var(--space-sm); margin-top: var(--space-sm); }
+@media (min-width: 1024px) {
+  .analyzer-grid { grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); align-items: start; }
+  .analyzer-grid .analyzer-group { border: var(--rule) solid var(--color-rule-faint); border-radius: var(--radius-md); padding: var(--space-sm) var(--space-md); background: var(--color-surface); transition: border-color var(--dur-fast) var(--ease-out); }
+  .analyzer-grid .analyzer-group:hover { border-color: var(--color-rule); }
+  .analyzer-grid .analyzer-row:last-child { border-bottom: 0; padding-bottom: 0; }
+}
+
+/* Pentest: collapsible OWASP groups with a severity dot strip; checks flow in columns on desktop. */
+.hack-group > summary { list-style: none; display: flex; align-items: center; gap: var(--space-sm); cursor: pointer; padding: var(--space-2xs) var(--space-2xs) var(--space-2xs) 0; border-radius: var(--radius-sm, 6px); }
+.hack-group > summary::-webkit-details-marker { display: none; }
+.hack-group > summary::before { content: ''; flex: none; width: .45rem; height: .45rem; margin-inline: .2rem .1rem; border-right: 2px solid var(--color-ink-faint); border-bottom: 2px solid var(--color-ink-faint); transform: rotate(-45deg); transition: transform var(--dur-fast) var(--ease-out); }
+.hack-group[open] > summary::before { transform: rotate(45deg); }
+.hack-group > summary:hover::before { border-color: var(--color-ink-soft); }
+.hack-group-sev { display: inline-flex; gap: 3px; }
+@media (prefers-reduced-motion: reduce) { .hack-group > summary::before { transition: none; } }
+.hack-groups { display: grid; gap: var(--space-md); }
+/* Groups flow as balanced columns (masonry-like), so a one-check group no longer owns a full row. */
+@media (min-width: 1100px) {
+  .hack-groups { display: block; columns: 2; column-gap: var(--space-lg); }
+  .hack-groups > * { break-inside: avoid; margin: 0 0 var(--space-md); }
+}
+@media (min-width: 1700px) { .hack-groups { columns: 3; } }
+
+/* Tools: uncovered cells are a faint dot, not the word "none" ×200. */
+.cov-empty { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--color-rule); vertical-align: middle; }
+.coverage-table tbody tr:hover > td { background: color-mix(in oklch, var(--color-accent) 4%, var(--color-surface)); }
+.coverage-table th:first-child, .coverage-table td:first-child { position: sticky; left: 0; z-index: 1; background: var(--color-surface); }
+
+/* Workspaces: fleet summary strip above the table. */
+.ws-summary { margin-bottom: var(--space-md); }
+.ws-summary .viz-sevbar { min-width: 5rem; }
+
+/* Settings: section cards; two columns on desktop. */
+.settings-h2-icon { display: inline-block; width: 1rem; height: 1rem; margin-right: var(--space-xs); vertical-align: -2px; color: var(--color-accent-strong); }
+@media (min-width: 1280px) {
+  .settings-list { max-width: none; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-lg); align-items: start; }
+  .settings-list > section { border: var(--rule) solid var(--color-rule-faint); border-radius: var(--radius-card); background: var(--color-surface); padding: 0 var(--space-lg) var(--space-sm); transition: border-color var(--dur-fast) var(--ease-out); }
+  .settings-list > section:hover { border-color: var(--color-rule); }
+  .settings-list > section .setting { grid-template-columns: minmax(0, 1fr) auto; }
+  .settings-list > section .setting:last-child { border-bottom: 0; }
+}
+
+/* Files: a language composition bar; on desktop the tree gets the wide column and the rules panel sticks. */
+.files-langbar { display: flex; gap: 2px; height: 8px; margin-bottom: var(--space-md); border-radius: 999px; overflow: hidden; background: var(--color-rule-faint); }
+.files-langbar > span { min-width: 4px; }
+@media (min-width: 1280px) {
+  .file-layout { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
+  .file-layout > :last-child { position: sticky; top: calc(var(--topbar-height, 56px) + var(--space-md)); }
+  .file-layout .tree-panel { min-height: min(34rem, calc(100vh - 16rem)); }
+}
+
+/* Home: missing-tool list stays one quiet line. */
+.board-foot-missing { color: var(--color-ink-faint); }
+.premium-card-steady { display: inline-flex; align-self: flex-start; margin-top: var(--space-xs); padding: 1px 8px; border-radius: 999px; background: var(--color-surface-muted); color: var(--color-ink-soft); font-size: var(--text-2xs); }
+/* Sidebar: the active item carries a small accent pip; desktop only (tablet rail is icon-only). */
+@media (min-width: 1280px) {
+  .rail-link { position: relative; }
+  .rail-link.active { font-weight: 600; }
+  .rail-link.active::before { content: ''; position: absolute; left: 0; top: 28%; bottom: 28%; width: 3px; border-radius: 0 3px 3px 0; background: var(--color-accent); }
+}

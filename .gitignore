@@ -64,3 +64,6 @@ desktop.ini
 .vscode/
 .idea/
 nul
+
+# local one-off audit scripts
+web/e2e/.*.tmp.mjs

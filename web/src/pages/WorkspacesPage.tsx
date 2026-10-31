@@ -1,6 +1,6 @@
 import { Sparkline } from '../components/viz/Sparkline';
 import { useEffect, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { Bug, FolderCheck, FolderGit2, Plus, ShieldAlert } from 'lucide-react';
 import { ApiError, api } from '../api';
 import type { Scan, Workspace } from '../types';
 import type { Route } from '../lib/router';
@@ -21,6 +21,8 @@ import { RowMenu, type RowMenuItem } from '../components/RowMenu';
 import { PageHeader } from '../components/PageHeader';
 import { riskGrade, riskScore, severityCountsOf } from '../lib/risk';
 import { GradeTile } from '../components/GradeTile';
+import { StatTile } from '../components/viz/StatTile';
+import { SeverityBar } from '../components/viz/SeverityBar';
 
 export function WorkspacesPage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd: () => void; notify: (n: Notice) => void }) {
   const state = useLoad(api.workspaces, []);
@@ -100,6 +102,7 @@ export function WorkspacesPage({ go, onAdd, notify }: { go: (r: Route) => void; 
         <><Empty title="No workspaces yet" icon={<FolderIcon />} action={addPrimary}>Add a project folder to scan it for security findings. Scan history stays on this computer. Some analyzers query advisory services or download tools; review network use before starting.</Empty><WorkspaceTemplates onUseTemplate={onAdd} /></>
       ) : (
         <>
+          <WorkspacesSummary workspaces={workspaces} />
           <div className="toolbar-row ws-toolbar">
             <div className="toolbar-filters">
               <Input type="search" aria-label="Search workspaces" placeholder="Search workspaces…" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setSearch(''); }} className="ws-filter-search w-44 sm:w-56" />
@@ -310,5 +313,23 @@ function WorkspaceRow({ workspace, go, onScan, onRemove }: { workspace: Workspac
         </div>
       </td>
     </tr>
+  );
+}
+
+/** Fleet summary above the table: how many folders, how many graded, and the
+ *  open findings mix across every workspace's latest finished scan. */
+function WorkspacesSummary({ workspaces }: { workspaces: Workspace[] }) {
+  const graded = workspaces.map(gradedScan).filter((scan): scan is Scan => Boolean(scan));
+  const sum = (key: 'critical_count' | 'high_count' | 'medium_count' | 'low_count' | 'info_count') => graded.reduce((n, scan) => n + (scan[key] ?? 0), 0);
+  const counts = { critical: sum('critical_count'), high: sum('high_count'), medium: sum('medium_count'), low: sum('low_count'), info: sum('info_count') };
+  const total = counts.critical + counts.high + counts.medium + counts.low + counts.info;
+  const severe = counts.critical + counts.high;
+  return (
+    <div className="stat-tiles ws-summary" aria-label="Workspace summary">
+      <StatTile icon={FolderGit2} value={workspaces.length} label="Tracked" />
+      <StatTile icon={FolderCheck} value={`${graded.length}/${workspaces.length}`} label="Graded" tone={graded.length === workspaces.length ? 'ok' : undefined} />
+      <StatTile icon={Bug} value={total} label="Open findings" extra={total ? <SeverityBar counts={counts} chips={false} height={6} /> : undefined} />
+      <StatTile icon={ShieldAlert} value={severe} label="Critical + high" tone={severe ? 'danger' : 'ok'} />
+    </div>
   );
 }

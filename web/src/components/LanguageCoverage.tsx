@@ -112,7 +112,7 @@ export function LanguageCoverage({ compact }: { compact?: boolean }) {
                   <td><span className="badge text-xs">{a.displayName}</span> <small className="text-[var(--color-ink-faint)] hidden sm:inline">{a.category}</small></td>
                   {visibleLangs.map((lang) => {
                     const covered = a.languages.includes(lang);
-                    return <td key={lang} className="text-center">{covered ? <span role="img" aria-label={`${a.displayName} covers ${lang}`} title="covered" className="inline-block w-2 h-2 rounded-full bg-[var(--color-success)]" /> : <span className="text-[var(--color-ink-faint)]">none</span>}</td>;
+                    return <td key={lang} className="text-center">{covered ? <span role="img" aria-label={`${a.displayName} covers ${lang}`} title="covered" className="inline-block w-2 h-2 rounded-full bg-[var(--color-success)]" /> : <span className="cov-empty" title="not covered"><span className="sr-only">not covered</span></span>}</td>;
                   })}
                   <td className="text-center font-mono text-[var(--color-ink-soft)]">{total}</td>
                 </tr>
@@ -120,13 +120,6 @@ export function LanguageCoverage({ compact }: { compact?: boolean }) {
             })}
           </tbody>
         </table>
-      </div>
-      <div className="mt-2 flex flex-wrap gap-1" aria-label="Language families">
-        {FAMILY_ORDER.map((fam) => (
-          <span key={fam} className="inline-flex items-center gap-1 rounded-full border border-[var(--color-rule)] bg-[var(--color-surface)] px-2 py-0.5 text-xs text-[var(--color-ink-soft)]">
-            <strong>{fam}:</strong> {(LANGUAGE_FAMILIES[fam] as readonly string[]).map((l) => LANG_LABELS[l] ?? l).join(', ')}
-          </span>
-        ))}
       </div>
     </section>
   );
