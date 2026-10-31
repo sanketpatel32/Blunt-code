@@ -11,6 +11,7 @@ import (
 
 	"bluntcode/internal/analyzers"
 	"bluntcode/internal/core"
+	"bluntcode/internal/database"
 )
 
 type trendSeverity struct {
@@ -180,5 +181,96 @@ func TestWorkspaceTrendsLimitDefaultsAndBounds(t *testing.T) {
 		if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "INVALID_TREND_QUERY") {
 			t.Fatalf("trends %s: got %d %s", query, response.Code, response.Body.String())
 		}
+	}
+}
+
+// TestWorkspaceTrendsCarryScoreAndGrade pins the grade-history fields: each
+// point carries the /risk score and band for that scan's counts.
+func TestWorkspaceTrendsCarryScoreAndGrade(t *testing.T) {
+	s := testServer(t)
+	ctx := context.Background()
+	work, err := s.db.CreateWorkspace(ctx, core.Workspace{RootPath: t.TempDir(), Name: "Graded"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
+	trendScan(t, s, work.ID, "completed", base)
+	trendScan(t, s, work.ID, "completed", base.Add(time.Hour),
+		finding("ruff", "G-C1", "src/g1.py", "c1", analyzers.SeverityCritical, analyzers.CategorySecurity),
+		finding("ruff", "G-C2", "src/g2.py", "c2", analyzers.SeverityCritical, analyzers.CategorySecurity),
+		finding("ruff", "G-C3", "src/g3.py", "c3", analyzers.SeverityCritical, analyzers.CategorySecurity),
+		finding("ruff", "G-C4", "src/g4.py", "c4", analyzers.SeverityCritical, analyzers.CategorySecurity),
+		finding("ruff", "G-C5", "src/g5.py", "c5", analyzers.SeverityCritical, analyzers.CategorySecurity))
+	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/workspaces/"+work.ID+"/trends", nil)
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	var body struct {
+		Items []struct {
+			Score float64 `json:"score"`
+			Grade string  `json:"grade"`
+			Total int     `json:"total"`
+		} `json:"items"`
+	}
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil || len(body.Items) != 2 {
+		t.Fatalf("trends: %d %s", response.Code, response.Body.String())
+	}
+	if body.Items[0].Score != 0 || body.Items[0].Grade != "A" {
+		t.Fatalf("clean scan grade: %#v", body.Items[0])
+	}
+	want := riskScoreOf(database.RiskCounts{Critical: 5})
+	if body.Items[1].Score != want || body.Items[1].Grade != riskGrade(want) || body.Items[1].Grade == "A" {
+		t.Fatalf("critical scan grade: %#v want score %v", body.Items[1], want)
+	}
+}
+
+// TestListWorkspacesCarriesSparkline pins the card sparkline on GET
+// /workspaces: completed totals only, oldest first, omitted when none exist.
+func TestListWorkspacesCarriesSparkline(t *testing.T) {
+	s := testServer(t)
+	ctx := context.Background()
+	work, err := s.db.CreateWorkspace(ctx, core.Workspace{RootPath: t.TempDir(), Name: "Spark"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	idle, err := s.db.CreateWorkspace(ctx, core.Workspace{RootPath: t.TempDir(), Name: "Idle"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
+	trendScan(t, s, work.ID, "completed", base,
+		finding("ruff", "S-1", "src/s1.py", "s1", analyzers.SeverityLow, analyzers.CategoryStyle),
+		finding("ruff", "S-2", "src/s2.py", "s2", analyzers.SeverityLow, analyzers.CategoryStyle))
+	trendScan(t, s, work.ID, "failed", base.Add(time.Hour))
+	trendScan(t, s, work.ID, "completed", base.Add(2*time.Hour),
+		finding("ruff", "S-3", "src/s3.py", "s3", analyzers.SeverityLow, analyzers.CategoryStyle))
+	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/workspaces", nil)
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	var body struct {
+		Items []struct {
+			ID    string `json:"id"`
+			Trend []int  `json:"trend"`
+		} `json:"items"`
+	}
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil {
+		t.Fatalf("workspaces: %d %s", response.Code, response.Body.String())
+	}
+	found := 0
+	for _, item := range body.Items {
+		switch item.ID {
+		case work.ID:
+			found++
+			if len(item.Trend) != 2 || item.Trend[0] != 2 || item.Trend[1] != 1 {
+				t.Fatalf("sparkline = %v, want [2 1]", item.Trend)
+			}
+		case idle.ID:
+			found++
+			if item.Trend != nil {
+				t.Fatalf("idle workspace has no sparkline: %v", item.Trend)
+			}
+		}
+	}
+	if found != 2 {
+		t.Fatalf("both workspaces listed: %s", response.Body.String())
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	"bluntcode/internal/analyzers"
@@ -131,5 +132,45 @@ func TestSearchDefaultsToLatestScan(t *testing.T) {
 	}
 	if response := get(t, s, http.MethodGet, "/api/v1/findings/search?scope=nope"); response.Code != http.StatusBadRequest {
 		t.Fatalf("bad scope status %d", response.Code)
+	}
+}
+
+// TestFindingsFirstPageCarriesFacets: page-mode first pages chart per-category
+// and per-analyzer totals across the whole filtered set, not just the page.
+func TestFindingsFirstPageCarriesFacets(t *testing.T) {
+	s := testServer(t)
+	ctx := context.Background()
+	work, err := s.db.CreateWorkspace(ctx, core.Workspace{RootPath: t.TempDir(), Name: "Facets"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := []analyzers.Finding{
+		finding("ruff", "A", "a.py", "a", analyzers.SeverityHigh, analyzers.CategorySecurity),
+		finding("ruff", "B", "b.py", "b", analyzers.SeverityLow, analyzers.CategoryStyle),
+		finding("ruff", "C", "c.py", "c", analyzers.SeverityLow, analyzers.CategoryStyle),
+	}
+	scan, _ := s.db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: "queued"})
+	if _, err := s.db.SaveAnalyzerResult(ctx, scan.ID, database.AnalyzerRunInput{AnalyzerID: "ruff", Version: "test", State: "succeeded"}, items, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.db.CompleteScan(ctx, scan.ID, "completed", ""); err != nil {
+		t.Fatal(err)
+	}
+	var body struct {
+		Facets struct {
+			Category map[string]int `json:"category"`
+			Analyzer map[string]int `json:"analyzer"`
+		} `json:"facets"`
+	}
+	response := get(t, s, http.MethodGet, "/api/v1/scans/"+scan.ID+"/findings?page=1&page_size=1")
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Facets.Category[string(analyzers.CategorySecurity)] != 1 || body.Facets.Category[string(analyzers.CategoryStyle)] != 2 || body.Facets.Analyzer["ruff"] != 3 {
+		t.Fatalf("facets past the page window: %s", response.Body.String())
+	}
+	second := get(t, s, http.MethodGet, "/api/v1/scans/"+scan.ID+"/findings?page=2&page_size=1")
+	if strings.Contains(second.Body.String(), `"facets"`) {
+		t.Fatalf("facets ride only on page 1: %s", second.Body.String())
 	}
 }

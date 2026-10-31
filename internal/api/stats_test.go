@@ -128,7 +128,7 @@ func TestGlobalStatsServesOverview(t *testing.T) {
 	// The shape is fixed: exactly these top-level keys, and the severity
 	// block carries exactly the five fixed severity names.
 	keys := topLevelKeys(t, response.Body.Bytes())
-	if !equalKeys(keys, []string{"findings", "generated_at", "risk_grades", "scans", "suppressions", "workspaces"}) {
+	if !equalKeys(keys, []string{"findings", "generated_at", "risk_grades", "scans", "scans_by_day", "suppressions", "workspaces"}) {
 		t.Fatalf("top-level keys = %v", keys)
 	}
 	var riskBlock struct {
@@ -188,7 +188,7 @@ func TestGlobalStatsIncludesToolReadiness(t *testing.T) {
 	if body.Tools == nil || body.Tools.Total != 8 || body.Tools.Ready != 0 {
 		t.Fatalf("tools section must count every known tool and the ready ones: %#v", body.Tools)
 	}
-	if keys := topLevelKeys(t, response.Body.Bytes()); !equalKeys(keys, []string{"findings", "generated_at", "risk_grades", "scans", "suppressions", "tools", "workspaces"}) {
+	if keys := topLevelKeys(t, response.Body.Bytes()); !equalKeys(keys, []string{"findings", "generated_at", "risk_grades", "scans", "scans_by_day", "suppressions", "tools", "workspaces"}) {
 		t.Fatalf("top-level keys = %v", keys)
 	}
 }

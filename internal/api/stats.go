@@ -21,8 +21,11 @@ type statsTools struct {
 // payload flat: workspaces, scans, findings, and suppressions inline.
 type statsResponse struct {
 	database.GlobalStats
-	Tools       *statsTools `json:"tools,omitempty"`
-	GeneratedAt string      `json:"generated_at"`
+	Tools *statsTools `json:"tools,omitempty"`
+	// ScansByDay is the last seven local calendar days of scan starts,
+	// oldest first and zero-filled, for the overview activity strip.
+	ScansByDay  []database.ScanDay `json:"scans_by_day"`
+	GeneratedAt string             `json:"generated_at"`
 }
 
 // globalStats serves the dashboard's global overview: workspace, scan, and
@@ -36,7 +39,13 @@ func (s *Server) globalStats(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, "DATABASE_ERROR", "Could not load global stats.")
 		return
 	}
-	response := statsResponse{GlobalStats: stats, GeneratedAt: time.Now().UTC().Format(time.RFC3339)}
+	now := time.Now()
+	byDay, err := s.db.ScansByDay(r.Context(), now, time.Local, 7)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load global stats.")
+		return
+	}
+	response := statsResponse{GlobalStats: stats, ScansByDay: byDay, GeneratedAt: now.UTC().Format(time.RFC3339)}
 	if s.tools != nil {
 		statuses := s.tools.All()
 		ready := 0
