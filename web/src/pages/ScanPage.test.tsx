@@ -186,10 +186,10 @@ describe('ScanPage what-changed panel', () => {
 
   it('names analyzers (not engines) in the hero meta and verdict stats, in the hero meta line', async () => {
     const { host } = await renderScanPage(scanFixture({ total_findings: 5, new_count: 2, critical_count: 1 }));
-    expect(host.querySelector('.scan-hero-meta')?.textContent).toContain('1 of 1 analyzer succeeded');
+    expect(host.querySelector('.scan-hero-meta')?.textContent).toContain('1 of 1 analyzer ran');
     expect(host.querySelector('.scan-hero-meta')?.textContent).toContain('profile');
     const stats = [...host.querySelectorAll('.verdict-stats .verdict-stat')];
-    expect(stats.map((stat) => stat.querySelector('dt')?.textContent)).toEqual(['Risk score', 'New', 'Fixed', 'Persistent', 'Analyzers']);
+    expect(stats.map((stat) => stat.querySelector('dt')?.textContent)).toEqual(['Risk score', 'New', 'Fixed', 'Persistent', 'Analyzers ran']);
     expect(host.textContent).not.toContain('engine');
   });
 

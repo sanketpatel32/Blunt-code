@@ -179,9 +179,9 @@ describe('HomePage risk board — verdict', () => {
     expect(caveat?.textContent).toContain('partial analyzer coverage');
     const badge = host.querySelector('.ledger-partial-badge');
     expect(badge?.textContent).toBe('partial');
-    expect(badge?.getAttribute('title')).toContain('3/5 clean');
-    expect(badge?.getAttribute('title')).toContain('1 failed');
-    expect(badge?.getAttribute('title')).toContain('1 degraded');
+    expect(badge?.getAttribute('title')).toContain('3 of 5 analyzers ran');
+    expect(badge?.getAttribute('title')).toContain("1 didn't run");
+    expect(badge?.getAttribute('title')).toContain('1 with warnings');
   });
 
   it('claims no partial caveat when every analyzer run completed cleanly', async () => {

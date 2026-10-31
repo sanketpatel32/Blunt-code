@@ -1,4 +1,5 @@
 import { Suspense, lazy, useEffect, useState, type ReactNode } from 'react';
+import { type SeverityCountFields, coveragePartial, coverageText, gradeExplanation } from '../lib/risk';
 import { ChevronDown } from 'lucide-react';
 import { api } from '../api';
 import type { AnalyzerRun, RiskProfile, Scan } from '../types';
@@ -388,7 +389,7 @@ export function AnalyzerStatuses({ runs, go }: { runs?: AnalyzerRun[]; go?: (r: 
   const failed = runs.filter((run) => run.status === 'failed' && !isMissingToolMessage(run.message));
   const ran = runs.filter((run) => ['completed', 'succeeded', 'success'].includes(run.status));
   const skipped = runs.filter((run) => run.status === 'skipped');
-  const parts = [`${ran.length} of ${runs.length - skipped.length} ran`];
+  const parts = [`${ran.length} of ${runs.length - skipped.length} ${runs.length - skipped.length === 1 ? 'analyzer' : 'analyzers'} ran`];
   if (missing.length) parts.push(`${missing.length} not installed`);
   if (failed.length) parts.push(`${failed.length} failed`);
   if (skipped.length) parts.push(`${skipped.length} not needed`);
@@ -533,14 +534,11 @@ export function RiskCard({ risk, unscanned }: { risk?: RiskProfile | null; /** t
   // failed or degraded, the score reflects partial coverage and the card
   // must say so instead of implying full assurance.
   const coverage = risk.coverage;
-  const partial = coverage && risk.complete === false;
-  const coverageNote = partial
-    ? `partial coverage: ${coverage!.succeeded} of ${coverage!.total} analyzers completed` +
-      (coverage!.failed > 0 ? `, ${coverage!.failed} failed` : '') +
-      (coverage!.warned > 0 ? `, ${coverage!.warned} degraded` : '')
-    : null;
+  const partial = !!coverage && (risk.complete === false || coveragePartial(coverage));
+  const coverageNote = partial ? `Partial coverage: ${coverageText(coverage!)}` : null;
+  const explanation = risk.counts ? gradeExplanation(risk.counts as SeverityCountFields, coverage) : null;
   return <div className={`summary-card premium-card risk-hero ${gradeTone}`} title={risk.finished_at ? `Latest scan finished ${risk.finished_at}` : undefined}>
-    <GradeTile grade={risk.grade} size="lg" className="risk-grade" />
+    <GradeTile grade={risk.grade} size="lg" className={`risk-grade${partial ? ' grade-provisional' : ''}`} />
     <strong className="risk-score" title={RISK_SCORE_EXPLAINER}>{Math.round(risk.score)}</strong>
     {/* "Risk score", not "Risk D". The grade letter is already the tile beside
         it, so repeating it here printed the same D twice on one card and read
@@ -549,6 +547,7 @@ export function RiskCard({ risk, unscanned }: { risk?: RiskProfile | null; /** t
     <span>Risk score</span>
     {trendNote && <small role="note" className="risk-trend">{trendNote.arrow}{trendNote.text}</small>}
     {coverageNote && <span className="risk-coverage-note" data-partial="true">{coverageNote}</span>}
+    {explanation && <p className="risk-explain">{explanation}</p>}
   </div>;
 }
 

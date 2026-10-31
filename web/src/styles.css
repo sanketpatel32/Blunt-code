@@ -5597,3 +5597,8 @@ tbody tr:hover > td { background: color-mix(in oklch, var(--color-accent) 5%, tr
 .suppressions-count { margin: 0 0 var(--space-sm); color: var(--color-ink-faint); font: 600 var(--text-xs) var(--font-mono); }
 /* Premium card hover — ensures trend cards lift */
 .trend-section .summary-card { transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-base) var(--ease-out); }
+/* Provisional grade (partial analyzer coverage): a dashed ring says the
+   letter rests on less than the full analyzer set. */
+.grade-provisional { outline: 2px dashed var(--color-warning, #b45309); outline-offset: 3px; }
+.risk-explain, .scan-hero-explain { margin: var(--space-2xs, 0.25rem) 0 0; max-width: 60ch; font-size: 0.875rem; line-height: 1.45; color: var(--color-text-muted, inherit); }
+.risk-hero .risk-explain { grid-column: 1 / -1; }

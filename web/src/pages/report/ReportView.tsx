@@ -1,4 +1,5 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../../components/ui/dialog';
+import { coverageFromRuns, coverageText } from '../../lib/risk';
 import * as React from 'react';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { api } from '../../api';
@@ -402,6 +403,8 @@ export function ReportView({ scanId, notify, runs: runsProp, go, onCountsChanged
     if (!runById.has(finding.analyzer_id)) runById.set(finding.analyzer_id, undefined);
   }
   const tools = [...runById.keys()];
+  /** The foot prints the same "X of Y analyzers ran" as the scan header, from the run rows. */
+  const footCoverage = coverageFromRuns(runs);
   /** Type rail: the categories actually present in this scan, most findings first. */
   const categories = [...(data.findings ?? []).reduce((map, finding) => { if (finding.category) map.set(finding.category, (map.get(finding.category) ?? 0) + 1); return map; }, new Map<string, number>())].sort((a, b) => b[1] - a[1]);
   /* The tool rail collapses past its leaders.
@@ -501,7 +504,7 @@ export function ReportView({ scanId, notify, runs: runsProp, go, onCountsChanged
       {selected && <SourcePane scanId={scanId} finding={selected} workspaceId={workspaceId} onClose={() => setSelectedKey(undefined)} onPrev={() => { if (selectedIndex > 0) setSelectedKey(findingKey(items[selectedIndex - 1]!, selectedIndex - 1)); }} onNext={() => { if (selectedIndex >= 0 && selectedIndex < items.length - 1) setSelectedKey(findingKey(items[selectedIndex + 1]!, selectedIndex + 1)); }} hasPrev={selectedIndex > 0} hasNext={selectedIndex >= 0 && selectedIndex < items.length - 1} onSuppress={setSuppressing} onRestore={restoreFinding} workspaceRoot={data.workspace?.root_path} />}
     </div>
     <footer className="report-foot">
-      <span className="report-foot-count">{total} {total === 1 ? 'finding' : 'findings'} · {tools.length || 0} {tools.length === 1 ? 'analyzer' : 'analyzers'} ran</span>
+      <span className="report-foot-count">{total} {total === 1 ? 'finding' : 'findings'}{footCoverage ? ` · ${coverageText(footCoverage)}` : ''}</span>
       <ExportMenu scanId={scanId} csvParams={csvParams} findings={items} />
     </footer>
     {suppressing && <SuppressFindingDialog workspaceId={workspaceId} finding={suppressing} onClose={() => { setSuppressing(undefined); setSuppressQueue([]); }} onSuppressed={(reason) => { void suppressQueued(reason); }} notify={notify ?? noopNotify} />}

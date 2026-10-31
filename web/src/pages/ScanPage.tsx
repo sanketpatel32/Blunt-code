@@ -6,7 +6,7 @@ import type { Notice } from '../lib/notice';
 import { message } from '../lib/notice';
 import { SEVERITY_LABELS, analyzerName, count, date, elapsed, findingLocation, scanStateDisplay } from '../lib/format';
 import { analyzerStatusLabels, eventCopy, isTerminalScanState, latestAnalyzerCompletions, liveHeadline, severityTotalsSoFar, stageLabels, type ScanEvent } from '../lib/scanEvents';
-import { bandFor, riskGrade, riskScore, severityCountsOf } from '../lib/risk';
+import { bandFor, coverageFromRuns, coveragePartial, coverageText, gradeExplanation, riskGrade, riskScore, severityCountsOf } from '../lib/risk';
 import { useLoad } from '../hooks/useLoad';
 import { useTicker } from '../hooks/useTicker';
 import { ErrorPanel, Loading, SeverityCounts } from '../components/ui';
@@ -174,7 +174,8 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
   const statsLabel = stats.join(', ');
   const caveat = interrupted ? 'partial results below' : incomplete ? 'coverage incomplete' : '';
   const runs = current.analyzer_runs ?? [];
-  const succeeded = runs.filter((run) => run.status === 'succeeded').length;
+  const coverage = coverageFromRuns(runs);
+  const explanation = graded && grade ? gradeExplanation(counts, coverage) : null;
   /** Card accent follows the worst finding on the page: danger > warning > success > neutral. */
   const heroTone = live ? 'live' : critical > 0 || (counts.high ?? 0) > 0 ? 'danger' : (counts.medium ?? 0) > 0 || incomplete ? 'warning' : total === 0 ? 'success' : 'neutral';
   const startedText = date(current.started_at);
@@ -184,7 +185,7 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
       <div className="scan-hero-main">
         <div className="scan-hero-title-row">
           {graded && grade
-            ? <GradeTile grade={grade} size="lg" flip className="scan-grade" />
+            ? <GradeTile grade={grade} size="lg" flip className={`scan-grade${coveragePartial(coverage) ? ' grade-provisional' : ''}`} />
             : incomplete
               ? <GradeTile grade={null} placeholder="!" tone="warning" size="lg" className="scan-grade scan-grade-clear" />
               : <GradeTile grade={null} placeholder="✓" tone="clear" size="lg" className="scan-grade scan-grade-clear" />}
@@ -210,12 +211,13 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
               <span>{live ? `elapsed ${durationText}` : durationText}</span>
               {runs.length > 0 && <>
                 <span aria-hidden="true">·</span>
-                <span>{succeeded} of {runs.length} {runs.length === 1 ? 'analyzer' : 'analyzers'} succeeded</span>
+                <span>{coverageText(coverage!)}</span>
               </>}
             </p>
             {/* The reason a scan failed or warned must survive outside the
                 live panel — "no eligible inputs" scans fail instantly, so
                 their explanation would otherwise never be seen here. */}
+            {explanation && <p className="scan-hero-explain">{explanation}</p>}
             {terminal && current.error_summary && (
               <p className="scan-hero-reason" role="note">{current.error_summary}</p>
             )}
@@ -277,7 +279,7 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
         <div className="verdict-stat" title={VERDICT_TRIO_TOOLTIP}><dt>New</dt><dd>{current.new_count ?? 0}</dd></div>
         <div className="verdict-stat" title={VERDICT_TRIO_TOOLTIP}><dt>Fixed</dt><dd>{current.fixed_count ?? 0}</dd></div>
         <div className="verdict-stat" title={VERDICT_TRIO_TOOLTIP}><dt>Persistent</dt><dd>{Math.max(0, total - (current.new_count ?? 0))}</dd></div>
-        <div className="verdict-stat"><dt>Analyzers</dt><dd>{runs.length ? `${succeeded}/${runs.length}` : '—'}</dd></div>
+        <div className="verdict-stat"><dt>Analyzers ran</dt><dd>{coverage ? `${coverage.succeeded} of ${coverage.total}` : '—'}</dd></div>
       </dl>
     </section>}
     {terminal && (current.fixed_count ?? 0) > 0 && (current.state === 'completed' || current.state === 'completed_with_warnings'

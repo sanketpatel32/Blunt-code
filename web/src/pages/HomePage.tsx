@@ -20,7 +20,7 @@ import { Activity, ChevronRight, FolderOpen, FolderPlus } from 'lucide-react';
 
 import { SEVERITY_ORDER, trendPointsFromScans } from '../lib/chartData';
 import { isActiveScanState } from '../lib/scanEvents';
-import { GRADE_BANDS, bandFor, gradeDepth, riskGrade, riskScore, severityCountsOf } from '../lib/risk';
+import { GRADE_BANDS, bandFor, coverageText, gradeDepth, riskGrade, riskScore, severityCountsOf } from '../lib/risk';
 import { GradeTile } from '../components/GradeTile';
 
 const FEED_LIMIT = 10;
@@ -971,7 +971,7 @@ function LedgerRow({
               {partialCoverage && coverage && (
                 <span
                   className="ledger-partial-badge"
-                  title={`Partial analyzer coverage: ${coverage.succeeded}/${coverage.total} clean${coverage.failed > 0 ? `, ${coverage.failed} failed` : ''}${coverage.warned > 0 ? `, ${coverage.warned} degraded` : ''}`}
+                  title={`Partial coverage: ${coverageText(coverage)}. The grade reflects only what ran.`}
                 >
                   partial
                 </span>

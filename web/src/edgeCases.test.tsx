@@ -195,7 +195,7 @@ describe('hostile API fixtures', () => {
     ]);
     const host = await renderAt('/scans/scan-1', fetchMock);
     expectClean(host);
-    expect(host.textContent).toContain('0 findings · 0 analyzers ran'); // no pager renders for an empty list — and nothing crashes
+    expect(host.textContent).toContain('0 findings'); // no pager renders for an empty list — and nothing crashes
   });
 
   it('ReportView survives a report payload with no scan at all', async () => {
