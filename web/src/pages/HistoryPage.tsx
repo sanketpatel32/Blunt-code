@@ -12,6 +12,9 @@ import { ComparePanel } from '../components/ComparePanel';
 import { PageHeader } from '../components/PageHeader';
 import { RowMenu, type RowMenuItem } from '../components/RowMenu';
 import { Badge } from '../components/ui/badge';
+import { Activity, Gauge, History as HistoryIcon } from 'lucide-react';
+import { StatTile } from '../components/viz/StatTile';
+import { Sparkline } from '../components/viz/Sparkline';
 
 function useDateFilter() {
   const [from, setFrom] = useState('');
@@ -175,6 +178,7 @@ export function HistoryPage({ workspaceId, go }: { workspaceId: string; go: (r: 
           you are inside it. */}
       <div className="workspace-page-body">
         <PageHeader title={workspace.data?.name ? `${workspace.data.name} — History` : 'Scan history'} actions={!pair.a && latestPair ? <button type="button" className="button secondary" onClick={() => { setPair(latestPair); syncCompareParams(latestPair.a, latestPair.b); }}>Compare latest two scans</button> : undefined} />
+        <HistoryTiles workspaceId={workspaceId} total={state.data?.total} />
         <div className="toolbar-row history-toolbar">
           <div className="toolbar-filters">
             {/* Loop 150 · the hand-drawn calendar SVG is gone.
@@ -464,4 +468,21 @@ export function HistoryTable({ scans, go, paging, dateFrom, dateTo, compareBaseI
     const menuItems = scanRowMenuItems(scan, compareBaseId, onComparePick);
     return <Fragment key={scan.id}><tr className={[tone, isOpen ? 'is-expanded' : ''].filter(Boolean).join(' ') || undefined}><td title={preciseDate(stampValue)}><span className="history-date"><button type="button" className="history-disclose" aria-expanded={isOpen} aria-controls={`history-detail-${scan.id}`} aria-label={`${isOpen ? 'Hide' : 'Show'} details for the scan from ${relativeTime(stampValue)}`} onClick={() => toggleExpanded(scan.id)}><span className="disclose-arrow" aria-hidden="true">▸</span></button><span className="history-when"><span className="history-relative">{when.relative}</span>{when.absolute && <><span className="history-abs-sep" aria-hidden="true">·</span><span className="history-abs">{when.absolute}</span></>}</span></span></td><td data-label="Status"><div className="history-status"><Badge variant={stateDisplay.variant} className="whitespace-nowrap">{stateDisplay.label}</Badge>{scan.profile && <span className="badge profile-badge">{scan.profile}</span>}</div></td><td data-label="Findings"><FindingsCell scan={scan} /></td><td data-label="Duration">{compactDuration(scan.duration_ms)}</td><td className="rtable-actions"><div className="table-actions history-actions"><button type="button" className="text-button" onClick={() => go({ page: 'scan', id: scan.id })}>Open report</button>{compareBaseId === scan.id && <span className="compare-base-tag">Base scan</span>}<RowMenu label={`Actions for scan ${scan.id}`} items={menuItems} /></div></td></tr>{isOpen && <tr className="history-detail-row rtable-sub"><td colSpan={5}><div className="history-detail" id={`history-detail-${scan.id}`}><dl className="history-detail-meta"><div><dt>Started</dt><dd>{preciseDate(scan.started_at)}</dd></div><div><dt>Finished</dt><dd>{preciseDate(scan.finished_at)}</dd></div>{scan.profile && <div><dt>Profile</dt><dd>{scan.profile}</dd></div>}</dl>{scan.snapshot && <p className="history-coverage">Selected {scan.snapshot.selected_file_count ?? 0} of {scan.snapshot.candidate_file_count ?? 0} candidate files{skipCoverageSummary(scan.snapshot.skip_counts) && <>, skipped {skipCoverageSummary(scan.snapshot.skip_counts)}</>}{(scan.snapshot.exclusions?.length ?? 0) > 0 && <> · {scan.snapshot.exclusions!.length} exclusion{scan.snapshot.exclusions!.length === 1 ? '' : 's'} in effect</>}</p>}{scan.error_summary && <div className="inline-warning">Warning: {scan.error_summary}</div>}{runs.length > 0 && <ul className="history-analyzers">{runs.map((run) => <li key={run.analyzer_id}><span>{analyzerName(run.analyzer_id)}</span><span className={`state ${run.status}`}>{run.status.replaceAll('_', ' ')}</span></li>)}</ul>}</div></td></tr>}</Fragment>;
   })}</Fragment>)}</tbody></table></div>{scrollCue && <div aria-hidden="true" style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: '2.25rem', pointerEvents: 'none', borderRadius: '0 var(--radius-card) var(--radius-card) 0', background: 'linear-gradient(to right, transparent, var(--color-surface))' }} />}</div>{!filteredMode && <nav className="history-pagination" aria-label="Scan history pagination">{!paging && <span className="history-pagination-count tabular-nums">Showing <strong>{shownFrom} to {shownTo}</strong> of <strong>{windowTotal}</strong> scans</span>}<div><button type="button" className="button secondary" onClick={() => serverMode ? paging!.onPage(paging!.page - 1) : setClientPage(currentPage - 1)} disabled={serverMode ? paging!.page <= 1 : currentPage === 0}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="14" height="14"><path d="M15 18 9 12l6-6" strokeLinecap="round" strokeLinejoin="round"/></svg>Previous</button><output aria-live="polite" className="tabular-nums">Page {serverMode ? paging!.page : currentPage + 1} of {pageCount}</output><button type="button" className="button secondary" onClick={() => serverMode ? paging!.onPage(paging!.page + 1) : setClientPage(currentPage + 1)} disabled={serverMode ? !paging!.hasNext : currentPage >= pageCount - 1}>Next<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="14" height="14"><path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round"/></svg></button></div></nav>}</>;
+}
+
+/** Score trend at a glance: completed scans only (failed runs are not a score of 0). */
+function HistoryTiles({ workspaceId, total }: { workspaceId: string; total?: number }) {
+  const trends = useLoad(() => api.trends(workspaceId), [workspaceId]);
+  const points = (trends.data ?? []).filter((point) => typeof point.score === 'number');
+  if (points.length === 0) return null;
+  const latest = points[points.length - 1]!;
+  const scores = points.map((point) => Math.round(point.score ?? 0));
+  const tone = latest.grade === 'A' ? 'ok' : latest.grade === 'B' ? 'warn' : 'danger';
+  return (
+    <div className="stat-tiles history-tiles">
+      <StatTile icon={Gauge} tone={tone} value={`${latest.grade ?? '—'} · ${scores[scores.length - 1]}`} label="Latest grade" />
+      <StatTile icon={Activity} value={points.length} label="Completed scans" extra={scores.length > 1 ? <Sparkline values={scores} label={`Risk score trend: ${scores.join(', ')}`} /> : undefined} />
+      {typeof total === 'number' && <StatTile icon={HistoryIcon} value={total} label="All runs" />}
+    </div>
+  );
 }

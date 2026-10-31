@@ -11,9 +11,7 @@ export function NotFoundPage({ go }: { go: (r: Route) => void }) {
   return (
     <div className="page">
       <PageHeader
-        eyebrow="404"
         title="Page not found"
-        description="This address does not match any page in Blunt Code."
       />
       <Empty
         title="Nothing here"

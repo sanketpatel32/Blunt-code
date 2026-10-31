@@ -33,9 +33,9 @@ describe('SEVERITY_COLOR', () => {
     }
   });
 
-  it('routes every band through the --color-sev-* ramp', () => {
+  it('routes every band through the --sev-fill-* ramp', () => {
     for (const sev of SEVERITY_ORDER) {
-      expect(SEVERITY_COLOR[sev]).toBe(`var(--color-sev-${sev})`);
+      expect(SEVERITY_COLOR[sev]).toBe(`var(--sev-fill-${sev})`);
     }
   });
 

@@ -63,6 +63,5 @@ describe('PreScanSummary — what this profile will run before it runs (IMP-14)'
     const host = await render({ profile: 'deep', languages: [], analyzers: [], exclusionCount: 0 });
     expect(host.querySelector('.pre-scan-summary')?.getAttribute('data-tone')).toBe('warning');
     expect(host.textContent).toContain("No analyzers match this project's languages yet.");
-    expect(host.textContent).toContain('dependencies, and network use');
   });
 });

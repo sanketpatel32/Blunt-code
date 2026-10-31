@@ -84,6 +84,9 @@ type workspaceView struct {
 	LatestScanCov      *database.ScanCoverage `json:"latest_scan_coverage,omitempty"`
 	LastCompletedScan  *scanDetail            `json:"last_completed_scan,omitempty"`
 	AssessmentCoverage *database.ScanCoverage `json:"assessment_coverage,omitempty"`
+	// Trend is total_findings of the newest completed scans, oldest first
+	// (list endpoint only), for the card sparkline.
+	Trend []int `json:"trend,omitempty"`
 }
 
 func New(db *database.DB, bus *events.Bus, scanService *scans.Service, toolService *tools.Service, paths config.Paths, version string, logger *slog.Logger) *Server {
@@ -352,6 +355,11 @@ func (s *Server) listWorkspaces(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, "DATABASE_ERROR", "Could not load workspace analysis.")
 		return
 	}
+	trendByWorkspace, err := s.db.RecentCompletedTotals(r.Context(), database.DefaultWorkspaceSparkline)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load workspace analysis.")
+		return
+	}
 	views := make([]workspaceView, 0, len(items))
 	for i, item := range items {
 		view, err := s.buildWorkspaceView(r.Context(), item, pairs[i].latest, pairs[i].lastCompleted, &viewPrefetch{runs: runsByScan, list: true})
@@ -363,6 +371,7 @@ func (s *Server) listWorkspaces(w http.ResponseWriter, r *http.Request) {
 			cov := coverage
 			view.LatestScanCov = &cov
 		}
+		view.Trend = trendByWorkspace[item.ID]
 		views = append(views, view)
 	}
 	writeJSON(w, 200, map[string]any{"items": views})
@@ -1259,7 +1268,7 @@ func (s *Server) workspaceTrends(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, "DATABASE_ERROR", "Could not load severity trends.")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"items": points})
+	writeJSON(w, 200, map[string]any{"items": trendViews(points)})
 }
 
 // listScans serves the workspace's scan history as one server-paged slice.
@@ -1379,6 +1388,24 @@ func riskGrade(score float64) string {
 	default:
 		return "D"
 	}
+}
+
+// trendView is one trend point plus the weighted risk score and A-D grade of
+// that scan, computed with the same weights and bands as /risk, so the UI can
+// draw grade history without re-implementing the scale.
+type trendView struct {
+	database.SeverityTrendPoint
+	Score float64 `json:"score"`
+	Grade string  `json:"grade"`
+}
+
+func trendViews(points []database.SeverityTrendPoint) []trendView {
+	out := make([]trendView, len(points))
+	for i, point := range points {
+		score := riskScoreOf(database.RiskCounts{Critical: point.Severity.Critical, High: point.Severity.High, Medium: point.Severity.Medium, Low: point.Severity.Low, Info: point.Severity.Info})
+		out[i] = trendView{SeverityTrendPoint: point, Score: score, Grade: riskGrade(score)}
+	}
+	return out
 }
 
 func riskScoreOf(c database.RiskCounts) float64 {
@@ -1793,6 +1820,10 @@ func (s *Server) findings(w http.ResponseWriter, r *http.Request) {
 		if filter.Page <= 1 {
 			if counts, err := s.db.FindingStatusCounts(r.Context(), scan, filter); err == nil {
 				body["status_counts"] = counts
+			}
+			// ...and per-category / per-analyzer totals for the report charts.
+			if facets, err := s.db.FindingFacets(r.Context(), scan, filter); err == nil {
+				body["facets"] = facets
 			}
 		}
 		writeJSON(w, 200, body)

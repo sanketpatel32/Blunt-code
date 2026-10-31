@@ -131,7 +131,7 @@ describe('HomePage risk board — verdict', () => {
       ? Promise.resolve(json({ error: { code: 'INTERNAL', message: 'database is locked' } }, 500))
       : base(input, init));
     const host = await render(fetchMock);
-    expect(host.querySelector('.verdict-rail')).toBeNull(); // no "Workspaces scanned 0 of 0"
+    expect(host.querySelector('.verdict-tiles')).toBeNull(); // no "Scanned 0/0"
     expect(host.querySelector('.verdict-score')?.textContent).toBe('grade unavailable');
     expect(host.textContent).toContain("Couldn't load your workspaces");
   });
@@ -164,7 +164,7 @@ describe('HomePage risk board — verdict', () => {
     expect(host.querySelector('.verdict-hero .sr-only')?.textContent).toBe('21 findings across the latest completed scan of 1 workspace.');
     expect(host.querySelector('.verdict-hero-num')?.textContent).toBe('21');
     expect(host.querySelector('.verdict-hero-unit')?.textContent).toBe('findings');
-    expect(host.querySelector('.verdict-hero-ctx')?.textContent).toContain('across the latest completed scan of 1 workspace.');
+    expect(host.querySelector('.verdict-hero-ctx')?.textContent).toContain('1 workspace');
 
     const bar = host.querySelector('.verdict-bar')!;
     expect(bar.querySelectorAll('i')).toHaveLength(4); // critical, high, medium, low — info is zero
@@ -186,8 +186,8 @@ describe('HomePage risk board — verdict', () => {
     ));
 
     const caveat = host.querySelector('.verdict-caveat');
-    expect(caveat?.textContent).toContain('1 of 1 scanned workspace ran');
-    expect(caveat?.textContent).toContain('partial analyzer coverage');
+    expect(caveat?.textContent).toContain('Partial coverage');
+    expect(caveat?.textContent).toContain('1/1');
     const badge = host.querySelector('.ledger-partial-badge');
     expect(badge?.textContent).toBe('partial');
     expect(badge?.getAttribute('title')).toContain('3 of 5 analyzers ran');
@@ -208,14 +208,14 @@ describe('HomePage risk board — verdict', () => {
   it('shows the real activity stats in the rail, not scores invented by the UI', async () => {
     const host = await render(homeFetchMock({ scans: [scanItem()], total: 1, summary }));
 
-    const rail = host.querySelector('.verdict-rail')!;
-    expect(rail.textContent).toContain('Scans this week');
+    const rail = host.querySelector('.verdict-tiles')!;
+    expect(rail.textContent).toContain('Scans · 7 days');
     expect(rail.textContent).toContain('6');
-    expect(rail.textContent).toContain('Workspaces scanned');
-    expect(rail.textContent).toContain('1 of 1'); // from the workspace list, not the stale summary shape
-    expect(rail.textContent).toContain('Last completed scan');
-    expect(rail.textContent).toContain('Optional tools');
-    expect(rail.textContent).toContain('2 of 2');
+    expect(rail.textContent).toContain('Scanned');
+    expect(rail.textContent).toContain('1/1'); // from the workspace list, not the stale summary shape
+    expect(rail.textContent).toContain('Last scan');
+    expect(rail.textContent).toContain('Tools ready');
+    expect(rail.textContent).toContain('2/2');
     // A count never appears twice: active scans live only in the header pill.
     expect(rail.textContent).not.toContain('Active scans');
     expect(host.querySelector('.board-live')?.textContent).toContain('1 scan running');
@@ -350,7 +350,7 @@ describe('HomePage cancelled-scan fallback and trajectory', () => {
     expect(host.querySelector('.ledger-count')?.textContent).toContain('7 findings');
     // The verdict and the "N of M workspaces" count use the same rule.
     expect(host.querySelector('.verdict-letter')?.getAttribute('data-grade')).toBe('C');
-    expect(host.querySelector('.verdict-rail')?.textContent).toContain('1 of 1');
+    expect(host.querySelector('.verdict-tiles')?.textContent).toContain('1/1');
     expect(host.querySelector('.verdict-hero .sr-only')?.textContent).toBe('7 findings across the latest completed scan of 1 workspace.');
     // Honest note + honest state badge about the cancelled run.
     const note = host.querySelector('.ledger-fallback-note');
@@ -425,7 +425,7 @@ describe('HomePage cancelled-scan fallback and trajectory', () => {
       undefined,
       { items: [{ id: 'ruff', ready: true }, { id: 'semgrep', ready: false }] },
     ));
-    expect(host.querySelector('.verdict-rail')?.textContent).toContain('Optional tools');
+    expect(host.querySelector('.verdict-tiles')?.textContent).toContain('Tools ready');
     expect(host.querySelector('.board-foot')?.getAttribute('aria-label')).toBe('Analyzers');
     expect(host.querySelector('.board-foot-note')?.textContent).toContain('1 of 2 optional tools ready');
     expect(host.textContent).not.toContain('engine');

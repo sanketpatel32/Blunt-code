@@ -104,7 +104,7 @@ export function ScanActionDropdown({
             size={size}
             variant={variant as never}
             disabled={running}
-            className="rounded-l-none px-2 focus-visible:z-10 focus-visible:ring-1 focus-visible:ring-offset-0 active:scale-100 shrink-0"
+            className="scan-options-trigger rounded-l-none px-2 focus-visible:z-10 focus-visible:ring-1 focus-visible:ring-offset-0 active:scale-100 shrink-0"
             aria-label="Scan options"
             title="Choose scan profile or open pentest"
           >

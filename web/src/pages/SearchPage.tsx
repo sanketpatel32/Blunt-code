@@ -626,9 +626,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
   return (
     <div className="page page-search search-page space-y-3">
       <PageHeader
-        eyebrow="Findings Search"
         title="Search findings"
-        description="Searches every stored scan on this computer. Suppressed findings stay hidden."
         actions={
           <>
             <Button variant="outline" size="sm" onClick={() => setAdvancedOpen(true)} aria-expanded={advancedOpen} aria-controls="search-advanced" className="gap-1.5 text-xs h-7 px-2.5">

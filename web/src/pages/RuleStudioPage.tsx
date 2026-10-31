@@ -282,7 +282,6 @@ export function RuleStudioPage() {
   return (
     <div className="page">
       <PageHeader
-        eyebrow="Rules"
         title="Custom rules"
         badge={
           <Badge variant="secondary" className="text-xs font-mono tabular-nums">
@@ -296,7 +295,6 @@ export function RuleStudioPage() {
            is made once, where the user is about to do the thing: on the editor
            itself. The header keeps the count and the shortcut, which are
            different facts. */
-        description="Draft YAML rules and validate their fields. Drafts stay in this browser and are not executed by workspace scans."
         actions={
           <span className="text-xs text-[var(--color-ink-soft)] font-mono hidden sm:inline-flex items-center gap-1">
             <kbd className="px-1.5 py-0.5 bg-[var(--color-surface-muted)] border border-[var(--color-rule)] rounded-[var(--radius-xs)] text-xs">Ctrl+S</kbd> inside the editor saves

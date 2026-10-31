@@ -21,11 +21,21 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
+          // Recharts and its private dependency tree load only with the routes
+          // that draw a chart, never with the shell.
+          if (/node_modules\/(recharts|@reduxjs|react-redux|redux|redux-thunk|immer|reselect|es-toolkit|eventemitter3|decimal\.js-light|victory-vendor|d3-[a-z-]+|internmap)\//.test(id)) return 'chunk-recharts';
+          // Rollup's virtual helpers (CJS interop, Vite's preload helper) go to
+          // vendor; left unassigned they land in whichever chunk asked first and
+          // drag that whole chunk into the shell's static imports.
+          if (id.startsWith('\0') || id.includes('vite/preload-helper') || id.includes('commonjsHelpers')) return 'vendor';
+          // Motion stays unassigned so its animation features can split into
+          // the LazyMotion chunk that loads after first paint.
+          if (/node_modules\/(motion|motion-dom|motion-utils|framer-motion)\//.test(id)) return undefined;
           if (id.includes('node_modules')) return 'vendor';
-          if (id.includes('src/components/AnalyticsCharts') || id.includes('src/components/SeverityTrendChart') || id.includes('src/components/DependencyGraph') || id.includes('src/components/MiniSparkline') || id.includes('src/lib/chartData')) return 'chunk-charts';
-          if (id.includes('src/pages/PentestPage') || id.includes('src/components/PentestSuite') || id.includes('src/lib/pentestTemplates') || id.includes('src/lib/hackingTests')) return 'chunk-pentest';
-          if (id.includes('src/pages/RuleStudioPage') || id.includes('src/components/CodeEditor')) return 'chunk-editor';
-          if (id.includes('src/components/ComplianceMatrix')) return 'chunk-compliance';
+          // App code is never assigned by hand: Rollup folds a manual chunk's
+          // dependencies into it, so naming src files here dragged shared
+          // helpers (and with them every chunk) into the shell's static
+          // imports. Route-level lazy() imports already split the pages.
         },
       },
     },

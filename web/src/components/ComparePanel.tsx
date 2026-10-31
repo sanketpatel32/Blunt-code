@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { CalendarDays } from 'lucide-react';
 import { ApiError, api } from '../api';
 import type { CompareResult, Finding, Scan } from '../types';
 import { analyzerName, findingLocation, preciseDate } from '../lib/format';
@@ -46,12 +47,14 @@ export function ComparePanel({ aId, bId, onClose }: { aId: string; bId: string; 
       <header className="compare-panel-header">
         <div className="compare-panel-title"><h2>Scan comparison</h2>{onClose && <button type="button" className="text-button" onClick={onClose}>Close comparison</button>}</div>
         <p className="compare-headline">
-          Since <strong>{preciseDate(previous.finished_at ?? previous.started_at)}</strong>:{' '}
-          <strong className="compare-count tabular-nums">{summary.new}</strong> new,{' '}
-          <strong className="compare-count tabular-nums">{summary.fixed}</strong> fixed,{' '}
-          <strong className="compare-count tabular-nums">{summary.persistent}</strong> still present
+          <span className="sr-only">Since {preciseDate(previous.finished_at ?? previous.started_at)}: </span>
+          <span className="compare-stat" data-tone={summary.new > 0 ? 'danger' : undefined}><strong className="compare-count tabular-nums">{summary.new}</strong> new</span>
+          <span className="sr-only">, </span>
+          <span className="compare-stat" data-tone={summary.fixed > 0 ? 'ok' : undefined}><strong className="compare-count tabular-nums">{summary.fixed}</strong> fixed</span>
+          <span className="sr-only">, </span>
+          <span className="compare-stat"><strong className="compare-count tabular-nums">{summary.persistent}</strong> still present</span>
         </p>
-        <p className="compare-sub">Comparing the {preciseDate(current.finished_at ?? current.started_at)}{current.profile ? ` ${current.profile}` : ''} scan with the {preciseDate(previous.finished_at ?? previous.started_at)}{previous.profile ? ` ${previous.profile}` : ''} scan</p>
+        <p className="compare-sub"><CalendarDays aria-hidden="true" size={13} /> {preciseDate(previous.finished_at ?? previous.started_at)}{previous.profile ? ` · ${previous.profile}` : ''} <span aria-hidden="true">→</span><span className="sr-only"> compared with </span> {preciseDate(current.finished_at ?? current.started_at)}{current.profile ? ` · ${current.profile}` : ''}</p>
         {notEvaluated.length > 0 && <p className="compare-note">Some analyzers did not finish in the newer scan, so their findings are not counted: {notEvaluated.join(', ')}.</p>}
       </header>
       <CompareSection label="New" items={comparison.new ?? []} moreNoun="new" />

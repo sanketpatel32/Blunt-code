@@ -204,12 +204,66 @@ await check('404 page', async () => {
 
 // 12 · Every route renders, light, desktop + phone.
 const routes = ['/', '/workspaces', `/workspaces/${wsId}`, `/workspaces/${wsId}/files`, `/workspaces/${wsId}/scans`, `/workspaces/${wsId}/pentest`, `/scans/${scanId}`, '/search', '/tools', '/settings', '/about', '/cli'];
-for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {
-  await check(`every route renders at ${viewport.width}px`, async () => {
-    await page.setViewportSize(viewport);
-    for (const route of routes) await visit(route);
+// `html, body { overflow-x: clip }` hides document scrollWidth, so sideways
+// overflow is measured by element right edges instead.
+async function overflowingElements() {
+  return page.evaluate(() => {
+    const limit = window.innerWidth + 1;
+    const out = [];
+    for (const el of document.querySelectorAll('main *, header *')) {
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0 || r.right <= limit) continue;
+      let clipped = false;
+      for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+        const cs = getComputedStyle(p);
+        if (/(auto|scroll|hidden|clip)/.test(cs.overflowX) && p.getBoundingClientRect().right <= limit) { clipped = true; break; }
+      }
+      if (!clipped && getComputedStyle(el).position !== 'fixed') out.push(`${el.tagName.toLowerCase()}.${String(el.className).split(' ')[0]}→${Math.round(r.right)}`);
+      if (out.length > 4) break;
+    }
+    return out;
   });
 }
+const VIEWPORTS = [{ name: 'wide', width: 1440, height: 900 }, { name: 'laptop', width: 1280, height: 800 }, { name: 'tablet', width: 820, height: 1180 }, { name: 'phone', width: 390, height: 844 }];
+for (const viewport of VIEWPORTS) {
+  await check(`every route renders at ${viewport.name} ${viewport.width}px with no element past the right edge`, async () => {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    const bad = [];
+    for (const route of routes) {
+      await visit(route);
+      const over = await overflowingElements();
+      if (over.length) bad.push(`${route}: ${over.join(', ')}`);
+    }
+    assert(!bad.length, bad.slice(0, 3).join(' | '));
+  });
+}
+
+await check('tablet: icon rail shows, labels hidden, nav links still named', async () => {
+  await page.setViewportSize({ width: 820, height: 1180 });
+  await visit('/workspaces');
+  const rail = page.locator('aside.app-rail');
+  const box = await rail.boundingBox();
+  assert(box && box.width > 40 && box.width < 120, `rail width ${box?.width}`);
+  const link = rail.locator('nav[aria-label="Main navigation"] a').first();
+  const name = (await link.getAttribute('aria-label')) || (await link.getAttribute('title')) || (await link.innerText());
+  assert(name && name.trim().length > 0, 'icon-only nav link has no accessible name');
+  await rail.locator('nav[aria-label="Main navigation"] a', { hasText: /Tools/ }).or(rail.locator('a[aria-label="Tools"], a[title="Tools"]')).first().click();
+  await page.waitForURL(/\/tools$/, { timeout: 5000 });
+});
+
+await check('phone: topbar controls are 40px tap targets, bell present; page buttons ≥24px (WCAG 2.5.8)', async () => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await visit('/');
+  const tiny = await page.locator('main button:visible, main a.button:visible').evaluateAll((els) => els.map((el) => { const r = el.getBoundingClientRect(); return { name: el.getAttribute('aria-label') || el.textContent.trim().slice(0, 30), w: Math.round(r.width), h: Math.round(r.height) }; }).filter((s) => s.w < 24 || s.h < 24));
+  assert(!tiny.length, `buttons under 24px: ${JSON.stringify(tiny.slice(0, 4))}`);
+  const options = page.locator('main [aria-label="Scan options"]:visible');
+  if (await options.count()) { const b = await options.first().boundingBox(); assert(b && b.width >= 40 && b.height >= 40, `Scan options ${b?.width}x${b?.height}`); }
+  const sizes = await page.locator('header.app-topbar button:visible').evaluateAll((els) => els.map((el) => { const r = el.getBoundingClientRect(); return { name: el.getAttribute('aria-label') || el.textContent.trim(), w: Math.round(r.width), h: Math.round(r.height) }; }));
+  assert(sizes.length >= 3, `only ${sizes.length} topbar controls`);
+  const small = sizes.filter((s) => s.w < 40 || s.h < 40);
+  assert(!small.length, `small targets: ${JSON.stringify(small)}`);
+  assert(sizes.some((s) => /notification/i.test(s.name)), `no notifications bell in ${sizes.map((s) => s.name).join(',')}`);
+});
 
 // 13 · Phone tables become cards.
 await check('phone: workspaces table renders as cards', async () => {

@@ -13,10 +13,14 @@ import { ErrorPanel, Loading, SeverityCounts } from '../components/ui';
 import { SkeletonLines } from '../components/skeletons';
 import { ReportView } from './report/ReportView';
 import { pushNotification } from '../lib/notifications';
-import { analyzerMeta, categoryColor, CATEGORY_LABELS } from '../lib/analyzerCatalog';
+import { analyzerMeta, categoryColor, CATEGORY_LABELS, FINDING_CATEGORY_LABELS } from '../lib/analyzerCatalog';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { Button } from '../components/ui/button';
 import { GradeTile } from '../components/GradeTile';
+import { PageHeader } from '../components/PageHeader';
+import { SkeletonCards } from '../components/skeletons';
+import { CategoryBars, SeverityDonut } from '../components/viz/Charts';
+import { AlertOctagon, Gauge, RotateCcw, ShieldCheck, Sparkles, Repeat2, Cpu } from 'lucide-react';
 
 export type { ScanEvent } from '../lib/scanEvents';
 
@@ -40,6 +44,7 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
   // Cancel in-flight guard: a second click while the request is out would
   // otherwise surface the server's 409 as an error toast for a normal race.
   const [cancelling, setCancelling] = useState(false);
+  const [rerunning, setRerunning] = useState(false);
   const scanState = scan.data?.state;
   // The completion notice names the project, not a raw scan id prefix.
   const scanRef = useRef(scan.data);
@@ -127,9 +132,17 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
     setCancelling(true);
     try { await api.cancelScan(id); await scan.reload(); } catch (e) { notify({ kind: 'error', text: message(e) }); } finally { setCancelling(false); }
   }
+  async function rerun() {
+    if (!current?.workspace_id || rerunning) return;
+    setRerunning(true);
+    try {
+      const next = await api.startScan(current.workspace_id, current.profile);
+      if (go && next?.id) go({ page: 'scan', id: next.id });
+    } catch (e) { notify({ kind: 'error', text: message(e) }); } finally { setRerunning(false); }
+  }
   // A background reload (after suppress/restore) keeps the page mounted.
-  if (scan.loading && !scan.data) return <div className="page"><Loading /></div>;
-  if (scan.error && !scan.data) return <div className="page"><ErrorPanel error={scan.error} retry={scan.reload} actions={go && <>
+  if (scan.loading && !scan.data) return <div className="page scan-page" aria-busy="true"><SkeletonCards count={1} variant="metric" /><SkeletonLines lines={6} /></div>;
+  if (scan.error && !scan.data) return <div className="page"><PageHeader title={scanMissing ? 'Scan not found' : 'Scan unavailable'} /><ErrorPanel error={scan.error} retry={scanMissing ? undefined : scan.reload} actions={go && <>
     <Button size="sm" onClick={() => go({ page: 'home' })}>Back to overview</Button>
     <Button variant="outline" size="sm" onClick={() => go({ page: 'workspaces' })}>Workspaces</Button>
   </>} /></div>;
@@ -202,9 +215,11 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
   return <div className="page scan-page">
     <header className="scan-hero" data-tone={heroTone}>
       <div className="scan-hero-main">
-        <div className="scan-hero-title-row">
+        <div className="scan-hero-title-row" title={explanation ?? undefined}>
           {graded && grade
             ? <GradeTile grade={grade} size="lg" flip className={`scan-grade${coveragePartial(coverage) ? ' grade-provisional' : ''}`} />
+            : current.state === 'failed' || current.state === 'cancelled'
+              ? <GradeTile grade={null} placeholder="✕" tone="warning" size="lg" className="scan-grade scan-grade-clear" />
             : incomplete
               ? <GradeTile grade={null} placeholder="!" tone="warning" size="lg" className="scan-grade scan-grade-clear" />
               : <GradeTile grade={null} placeholder="✓" tone="clear" size="lg" className="scan-grade scan-grade-clear" />}
@@ -236,7 +251,7 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
             {/* The reason a scan failed or warned must survive outside the
                 live panel — "no eligible inputs" scans fail instantly, so
                 their explanation would otherwise never be seen here. */}
-            {explanation && <p className="scan-hero-explain">{explanation}</p>}
+            {explanation && <p className="scan-hero-explain sr-only">{explanation}</p>}
             {terminal && current.error_summary && (
               <p className="scan-hero-reason" role="note">{current.error_summary}</p>
             )}
@@ -278,7 +293,8 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
     </section>}
     {terminal && total > 0 && <section className="analysis-verdict verdict-card" data-tone={heroTone} aria-label="Verdict">
       <div className="verdict-distro">
-        <p className="eyebrow">Findings by severity</p>
+        <h2 className="sr-only">Findings by severity</h2>
+        <div className="verdict-distro-donut"><SeverityDonut counts={counts} size={132} /></div>
         <ul className="verdict-bars">
           {(['critical', 'high', 'medium', 'low', 'info'] as const).map((sev) => {
             const value = counts[sev] ?? 0;
@@ -294,12 +310,20 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
         </ul>
       </div>
       <dl className="verdict-stats">
-        <div className="verdict-stat" title={RISK_SCORE_TOOLTIP}><dt>Risk score</dt><dd>{score}<span className="verdict-stat-note"> band {bandFor(riskGrade(score)).range}</span></dd></div>
-        <div className="verdict-stat" title={VERDICT_TRIO_TOOLTIP}><dt>New</dt><dd>{current.new_count ?? 0}</dd></div>
-        <div className="verdict-stat" title={VERDICT_TRIO_TOOLTIP}><dt>Fixed</dt><dd>{current.fixed_count ?? 0}</dd></div>
-        <div className="verdict-stat" title={VERDICT_TRIO_TOOLTIP}><dt>Persistent</dt><dd>{Math.max(0, total - (current.new_count ?? 0))}</dd></div>
-        <div className="verdict-stat"><dt>Analyzers ran</dt><dd>{coverage ? `${coverage.succeeded} of ${coverage.total}` : '—'}</dd></div>
+        <div className="verdict-stat" title={RISK_SCORE_TOOLTIP}><dt><Gauge className="verdict-stat-icon" aria-hidden="true" />Risk score</dt><dd>{score}<span className="verdict-stat-note"> band {bandFor(riskGrade(score)).range}</span></dd></div>
+        <div className="verdict-stat" title={VERDICT_TRIO_TOOLTIP}><dt><Sparkles className="verdict-stat-icon" aria-hidden="true" />New</dt><dd>{current.new_count ?? 0}</dd></div>
+        <div className="verdict-stat" title={VERDICT_TRIO_TOOLTIP}><dt><ShieldCheck className="verdict-stat-icon" aria-hidden="true" />Fixed</dt><dd>{current.fixed_count ?? 0}</dd></div>
+        <div className="verdict-stat" title={VERDICT_TRIO_TOOLTIP}><dt><Repeat2 className="verdict-stat-icon" aria-hidden="true" />Persistent</dt><dd>{Math.max(0, total - (current.new_count ?? 0))}</dd></div>
+        <div className="verdict-stat"><dt><Cpu className="verdict-stat-icon" aria-hidden="true" />Analyzers ran</dt><dd>{coverage ? `${coverage.succeeded} of ${coverage.total}` : '—'}</dd></div>
       </dl>
+    </section>}
+    {terminal && total > 0 && <ScanFacets scanId={id} />}
+    {current.state === 'failed' && <section className="scan-failed-panel" role="alert">
+      <AlertOctagon className="scan-failed-icon" aria-hidden="true" />
+      <div className="scan-failed-copy">
+        <h2>Nothing was graded</h2>
+      </div>
+      {current.workspace_id && <Button size="sm" onClick={() => void rerun()} disabled={rerunning}><RotateCcw className="mr-1.5 h-4 w-4" aria-hidden="true" />{rerunning ? 'Starting…' : 'Re-run'}</Button>}
     </section>}
     {terminal && (current.fixed_count ?? 0) > 0 && (current.state === 'completed' || current.state === 'completed_with_warnings'
       ? <WhatChanged scanId={id} fixedCount={current.fixed_count ?? 0} />
@@ -437,4 +461,33 @@ function ScanStageList({ scan, events }: { scan: Scan; events: ScanEvent[] }) {
   // outcome; interrupted keeps it — it carries the "partial report saved" note.
   const showStatus = !terminal || scan.state === 'interrupted';
   return <section className="stage-list"><header><div><h2>{terminal ? 'How the analysis ran' : 'What is happening now'}</h2></div><span>{entries.length} update{entries.length === 1 ? '' : 's'}</span></header>{showStatus && <p className={`flow-now ${active ? 'active' : ''}`} role="status" aria-live="polite"><i aria-hidden="true" />{status}</p>}<ol className="scan-flow">{entries.map((event, index) => { const state = event.type.includes('failed') ? 'failed' : event.type.includes('completed') ? 'done' : event.type.includes('cancelled') ? 'interrupted' : index === entries.length - 1 && !isTerminalScanState(scan.state) ? 'current' : ''; return <li className={`${state} ${reduced ? '' : 'stage-enter'}`} key={event.seq ?? `${event.type}-${event.at}`} style={reduced ? undefined : { animationDelay: `${index * 40}ms`, willChange: 'transform, opacity' } as never}><i className={`flow-marker flow-marker-spring ${state === 'current' ? 'current' : ''}`} aria-hidden="true" style={reduced ? undefined : { willChange: 'transform' } as never} /><div><strong>{eventCopy(event)}</strong><small style={{ fontVariantNumeric: 'tabular-nums' } as never}>{mediumTime.format(event.at)}</small></div></li>; })}</ol></section>;
+}
+
+/** Where the findings cluster: category and tool bars from the findings
+ *  endpoint's facets. Clicking a bar applies that filter to the report below. */
+function ScanFacets({ scanId }: { scanId: string }) {
+  const facets = useLoad(() => api.findings(scanId, { page: '1', page_size: '1' }).then((page) => page.facets ?? null), [scanId]);
+  const toRows = (map?: Record<string, number>, label?: (key: string) => string) => Object.entries(map ?? {}).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([name, value]) => ({ name: label ? label(name) : name, key: name, value }));
+  const categories = toRows(facets.data?.category, (key) => FINDING_CATEGORY_LABELS[key] ?? key);
+  const tools = toRows(facets.data?.analyzer, analyzerName);
+  if (facets.loading) return <div className="bento scan-facets"><div className="span-6"><SkeletonCards count={1} variant="chart" /></div><div className="span-6"><SkeletonCards count={1} variant="chart" /></div></div>;
+  if (!categories.length && !tools.length) return null;
+  const apply = (key: 'category' | 'analyzer', value: string) => {
+    const query = new URLSearchParams(window.location.search);
+    query.set(key, value);
+    query.delete('page');
+    window.history.replaceState(null, '', `${window.location.pathname}?${query.toString()}${window.location.hash}`);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    document.querySelector('.report')?.scrollIntoView({ block: 'start' });
+  };
+  return <div className="bento scan-facets">
+    {categories.length > 0 && <article className="viz-card span-6" aria-label="Findings by category">
+      <header><h3>Categories</h3><span className="viz-card-chip">{categories.length}</span></header>
+      <CategoryBars items={categories} onSelect={(name) => { const row = categories.find((c) => c.name === name); if (row) apply('category', row.key); }} />
+    </article>}
+    {tools.length > 0 && <article className="viz-card span-6" aria-label="Findings by tool">
+      <header><h3>Tools</h3><span className="viz-card-chip">{tools.length}</span></header>
+      <CategoryBars items={tools} tone="var(--color-ink-soft)" onSelect={(name) => { const row = tools.find((t) => t.name === name); if (row) apply('analyzer', row.key); }} />
+    </article>}
+  </div>;
 }

@@ -1,3 +1,4 @@
+import { Sparkline } from '../components/viz/Sparkline';
 import { useEffect, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { ApiError, api } from '../api';
@@ -93,7 +94,6 @@ export function WorkspacesPage({ go, onAdd, notify }: { go: (r: Route) => void; 
     <div className="page page-workspaces">
       <PageHeader
         title="Workspaces"
-        description="Every registered project with its latest scan results."
         actions={workspaces.length ? addPrimary : undefined}
       />
       {state.loading ? <SkeletonTable rows={8} cols={6} /> : state.error ? <ErrorPanel error={state.error} retry={state.reload} /> : !workspaces.length ? (
@@ -247,6 +247,7 @@ function FindingsCell({ workspace }: { workspace: Workspace }) {
         {total > categorized && <span className="ws-findings-total">{count(total)}</span>}
         {severities.map(([severity, n]) => <span key={severity} className={`ws-sev ws-sev-${severity}`}>{count(n)} <em>{severity}</em></span>)}
       </span>
+      {workspace.trend && workspace.trend.length >= 2 && <Sparkline className="ws-spark" values={workspace.trend} width={64} height={18} label={`Findings over the last ${workspace.trend.length} completed scans: ${workspace.trend.join(', ')}`} />}
     </td>
   );
 }

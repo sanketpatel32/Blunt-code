@@ -483,10 +483,8 @@ export function CLIPage() {
   return (
     <div className="page wide cli-page">
       <PageHeader
-        eyebrow="Developer Reference"
         title="Command-Line Interface (CLI)"
         badge={meta.data?.version ? <Badge variant="secondary" className="text-xs font-mono">v{meta.data.version}</Badge> : undefined}
-        description="Every feature in Blunt Code is fully accessible from your terminal, CI/CD pipeline, pre-commit hook, or AI assistant."
       />
 
       {/* Hero Overview Card */}

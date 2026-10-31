@@ -19,7 +19,9 @@ import { HistoryTable } from './HistoryPage';
 import { analyzerMeta, categoryColor, CATEGORY_LABELS } from '../lib/analyzerCatalog';
 import { languageCoverageFromSnapshot, severityCountsFromSummary, sparkSeries, trendPointsFromScans, type LanguageCoverage } from '../lib/chartData';
 import { useReducedMotion } from '../hooks/useReducedMotion';
-import { Copy, Check, ShieldAlert, BarChart3, AlertTriangle, Layers, FileSearch, ShieldCheck, ArrowDown, ArrowUp, FileText, FileDown, Settings2, Eraser, Trash2 } from 'lucide-react';
+import { Copy, Check, ShieldAlert, BarChart3, AlertTriangle, Layers, FileSearch, ShieldCheck, ArrowDown, ArrowUp, FileText, FileDown, Settings2, Eraser, Trash2, CalendarDays, Gauge, History } from 'lucide-react';
+import { StatTile } from '../components/viz/StatTile';
+import { SeverityBar } from '../components/viz/SeverityBar';
 import { RowMenu, type RowMenuItem } from '../components/RowMenu';
 import { ScanActionDropdown } from '../components/ScanActionDropdown';
 import { PreScanSummary } from '../components/PreScanSummary';
@@ -49,6 +51,7 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
   const workspace = useLoad(() => api.workspace(id), [id]);
   const scans = useLoad(() => api.scans(id), [id]);
   const risk = useLoad(() => api.risk(id), [id]);
+  const trendSeries = useLoad(() => api.trends(id), [id]);
   // Pre-flight data (IMP-14): what the selected profile will run, whether the
   // engines are installed, and which exclusions will shape the selection.
   const analyzers = useLoad(api.analyzers, []);
@@ -132,7 +135,6 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
     {/* 1 · Identify + Act — one PageHeader row: who this is on the left, the
         single primary (Run scan) and the overflow menu on the right. */}
     <PageHeader
-      eyebrow="Workspace"
       title={item.name}
       badge={
         item.languages?.length ? (
@@ -156,7 +158,7 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
           </>
         )
       }
-      description={
+      meta={
         <div className="workspace-path-row flex items-center gap-1.5 font-mono text-xs">
           {/* flex-1 + break-all, not truncate: an ellipsized text node still
               lays out at full width and runs under the copy button (73), and
@@ -197,7 +199,12 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
         (overrides.data ?? []).filter((override) => override.mode === 'exclude').length
       }
     />
-    {latest && <p className="availability-note" role="note">Assessment from {date(latest.finished_at ?? latest.started_at)} · {latest.profile ?? 'standard'} · {latest.state.replaceAll('_', ' ')}. {fallbackNotice ?? 'Counts describe this completed scan.'}</p>}
+    {latest && <p className="availability-note ws-scan-chips" role="note" title={fallbackNotice ?? 'Counts describe this completed scan.'}>
+      <span className="viz-card-chip"><CalendarDays className="h-3 w-3" aria-hidden="true" />{date(latest.finished_at ?? latest.started_at)}</span>
+      <span className="viz-card-chip"><Gauge className="h-3 w-3" aria-hidden="true" />{latest.profile ?? 'standard'}</span>
+      <span className="viz-card-chip" data-state={latest.state}>{latest.state.replaceAll('_', ' ')}</span>
+      {fallbackNotice && <span className="viz-card-chip" data-tone="warn"><History className="h-3 w-3" aria-hidden="true" />earlier result</span>}
+    </p>}
     {/* Editors submit as secondary: Run scan stays the screen's one primary. */}
     {pruneOpen && <form className="settings-editor" onSubmit={(event) => { event.preventDefault(); setPruneConfirm(true); }} aria-label="Prune scan history"><label>Keep newest<input type="number" min={1} max={100} value={pruneKeep} onChange={(event) => setPruneKeep(Number(event.target.value))} /></label><div className="editor-actions"><button type="submit" className="button secondary" disabled={pruning}>Delete older scans</button><button type="button" className="button secondary" onClick={() => setPruneOpen(false)}>Cancel</button></div></form>}
     {pruneConfirm && <ConfirmationDialog title="Delete older scan history?" description={`Keep the newest ${pruneKeep} terminal scans. Older scans, their findings, and reports will be removed permanently. Active scans and project files are retained.`} confirmLabel="Delete older scans" busy={pruning} onCancel={() => setPruneConfirm(false)} onConfirm={() => { setPruneConfirm(false); void prune(); }} />}
@@ -245,6 +252,7 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
       <TabsContent value="trends">
         <Suspense fallback={<div className="skeleton-chart" aria-busy="true" />}>
           <AnalyticsCharts
+            series={trendSeries.data ?? undefined}
             trends={trendPointsFromScans(scanHistory)}
             severityCounts={severityCountsFromSummary({ critical_count: latest?.critical_count, high_count: latest?.high_count, medium_count: latest?.medium_count, low_count: latest?.low_count, info_count: latest?.info_count })}
             languages={coverage}
@@ -538,7 +546,7 @@ export function RiskCard({ risk, unscanned }: { risk?: RiskProfile | null; /** t
   const partial = !!coverage && (risk.complete === false || coveragePartial(coverage));
   const coverageNote = partial ? `Partial coverage: ${coverageText(coverage!)}` : null;
   const explanation = risk.counts ? gradeExplanation(risk.counts as SeverityCountFields, coverage) : null;
-  return <div className={`summary-card premium-card risk-hero ${gradeTone}`} title={risk.finished_at ? `Latest scan finished ${risk.finished_at}` : undefined}>
+  return <div className={`summary-card premium-card risk-hero ${gradeTone}`} title={explanation ?? (risk.finished_at ? `Latest scan finished ${risk.finished_at}` : undefined)}>
     <GradeTile grade={risk.grade} size="lg" className={`risk-grade${partial ? ' grade-provisional' : ''}`} />
     <strong className="risk-score" title={RISK_SCORE_EXPLAINER}>{Math.round(risk.score)}</strong>
     {/* "Risk score", not "Risk D". The grade letter is already the tile beside
@@ -548,7 +556,8 @@ export function RiskCard({ risk, unscanned }: { risk?: RiskProfile | null; /** t
     <span>Risk score</span>
     {trendNote && <small role="note" className="risk-trend">{trendNote.arrow}{trendNote.text}</small>}
     {coverageNote && <span className="risk-coverage-note" data-partial="true">{coverageNote}</span>}
-    {explanation && <p className="risk-explain">{explanation}</p>}
+    {risk.counts && <SeverityBar counts={{ critical: risk.counts.critical ?? risk.counts.critical_count, high: risk.counts.high ?? risk.counts.high_count, medium: risk.counts.medium ?? risk.counts.medium_count, low: risk.counts.low ?? risk.counts.low_count, info: risk.counts.info ?? risk.counts.info_count }} height={6} />}
+    {explanation && <p className="risk-explain sr-only">{explanation}</p>}
   </div>;
 }
 
@@ -583,35 +592,18 @@ function WorkspacePentestInsight({ workspaceId, scanId, go }: { workspaceId: str
   return (
     <div className="workspace-section-card space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h3 className="text-base font-semibold text-[var(--color-ink)] flex items-center gap-2">
-            <ShieldAlert className="h-4 w-4 text-[var(--color-danger)]" />OWASP Top 10 &amp; Pentest Posture
-          </h3>
-          <p className="text-xs text-[var(--color-ink-soft)]">
-            Active security vulnerabilities, injection flaws, broken authentication, and exposed secrets in this workspace.
-          </p>
-        </div>
+        <h3 className="text-base font-semibold text-[var(--color-ink)] flex items-center gap-2">
+          <ShieldAlert className="h-4 w-4 text-[var(--color-danger)]" />OWASP &amp; Pentest
+        </h3>
         <button type="button" className="button ghost" onClick={() => go({ page: 'pentest', id: workspaceId })}>
-          Open full Pentest Suite
+          Open Pentest
         </button>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className="p-3 rounded-[var(--radius-md)] border border-[var(--color-rule-faint)] bg-[var(--color-surface)]">
-          <span className="text-xs font-semibold text-[var(--color-danger)]">Critical Flaws</span>
-          <p className="font-display text-2xl font-semibold mt-1 text-[var(--color-danger)]">{critical}</p>
-          <span className="text-xs text-[var(--color-ink-faint)]">RCE, SQLi, Hardcoded JWT, XXE</span>
-        </div>
-        <div className="p-3 rounded-[var(--radius-md)] border border-[var(--color-rule-faint)] bg-[var(--color-surface)]">
-          <span className="text-xs font-semibold text-[var(--color-warning)]">High Severity</span>
-          <p className="font-display text-2xl font-semibold mt-1 text-[var(--color-warning)]">{high}</p>
-          <span className="text-xs text-[var(--color-ink-faint)]">SSRF, XSS, Path Traversal, CORS</span>
-        </div>
-        <div className="p-3 rounded-[var(--radius-md)] border border-[var(--color-rule-faint)] bg-[var(--color-surface)]">
-          <span className="text-xs font-semibold text-[var(--color-ink-soft)]">Medium / Warnings</span>
-          <p className="font-display text-2xl font-semibold mt-1 text-[var(--color-ink)]">{medium}</p>
-          <span className="text-xs text-[var(--color-ink-faint)]">Weak Hashes, Missing Headers, Debug</span>
-        </div>
+      <div className="stat-tiles">
+        <StatTile icon={ShieldAlert} tone="danger" value={critical} label="Critical" title="RCE, SQLi, hardcoded JWT, XXE" />
+        <StatTile icon={AlertTriangle} tone="warn" value={high} label="High" title="SSRF, XSS, path traversal, CORS" />
+        <StatTile icon={Layers} value={medium} label="Medium" title="Weak hashes, missing headers, debug" />
       </div>
 
       {secFindings.length > 0 ? (
@@ -632,7 +624,7 @@ function WorkspacePentestInsight({ workspaceId, scanId, go }: { workspaceId: str
       ) : (
         <div className="p-4 rounded-[var(--radius-md)] border border-[var(--color-success)]/30 bg-[var(--color-success-soft)] text-xs text-[var(--color-ink-soft)] flex items-center gap-2">
           <ShieldCheck className="h-4 w-4 text-[var(--color-success)] shrink-0" />
-          <span>No critical OWASP vulnerabilities detected in the latest scan. Run a Pentest Scan to verify against all 22+ checks.</span>
+          <span>No OWASP issues in the latest scan</span>
         </div>
       )}
     </div>

@@ -54,8 +54,8 @@ export function LanguageCoverage({ compact }: { compact?: boolean }) {
     <section className="language-coverage" aria-label="Language coverage matrix">
       <div className="section-head flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3>Language coverage</h3>
-          <p className="muted text-sm">Which analyzers run for each detected language. Grouped by family. {visibleLangs.length} languages shown.</p>
+          <h3>Language coverage</h3>{' '}
+          <span className="viz-card-chip tabular-nums">{visibleLangs.length} languages</span>
         </div>
         <button type="button" onClick={exportCsv} className="button secondary text-xs" aria-label="Export coverage as CSV">Export CSV</button>
       </div>

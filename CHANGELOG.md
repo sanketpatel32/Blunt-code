@@ -5,6 +5,27 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.48.0] - 2026-11-01
+
+### Added
+- **Charts instead of paragraphs.** Overview, Workspace, Scan, History, Tools and Pentest now lead with stat tiles, rings, sparklines and a severity donut. Workspace trends are a stacked area chart, and the Scan page has category and tool bars you can click to filter. Charts use Recharts and only load on pages that draw one.
+- **OWASP Top 10 grid on Pentest.** Ten tiles show the findings mapped to each risk and how many built-in checks target it. The four text cards are now a stat-tile row (grade, critical + high, checks, DAST).
+- **Failed scans say so.** A failed or cancelled scan shows "Nothing was graded" with a Re-run button, not a green tick.
+- **API:** `/workspaces/{id}/trends` returns score and grade, the workspace list has a `trend` sparkline, `/stats` has `scans_by_day`, and findings pages return `facets` (counts by category and tool).
+- **Motion, used lightly.** Pages fade in, numbers count up and rings fill. All of it respects "reduce motion", and the animation code loads after first paint.
+
+### Changed
+- **Works on tablets and phones.** From 701 to 1023px the sidebar becomes an icon rail. On phones the top bar has the notifications bell and 40px tap targets, dialogs scroll inside the window, tab strips scroll sideways, compare rows wrap, and Tools turns into compact rows.
+- **Titles only.** Page eyebrows and subtitle paragraphs are gone across the app. The explanations now live in tooltips and screen-reader text.
+- **Smaller first load.** The JavaScript loaded at startup is about 3% smaller than in 0.47.0 (825 KB raw, 245 KB gzip) even with the new charts, because the pages, the chart library and the animation features now load only when needed.
+- **Skeleton loaders** on Tools, Scan facets, the charts and the scan page.
+
+### Fixed
+- **The trend chart no longer counts failed scans as 0.** Trends and sparklines use completed scans only.
+- **The risk card's severity bar** was empty because the API's `critical`/`high` keys were read under the wrong names.
+- **Plural fixes** ("1 file"), the phone brand link now has an accessible name, and the History compare rows no longer overflow on phones.
+- **The e2e smoke suite** now checks 4 viewports by element right edges (`overflow-x: clip` hid the old scrollWidth check), the tablet icon rail and phone tap targets.
+
 ## [0.47.0] - 2026-10-31
 
 ### Added

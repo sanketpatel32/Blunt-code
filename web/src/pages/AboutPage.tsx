@@ -50,10 +50,8 @@ function EyeOffIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <div className="page narrow">
       <PageHeader
-        eyebrow="About"
         title="Blunt Code"
         badge={meta.data?.version ? <Badge variant="secondary" className="text-xs font-mono">v{meta.data.version}</Badge> : undefined}
-        description="A local-first static analysis and security auditing application for Windows."
       />
       <section className="about-card">
         {/* No version badge here. The page title right above already carries it,
@@ -61,7 +59,6 @@ function EyeOffIcon(props: SVGProps<SVGSVGElement>) {
             number was on screen three times plus the footer. This card is about
             what Blunt Code does locally, not what version it is. */}
         <h2>Local by default</h2>
-        <p>Analyzes selected files on this computer and combines results from local analysis tools.</p>
         <ul className="about-points" style={{ display: 'grid', gap: 'var(--space-xs)', margin: 'var(--space-lg) 0 0', padding: 0, listStyle: 'none' }}>
           <li className="local-signal"><MonitorIcon />Local-only analysis</li>
           <li className="local-signal"><PersonSlashIcon />No account required</li>
@@ -132,7 +129,6 @@ function UpdateCard({ version, onUpdateHandoff }: { version: string; onUpdateHan
   }
   return <section className="about-card" aria-label="Updates" style={{ marginTop: 'var(--space-lg)' }}>
     <h2>Updates {version ? <span className="badge">v{version} installed</span> : null}</h2>
-    <p>Checks GitHub releases for a newer Blunt Code. Updating closes the app, installs the official package, and reopens the new version automatically; your data stays local.</p>
     <div aria-live="polite">
       {state.phase === 'idle' && <p style={{ margin: 'var(--space-md) 0 0' }}><button type="button" className="button" onClick={() => void check()} disabled={!version}>Check for updates</button></p>}
       {state.phase === 'checking' && <p className="muted" style={{ margin: 'var(--space-md) 0 0' }}>Checking GitHub releases…</p>}
