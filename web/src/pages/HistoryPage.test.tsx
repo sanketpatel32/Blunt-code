@@ -613,6 +613,20 @@ describe('HistoryPage', () => {
       await act(async () => {});
     }
 
+    it('offers a visible "Compare latest two scans" that opens the panel directly, with seconds in the stamps', async () => {
+      mockComparePages([[newerScan, olderScan]]);
+      const host = await renderPage();
+      await clickButton(host, 'Compare latest two scans');
+      await act(async () => {});
+      expect(api.compareScans).toHaveBeenCalledWith('newer', 'older');
+      expect(window.location.search).toBe('?compare=newer&with=older');
+      const sub = host.querySelector('.compare-sub')!.textContent!;
+      expect(sub).toMatch(/\d{1,2}:\d{2}:\d{2}/); // two scans a minute apart must not read the same
+      expect([...host.querySelectorAll('button')].some((button) => button.textContent === 'Compare latest two scans')).toBe(false);
+      await clickButton(host, 'Close comparison');
+      expect(host.querySelector('.compare-panel')).toBeNull();
+    });
+
     it('walks selection: strip appears on compare pick, other rows offer "Compare with this", picking completes the pair', async () => {
       mockComparePages([[newerScan, olderScan]]);
       const host = await renderPage();

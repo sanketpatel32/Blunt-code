@@ -20,6 +20,17 @@ import { GradeTile } from '../components/GradeTile';
 
 export type { ScanEvent } from '../lib/scanEvents';
 
+/** Pushes "Scan completed · big-monorepo (standard)" to the notification
+ *  center; falls back to the profile alone when the workspace can't load. */
+function announceCompleted(current?: Scan | null) {
+  const push = (name?: string) => {
+    const what = [name, current?.profile ? `${current.profile} scan` : 'scan'].filter(Boolean).join(' · ');
+    try { pushNotification({ title: 'Scan completed', message: `${what.charAt(0).toUpperCase()}${what.slice(1)} finished`, kind: 'success' }); } catch { /* storage unavailable */ }
+  };
+  if (!current?.workspace_id) { push(); return; }
+  api.workspace(current.workspace_id).then((work) => push(work?.name), () => push());
+}
+
 export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => void; notify: (n: Notice) => void }) {
   const scan = useLoad(() => api.scan(id), [id]);
   const [events, setEvents] = useState<ScanEvent[]>([]);
@@ -30,6 +41,9 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
   // otherwise surface the server's 409 as an error toast for a normal race.
   const [cancelling, setCancelling] = useState(false);
   const scanState = scan.data?.state;
+  // The completion notice names the project, not a raw scan id prefix.
+  const scanRef = useRef(scan.data);
+  scanRef.current = scan.data;
   const scanReload = scan.reload;
   // A scan that answers NOT_FOUND is gone for good (pruned, or a stale deep link);
   // the live stream and its scanReload loop must stop instead of retrying forever.
@@ -70,7 +84,7 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
         const next: ScanEvent = { ...data, type: envelope.type ?? event.type, at: Date.now(), seq: eventSeq.current++ };
         setEvents((old) => { if (replaceNext) { replaceNext = false; return [next]; } return [...old.slice(-31), next]; });
         setStreamState('live');
-        if (next.type === 'scan.completed') { try { pushNotification({ title: 'Scan completed', message: `Scan ${id.slice(0,8)} finished`, kind: 'success' }); } catch {} void scanReload(); } else if (next.type === 'scan.cancelled') void scanReload();
+        if (next.type === 'scan.completed') { announceCompleted(scanRef.current); void scanReload(); } else if (next.type === 'scan.cancelled') void scanReload();
       } catch { /* Invalid optional event payloads do not interrupt the scan. */ }
     };
     let attempt = 0;

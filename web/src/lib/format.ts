@@ -9,6 +9,7 @@ const JUST_NOW_WINDOW_MS = 45 * SECOND_MS;
 // per row), so both instances are hoisted to module level and reused for every call.
 const shortDate = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
 const dateTime = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+const dateTimeSeconds = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'medium' });
 // Hoisted for the same reason as the date formatters: live scan panels format
 // one number per severity chip and per analyzer pill per update.
 const countFmt = new Intl.NumberFormat(undefined);
@@ -24,6 +25,15 @@ export function date(value?: string | null) {
   // Intl.format() throws RangeError on an invalid time value, so hostile timestamps are defused here.
   if (Number.isNaN(time)) return 'Not analyzed yet';
   return dateTime.format(time);
+}
+
+/** date() with seconds, for places where two scans minutes apart must not
+ *  read as the same moment (comparisons, the history detail row). */
+export function preciseDate(value?: string | null) {
+  if (!value) return 'Not analyzed yet';
+  const time = new Date(value).getTime();
+  if (Number.isNaN(time)) return 'Not analyzed yet';
+  return dateTimeSeconds.format(time);
 }
 
 export function relativeTime(value?: string | null, now = Date.now()): string {

@@ -318,6 +318,7 @@ tr.is-expanded .history-date::before { border-color: var(--color-accent); backgr
 }
 .compare-panel-header { display: grid; gap: var(--space-2xs); padding-bottom: var(--space-md); border-bottom: var(--rule) solid var(--color-rule-faint); }
 .compare-panel-header h2 { margin: 0; font-family: var(--font-display); font-size: var(--text-xl); font-weight: 600; }
+.compare-panel-title { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-md); flex-wrap: wrap; }
 .compare-headline { margin: 0; color: var(--color-ink-soft); font-size: var(--text-sm); }
 .compare-headline strong { color: var(--color-ink); }
 /* Counts stay body-size — number hierarchy without display-size inflation. */

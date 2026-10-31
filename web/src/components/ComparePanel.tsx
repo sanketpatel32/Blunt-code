@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ApiError, api } from '../api';
 import type { CompareResult, Finding, Scan } from '../types';
-import { analyzerName, date, findingLocation } from '../lib/format';
+import { analyzerName, findingLocation, preciseDate } from '../lib/format';
 import { useLoad } from '../hooks/useLoad';
 import { Empty, ErrorPanel } from './ui';
 import { SkeletonLines } from './skeletons';
@@ -21,7 +21,7 @@ function scanStamp(scan: Scan) {
  *  in EITHER order (deep links can carry ?compare=&with= either way): both
  *  scans are loaded, sorted newest-first, and the diff is requested as
  *  (newer, older) so "new" and "fixed" read correctly. */
-export function ComparePanel({ aId, bId }: { aId: string; bId: string }) {
+export function ComparePanel({ aId, bId, onClose }: { aId: string; bId: string; onClose?: () => void }) {
   const loaded = useLoad<CompareSide>(async () => {
     const [a, b] = await Promise.all([api.scan(aId), api.scan(bId)]);
     if (!a || !b) throw new ApiError('SCAN_NOT_FOUND', 'One of these scans could not be found.');
@@ -44,14 +44,14 @@ export function ComparePanel({ aId, bId }: { aId: string; bId: string }) {
   return (
     <section className="compare-panel" aria-label="Scan comparison">
       <header className="compare-panel-header">
-        <h2>Scan comparison</h2>
+        <div className="compare-panel-title"><h2>Scan comparison</h2>{onClose && <button type="button" className="text-button" onClick={onClose}>Close comparison</button>}</div>
         <p className="compare-headline">
-          Since <strong>{date(previous.finished_at ?? previous.started_at)}</strong>:{' '}
+          Since <strong>{preciseDate(previous.finished_at ?? previous.started_at)}</strong>:{' '}
           <strong className="compare-count tabular-nums">{summary.new}</strong> new,{' '}
           <strong className="compare-count tabular-nums">{summary.fixed}</strong> fixed,{' '}
           <strong className="compare-count tabular-nums">{summary.persistent}</strong> still present
         </p>
-        <p className="compare-sub">Comparing {date(current.finished_at ?? current.started_at)} with {date(previous.finished_at ?? previous.started_at)}</p>
+        <p className="compare-sub">Comparing the {preciseDate(current.finished_at ?? current.started_at)}{current.profile ? ` ${current.profile}` : ''} scan with the {preciseDate(previous.finished_at ?? previous.started_at)}{previous.profile ? ` ${previous.profile}` : ''} scan</p>
         {notEvaluated.length > 0 && <p className="compare-note">Some analyzers did not finish in the newer scan, so their findings are not counted: {notEvaluated.join(', ')}.</p>}
       </header>
       <CompareSection label="New" items={comparison.new ?? []} moreNoun="new" />
