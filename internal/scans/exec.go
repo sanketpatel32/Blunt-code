@@ -7,6 +7,7 @@ package scans
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -217,13 +218,21 @@ func (s *Service) executeAnalyzer(ctx context.Context, scan core.Scan, work core
 		s.emit(scan.ID, "analyzer.failed", map[string]any{"analyzer_id": adapter.ID(), "error": err.Error()})
 		return analyzerFailed
 	}
-	analyzerCtx, analyzerCancel := context.WithTimeout(ctx, analyzerTimeout(adapter.ID()))
+	timeout := analyzerTimeout(adapter.ID())
+	analyzerCtx, analyzerCancel := context.WithTimeout(ctx, timeout)
 	result, err := adapter.Run(analyzerCtx, plan, eventEmitter{service: s, scanID: scan.ID})
+	timedOut := errors.Is(analyzerCtx.Err(), context.DeadlineExceeded)
 	analyzerCancel()
 	finished := time.Now()
 	s.writeDiagnosticLog(scan.ID, adapter.ID(), result)
 	if ctx.Err() != nil {
 		return analyzerAborted
+	}
+	// A run that hit its own deadline was killed mid-output; never hand that
+	// fragment to Normalize (it could parse as a clean run with fewer
+	// findings and mark the rest "fixed"). Record a plain timeout instead.
+	if timedOut {
+		err = fmt.Errorf("%s timed out after %s and was stopped; its partial output was discarded", adapter.DisplayName(), timeout)
 	}
 	if err == nil {
 		var findings []analyzers.Finding
