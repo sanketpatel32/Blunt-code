@@ -2084,8 +2084,12 @@ type GlobalFindingsFilter struct {
 	Analyzer          string
 	WorkspaceID       string
 	IncludeSuppressed bool
-	Page              int
-	PageSize          int
+	// AllScans searches every stored scan. Off (the default), only each
+	// workspace's latest completed scan is searched, so a finding that
+	// persisted across ten scans is one hit, not ten.
+	AllScans bool
+	Page     int
+	PageSize int
 }
 
 // SearchedFinding is a finding enriched with its scan and workspace identity
@@ -2101,6 +2105,10 @@ type SearchedFinding struct {
 // population the paged list draws from. All values are bound as parameters;
 // the text filter escapes LIKE wildcards so q is a substring match, never a
 // wildcard expression.
+// latestCompletedScanIDsSQL restricts a findings⋈scans query to each
+// workspace's newest completed scan.
+const latestCompletedScanIDsSQL = `scans.id IN (SELECT id FROM (SELECT id,ROW_NUMBER() OVER (PARTITION BY workspace_id ORDER BY COALESCE(finished_at,started_at) DESC,id DESC) AS recency FROM scans WHERE state IN ('completed','completed_with_warnings')) WHERE recency=1)`
+
 func searchFindingsWhere(filter GlobalFindingsFilter) (string, []any) {
 	where := []string{}
 	args := []any{}
@@ -2110,6 +2118,9 @@ func searchFindingsWhere(filter GlobalFindingsFilter) (string, []any) {
 	}
 	if !filter.IncludeSuppressed {
 		where = append(where, "NOT EXISTS (SELECT 1 FROM suppressed_findings suppressed WHERE suppressed.workspace_id=scans.workspace_id AND suppressed.fingerprint=findings.fingerprint)")
+	}
+	if !filter.AllScans {
+		where = append(where, latestCompletedScanIDsSQL)
 	}
 	if len(filter.Severities) == 1 {
 		where = append(where, "LOWER(findings.severity)=LOWER(?)")

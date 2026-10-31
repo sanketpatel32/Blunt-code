@@ -92,3 +92,44 @@ func TestFindingsFirstPageCarriesStatusCounts(t *testing.T) {
 		t.Fatalf("body %s", response.Body.String())
 	}
 }
+
+// TestSearchDefaultsToLatestScan: a finding that persists across scans is one
+// search hit by default; scope=all keeps every scan's copy.
+func TestSearchDefaultsToLatestScan(t *testing.T) {
+	s := testServer(t)
+	ctx := context.Background()
+	work, err := s.db.CreateWorkspace(ctx, core.Workspace{RootPath: t.TempDir(), Name: "Search"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		scan, _ := s.db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: "queued"})
+		f := finding("ruff", "S1", "a.py", "dup", analyzers.SeverityHigh, analyzers.CategorySecurity)
+		if _, err := s.db.SaveAnalyzerResult(ctx, scan.ID, database.AnalyzerRunInput{AnalyzerID: "ruff", Version: "test", State: "succeeded"}, []analyzers.Finding{f}, nil); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.db.CompleteScan(ctx, scan.ID, "completed", ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	total := func(target string) (int, string) {
+		response := get(t, s, http.MethodGet, target)
+		var body struct {
+			Total int    `json:"total"`
+			Scope string `json:"scope"`
+		}
+		if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+			t.Fatal(err)
+		}
+		return body.Total, body.Scope
+	}
+	if n, scope := total("/api/v1/findings/search?q=dup"); n != 1 || scope != "latest" {
+		t.Fatalf("default search: total %d scope %q, want 1 latest", n, scope)
+	}
+	if n, scope := total("/api/v1/findings/search?q=dup&scope=all"); n != 2 || scope != "all" {
+		t.Fatalf("scope=all: total %d scope %q, want 2 all", n, scope)
+	}
+	if response := get(t, s, http.MethodGet, "/api/v1/findings/search?scope=nope"); response.Code != http.StatusBadRequest {
+		t.Fatalf("bad scope status %d", response.Code)
+	}
+}

@@ -1607,6 +1607,18 @@ func (s *Server) searchFindings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	filter.IncludeSuppressed = strings.EqualFold(strings.TrimSpace(query.Get("include_suppressed")), "true")
+	// scope=latest (default) searches each workspace's newest completed scan;
+	// scope=all keeps the full history, one hit per scan.
+	scope := strings.ToLower(strings.TrimSpace(query.Get("scope")))
+	switch scope {
+	case "", "latest":
+		scope = "latest"
+	case "all":
+		filter.AllScans = true
+	default:
+		fail(w, 400, "INVALID_SEARCH_QUERY", "scope must be latest or all.")
+		return
+	}
 	if raw := strings.TrimSpace(query.Get("page")); raw != "" {
 		value, err := strconv.Atoi(raw)
 		if err != nil || value < 1 {
@@ -1633,7 +1645,7 @@ func (s *Server) searchFindings(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, "DATABASE_ERROR", "Could not count findings by severity.")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"items": items, "total": total, "page": filter.Page, "page_size": filter.PageSize, "has_next": (filter.Page-1)*filter.PageSize+len(items) < total, "severity_counts": severityCounts})
+	writeJSON(w, 200, map[string]any{"items": items, "total": total, "page": filter.Page, "page_size": filter.PageSize, "has_next": (filter.Page-1)*filter.PageSize+len(items) < total, "severity_counts": severityCounts, "scope": scope})
 }
 
 // deleteScan removes one terminal scan and everything stored under it

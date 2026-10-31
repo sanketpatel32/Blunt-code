@@ -171,6 +171,9 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
   });
   const [analyzer, setAnalyzer] = useState(() => new URLSearchParams(window.location.search).get('analyzer') ?? '');
   const [workspace, setWorkspace] = useState(() => new URLSearchParams(window.location.search).get('workspace') ?? '');
+  /** Off by default: search reads each workspace's latest completed scan, so a
+   *  finding that persisted across ten scans is one hit, not ten. */
+  const [allScans, setAllScans] = useState(() => new URLSearchParams(window.location.search).get('scope') === 'all');
   const [visibleCols, setVisibleCols] = useState({ finding: true, location: true, severity: true, actions: true });
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('table');
   const [selectedFinding, setSelectedFinding] = useState<SearchedFinding | null>(null);
@@ -208,8 +211,9 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
     if (severities.size) value.severity = [...severities].join(',');
     // The server scopes by workspace_id; the address bar keeps the shorter `workspace` key.
     if (workspace) value.workspace_id = workspace;
+    if (allScans) value.scope = 'all';
     return value;
-  }, [debouncedQuery, severities, analyzer, workspace, page, pageSize]);
+  }, [debouncedQuery, severities, analyzer, workspace, page, pageSize, allScans]);
 
   // Reset to page 1 whenever a filter changes — but skip the very first run so a
   // deep link like /search?q=error&page=2 keeps its URL-initialized page.
@@ -220,7 +224,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
       return;
     }
     setPage(1);
-  }, [debouncedQuery, severities, analyzer, workspace]);
+  }, [debouncedQuery, severities, analyzer, workspace, allScans]);
 
   // URL sync
   useEffect(() => {
@@ -229,13 +233,14 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
     if (analyzer) sp.set('analyzer', analyzer);
     if (severities.size) sp.set('severity', [...severities].join(','));
     if (workspace) sp.set('workspace', workspace);
+    if (allScans) sp.set('scope', 'all');
     if (page !== 1) sp.set('page', String(page));
     const qs = sp.toString();
     const cur = window.location.search.replace(/^\?/, '');
     if (qs === cur) return;
     const next = qs ? `${window.location.pathname}?${qs}${window.location.hash}` : `${window.location.pathname}${window.location.hash}`;
     window.history.replaceState(null, '', next);
-  }, [debouncedQuery, analyzer, severities, workspace, page]);
+  }, [debouncedQuery, analyzer, severities, workspace, page, allScans]);
 
   useEffect(() => {
     const onPop = () => {
@@ -243,6 +248,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
       setQuery(sp.get('q') ?? '');
       setAnalyzer(sp.get('analyzer') ?? '');
       setWorkspace(sp.get('workspace') ?? '');
+      setAllScans(sp.get('scope') === 'all');
       const v = sp.get('severity');
       setSeverities(new Set(v ? v.split(',').filter(Boolean) : []));
       const p = Number(sp.get('page'));
@@ -277,7 +283,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
     );
   }, [severities, analyzer, workspace, query]);
 
-  const state = useLoad(() => api.searchFindings(params), [params.q, params.severity, params.analyzer, params.page, params.page_size, params.workspace_id]);
+  const state = useLoad(() => api.searchFindings(params), [params.q, params.severity, params.analyzer, params.page, params.page_size, params.workspace_id, params.scope]);
   const items = state.data?.items ?? [];
   const total = state.data?.total ?? 0;
   const actualPageSize = state.data?.page_size ?? pageSize;
@@ -750,6 +756,15 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
               matched total renders exactly once on this screen — here. */}
           <div className="toolbar-row">
             <div className="toolbar-filters">
+              <button
+                type="button"
+                className="chip"
+                aria-pressed={allScans}
+                title={allScans ? 'Showing every stored scan: a finding that persisted across scans appears once per scan' : 'Showing the latest completed scan of each workspace. Turn on to search older scans too'}
+                onClick={() => setAllScans((value) => !value)}
+              >
+                Include older scans
+              </button>
               {total > 0 && (
                 <button
                   type="button"
