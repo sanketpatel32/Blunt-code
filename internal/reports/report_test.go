@@ -183,6 +183,7 @@ func TestMarkdownSurvivesHostileCorpus(t *testing.T) {
 	// message like "\n# Forged H1" must not introduce a heading.
 	allowed := map[string]bool{
 		"# Blunt Code Analysis Report - ":     false,
+		"## Summary":                          false,
 		"## Quality Metrics Summary":          false,
 		"## Open Findings":                    false,
 		"## Security Findings":                false,

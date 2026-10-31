@@ -21,7 +21,7 @@ const htmlDocument = `<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Blunt Code report — {{.WorkspaceName}}{{if .Date}} — {{.Date}}{{end}}</title>
 <style>
-:root{--ink:#111827;--muted:#6b7280;--line:#e5e7eb;--page:#ffffff;--critical:#b91c1c;--high:#dc2626;--medium:#b45309;--low:#4b5563;--info:#0f766e}
+:root{--brand:#c2410c;--ink:#111827;--muted:#6b7280;--line:#e5e7eb;--page:#ffffff;--critical:#b91c1c;--high:#dc2626;--medium:#b45309;--low:#4b5563;--info:#0f766e}
 *{box-sizing:border-box}
 body{margin:0;padding:2rem 1rem 3rem;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;color:var(--ink);background:var(--page);line-height:1.5}
 main{max-width:64rem;margin:0 auto}
@@ -78,6 +78,17 @@ select,input[type="search"]{font:inherit;font-size:.85rem;color:var(--ink);backg
 .filter-status{margin:0 0 0 auto;align-self:center;font-size:.85rem;color:var(--muted);font-variant-numeric:tabular-nums}
 :focus-visible{outline:2px solid #1d4ed8;outline-offset:2px}
 tr[hidden]{display:none}
+.brand-head{border-top:4px solid var(--brand);padding-top:1rem}
+.brand-bar{display:flex;align-items:center;gap:.5rem;font-size:.85rem;color:var(--muted);margin-bottom:1rem}
+.brand-mark{display:inline-grid;place-items:center;width:1.6rem;height:1.6rem;border-radius:.35rem;background:var(--brand);color:#fff;font-weight:800}
+.brand-name{font-weight:700;color:var(--ink)}
+.brand-sub::before{content:"·";margin-right:.5rem}
+.verdict{display:flex;gap:1rem;align-items:center}
+.verdict-line{margin:.2rem 0 0;color:var(--muted)}
+.verdict-line strong{color:var(--ink)}
+.grade{display:inline-grid;place-items:center;flex:none;width:3.25rem;height:3.25rem;border-radius:.6rem;font-size:1.7rem;font-weight:800;color:#fff}
+.grade-a{background:#15803d}.grade-b{background:#a16207}.grade-c{background:#c2410c}.grade-d{background:#b91c1c}
+.grade-provisional{outline:2px dashed #b45309;outline-offset:3px}
 details.file-group{border:1px solid var(--line);border-radius:.5rem;margin:0 0 .75rem}
 details.file-group[hidden]{display:none}
 .file-group summary{display:flex;flex-wrap:wrap;gap:.25rem .6rem;align-items:baseline;cursor:pointer;padding:.5rem .75rem}
@@ -104,8 +115,9 @@ body.is-printing details.file-group[hidden]{display:block}
 </head>
 <body>
 <main>
-<header>
-<h1>Blunt Code — {{.WorkspaceName}}</h1>
+<header class="brand-head">
+<div class="brand-bar"><span class="brand-mark" aria-hidden="true">B</span><span class="brand-name">Blunt Code</span><span class="brand-sub">Local code analysis report</span></div>
+<div class="verdict"><span class="grade grade-{{.GradeClass}}{{if .Provisional}} grade-provisional{{end}}" aria-label="Grade {{.Grade}}">{{.Grade}}</span><div><h1>{{.WorkspaceName}}</h1><p class="verdict-line"><strong>{{.GradeLabel}}</strong> · risk score {{.Score}}{{if .Coverage}} · {{.Coverage}}{{end}}{{if .Provisional}} · provisional grade{{end}}</p></div></div>
 <p class="meta">
 {{- if .WorkspacePath}}<span><strong>Root:</strong> {{.WorkspacePath}}</span>{{end -}}
 {{- if .Profile}}<span><strong>Profile:</strong> {{.Profile}}</span>{{end -}}
@@ -198,7 +210,11 @@ type htmlModel struct {
 	Findings                                                                []htmlFinding
 	Groups                                                                  []htmlGroup
 	Analyzers                                                               []string
-	Script                                                                  template.JS
+	// Verdict header: the same grade, score and coverage line the app shows.
+	Grade, GradeClass, GradeLabel, Coverage string
+	Score                                   int
+	Provisional                             bool
+	Script                                  template.JS
 }
 type htmlSeverity struct {
 	Name, Class string
@@ -233,6 +249,10 @@ func HTML(m Model) []byte {
 		Total: len(m.Findings), New: len(m.Comparison.New), Fixed: len(m.Comparison.Fixed), Persistent: len(m.Comparison.Persistent),
 		Script: template.JS(htmlScript),
 	}
+	view.Score, view.Grade, view.GradeLabel = Grade(m.Counts)
+	view.GradeClass = strings.ToLower(view.Grade)
+	view.Coverage = CoverageLine(m.Runs)
+	view.Provisional = len(m.Runs) > 0 && !coverageComplete(m.Runs)
 	for _, warning := range m.Warnings {
 		view.Warnings = append(view.Warnings, scrubControls(warning))
 	}

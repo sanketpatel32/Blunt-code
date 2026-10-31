@@ -158,6 +158,9 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings", s.findings)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings.csv", s.findingsCSV)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings.json", s.findingsJSON)
+	// report.json is the same versioned document under the report.* naming
+	// the other full-report exports use.
+	s.mux.HandleFunc("GET /api/v1/scans/{id}/report.json", s.findingsJSON)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings.jsonl", s.findingsJSONL)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/fixed", s.fixedFindings)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/compare", s.scanCompare)
@@ -1962,7 +1965,7 @@ func (s *Server) findingsJSON(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="bluntcode-scan-%s-findings.json"`, shortID(scan.ID)))
+	reportDisposition(w, r, fmt.Sprintf("bluntcode-scan-%s-findings.json", shortID(scan.ID)), "")
 	_, _ = w.Write(reports.JSON(model))
 }
 
@@ -2541,7 +2544,7 @@ func (s *Server) reportMarkdown(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
-	w.Header().Set("Content-Disposition", `attachment; filename="blunt-code-report.md"`)
+	reportDisposition(w, r, "blunt-code-report.md", "text/plain; charset=utf-8")
 	_, _ = w.Write([]byte(reports.Markdown(model)))
 }
 
@@ -2575,7 +2578,7 @@ func (s *Server) reportSARIF(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="bluntcode-scan-%s.sarif"`, shortID(scan.ID)))
+	reportDisposition(w, r, fmt.Sprintf("bluntcode-scan-%s.sarif", shortID(scan.ID)), "")
 	_ = json.NewEncoder(w).Encode(reports.SARIF(model))
 }
 
@@ -2609,8 +2612,25 @@ func (s *Server) reportHTML(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="bluntcode-scan-%s.html"`, shortID(scan.ID)))
+	reportDisposition(w, r, fmt.Sprintf("bluntcode-scan-%s.html", shortID(scan.ID)), "")
 	_, _ = w.Write(reports.HTML(model))
+}
+
+// reportDisposition sends a report as a download, or, with ?inline=1, for
+// viewing in a browser tab ("Open in new tab"). Inline responses are
+// sandboxed: the document gets an opaque origin, so its own script (the HTML
+// report's filter) runs but cannot reach the local API. inlineType replaces
+// the Content-Type for formats browsers would otherwise download (Markdown).
+func reportDisposition(w http.ResponseWriter, r *http.Request, filename, inlineType string) {
+	if r.URL.Query().Get("inline") != "1" {
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+		return
+	}
+	if inlineType != "" {
+		w.Header().Set("Content-Type", inlineType)
+	}
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`inline; filename="%s"`, filename))
+	w.Header().Set("Content-Security-Policy", "sandbox allow-scripts; default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:")
 }
 
 // shortID keeps attachment filenames readable while staying scan-unique.

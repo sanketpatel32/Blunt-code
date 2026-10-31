@@ -788,15 +788,20 @@ describe('ReportView export foot', () => {
     await click([...host.querySelectorAll('button')].find((button) => button.textContent === 'Export report')!);
     const dialog = document.querySelector('[role="dialog"]')!;
     const items = [...dialog.querySelectorAll('.export-item')] as HTMLElement[];
-    expect(items.map((item) => item.textContent)).toEqual(['Markdown.md', 'HTML.html', 'SARIF.sarif', 'CSV (current filters).csv', 'Jira CSV.csv · loaded rows']);
+    expect(items.map((item) => item.textContent)).toEqual(['Markdown.md', 'HTML.html', 'SARIF.sarif', 'JSON.json', 'CSV (current filters).csv', 'Jira CSV.csv · loaded rows']);
     expect(items[0].getAttribute('href')).toBe('/api/v1/scans/scan-1/report.md');
-    const csvHref = (items[3] as HTMLAnchorElement).getAttribute('href')!;
+    const csvHref = (items[4] as HTMLAnchorElement).getAttribute('href')!;
     expect(csvHref).toContain('/api/v1/scans/scan-1/findings.csv?');
     expect(csvHref).toContain('severity=high'); // the active filter rides along
     expect(csvHref).toContain('sort=severity');
     expect(csvHref).toContain('order=desc'); // the export mirrors the fixed default sort
     expect(csvHref).not.toContain('page='); // paging params stay off the export
-    expect(items.slice(0, 4).every((item) => (item as HTMLAnchorElement).hasAttribute('download'))).toBe(true); // plain GET navigation, no fetch
+    expect(items.slice(0, 5).every((item) => (item as HTMLAnchorElement).hasAttribute('download'))).toBe(true); // plain GET navigation, no fetch
+    expect(items[3].getAttribute('href')).toBe('/api/v1/scans/scan-1/findings.json');
+    const open = dialog.querySelector('.export-open') as HTMLAnchorElement;
+    expect(open.getAttribute('href')).toBe('/api/v1/scans/scan-1/report.html?inline=1');
+    expect(open.target).toBe('_blank');
+    expect(open.rel).toContain('noopener');
   });
 
   it('the foot counts findings and analyzers from the report payload', async () => {

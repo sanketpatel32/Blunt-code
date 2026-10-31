@@ -511,7 +511,7 @@ export function ReportView({ scanId, notify, runs: runsProp, go, onCountsChanged
   </section>;
 }
 
-/** Flat export row — plain `<a download>` GET links for the Markdown/HTML/SARIF attachments plus a CSV of the currently filtered findings and a client-side Jira CSV. */
+/** Flat export row — plain `<a download>` GET links for the Markdown/HTML/SARIF/JSON attachments, an inline "open in a new tab" view of the HTML report, plus a CSV of the currently filtered findings and a client-side Jira CSV. */
 function ExportMenu({ scanId, csvParams, findings }: { scanId: string; csvParams: Record<string, string>; findings?: Finding[] }) {
   const [open, setOpen] = useState(false);
   const returnFocus = useRef<HTMLButtonElement>(null);
@@ -519,6 +519,7 @@ function ExportMenu({ scanId, csvParams, findings }: { scanId: string; csvParams
     { label: 'Markdown', ext: '.md', href: api.markdownUrl(scanId) },
     { label: 'HTML', ext: '.html', href: api.exportUrl(scanId, 'html') },
     { label: 'SARIF', ext: '.sarif', href: api.exportUrl(scanId, 'sarif') },
+    { label: 'JSON', ext: '.json', href: api.exportUrl(scanId, 'json') },
   ];
   return <>
     <button ref={returnFocus} className="button secondary" onClick={() => setOpen(true)}>Export report</button>
@@ -526,6 +527,7 @@ function ExportMenu({ scanId, csvParams, findings }: { scanId: string; csvParams
       <DialogHeader><DialogTitle>Export report</DialogTitle><DialogDescription>Choose the scope to include. Exports describe this scan, not the current source files.</DialogDescription></DialogHeader>
       <section><h3>Full scan report</h3><p className="muted">Includes the whole report regardless of visible filters.</p>
         <div className="export-inline">{items.map((item) => <a key={item.label} className="export-item" href={item.href} download>{item.label}<small>{item.ext}</small></a>)}</div>
+        <a className="export-open" href={api.exportUrl(scanId, 'html', { inline: '1' })} target="_blank" rel="noopener noreferrer">Open HTML report in a new tab<span aria-hidden="true"> ↗</span></a>
       </section>
       <section><h3>All findings matching current filters</h3><p className="muted">Includes matching rows beyond the loaded page.</p><a className="export-item" href={api.exportUrl(scanId, 'csv', csvParams)} download>CSV (current filters)<small>.csv</small></a></section>
       <section><h3>Loaded findings only</h3><p className="muted">{findings?.length ?? 0} rows currently loaded. Load more findings first to include more rows.</p><button className="export-item whitespace-nowrap" disabled={!findings?.length} onClick={() => downloadJiraCsv(findings ?? [], `jira-${scanId}.csv`)}>Jira CSV<small className="whitespace-nowrap">.csv · loaded rows</small></button></section>
