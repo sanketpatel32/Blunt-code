@@ -4,6 +4,12 @@ export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
+      // Playful instrument type floor: captions 13px, UI 14px, prose 16px.
+      fontSize: {
+        xs: ['0.8125rem', { lineHeight: '1.15rem' }],
+        sm: ['0.875rem', { lineHeight: '1.3rem' }],
+        base: ['1rem', { lineHeight: '1.55rem' }],
+      },
       colors: {
         border: 'var(--color-rule)',
         input: 'var(--color-field-edge)',

@@ -1,0 +1,174 @@
+/* ════════════════════════════════════════════════════════════════════
+   PLAYFUL INSTRUMENT — the system layer (direction B).
+   Imported last. It states the rules every page shares, so the older
+   layered sheets only carry page-specific layout:
+     1. type floor   — captions 13, UI 14, prose 16, titles 32
+     2. one surface  — white card, 1px rule, 14px corner; never a card in a card
+     3. one primary  — coral fill + a 2px pressed lip; everything else is quiet
+     4. grade tiles  — the signature: chunky, one hue per grade everywhere
+     5. tags not pills — counts and states are squared tags, pills only for filters
+     6. phone tables become cards (see `.rtable` below)
+   ════════════════════════════════════════════════════════════════════ */
+
+/* 1 · Type floor ---------------------------------------------------- */
+body { font-size: var(--text-xs); line-height: 1.5; -webkit-font-smoothing: antialiased; }
+table { font-size: var(--text-xs); }
+.page-header .page-title, .page-title { font-size: var(--text-page-title); letter-spacing: var(--tracking-display); line-height: 1.1; }
+.page-header .page-eyebrow { font-size: var(--text-2xs); font-weight: 600; color: var(--color-accent-strong); }
+.page-heading-description, .page-header p { font-size: var(--text-md); line-height: 1.55; color: var(--color-ink-soft); max-width: var(--measure); }
+h2, .board-panel-title, .section-title { font-size: var(--text-lg); font-weight: 600; letter-spacing: -0.01em; }
+.rail-link { font-size: var(--text-xs); min-height: 40px; font-weight: 500; }
+.rail-group-label { font-size: var(--text-2xs); }
+.rail-brand { font-size: 1.125rem; }
+.design-topbar nav, .design-topbar .topbar-search { font-size: var(--text-2xs); }
+th { font-size: var(--text-2xs); }
+
+/* 2 · One surface --------------------------------------------------- */
+.board-verdict, .board-panel, .workspace-section-card, .summary-card, .risk-hero,
+.table-wrap, .data-table-wrapper, .scan-hero, .analysis-verdict.verdict-card, .analysis-toolbar {
+  background: var(--color-surface);
+  border: 1px solid var(--color-rule);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+/* The page itself is the only background; panel heads and inner wells stop
+   painting a second grey card inside the first. */
+.board-panel-head, .board-panel > header, .toolbar-groups, .verdict-rail,
+.board-panel .table-wrap, .board-panel .data-table-wrapper, .workspace-section-card .table-wrap,
+.board-panel .board-feed, .feed-panel, .board-panel .analytics-card {
+  background: transparent;
+  box-shadow: none;
+}
+.board-panel .table-wrap, .board-panel .data-table-wrapper, .workspace-section-card .table-wrap { border: 0; border-radius: 0; }
+.board-panel-head { border-bottom: 1px solid var(--color-rule-faint); }
+th { background: transparent; color: var(--color-ink-faint); font-weight: 600; border-bottom: 1px solid var(--color-rule); }
+td { border-color: var(--color-rule-faint); }
+tbody tr:hover > td { background: color-mix(in oklch, var(--color-accent) 5%, transparent); }
+.board-verdict[data-focus='hero'] { box-shadow: var(--shadow-md); border-color: var(--color-rule); }
+
+/* 3 · One primary ---------------------------------------------------
+   The shadcn `Button` default and the legacy `.button.primary` are the same
+   object: coral fill, dark ink, a 2px pressed lip. Hover brightens (darkening
+   to accent-strong would drop the dark ink below AA). */
+:root { --color-accent-hover: color-mix(in oklch, var(--color-accent) 86%, white); --color-accent-lip: color-mix(in oklch, var(--color-accent-strong) 72%, black); }
+:root[data-theme='dark'] { --color-accent-hover: color-mix(in oklch, var(--color-accent) 88%, white); --color-accent-lip: color-mix(in oklch, var(--color-accent) 45%, black); }
+.button.primary { background: var(--color-accent); border-color: transparent; color: var(--color-accent-ink); box-shadow: 0 2px 0 var(--color-accent-lip); }
+.button.primary:hover:not(:disabled), :root[data-theme='dark'] .button.primary:hover:not(:disabled) { background: var(--color-accent-hover); border-color: transparent; color: var(--color-accent-ink); box-shadow: 0 2px 0 var(--color-accent-lip); }
+.button.primary:active:not(:disabled) { transform: translateY(1px); box-shadow: 0 1px 0 var(--color-accent-lip); }
+.button.secondary { border-color: var(--color-rule); box-shadow: none; }
+.button.secondary:hover:not(:disabled) { border-color: var(--color-rule-strong); background: var(--color-surface-muted); box-shadow: none; }
+
+/* 4 · Grade tiles --------------------------------------------------- */
+[data-grade='A'] { --grade-bg: var(--grade-a); --grade-ink: var(--grade-tile-ink); --grade-edge: var(--grade-tile-edge); }
+[data-grade='B'] { --grade-bg: var(--grade-b); --grade-ink: var(--grade-tile-ink); --grade-edge: var(--grade-tile-edge); }
+[data-grade='C'] { --grade-bg: var(--grade-c); --grade-ink: var(--grade-tile-ink); --grade-edge: var(--grade-tile-edge); }
+[data-grade='D'] { --grade-bg: var(--grade-d); --grade-ink: var(--grade-tile-ink); --grade-edge: var(--grade-tile-edge); }
+[data-grade='none'] { --grade-bg: var(--grade-none); --grade-ink: var(--color-ink-faint); --grade-edge: var(--color-rule-strong); }
+.grade-tile[data-tone='clear'] { --grade-bg: var(--grade-a); --grade-ink: var(--grade-tile-ink); --grade-edge: var(--grade-tile-edge); }
+.grade-tile[data-tone='warning'] { --grade-bg: var(--grade-b); --grade-ink: var(--grade-tile-ink); --grade-edge: var(--grade-tile-edge); }
+
+.grade-tile, .verdict-letter.grade-tile, .scan-grade.grade-tile, .ledger-grade.grade-tile, .risk-hero .risk-grade.grade-tile {
+  --tile: 2.5rem;
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: var(--tile);
+  height: var(--tile);
+  border: 2px solid var(--grade-edge);
+  border-radius: calc(var(--tile) * 0.24);
+  background: var(--grade-bg);
+  color: var(--grade-ink);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: calc(var(--tile) * 0.58);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  /* The chunky lip: a hard offset shadow in the edge ink, like a key cap. */
+  box-shadow: 0 calc(var(--tile) * 0.06) 0 var(--grade-edge);
+  overflow: hidden;
+}
+.grade-tile-sm, .ledger-grade.grade-tile { --tile: 1.875rem; border-width: 1.5px; }
+.grade-tile-md { --tile: 2.75rem; }
+.grade-tile-lg, .scan-grade.grade-tile, .risk-hero .risk-grade.grade-tile { --tile: 4rem; }
+.grade-tile-xl, .verdict-letter.grade-tile { --tile: 6.5rem; }
+.grade-tile .grade-flap { font-size: inherit; gap: 0; }
+.grade-tile .grade-flap-tile { width: 0.8em; height: 1.1em; background: transparent; color: inherit; }
+.ledger-grade.grade-tile::after { background: var(--grade-ink); height: 3px; opacity: .55; }
+
+/* 5 · Tags, not pills ----------------------------------------------- */
+.state, .badge, .severity, .severity-pill, .tag, .ledger-lang, .state-tag, .history-state {
+  border-radius: 6px;
+}
+.chip, .filter-chip { border-radius: var(--radius-pill); }
+
+/* Teal is the second voice: good news reads teal everywhere. */
+.state.success, .state.succeeded, .state.completed, .state-tag.state-success { color: var(--color-success-text); }
+
+@media (max-width: 700px) {
+  .page-header .page-title { font-size: 1.625rem; }
+  .grade-tile-xl, .verdict-letter.grade-tile { --tile: 4.75rem; }
+  .grade-tile-lg, .scan-grade.grade-tile { --tile: 3.5rem; }
+}
+
+/* Grade letter never inherits a host card's span sizing (risk-hero styles
+   every span as a caption). */
+.grade-tile > .grade-tile-letter, .grade-tile .grade-flap { font: inherit; color: inherit; letter-spacing: inherit; }
+.grade-tile .grade-flap [aria-hidden] { font: inherit; }
+
+/* 6 · Phone tables become cards -------------------------------------
+   Tables opt in with `.rtable`; each value cell carries `data-label`
+   so the key columns stay visible as label/value lines instead of a
+   sideways scroll. The first cell is the card title. */
+@media (max-width: 40rem) {
+  .table-wrap:has(> .rtable), .data-table-wrapper:has(.rtable) {
+    overflow: visible; border: 0; background: transparent; box-shadow: none; border-radius: 0;
+  }
+  table.rtable { min-width: 0 !important; width: 100%; border-collapse: separate; }
+  .rtable thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .rtable, .rtable tbody, .rtable tr, .rtable td, .rtable tbody th { display: block; }
+  .rtable tbody tr:not(.history-band-row):not(.history-detail-row):not(.tools-details-row) {
+    position: relative;
+    margin: 0 0 var(--space-sm);
+    padding: 12px 14px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-rule);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-xs);
+  }
+  .rtable tbody tr:hover > td { background: transparent; }
+  .rtable td {
+    position: static !important;
+    border: 0 !important;
+    padding: 3px 0 !important;
+    white-space: normal !important;
+    background: transparent !important;
+    text-align: left !important;
+    max-width: none !important;
+  }
+  .rtable td[data-label] { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); min-height: 30px; }
+  .rtable td[data-label]::before {
+    content: attr(data-label);
+    flex: none;
+    font-size: var(--text-2xs);
+    font-weight: 600;
+    color: var(--color-ink-faint);
+  }
+  .rtable td[data-label] > * { min-width: 0; text-align: right; }
+  .rtable td:first-child { padding-bottom: 6px !important; }
+  .rtable td.rtable-actions, .rtable td.ws-cell-actions {
+    margin-top: 6px; padding-top: 10px !important; border-top: 1px solid var(--color-rule-faint) !important;
+  }
+  .rtable td.rtable-actions .table-actions, .rtable td.ws-cell-actions .table-actions { justify-content: flex-start; flex-wrap: wrap; }
+  .rtable .history-band-row th { padding: var(--space-md) 2px var(--space-xs); background: transparent; border: 0; }
+  .rtable .history-detail-row, .rtable .tools-details-row { margin: -6px 0 var(--space-sm); }
+  .rtable .history-detail-row > td, .rtable .tools-details-row > td { padding: 10px 14px !important; border: 1px solid var(--color-rule-faint) !important; border-radius: 0 0 var(--radius-card) var(--radius-card); }
+  .rtable .ws-cell-name .ws-path { max-width: 100%; }
+}
+
+/* Kokonut switch-button parts (theme toggle). Light = sun, dark = moon. */
+.theme-switch [data-part='bite'] { translate: 10px -10px; }
+.theme-switch [data-part='disc'], .theme-switch [data-part='ray'] { transform-box: view-box; transform-origin: 12px 12px; }
+:root[data-theme='dark'] .theme-switch [data-part='bite'] { translate: 0 0; }
+:root[data-theme='dark'] .theme-switch [data-part='disc'] { scale: 1.8; }
+:root[data-theme='dark'] .theme-switch [data-part='ray'] { scale: .5; opacity: 0; }

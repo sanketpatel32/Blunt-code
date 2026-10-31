@@ -19,6 +19,8 @@ import './css/identity.css';
 // them; see the header for the measurement that motivated it.
 import './css/hierarchy.css';
 import './css/design-system.css';
+// Playful instrument system layer (direction B) — last on purpose; see its header.
+import './css/playful.css';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
