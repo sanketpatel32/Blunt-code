@@ -1,3 +1,4 @@
+import { Sparkline } from '../components/viz/Sparkline';
 import { useEffect, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { ApiError, api } from '../api';
@@ -246,6 +247,7 @@ function FindingsCell({ workspace }: { workspace: Workspace }) {
         {total > categorized && <span className="ws-findings-total">{count(total)}</span>}
         {severities.map(([severity, n]) => <span key={severity} className={`ws-sev ws-sev-${severity}`}>{count(n)} <em>{severity}</em></span>)}
       </span>
+      {workspace.trend && workspace.trend.length >= 2 && <Sparkline className="ws-spark" values={workspace.trend} width={64} height={18} label={`Findings over the last ${workspace.trend.length} completed scans: ${workspace.trend.join(', ')}`} />}
     </td>
   );
 }

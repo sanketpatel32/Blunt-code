@@ -6,7 +6,7 @@ import { message } from '../lib/notice';
 import { useLoad } from '../hooks/useLoad';
 import { Empty, ErrorPanel } from '../components/ui';
 import { WrenchIcon } from '../components/icons';
-import { SkeletonTable } from '../components/skeletons';
+import { SkeletonCards, SkeletonTable } from '../components/skeletons';
 import { ANALYZER_CATALOG } from '../lib/analyzerCatalog';
 import { LanguageCoverage } from '../components/LanguageCoverage';
 import { ConfirmationDialog } from '../components/dialogs';
@@ -14,7 +14,9 @@ import { RowMenu } from '../components/RowMenu';
 import type { Route } from '../lib/router';
 import { PageHeader } from '../components/PageHeader';
 import { formatBytes } from '../lib/format';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Cpu, PackageCheck } from 'lucide-react';
+import { StatTile } from '../components/viz/StatTile';
+import { Ring } from '../components/viz/Ring';
 
 type ToolOperation = 'install' | 'repair' | 'update' | 'uninstall';
 type BusyAction = { tool: string; operation: ToolOperation };
@@ -128,6 +130,10 @@ export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r
         title="Analysis tools"
       />
       {analyzers.error ? <ErrorPanel error={analyzers.error} retry={analyzers.reload} /> : <>
+        {analyzers.loading ? <SkeletonCards count={3} variant="metric" /> : rows.length > 0 && <div className="stat-tiles tools-tiles">
+          <StatTile icon={PackageCheck} tone={managed.length && readyManaged === managed.length ? 'ok' : undefined} value={`${readyManaged}/${managed.length}`} label="Optional ready" extra={<Ring value={readyManaged} max={managed.length} size={36} stroke={4} tone="var(--color-success)" label={`${readyManaged} of ${managed.length} optional tools ready`}><span /></Ring>} />
+          <StatTile icon={Cpu} value={rows.filter((a) => a.execution === 'in-process').length} label="Built-in" />
+        </div>}
         <div className="toolbar-row tools-toolbar">
           <div className="toolbar-filters">
             <div className="segmented" role="group" aria-label="Filter analyzers by status">
