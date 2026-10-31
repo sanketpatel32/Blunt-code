@@ -93,7 +93,9 @@ func New(db *database.DB, bus *events.Bus, scanService *scans.Service, toolServi
 	s.routes()
 	return s
 }
-func (s *Server) Handler() http.Handler { return securityMiddleware(rateLimitMiddleware(s.mux)) }
+func (s *Server) Handler() http.Handler {
+	return securityMiddleware(rateLimitMiddleware(jsonRouteErrors(s.mux)))
+}
 
 // StaticGuard applies the API's loopback Host check and baseline security
 // headers to a non-API handler (the embedded UI). The UI has no
@@ -180,6 +182,18 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 func fail(w http.ResponseWriter, status int, code, message string) {
 	writeJSON(w, status, map[string]any{"error": map[string]any{"code": code, "message": message}})
 }
+
+// failField is fail plus the request field the error belongs to, so a form
+// can show the message under the input that caused it instead of a toast.
+func failField(w http.ResponseWriter, status int, code, message, field string) {
+	writeJSON(w, status, map[string]any{"error": map[string]any{"code": code, "message": message, "field": field}})
+}
+
+// invalidJSONMessage is the one message every handler answers a body that
+// does not decode with; naming a single field there misled callers whose
+// JSON was simply malformed.
+const invalidJSONMessage = "Request body is not valid JSON for this endpoint."
+
 func decode(r *http.Request, into any) error {
 	d := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
 	d.DisallowUnknownFields()
@@ -244,7 +258,16 @@ func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
 		Offline     *bool `json:"offline"`
 		OpenBrowser *bool `json:"open_browser"`
 	}
-	if err := decode(r, &input); err != nil || (input.Offline == nil && input.OpenBrowser == nil) {
+	if err := decode(r, &input); err != nil {
+		var syntax *json.SyntaxError
+		if errors.As(err, &syntax) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) {
+			fail(w, 400, "INVALID_JSON", invalidJSONMessage)
+			return
+		}
+		fail(w, 400, "INVALID_SETTINGS", "Provide offline or open_browser as a boolean.")
+		return
+	}
+	if input.Offline == nil && input.OpenBrowser == nil {
 		fail(w, 400, "INVALID_SETTINGS", "Provide offline or open_browser as a boolean.")
 		return
 	}
@@ -331,12 +354,12 @@ func (s *Server) createWorkspace(w http.ResponseWriter, r *http.Request) {
 		Name     string `json:"name"`
 	}
 	if err := decode(r, &input); err != nil {
-		fail(w, 400, "INVALID_JSON", "root_path is required.")
+		fail(w, 400, "INVALID_JSON", invalidJSONMessage)
 		return
 	}
-	root, err := workspace.NormalizeRoot(input.RootPath)
+	root, err := apiWorkspaceRoot(input.RootPath)
 	if err != nil {
-		fail(w, 400, "INVALID_PATH", err.Error())
+		failField(w, 400, "INVALID_PATH", err.Error(), "root_path")
 		return
 	}
 	if input.Name == "" {

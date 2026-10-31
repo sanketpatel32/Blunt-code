@@ -1,7 +1,7 @@
 import { act, useState, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { AddWorkspaceDialog, ConfirmationDialog, FindingPreviewDialog, SuppressFindingDialog, SUPPRESSION_REASON_MAX } from './dialogs';
+import { AddWorkspaceDialog, folderPathProblem, ConfirmationDialog, FindingPreviewDialog, SuppressFindingDialog, SUPPRESSION_REASON_MAX } from './dialogs';
 import type { Finding } from '../types';
 import type { Notice } from '../lib/notice';
 
@@ -253,5 +253,55 @@ describe('suppress finding dialog', () => {
     await flush();
     expect(notify).toHaveBeenCalledWith({ kind: 'error', text: 'DATABASE_ERROR: Could not save suppression.' });
     expect(host.querySelector('dialog')).not.toBeNull(); // nothing is lost; the user can retry or cancel
+  });
+});
+
+describe('add workspace path errors', () => {
+  async function typePath(input: HTMLInputElement, value: string) {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+    await act(async () => {
+      setter.call(input, value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  }
+  async function submit(host: HTMLElement) {
+    await act(async () => { ([...host.querySelectorAll('button')].find((button) => button.textContent === 'Add workspace') as HTMLButtonElement).click(); });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
+  }
+
+  it('accepts absolute Windows, UNC, POSIX and home paths, and explains relative ones', () => {
+    for (const ok of ['C:\\code\\app', 'd:/work', '\\\\server\\share\\app', '/home/me/app', '~', '~/app', '"C:\\quoted path"']) expect(folderPathProblem(ok)).toBe('');
+    expect(folderPathProblem('src\\app')).toMatch(/full folder path/);
+    expect(folderPathProblem('C:')).toMatch(/backslash/);
+  });
+
+  it('shows a relative path problem under the field without calling the API', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const notify = vi.fn();
+    const host = await renderHarness((close) => <AddWorkspaceDialog onClose={close} onCreated={() => {}} notify={notify} />);
+    await openDialog(host);
+    const input = host.querySelector<HTMLInputElement>('#add-workspace-path')!;
+    await typePath(input, 'my-app');
+    await submit(host);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(notify).not.toHaveBeenCalled();
+    expect(host.querySelector('#add-workspace-path-error')?.textContent).toMatch(/full folder path/);
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(document.activeElement).toBe(input);
+    await typePath(input, 'my-app2');
+    expect(host.querySelector('#add-workspace-path-error')).toBeNull(); // editing clears the stale message
+  });
+
+  it('puts the server INVALID_PATH message inline instead of a toast', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(json({ error: { code: 'INVALID_PATH', field: 'root_path', message: 'That folder does not exist. Check the spelling, or use Browse to pick it.' } }, 400))));
+    const notify = vi.fn();
+    const host = await renderHarness((close) => <AddWorkspaceDialog onClose={close} onCreated={() => {}} notify={notify} />);
+    await openDialog(host);
+    await typePath(host.querySelector<HTMLInputElement>('#add-workspace-path')!, 'C:\\nope');
+    await submit(host);
+    expect(notify).not.toHaveBeenCalled();
+    expect(host.querySelector('#add-workspace-path-error')?.textContent).toBe('That folder does not exist. Check the spelling, or use Browse to pick it.');
+    expect(host.querySelector('dialog')).not.toBeNull();
   });
 });

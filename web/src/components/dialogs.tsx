@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { api, type CreatedWorkspace } from '../api';
+import { api, ApiError, type CreatedWorkspace } from '../api';
 import type { Finding, SourcePreview } from '../types';
 import type { Notice } from '../lib/notice';
 import { message } from '../lib/notice';
@@ -44,10 +44,25 @@ export function AddWorkspaceDialog({ onClose, onCreated, notify }: { onClose: ()
   const pathInputRef = useRef<HTMLInputElement>(null);
   const { dialogRef, onBackdropMouseDown } = useDialogA11y({ onClose, busy, autoFocusRef: pathInputRef });
   const pick = async () => { setBusy(true); try { const result = await api.selectFolder(); if (!result.cancelled && result.path) { const folder = result.path; setPath(folder); setName((current) => current || folder.split(/[\\/]/).filter(Boolean).pop() || 'Workspace'); } } catch (e) { notify({ kind: 'error', text: message(e) }); } finally { setBusy(false); } };
-  const submit = async (event: FormEvent) => { event.preventDefault(); if (!path.trim()) return; setBusy(true); try { onCreated(await api.createWorkspace({ root_path: path.trim(), name: name.trim() || undefined })); } catch (e) { notify({ kind: 'error', text: message(e) }); } finally { setBusy(false); } };
+  /** Path problems show under the field (and keep focus there) instead of a toast in the corner. */
+  const [pathError, setPathError] = useState('');
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    const value = path.trim();
+    if (!value) return;
+    const local = folderPathProblem(value);
+    if (local) { setPathError(local); pathInputRef.current?.focus(); return; }
+    setBusy(true);
+    try {
+      onCreated(await api.createWorkspace({ root_path: value, name: name.trim() || undefined }));
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'INVALID_PATH') { setPathError(e.message); pathInputRef.current?.focus(); }
+      else notify({ kind: 'error', text: message(e) });
+    } finally { setBusy(false); }
+  };
   return (
   // biome-ignore lint/a11y/noStaticElementInteractions: backdrop-only dismissal is pointer convenience; keyboard users close via Escape and the dialog's own Cancel/close button.
-    <div className="dialog-backdrop" role="presentation" onMouseDown={onBackdropMouseDown}><dialog ref={dialogRef} open aria-modal="true" aria-labelledby="add-workspace-title"><form onSubmit={(event) => void submit(event)}><header><h2 id="add-workspace-title">Add workspace</h2><Button variant="ghost" size="icon" type="button" onClick={onClose} disabled={busy} aria-label="Close">×</Button></header><p>Choose a project folder. Blunt Code keeps a reference and never changes your source files.</p><label>Folder path<div className="picker-row flex gap-2"><Input ref={pathInputRef} value={path} onChange={(event) => setPath(event.target.value)} placeholder="C:\Projects\my-app" required className="flex-1" /><Button type="button" variant="outline" onClick={() => void pick()} disabled={busy}>Browse…</Button></div></label><label>Workspace name <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Optional" /></label><footer className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={onClose} disabled={busy}>Cancel</Button><Button type="submit" disabled={busy || !path.trim()}>{busy ? 'Adding…' : 'Add workspace'}</Button></footer></form></dialog></div>);
+    <div className="dialog-backdrop" role="presentation" onMouseDown={onBackdropMouseDown}><dialog ref={dialogRef} open aria-modal="true" aria-labelledby="add-workspace-title"><form onSubmit={(event) => void submit(event)}><header><h2 id="add-workspace-title">Add workspace</h2><Button variant="ghost" size="icon" type="button" onClick={onClose} disabled={busy} aria-label="Close">×</Button></header><p>Choose a project folder. Blunt Code keeps a reference and never changes your source files.</p><label htmlFor="add-workspace-path">Folder path</label><div className="picker-row flex gap-2"><Input id="add-workspace-path" ref={pathInputRef} value={path} onChange={(event) => { setPath(event.target.value); if (pathError) setPathError(''); }} placeholder="C:\Projects\my-app" required className="flex-1" aria-invalid={pathError ? true : undefined} aria-describedby={pathError ? 'add-workspace-path-error' : undefined} /><Button type="button" variant="outline" onClick={() => void pick()} disabled={busy}>Browse…</Button></div>{pathError && <p id="add-workspace-path-error" className="field-error" role="alert">{pathError}</p>}<label>Workspace name <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Optional" /></label><footer className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={onClose} disabled={busy}>Cancel</Button><Button type="submit" disabled={busy || !path.trim()}>{busy ? 'Adding…' : 'Add workspace'}</Button></footer></form></dialog></div>);
 }
 
 export function ConfirmationDialog({ title, description, confirmLabel, busy, onCancel, onConfirm, tone = 'destructive' }: { title: string; description: string; confirmLabel: string; busy: boolean; onCancel: () => void; onConfirm: () => void; /** destructive (default) for irreversible actions; primary for safe starts like running a scan. */ tone?: 'destructive' | 'primary' }) {
@@ -60,6 +75,16 @@ export function ConfirmationDialog({ title, description, confirmLabel, busy, onC
 
 /** Upper bound on the optional suppression note; mirrors the backend's maxSuppressionReasonLength. */
 export const SUPPRESSION_REASON_MAX = 500;
+
+/** Client-side check for the one mistake the server cannot fix: a relative
+ *  path means nothing to the app, which runs from its own folder. Absolute
+ *  Windows (C:\\, \\\\server\\share), POSIX (/…) and home (~) paths pass. */
+export function folderPathProblem(value: string): string {
+  const path = value.trim().replace(/^["']|["']$/g, '');
+  if (/^[A-Za-z]:[\\/]/.test(path) || path.startsWith('\\\\') || path.startsWith('/') || path === '~' || /^~[\\/]/.test(path)) return '';
+  if (/^[A-Za-z]:$/.test(path)) return `Add a backslash to scan the whole drive (${path}\\), or pick a folder on it.`;
+  return 'Use the full folder path, for example C:\\Projects\\my-app, or use Browse to pick it.';
+}
 
 /**
  * "Suppress this finding" dialog: records a fingerprint dismissal for the workspace.

@@ -2128,6 +2128,10 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .dialog-backdrop label { display: grid; gap: var(--space-xs); margin-top: var(--space-md); color: var(--color-ink); font-size: var(--text-sm); font-weight: 600; }
 .picker-row { display: flex; gap: var(--space-sm); }
 .picker-row input { flex: 1; }
+.dialog-backdrop label + .picker-row { margin-top: var(--space-xs); }
+.field-error { margin: var(--space-xs) 0 0; color: var(--color-danger-text); font-size: var(--text-sm); font-weight: 500; line-height: 1.45; }
+.dialog-backdrop .field-error { color: var(--color-danger-text); }
+[aria-invalid="true"] { border-color: var(--color-danger); }
 .dialog-backdrop footer { justify-content: flex-end; margin-top: var(--space-xl); gap: var(--space-sm); }
 .sr-only { position: absolute; width: .06rem; height: .06rem; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
 .dialog-backdrop dialog.code-preview-dialog { width: min(58rem, 100%); }
