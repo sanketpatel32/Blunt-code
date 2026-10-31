@@ -20,6 +20,7 @@ import { WorkspaceTemplates } from '../components/WorkspaceTemplates';
 import { RowMenu, type RowMenuItem } from '../components/RowMenu';
 import { PageHeader } from '../components/PageHeader';
 import { riskGrade, riskScore, severityCountsOf } from '../lib/risk';
+import { GradeTile } from '../components/GradeTile';
 
 export function WorkspacesPage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd: () => void; notify: (n: Notice) => void }) {
   const state = useLoad(api.workspaces, []);
@@ -110,7 +111,7 @@ export function WorkspacesPage({ go, onAdd, notify }: { go: (r: Route) => void; 
           </div>
           {visibleWorkspaces.length ? (
             <div className="table-wrap ws-table-wrap">
-              <table className="table-dense ws-table">
+              <table className="table-dense ws-table rtable">
                 <caption className="sr-only">Registered workspaces with languages, risk grade, findings, and last scan</caption>
                 <thead>
                   <tr>
@@ -190,12 +191,12 @@ const MAX_LANG_DOTS = 3;
 /** Languages column: up to three color dots (lib/format languageColor) plus a "+N" tag; the full list lives in the tooltip and for screen readers. */
 function LanguagesCell({ languages }: { languages?: string[] }) {
   const langs = languages ?? [];
-  if (!langs.length) return <td className="ws-cell-langs"><span className="ws-none" title="No supported source languages found">none<span className="sr-only">No supported source languages found</span></span></td>;
+  if (!langs.length) return <td data-label="Languages" className="ws-cell-langs"><span className="ws-none" title="No supported source languages found">none<span className="sr-only">No supported source languages found</span></span></td>;
   const shown = langs.slice(0, MAX_LANG_DOTS);
   const extra = langs.length - shown.length;
   const names = langs.map((language) => languageNames[language] ?? language).join(', ');
   return (
-    <td className="ws-cell-langs">
+    <td data-label="Languages" className="ws-cell-langs">
       <span className="ws-langs" title={names}>
         {shown.map((language) => <i key={language} aria-hidden="true" className="ws-lang" style={{ background: languageColor(language) }} />)}
         {extra > 0 && <span className="tag">+{extra}</span>}
@@ -225,9 +226,9 @@ function FindingsCell({ workspace }: { workspace: Workspace }) {
   const scan = gradedScan(workspace);
   if (!scan) {
     const latest = workspace.latest_scan;
-    if (!latest) return <td className="ws-cell-findings"><span className="ws-none">none</span></td>;
+    if (!latest) return <td data-label="Findings" className="ws-cell-findings"><span className="ws-none">none</span></td>;
     const display = scanStateDisplay(latest.state);
-    return <td className="ws-cell-findings"><span className={`ws-state state ${statePillClass[display.variant] ?? ''}`} title="This scan has not finished; findings appear once it does">{display.label}</span></td>;
+    return <td data-label="Findings" className="ws-cell-findings"><span className={`ws-state state ${statePillClass[display.variant] ?? ''}`} title="This scan has not finished; findings appear once it does">{display.label}</span></td>;
   }
   const finishedTime = new Date(scan.finished_at ?? '').getTime();
   const title = !Number.isNaN(finishedTime) ? `Latest finished scan · ${date(scan.finished_at)}` : undefined;
@@ -236,12 +237,12 @@ function FindingsCell({ workspace }: { workspace: Workspace }) {
   const medium = scan.medium_count ?? 0;
   const low = scan.low_count ?? 0;
   const total = scan.total_findings;
-  if (total == null) return <td className="ws-cell-findings"><span className="ws-none" title={title}>none</span></td>;
-  if (!total) return <td className="ws-cell-findings"><span className="ws-findings-zero tabular-nums" title={title}>0</span></td>;
+  if (total == null) return <td data-label="Findings" className="ws-cell-findings"><span className="ws-none" title={title}>none</span></td>;
+  if (!total) return <td data-label="Findings" className="ws-cell-findings"><span className="ws-findings-zero tabular-nums" title={title}>0</span></td>;
   const categorized = critical + high + medium + low;
   const severities = ([['critical', critical], ['high', high], ['medium', medium], ['low', low]] as const).filter(([, n]) => n > 0);
   return (
-    <td className="ws-cell-findings">
+    <td data-label="Findings" className="ws-cell-findings">
       <span className="ws-findings tabular-nums" title={title}>
         {/* The total only leads when the four colored buckets do not already sum to it. */}
         {total > categorized && <span className="ws-findings-total">{count(total)}</span>}
@@ -255,9 +256,9 @@ function FindingsCell({ workspace }: { workspace: Workspace }) {
 function LastScanCell({ workspace }: { workspace: Workspace }) {
   const value = workspace.last_scan_at ?? workspace.latest_scan?.finished_at ?? workspace.latest_scan?.started_at ?? null;
   const time = value ? new Date(value).getTime() : NaN;
-  if (!value || Number.isNaN(time)) return <td className="ws-cell-scan"><span className="ws-none">Never</span></td>;
+  if (!value || Number.isNaN(time)) return <td data-label="Last scan" className="ws-cell-scan"><span className="ws-none">Never</span></td>;
   const failed = workspace.latest_scan?.state === 'failed';
-  return <td className="ws-cell-scan"><span className={`ws-scan tabular-nums${failed ? ' ws-scan-failed' : ''}`} title={failed ? `Last scan failed · ${date(value)}` : date(value)}>{relativeTime(value)}</span></td>;
+  return <td data-label="Last scan" className="ws-cell-scan"><span className={`ws-scan tabular-nums${failed ? ' ws-scan-failed' : ''}`} title={failed ? `Last scan failed · ${date(value)}` : date(value)}>{relativeTime(value)}</span></td>;
 }
 
 /** One table row = one workspace. The row itself opens the detail view (click or
@@ -283,7 +284,6 @@ function WorkspaceRow({ workspace, go, onScan, onRemove }: { workspace: Workspac
   const graded = gradedScan(workspace);
   const score = graded ? riskScore(severityCountsOf(graded)) : null;
   const grade = score == null ? null : riskGrade(score);
-  const riskTone = grade === 'A' ? 'success' : grade === 'B' ? 'warning' : 'failed';
   return (
     <tr tabIndex={0} role="link" aria-label={`Open ${workspace.name || workspace.root_path || 'workspace'}`} onClick={open} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); open(); } }}>
       <td className="ws-cell-name">
@@ -299,7 +299,7 @@ function WorkspaceRow({ workspace, go, onScan, onRemove }: { workspace: Workspac
         </span>
       </td>
       <LanguagesCell languages={workspace.languages} />
-      <td className="ws-cell-risk">{grade ? <span className={`ws-risk state ${riskTone}`} title={`Weighted risk score ${score} from the latest finished scan`}>{grade}</span> : <span className="ws-none">Never scanned</span>}</td>
+      <td data-label="Risk" className="ws-cell-risk">{grade ? <span className="ws-risk" title={`Weighted risk score ${score} from the latest finished scan`}><GradeTile grade={grade} size="sm" announce /></span> : <span className="ws-none">Never scanned</span>}</td>
       <FindingsCell workspace={workspace} />
       <LastScanCell workspace={workspace} />
       {/* Buttons inside must not double-fire the row's open-on-click. */}

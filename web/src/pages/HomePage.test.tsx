@@ -128,7 +128,7 @@ describe('HomePage risk board — verdict', () => {
   it('grades the whole board with the backend formula (3c+4h+9m+5l → score 73, grade D)', async () => {
     const host = await render(homeFetchMock({ scans: [scanItem()], total: 1, summary }));
 
-    expect(host.querySelector('.verdict-letter')?.textContent).toBe('D');
+    expect(host.querySelector('.verdict-letter')?.getAttribute('data-grade')).toBe('D');
     expect(host.querySelector('.verdict-score')?.textContent).toContain('73');
     expect(host.textContent).toContain('Critical risk.');
     // Score explainability: the weighting travels on the grade tile, the band
@@ -338,7 +338,7 @@ describe('HomePage cancelled-scan fallback and trajectory', () => {
     expect(host.querySelector('.ledger-grade')?.textContent).toBe('C');
     expect(host.querySelector('.ledger-count')?.textContent).toContain('7 findings');
     // The verdict and the "N of M workspaces" count use the same rule.
-    expect(host.querySelector('.verdict-letter')?.textContent).toBe('C');
+    expect(host.querySelector('.verdict-letter')?.getAttribute('data-grade')).toBe('C');
     expect(host.querySelector('.verdict-rail')?.textContent).toContain('1 of 1');
     expect(host.querySelector('.verdict-hero .sr-only')?.textContent).toBe('7 findings across the latest completed scan of 1 workspace.');
     // Honest note + honest state badge about the cancelled run.
@@ -611,7 +611,7 @@ describe('HomePage quick actions', () => {
     const host = await render(homeFetchMock({ scans: [], total: 0 }, { items: [] }));
     expect(host.textContent).toContain('Point Blunt Code at a project');
     expect(host.textContent).toContain('Add your first workspace');
-    expect(host.textContent).toContain('security and code-quality analyzers');
+    expect(host.textContent).toContain('secrets, vulnerable dependencies, and risky code');
     expect(host.textContent).toContain('1. Add a workspace');
     expect(host.textContent).toContain('2. Run a scan');
     expect(host.textContent).toContain('3. Review findings');

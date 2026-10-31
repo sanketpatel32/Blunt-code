@@ -23,6 +23,7 @@ import { RowMenu, type RowMenuItem } from '../components/RowMenu';
 import { ScanActionDropdown } from '../components/ScanActionDropdown';
 import { PreScanSummary } from '../components/PreScanSummary';
 import { PageHeader } from '../components/PageHeader';
+import { GradeTile } from '../components/GradeTile';
 
 const AnalyticsCharts = lazy(() => import('../components/AnalyticsCharts').then((m) => ({ default: m.AnalyticsCharts })));
 const DependencyGraph = lazy(() => import('../components/DependencyGraph').then((m) => ({ default: m.DependencyGraph })) );
@@ -359,10 +360,11 @@ function MiniSparkline({ values }: { values: number[] }) {
   return <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} preserveAspectRatio="none" aria-hidden="true" className="premium-sparkline"><polyline vectorEffect="non-scaling-stroke" fill="none" stroke="var(--color-accent)" strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round" points={pts.join(' ')} /></svg>;
 }
 
-function PremiumSummaryCard({ label, value, tone, icon, spark, delay }: { label: string; /** null = nothing has completed yet — the card reads "—" / "no scan yet" instead of a lying 0. */ value: number | null; tone?: string; icon: ReactNode; spark?: number[] | null; delay: number }) {
+/* `icon` is accepted for call-site compatibility but no longer drawn: the
+   icon-in-a-tinted-square stat card was a template tell; the number leads. */
+function PremiumSummaryCard({ label, value, tone, spark, delay }: { label: string; /** null = nothing has completed yet — the card reads "—" / "no scan yet" instead of a lying 0. */ value: number | null; tone?: string; icon?: ReactNode; spark?: number[] | null; delay: number }) {
   const unscanned = value == null;
   return <div className={`summary-card premium-card ${tone ?? ''}`} style={{ animationDelay: `${delay*40}ms` }}>
-    <span className="premium-card-icon">{icon}</span>
     <strong>{unscanned ? '—' : value}</strong>
     <span className="premium-card-label">{unscanned ? 'no scan yet' : label}</span>
     {/* Only a real multi-scan trend draws a line (sparkSeries returns null below two points). */}
@@ -492,7 +494,7 @@ function ComplianceSection({ scanId, go }: { scanId: string; go: (r: Route) => v
 }
 
 export function RiskCard({ risk, unscanned }: { risk?: RiskProfile | null; /** true when no completed scan exists: "—" beats a 0 that reads as all-clear. */ unscanned?: boolean }) {
-  if (!risk?.available || typeof risk.score !== 'number') return <div className="summary-card premium-card risk-hero"><span className="premium-card-icon"><ShieldAlert className="h-4 w-4" /></span><strong>{'—'}</strong><span>Risk score{unscanned ? ' · no scan yet' : ' · unavailable'}</span></div>;
+  if (!risk?.available || typeof risk.score !== 'number') return <div className="summary-card premium-card risk-hero"><GradeTile grade={null} size="lg" className="risk-grade" /><strong>{'—'}</strong><span>Risk score{unscanned ? ' · no scan yet' : ' · unavailable'}</span></div>;
   // C8 · words beat glyphs: "Risk D · ▼ 4" made screen readers say "down arrow" and
   // left everyone else guessing whether down was good. Trend direction now says
   // what happened. The delta note stays neutral ink with a decorative arrow:
@@ -521,8 +523,7 @@ export function RiskCard({ risk, unscanned }: { risk?: RiskProfile | null; /** t
       (coverage!.warned > 0 ? `, ${coverage!.warned} degraded` : '')
     : null;
   return <div className={`summary-card premium-card risk-hero ${gradeTone}`} title={risk.finished_at ? `Latest scan finished ${risk.finished_at}` : undefined}>
-    <span className="premium-card-icon"><ShieldAlert className="h-4 w-4" /></span>
-    <span className="risk-grade">{risk.grade}</span>
+    <GradeTile grade={risk.grade} size="lg" className="risk-grade" />
     <strong className="risk-score" title={RISK_SCORE_EXPLAINER}>{Math.round(risk.score)}</strong>
     {/* "Risk score", not "Risk D". The grade letter is already the tile beside
         it, so repeating it here printed the same D twice on one card and read

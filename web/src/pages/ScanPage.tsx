@@ -16,6 +16,7 @@ import { pushNotification } from '../lib/notifications';
 import { analyzerMeta, categoryColor, CATEGORY_LABELS } from '../lib/analyzerCatalog';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { Button } from '../components/ui/button';
+import { GradeTile } from '../components/GradeTile';
 
 export type { ScanEvent } from '../lib/scanEvents';
 
@@ -182,10 +183,10 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
       <div className="scan-hero-main">
         <div className="scan-hero-title-row">
           {graded && grade
-            ? <span className="scan-grade" data-grade={grade} aria-hidden="true">{grade}</span>
+            ? <GradeTile grade={grade} size="lg" flip className="scan-grade" />
             : incomplete
-              ? <span className="scan-grade scan-grade-clear" data-tone="warning" aria-hidden="true">!</span>
-              : <span className={`scan-grade scan-grade-clear`} aria-hidden="true">✓</span>}
+              ? <GradeTile grade={null} placeholder="!" tone="warning" size="lg" className="scan-grade scan-grade-clear" />
+              : <GradeTile grade={null} placeholder="✓" tone="clear" size="lg" className="scan-grade scan-grade-clear" />}
           <div className="scan-hero-copy">
             <h1 className="page-title">{verdict}</h1>
             {/* The counts and the qualification the old headline carried, as

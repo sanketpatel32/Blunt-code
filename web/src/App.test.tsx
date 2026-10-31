@@ -77,7 +77,7 @@ describe('Blunt Code home', () => {
     const fetchMock = vi.fn((input: string) => Promise.resolve(json(input.endsWith('/workspaces') ? { items: [] } : { items: [] })));
     const host = await render(fetchMock);
     expect(host.textContent).toContain('Point Blunt Code at a project');
-    expect(host.textContent).toContain('Add workspace');
+    expect(host.textContent).toContain('Add your first workspace');
   });
 
   it('shows the backend error without exposing implementation detail', async () => {

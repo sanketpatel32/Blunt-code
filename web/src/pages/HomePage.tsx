@@ -22,6 +22,7 @@ import { Activity, ChevronRight, FolderOpen, FolderPlus } from 'lucide-react';
 import { SEVERITY_ORDER, trendPointsFromScans } from '../lib/chartData';
 import { isActiveScanState } from '../lib/scanEvents';
 import { GRADE_BANDS, bandFor, gradeDepth, riskGrade, riskScore, severityCountsOf } from '../lib/risk';
+import { GradeTile } from '../components/GradeTile';
 
 const FEED_LIMIT = 10;
 
@@ -193,33 +194,25 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
           eyebrow="Dashboard"
           title="Overview"
           description="Scan a project locally, then track its risk here."
-          actions={
-            <>
-              <Button variant="outline" onClick={() => void handlePickFolder()} disabled={pickingFolder}>
-                <FolderOpen className="mr-1.5 h-4 w-4" />
-                {pickingFolder ? 'Opening…' : 'Browse folder…'}
-              </Button>
-              <Button onClick={onAdd}>Add workspace</Button>
-            </>
-          }
         />
 
+        {/* One primary on the screen: the empty card owns the call to action, so
+            the header no longer repeats the same two buttons above it. */}
         <Empty
           title="Point Blunt Code at a project"
           icon={<FolderIcon />}
           tone="positive"
           action={
             <div className="flex flex-wrap items-center justify-center gap-3">
-              {/* Outline, not filled: the header already carries the page's one primary "Add workspace". */}
-              <Button variant="outline" onClick={onAdd}>Add your first workspace</Button>
-              <Button variant="outline" onClick={() => void handlePickFolder()}>
-                Browse folder
+              <Button onClick={onAdd}>Add your first workspace</Button>
+              <Button variant="outline" onClick={() => void handlePickFolder()} disabled={pickingFolder}>
+                <FolderOpen className="mr-1.5 h-4 w-4" />
+                {pickingFolder ? 'Opening…' : 'Browse folder…'}
               </Button>
             </div>
           }
         >
-          Choose any folder on this computer. Blunt Code scans it locally, keeps the history here, and never changes your source files.
-          {' '}Blunt Code runs security and code-quality analyzers over the folder, surfacing secrets, vulnerabilities, and risky code, without changing your files.
+          Pick any folder on this computer. Blunt Code looks for secrets, vulnerable dependencies, and risky code — locally, without touching your files.
           <br />
           <span className="mt-2 inline-flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xs text-[var(--color-ink-faint)]" aria-label="Getting started: add a workspace, run a scan, review findings">
             <span>1. Add a workspace</span>
@@ -316,7 +309,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
                 ? `Grade ${verdict.grade}, ${bandFor(verdict.grade).label.toLowerCase()}, score ${verdict.score}. Grade bands: ${GRADE_BANDS.map((band) => `${band.grade} ${band.range}`).join(', ')}.`
                 : 'Not graded yet: no completed scans.'}
             >
-              <span className="verdict-letter" aria-hidden="true">{verdictTallied ? verdict.grade : '–'}</span>
+              <GradeTile grade={verdictTallied ? verdict.grade : null} size="xl" flip className="verdict-letter" />
               {/* The grade owns the color; its label and band range stay neutral ink. */}
               <span className="verdict-grade-text" aria-hidden="true">
                 <span className="verdict-bandlabel">{verdictTallied && <>{bandFor(verdict.grade).label}.</>}</span>
@@ -912,14 +905,12 @@ function LedgerRow({
           every row carried the same fact twice in two visual languages and the
           right edge stacked a second metadata cell beside the actions. */}
       <span className="ledger-grade-wrap">
-        <span
+        <GradeTile
+          grade={grade}
+          size="sm"
           className="ledger-grade"
-          data-grade={grade ?? 'none'}
           style={depth !== null ? ({ '--grade-depth': depth.toFixed(3) } as React.CSSProperties) : undefined}
-          aria-hidden="true"
-        >
-          {grade ?? '–'}
-        </span>
+        />
         {score !== null && (
           <span
             className="ledger-score tabular-nums"

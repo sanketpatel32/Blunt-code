@@ -167,13 +167,13 @@ describe('WorkspacesPage risk chips (Loop W3)', () => {
     const rows = [...host.querySelectorAll('.ws-table tbody tr')];
     const betaRisk = rows[0]!.querySelector('.ws-risk')!;
     expect(betaRisk.textContent).toBe('A'); // grade only; compact
-    expect(betaRisk.className).toContain('state success');
+    expect(betaRisk.querySelector('[data-grade]')!.getAttribute('data-grade')).toBe('A');
     expect(betaRisk.getAttribute('title')).toBe('Weighted risk score 1 from the latest finished scan');
     // The fixture's stale payload `risk: { grade: 'B', score: 41.6 }` MUST lose to
     // the computed grade — no endpoint populates that field, the client does the math.
     const alphaRisk = rows[1]!.querySelector('.ws-risk')!;
     expect(alphaRisk.textContent).toBe('C');
-    expect(alphaRisk.className).toContain('state failed');
+    expect(alphaRisk.querySelector('[data-grade]')!.getAttribute('data-grade')).toBe('C');
     expect(alphaRisk.getAttribute('title')).toBe('Weighted risk score 34 from the latest finished scan');
     expect(rows[2]!.querySelector('.ws-risk')).toBeNull(); // never scanned → no chip
     expect(rows[2]!.querySelector('.ws-cell-risk')?.textContent).toBe('Never scanned');
