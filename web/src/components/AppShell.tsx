@@ -4,7 +4,8 @@ import * as React from 'react';
 import { href, type Route } from '../lib/router';
 import { navigateFromLink } from '../lib/navigation';
 import type { Theme } from '../hooks/useTheme';
-import { Button } from './ui/button';
+import { Button, buttonVariants } from './ui/button';
+import SwitchButton from './kokonutui/switch-button';
 import {
   Check,
   FileCode,
@@ -13,12 +14,10 @@ import {
   Info,
   Languages,
   LayoutDashboard,
-  Moon,
   Power,
   Search,
   Settings,
   SlidersHorizontal,
-  Sun,
   Terminal,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -205,16 +204,13 @@ export function AppShell({ workspace, route, onNavigate, onClose, theme, onToggl
           </ul>
 
           <div className="rail-util">
-            <button
-              type="button"
+            <SwitchButton
               className="rail-util-btn theme-toggle"
-              onClick={onToggleTheme}
-              aria-pressed={theme === 'dark'}
+              theme={theme}
+              onThemeChange={(next) => { if (next !== theme) onToggleTheme(); }}
               aria-label={theme === 'dark' ? t('common.switchToLight') : t('common.switchToDark')}
               title={theme === 'dark' ? t('common.switchToLight') : t('common.switchToDark')}
-            >
-              {theme === 'dark' ? <Sun className="h-4 w-4" aria-hidden="true" /> : <Moon className="h-4 w-4" aria-hidden="true" />}
-            </button>
+            />
             <NotificationsCenter routeKey={href(route)} />
             {seqArmed && <span className="seq-hint" aria-hidden="true">g…</span>}
             <DropdownMenu>
@@ -298,9 +294,7 @@ export function AppShell({ workspace, route, onNavigate, onClose, theme, onToggl
           <Button variant="ghost" size="icon" className="rail-util-btn" onClick={openCommandPalette} aria-label="Search and commands" title="Search and commands (Ctrl+K)">
             <Search className="h-4 w-4" aria-hidden="true" />
           </Button>
-          <Button variant="ghost" size="icon" className="rail-util-btn" onClick={onToggleTheme} aria-pressed={theme === 'dark'} aria-label={theme === 'dark' ? t('common.switchToLight') : t('common.switchToDark')} title={theme === 'dark' ? t('common.switchToLight') : t('common.switchToDark')}>
-            {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </Button>
+          <SwitchButton className={cn(buttonVariants({ variant: 'ghost', size: 'icon' }), 'rail-util-btn')} theme={theme} onThemeChange={(next) => { if (next !== theme) onToggleTheme(); }} aria-label={theme === 'dark' ? t('common.switchToLight') : t('common.switchToDark')} title={theme === 'dark' ? t('common.switchToLight') : t('common.switchToDark')} />
         </div>
       </header>
     </>

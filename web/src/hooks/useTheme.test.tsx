@@ -116,7 +116,7 @@ describe('theme toggle in the rail', () => {
     expect(toggle).not.toBeNull();
     expect(toggle!.getAttribute('aria-label')).toBe('Switch to dark theme');
     expect(toggle!.getAttribute('aria-pressed')).toBe('false');
-    expect(toggle!.querySelector('path')).not.toBeNull();
+    expect(toggle!.querySelector('[data-part="ray"]')).not.toBeNull(); // Kokonut sun/moon morph icon
     await act(async () => { toggle!.click(); });
     expect(onToggleTheme).toHaveBeenCalledTimes(1);
   });
