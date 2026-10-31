@@ -102,6 +102,7 @@ func Build(in Input) Model {
 	m.Summary = summary(counts, m.Partial)
 	return m
 }
+
 // runErrorText is the run's error without a leading "<id>: " or
 // "<name>: " echo (older scans stored "ruff: ruff: …"), so the warning reads
 // "Ruff: <reason>" once.

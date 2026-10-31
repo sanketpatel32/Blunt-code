@@ -1048,11 +1048,21 @@ func (s *Server) addSuppression(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, "DATABASE_ERROR", "Could not save suppression.")
 		return
 	}
+	s.suppressionsChanged(r.Context(), work.ID)
 	writeJSON(w, 201, item)
 }
 
-// removeSuppression deletes one dismissal; the next scan stores and counts the
-// finding normally again.
+// suppressionsChanged re-derives the workspace's persisted scan counts after a
+// suppression is added, removed or imported. A failure only leaves the old
+// counts in place until the next scan, so it is logged, not surfaced.
+func (s *Server) suppressionsChanged(ctx context.Context, workspaceID string) {
+	if err := s.db.RecountWorkspaceScans(ctx, workspaceID); err != nil {
+		s.log.Warn("recount scans after suppression change failed", "workspace", workspaceID, "error", err)
+	}
+}
+
+// removeSuppression deletes one dismissal; the finding counts again in every
+// scan of the workspace right away.
 func (s *Server) removeSuppression(w http.ResponseWriter, r *http.Request) {
 	work, ok := s.workspace(r)
 	if !ok {
@@ -1072,6 +1082,7 @@ func (s *Server) removeSuppression(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, "DATABASE_ERROR", "Could not remove suppression.")
 		return
 	}
+	s.suppressionsChanged(r.Context(), work.ID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -1181,6 +1192,9 @@ func (s *Server) importSuppressions(w http.ResponseWriter, r *http.Request) {
 		}
 		seen[fingerprint] = true
 		imported++
+	}
+	if imported > 0 {
+		s.suppressionsChanged(r.Context(), work.ID)
 	}
 	writeJSON(w, 200, map[string]int{"imported": imported, "skipped_invalid": skippedInvalid, "duplicate": duplicate})
 }
@@ -1724,7 +1738,16 @@ func (s *Server) findings(w http.ResponseWriter, r *http.Request) {
 	// byte-for-byte; page-mode responses add page, page_size, and has_next on
 	// top of the legacy fields so both client generations can read them.
 	if filter.PageSize > 0 {
-		writeJSON(w, 200, map[string]any{"items": page.Items, "total": page.Total, "limit": page.Limit, "offset": page.Offset, "next_offset": page.NextOffset, "has_more": page.HasMore, "page": filter.Page, "page_size": filter.PageSize, "has_next": page.HasMore})
+		body := map[string]any{"items": page.Items, "total": page.Total, "limit": page.Limit, "offset": page.Offset, "next_offset": page.NextOffset, "has_more": page.HasMore, "page": filter.Page, "page_size": filter.PageSize, "has_next": page.HasMore}
+		// The first page also carries per-status totals under the same
+		// non-status filters, so the status chips count suppressed findings
+		// (which the report payload leaves out) without extra requests.
+		if filter.Page <= 1 {
+			if counts, err := s.db.FindingStatusCounts(r.Context(), scan, filter); err == nil {
+				body["status_counts"] = counts
+			}
+		}
+		writeJSON(w, 200, body)
 		return
 	}
 	writeJSON(w, 200, map[string]any{"items": page.Items, "total": page.Total, "limit": page.Limit, "offset": page.Offset, "next_offset": page.NextOffset, "has_more": page.HasMore})

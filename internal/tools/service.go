@@ -100,6 +100,7 @@ func (s *Service) All() []Status {
 	}
 	return out
 }
+
 // NotInstallableError reports a tool Blunt Code cannot set up by itself on
 // this computer (no managed download for the platform). Scans record it as
 // "not installed" so the UI can group every such tool into one notice.

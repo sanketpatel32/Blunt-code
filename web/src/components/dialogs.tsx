@@ -88,22 +88,25 @@ export function folderPathProblem(value: string): string {
 
 /**
  * "Suppress this finding" dialog: records a fingerprint dismissal for the workspace.
- * The reason is optional and capped at 500 characters; confirming posts the
+ * A reason is required (capped at 500 characters) so the list explains itself
+ * later; the quick picks fill it in one click. Confirming posts the
  * suppression and hands control back to the caller (which closes the dialog and
  * refreshes the findings list). Errors keep the dialog open so nothing is lost.
  */
 export function SuppressFindingDialog({ workspaceId, finding, onClose, onSuppressed, notify }: { workspaceId: string; finding: Finding; onClose: () => void; onSuppressed: (reason: string) => void; notify: (n: Notice) => void }) {
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
+  const [reasonMissing, setReasonMissing] = useState(false);
   const reasonRef = useRef<HTMLTextAreaElement>(null);
   const { dialogRef, onBackdropMouseDown } = useDialogA11y({ onClose, busy, autoFocusRef: reasonRef });
   const name = finding.title ?? finding.rule_id ?? 'finding';
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!finding.fingerprint) return;
+    if (!reason.trim()) { setReasonMissing(true); reasonRef.current?.focus(); return; }
     setBusy(true);
     try {
-      await api.addSuppression(workspaceId, finding.fingerprint, reason.trim() || undefined);
+      await api.addSuppression(workspaceId, finding.fingerprint, reason.trim());
       onSuppressed(reason.trim());
     } catch (e) {
       notify({ kind: 'error', text: message(e) });
@@ -112,7 +115,7 @@ export function SuppressFindingDialog({ workspaceId, finding, onClose, onSuppres
   };
   return (
   // biome-ignore lint/a11y/noStaticElementInteractions: backdrop-only dismissal is pointer convenience; keyboard users close via Escape and the dialog's own Cancel/close button.
-    <div className="dialog-backdrop" role="presentation" onMouseDown={onBackdropMouseDown}><dialog ref={dialogRef} open aria-modal="true" aria-labelledby="suppress-finding-title"><form onSubmit={(event) => void submit(event)}><header><h2 id="suppress-finding-title">Suppress this finding?</h2><button type="button" className="icon-button" onClick={onClose} aria-label="Close">×</button></header><p className="suppress-finding-context"><strong>{name}</strong> <code>{findingLocation(finding)}</code></p><p id="suppress-finding-hint">Suppressing hides this finding, matched by its fingerprint, from all future scans, reports, and the CI gate for this workspace.</p><label htmlFor="suppress-finding-reason">Reason (optional)<textarea id="suppress-finding-reason" ref={reasonRef} rows={3} maxLength={SUPPRESSION_REASON_MAX} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Why this finding is being hidden" aria-describedby="suppress-finding-hint suppress-finding-count" /></label><div className="reason-suggestions" role="group" aria-label="Common reasons">{['False positive', 'Safe by design', 'Documented in runbook', 'Third-party code', 'Tracked externally'].map((suggestion) => <button key={suggestion} type="button" className="text-button reason-suggestion" onClick={() => { setReason(suggestion); reasonRef.current?.focus(); }}>{suggestion}</button>)}</div><small id="suppress-finding-count" className="suppress-finding-count">{reason.length}/{SUPPRESSION_REASON_MAX} characters</small><footer><button type="button" className="button secondary" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" className="button danger" disabled={busy || !finding.fingerprint}>{busy ? 'Suppressing…' : 'Suppress finding'}</button></footer><small className="muted">You can restore it anytime from the workspace’s Suppressions list.</small></form></dialog></div>);
+    <div className="dialog-backdrop" role="presentation" onMouseDown={onBackdropMouseDown}><dialog ref={dialogRef} open aria-modal="true" aria-labelledby="suppress-finding-title"><form onSubmit={(event) => void submit(event)}><header><h2 id="suppress-finding-title">Suppress this finding?</h2><button type="button" className="icon-button" onClick={onClose} aria-label="Close">×</button></header><p className="suppress-finding-context"><strong>{name}</strong> <code>{findingLocation(finding)}</code></p><p id="suppress-finding-hint">Suppressing hides this finding, matched by its fingerprint, from this workspace’s counts, grade, reports, and CI gate — in this scan and all future ones.</p><label htmlFor="suppress-finding-reason">Reason<textarea id="suppress-finding-reason" ref={reasonRef} rows={3} maxLength={SUPPRESSION_REASON_MAX} value={reason} aria-required="true" onChange={(event) => { setReason(event.target.value); if (reasonMissing) setReasonMissing(false); }} placeholder="Why this finding is being hidden" aria-invalid={reasonMissing || undefined} aria-describedby={`suppress-finding-hint suppress-finding-count${reasonMissing ? ' suppress-finding-reason-error' : ''}`} /></label>{reasonMissing && <p id="suppress-finding-reason-error" className="field-error" role="alert">Add a reason, or pick one below, so the suppression explains itself later.</p>}<div className="reason-suggestions" role="group" aria-label="Common reasons">{['False positive', 'Safe by design', 'Documented in runbook', 'Third-party code', 'Tracked externally'].map((suggestion) => <button key={suggestion} type="button" className="text-button reason-suggestion" onClick={() => { setReason(suggestion); setReasonMissing(false); reasonRef.current?.focus(); }}>{suggestion}</button>)}</div><small id="suppress-finding-count" className="suppress-finding-count">{reason.length}/{SUPPRESSION_REASON_MAX} characters</small><footer><button type="button" className="button secondary" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" className="button danger" disabled={busy || !finding.fingerprint}>{busy ? 'Suppressing…' : 'Suppress finding'}</button></footer><small className="muted">You can restore it anytime from the workspace’s Suppressions list.</small></form></dialog></div>);
 }
 
 export function FindingPreviewDialog({ scanId, finding, onClose }: { scanId: string; finding: Finding; onClose: () => void }) {

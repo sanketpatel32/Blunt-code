@@ -1083,6 +1083,30 @@ func (d *DB) CompleteScan(ctx context.Context, scanID, state, reportPath string)
 	}
 	return tx.Commit()
 }
+
+// RecountWorkspaceScans recomputes the persisted severity counts and totals
+// of every finished scan in a workspace with the same rule CompleteScan uses:
+// suppressed fingerprints do not count. Suppressing or restoring a finding
+// calls it so the scan header, grade, history and home totals change at once
+// instead of only after the next scan.
+func (d *DB) RecountWorkspaceScans(ctx context.Context, workspaceID string) error {
+	tx, err := d.SQL.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	count := func(severity string) string {
+		return `(SELECT COUNT(*) FROM findings f WHERE f.scan_id=scans.id AND f.severity='` + severity + `' AND NOT EXISTS (SELECT 1 FROM suppressed_findings s WHERE s.workspace_id=scans.workspace_id AND s.fingerprint=f.fingerprint))`
+	}
+	_, err = tx.ExecContext(ctx, `UPDATE scans SET critical_count=`+count("critical")+`,high_count=`+count("high")+`,medium_count=`+count("medium")+`,low_count=`+count("low")+`,info_count=`+count("info")+` WHERE workspace_id=? AND finished_at IS NOT NULL`, workspaceID)
+	if err == nil {
+		_, err = tx.ExecContext(ctx, `UPDATE scans SET total_findings=critical_count+high_count+medium_count+low_count+info_count WHERE workspace_id=? AND finished_at IS NOT NULL`, workspaceID)
+	}
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
 func (d *DB) Findings(ctx context.Context, scanID string) ([]analyzers.Finding, error) {
 	rows, err := d.SQL.QueryContext(ctx, `SELECT id,analyzer_id,COALESCE(rule_id,''),fingerprint,severity,category,COALESCE(title,''),message,COALESCE(relative_path,''),COALESCE(start_line,0),COALESCE(start_column,0),COALESCE(end_line,0),COALESCE(end_column,0),COALESCE(remediation,''),COALESCE(documentation_url,''),COALESCE(raw_severity,''),metadata_json FROM findings WHERE scan_id=? ORDER BY relative_path,start_line`, scanID)
 	if err != nil {
@@ -1431,6 +1455,35 @@ func scanFindingRow(rows *sql.Rows) (analyzers.Finding, error) {
 // modes: the legacy limit (25/50/100) plus offset pair, and the page-based
 // mode enabled by PageSize > 0 (1-based Page, any size up to
 // MaxFindingsPageSize), which derives limit and offset from the page window.
+// FindingStatusCounts counts a scan's findings per comparison status (new,
+// persistent, suppressed) under the filter's non-status controls, so the
+// report's status chips show real totals, suppressed included.
+func (d *DB) FindingStatusCounts(ctx context.Context, scan core.Scan, filter FindingFilter) (map[string]int, error) {
+	filter.Status, filter.Statuses, filter.ExcludeSuppressed = "", nil, false
+	filter.Sort, filter.Order = "", ""
+	query, err := d.buildFindingQuery(ctx, scan, filter)
+	if err != nil {
+		return nil, err
+	}
+	args := []any{query.workspaceID, query.previousID}
+	args = append(args, query.args...)
+	rows, err := d.SQL.QueryContext(ctx, `SELECT `+query.statusExpr+` AS status, COUNT(*) FROM findings WHERE `+query.whereSQL+` GROUP BY status`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	counts := map[string]int{"new": 0, "persistent": 0, "suppressed": 0}
+	for rows.Next() {
+		var status string
+		var n int
+		if err := rows.Scan(&status, &n); err != nil {
+			return nil, err
+		}
+		counts[status] += n
+	}
+	return counts, rows.Err()
+}
+
 func (d *DB) FindingsPage(ctx context.Context, scan core.Scan, filter FindingFilter) (FindingsPage, error) {
 	if filter.PageSize > 0 {
 		if filter.PageSize > MaxFindingsPageSize {

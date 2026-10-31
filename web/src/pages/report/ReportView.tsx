@@ -177,7 +177,7 @@ function rowTitleFor(finding: Finding): string {
   return title;
 }
 
-export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: string; notify?: (n: Notice) => void; runs?: AnalyzerRun[]; /** Navigation callback from the hosting page; present, the suppress toast gains a "View suppressions" jump to the workspace. */ go?: (r: Route) => void }) {
+export function ReportView({ scanId, notify, runs: runsProp, go, onCountsChanged }: { scanId: string; notify?: (n: Notice) => void; runs?: AnalyzerRun[]; /** Navigation callback from the hosting page; present, the suppress toast gains a "View suppressions" jump to the workspace. */ go?: (r: Route) => void; /** Called after a suppress/restore changed the scan's persisted counts, so the host can refresh its header and grade. */ onCountsChanged?: () => void }) {
   const report = useLoad(() => api.report(scanId), [scanId]);
   // Read the shareable URL state exactly once per mount so all three slices
   // stay mutually consistent even if the address changes mid-render.
@@ -247,10 +247,16 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
    *  refresh never duplicates a row and status flips land where the user can see them. */
   const [items, setItems] = useState<Finding[]>([]);
   const [envelope, setEnvelope] = useState<FindingPage>();
+  /** Status chip counts come from the findings endpoint's first page
+   *  (status_counts): the report payload leaves suppressed findings out, so
+   *  counting it would always show Suppressed 0. Older servers omit the field
+   *  and the chips fall back to the report payload. */
+  const [statusCounts, setStatusCounts] = useState<FindingPage['status_counts']>();
   useEffect(() => {
     const data = findings.data;
     if (!data) return;
     setEnvelope(data);
+    if (data.status_counts) setStatusCounts(data.status_counts);
     setItems((prev) => {
       if (pages === 1) return data.items ?? [];
       const merged = new Map(prev.map((finding, index) => [findingKey(finding, index), finding]));
@@ -266,6 +272,7 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
     for (let page = 1; page <= pages; page += 1) {
       try {
         last = await api.findings(scanId, { ...params, page: String(page) });
+        if (page === 1 && last.status_counts) setStatusCounts(last.status_counts);
         collected.push(...(last.items ?? []));
       } catch { /* a failed refresh keeps the rows already on screen */ }
     }
@@ -293,6 +300,10 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
   const [suppressionVersion, setSuppressionVersion] = useState(0);
   const reportWorkspaceId = report.data?.scan?.workspace_id ?? '';
   const suppressions = useLoad(() => (reportWorkspaceId ? api.suppressions(reportWorkspaceId) : Promise.resolve([])), [reportWorkspaceId, suppressionVersion]);
+  /** After a suppression change the server has already recounted the scan:
+   *  refresh the severity chips (report), the status chips, and the host's
+   *  header/grade without a loading flash. */
+  const countsChanged = () => { void report.reload(); onCountsChanged?.(); };
   /* Open/closed state for the two collapsed filter rails (see RAIL_LEAD below).
    * These two hooks MUST sit above the loading/error early returns: React
    * compares hook counts between renders, so a hook added after an early
@@ -304,8 +315,8 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
   // Any change to the selection closes both: a disclosure left open after the
   // filter changed shows a list that no longer matches the results.
   useEffect(() => { setToolsOpen(false); setCategoriesOpen(false); }, [filters.analyzer, filters.category]);
-  if (report.loading) return <section className="report"><SkeletonTable rows={6} cols={5} className="findings-table" /></section>;
-  if (report.error) return <ErrorPanel error={report.error} retry={report.reload} />;
+  if (report.loading && !report.data) return <section className="report"><SkeletonTable rows={6} cols={5} className="findings-table" /></section>;
+  if (report.error && !report.data) return <ErrorPanel error={report.error} retry={report.reload} />;
   const data = report.data ?? ({} as Report);
   /** A report payload without its scan still renders: zeroed controls beat a crashed report view. */
   const dataScan = data.scan ?? ({ id: scanId, workspace_id: '', state: '' } as Scan);
@@ -329,7 +340,8 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
     try {
       await api.removeSuppression(workspaceId, finding.fingerprint);
       setSuppressionVersion((version) => version + 1);
-      notify?.({ kind: 'success', text: 'Finding restored. It will be counted again on the next scan.' });
+      notify?.({ kind: 'success', text: 'Finding restored. It counts toward this scan’s totals and grade again.' });
+      countsChanged();
       await reloadAllPages();
     } catch (e) {
       notify?.({ kind: 'error', text: message(e) });
@@ -344,7 +356,8 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
     if (queue.length <= 1) {
       setSuppressQueue([]);
       setSuppressionVersion((version) => version + 1);
-      notify?.({ kind: 'success', text: `Finding suppressed${reason ? ` (${reason})` : ''}. It will not appear in future scans, reports, or the CI gate.${suppressionHint}`, action: suppressionAction });
+      notify?.({ kind: 'success', text: `Finding suppressed${reason ? ` (${reason})` : ''}. Counts and grade are updated, and it stays out of future scans, reports, and the CI gate.${suppressionHint}`, action: suppressionAction });
+      countsChanged();
       await reloadAllPages();
       return;
     }
@@ -364,7 +377,8 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
     setSuppressQueue([]);
     setSelectionEpoch((epoch) => epoch + 1);
     setSuppressionVersion((version) => version + 1);
-    notify?.({ kind: failed ? 'error' : 'success', text: failed ? `Suppressed ${done} of ${queue.length} findings — ${failed} failed; retry the rest.` : `Suppressed ${done} findings${reason ? ` (${reason})` : ''}. They will not appear in future scans, reports, or the CI gate.${suppressionHint}`, action: failed ? undefined : suppressionAction });
+    notify?.({ kind: failed ? 'error' : 'success', text: failed ? `Suppressed ${done} of ${queue.length} findings — ${failed} failed; retry the rest.` : `Suppressed ${done} findings${reason ? ` (${reason})` : ''}. Counts and grade are updated, and they stay out of future scans, reports, and the CI gate.${suppressionHint}`, action: failed ? undefined : suppressionAction });
+    countsChanged();
     await reloadAllPages();
   }
   /** Bulk entry point from the selection toolbar: confirm the reason once in the dialog, then apply it to every selected finding. */
@@ -448,7 +462,7 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
         </div>
         <div className="filter-group">
           <span className="filter-group-label" aria-hidden="true">Status</span>
-          <fieldset className="chip-group" aria-label="Status">{STATUS_OPTIONS.map((status) => <button type="button" key={status} className={`chip${filters.status === status ? ' pressed' : ''}`} aria-pressed={filters.status === status} onClick={() => toggleStatus(status)}>{STATUS_LABELS[status]}<span className="chip-count">{countByStatus.get(status) ?? 0}</span></button>)}</fieldset>
+          <fieldset className="chip-group" aria-label="Status">{STATUS_OPTIONS.map((status) => <button type="button" key={status} className={`chip${filters.status === status ? ' pressed' : ''}`} aria-pressed={filters.status === status} onClick={() => toggleStatus(status)}>{STATUS_LABELS[status]}<span className="chip-count">{statusCounts?.[status] ?? countByStatus.get(status) ?? 0}</span></button>)}</fieldset>
         </div>
         {/* Sorting for the collapsed rails happens on the whole set, so the
             order a reader sees in "+N" matches the order they saw in the rail.

@@ -210,6 +210,8 @@ export interface FindingPage {
   page?: number;
   page_size?: number;
   has_next?: boolean;
+  /** First page in page mode only: finding counts per comparison status under the same non-status filters, suppressed included. */
+  status_counts?: Partial<Record<'new' | 'persistent' | 'suppressed', number>>;
 }
 
 /** Query for GET /scans/{id}/findings. `severity`/`status` accept comma lists, `analyzer`/`rule` match exactly (rule case-insensitively), `path` is a substring match and `path_prefix` anchors at the start, `page`/`page_size` (1..200) page the results (never mixed with legacy `limit`/`offset`), and `sort`/`order` pick the ordering (`sort` also accepts a `-` prefix for descending). */

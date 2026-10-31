@@ -113,8 +113,9 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
     setCancelling(true);
     try { await api.cancelScan(id); await scan.reload(); } catch (e) { notify({ kind: 'error', text: message(e) }); } finally { setCancelling(false); }
   }
-  if (scan.loading) return <div className="page"><Loading /></div>;
-  if (scan.error) return <div className="page"><ErrorPanel error={scan.error} retry={scan.reload} /></div>;
+  // A background reload (after suppress/restore) keeps the page mounted.
+  if (scan.loading && !scan.data) return <div className="page"><Loading /></div>;
+  if (scan.error && !scan.data) return <div className="page"><ErrorPanel error={scan.error} retry={scan.reload} /></div>;
   if (!current) return <div className="page"><Loading /></div>;
   const state = scanStateDisplay(current.state);
   const live = !terminal;
@@ -284,7 +285,7 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
       : current.state === 'cancelled' || current.state === 'interrupted'
         ? <CancelledDiffNote fixedCount={current.fixed_count ?? 0} state={current.state} />
         : null)}
-    {terminal && <ReportView scanId={id} notify={notify} go={go} runs={current.analyzer_runs ?? []} />}
+    {terminal && <ReportView scanId={id} notify={notify} go={go} runs={current.analyzer_runs ?? []} onCountsChanged={() => { void scanReload(); }} />}
   </div>;
 }
 

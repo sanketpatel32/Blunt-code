@@ -53,9 +53,10 @@ const fetchMock = vi.fn((input: string, _init?: RequestInit) => {
   return Promise.resolve(json({ items: [] }));
 });
 
-/** Only list requests — the preview endpoint also matches a loose /findings substring. */
+/** Only list requests — the preview endpoint also matches a loose /findings substring,
+ *  and the status-chip totals are one-row count probes (page_size=1), not list loads. */
 function findingUrls() {
-  return fetchMock.mock.calls.map(([input]) => String(input)).filter((url) => url.includes('/findings?'));
+  return fetchMock.mock.calls.map(([input]) => String(input)).filter((url) => url.includes('/findings?') && !/[?&]page_size=1(&|$)/.test(url));
 }
 
 async function render() {
@@ -208,6 +209,19 @@ describe('ReportView toolbar filters', () => {
       expect(chipIn(host, 'Status', 'New').querySelector('.chip-count')!.textContent).toBe('2');
       expect(chipIn(host, 'Status', 'Still present').querySelector('.chip-count')!.textContent).toBe('1'); // "persistent" value, human label
       expect(chipIn(host, 'Status', 'Suppressed').querySelector('.chip-count')!.textContent).toBe('1');
+    });
+  });
+
+  it('status chips prefer the server status_counts, which include suppressed findings the report payload omits', async () => {
+    await fetchMock.withImplementation((input: string) => {
+      if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, warnings: [], findings: [finding] }));
+      if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ ...findingsPage(), status_counts: { new: 7, persistent: 3, suppressed: 4 } }));
+      return Promise.resolve(json({ items: [] }));
+    }, async () => {
+      const host = await render();
+      expect(chipIn(host, 'Status', 'New').querySelector('.chip-count')!.textContent).toBe('7');
+      expect(chipIn(host, 'Status', 'Still present').querySelector('.chip-count')!.textContent).toBe('3');
+      expect(chipIn(host, 'Status', 'Suppressed').querySelector('.chip-count')!.textContent).toBe('4');
     });
   });
 
@@ -603,14 +617,15 @@ describe('ReportView suppression actions', () => {
       const suppressItem = await rowMenuItem(host, 0, 'Suppress…');
       expect(suppressItem.textContent).toBe('Suppress…');
       await click(suppressItem);
-      expect(host.querySelector('dialog')!.textContent).toContain('Suppressing hides this finding, matched by its fingerprint, from all future scans, reports, and the CI gate for this workspace.');
+      expect(host.querySelector('dialog')!.textContent).toContain('Suppressing hides this finding, matched by its fingerprint, from this workspace’s counts, grade, reports, and CI gate — in this scan and all future ones.');
 
+      await click([...host.querySelectorAll('button')].find((button) => button.textContent === 'False positive')!); // a reason is required
       await click([...host.querySelectorAll('button')].find((button) => button.textContent === 'Suppress finding')!);
       await flush();
       const posts = callsFor('POST');
       expect(posts).toHaveLength(1);
       expect(posts[0][0]).toBe('/api/v1/workspaces/ws-1/suppressions');
-      expect(JSON.parse(String(posts[0][1]!.body))).toEqual({ fingerprint: FINGERPRINT, reason: '' });
+      expect(JSON.parse(String(posts[0][1]!.body))).toEqual({ fingerprint: FINGERPRINT, reason: 'False positive' });
       expect(host.querySelector('dialog')).toBeNull(); // closes on success
       expect(findingUrls()).toHaveLength(2); // the list refetches so the row status flips
     });
@@ -671,6 +686,7 @@ describe('ReportView suppression actions', () => {
       await act(async () => { root.render(<ReportView scanId="scan-1" notify={notify} go={go} />); });
       await settle();
       await click(await rowMenuItem(host, 0, 'Suppress…'));
+      await click([...host.querySelectorAll('button')].find((button) => button.textContent === 'False positive')!); // a reason is required
       await click([...host.querySelectorAll('button')].find((button) => button.textContent === 'Suppress finding')!);
       await settle();
       const notice = notify.mock.calls.at(-1)![0];
@@ -696,6 +712,7 @@ describe('ReportView suppression actions', () => {
       await act(async () => { root.render(<ReportView scanId="scan-1" notify={notify} />); });
       await settle();
       await click(await rowMenuItem(host, 0, 'Suppress…'));
+      await click([...host.querySelectorAll('button')].find((button) => button.textContent === 'False positive')!); // a reason is required
       await click([...host.querySelectorAll('button')].find((button) => button.textContent === 'Suppress finding')!);
       await settle();
       const notice = notify.mock.calls.at(-1)![0];
@@ -749,13 +766,14 @@ describe('ReportView bulk suppression', () => {
       expect(host.querySelector('dialog')).not.toBeNull();
       expect(host.textContent).toContain('applies to all 2 selected findings'); // queue context line
 
+      await click([...host.querySelectorAll('button')].find((button) => button.textContent === 'False positive')!); // a reason is required
       await click([...host.querySelectorAll('button')].find((button) => button.textContent === 'Suppress finding')!);
       await settle();
       await settle();
       const posts = fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST');
       expect(posts).toHaveLength(2); // both findings, not just the last one selected
-      expect(JSON.parse(String(posts[0][1]!.body))).toEqual({ fingerprint: FP1, reason: '' });
-      expect(JSON.parse(String(posts[1][1]!.body))).toEqual({ fingerprint: FP2, reason: '' });
+      expect(JSON.parse(String(posts[0][1]!.body))).toEqual({ fingerprint: FP1, reason: 'False positive' });
+      expect(JSON.parse(String(posts[1][1]!.body))).toEqual({ fingerprint: FP2, reason: 'False positive' });
       expect(host.querySelector('dialog')).toBeNull(); // closes on success
       expect(host.querySelector('[role="toolbar"][aria-label="Bulk actions"]')).toBeNull(); // selection cleared
       expect(findingUrls()).toHaveLength(2); // list refetched so the statuses flip
