@@ -50,10 +50,8 @@ function EyeOffIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <div className="page narrow">
       <PageHeader
-        eyebrow="About"
         title="Blunt Code"
         badge={meta.data?.version ? <Badge variant="secondary" className="text-xs font-mono">v{meta.data.version}</Badge> : undefined}
-        description="A local-first static analysis and security auditing application for Windows."
       />
       <section className="about-card">
         {/* No version badge here. The page title right above already carries it,

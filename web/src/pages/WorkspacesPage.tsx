@@ -93,7 +93,6 @@ export function WorkspacesPage({ go, onAdd, notify }: { go: (r: Route) => void; 
     <div className="page page-workspaces">
       <PageHeader
         title="Workspaces"
-        description="Every registered project with its latest scan results."
         actions={workspaces.length ? addPrimary : undefined}
       />
       {state.loading ? <SkeletonTable rows={8} cols={6} /> : state.error ? <ErrorPanel error={state.error} retry={state.reload} /> : !workspaces.length ? (

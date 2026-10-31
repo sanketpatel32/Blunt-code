@@ -18,6 +18,8 @@ export interface Workspace {
   /** Analyzer outcome counts for `latest_scan` (absent when it recorded no runs) — pairs every dashboard grade with its coverage. */
   latest_scan_coverage?: ScanCoverage;
   assessment_coverage?: ScanCoverage;
+  /** total_findings of the newest completed scans, oldest first (list endpoint only); failed scans are gaps, never zeros. */
+  trend?: number[];
 }
 
 export interface Scan {
@@ -162,6 +164,10 @@ export interface GlobalStats {
   findings: { severity: Record<Severity, number>; total: number };
   suppressions: number;
   tools?: StatsTools;
+  /** Risk grade distribution across each workspace's latest completed scan. */
+  risk_grades?: Partial<Record<'A' | 'B' | 'C' | 'D', number>>;
+  /** Last seven local days of scan starts, oldest first, zero-filled. */
+  scans_by_day?: Array<{ date: string; total: number; completed: number }>;
   generated_at: string;
 }
 
@@ -173,6 +179,9 @@ export interface SeverityTrendPoint {
   state: string;
   severity: { critical: number; high: number; medium: number; low: number; info: number };
   total: number;
+  /** Weighted risk score and A-D grade for this scan (same scale as /risk). */
+  score?: number;
+  grade?: 'A' | 'B' | 'C' | 'D';
 }
 
 export interface Finding {
@@ -214,6 +223,8 @@ export interface FindingPage {
   has_next?: boolean;
   /** First page in page mode only: finding counts per comparison status under the same non-status filters, suppressed included. */
   status_counts?: Partial<Record<'new' | 'persistent' | 'suppressed', number>>;
+  /** First page in page mode only: counts per category and per analyzer across the whole filtered set. */
+  facets?: { category: Record<string, number>; analyzer: Record<string, number> };
 }
 
 /** Query for GET /scans/{id}/findings. `severity`/`status` accept comma lists, `analyzer`/`rule` match exactly (rule case-insensitively), `path` is a substring match and `path_prefix` anchors at the start, `page`/`page_size` (1..200) page the results (never mixed with legacy `limit`/`offset`), and `sort`/`order` pick the ordering (`sort` also accepts a `-` prefix for descending). */

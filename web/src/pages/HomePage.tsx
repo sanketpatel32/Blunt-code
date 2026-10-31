@@ -190,9 +190,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
     return (
       <div className="page board-page">
         <PageHeader
-          eyebrow="Dashboard"
           title="Overview"
-          description="Scan a project locally, then track its risk here."
         />
 
         {/* One primary on the screen: the empty card owns the call to action, so
@@ -236,9 +234,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
   return (
     <div className="page board-page">
       <PageHeader
-        eyebrow={workspaces.data?.length ? `${workspaces.data.length} workspace${workspaces.data.length === 1 ? '' : 's'} on this computer` : undefined}
         title="Overview"
-        description={<>Each project is graded from its newest scan that <strong>actually finished</strong> — a cancelled run never sets a grade.</>}
         badge={activeScans > 0 ? (
           <span className="board-live">
             <i className="board-live-dot" aria-hidden="true" />

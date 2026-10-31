@@ -22,8 +22,10 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.34.0",
+    "motion": "^14.9.0",
     "react": "19.1.1",
     "react-dom": "19.1.1",
+    "recharts": "^3.10.1",
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {

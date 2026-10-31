@@ -125,9 +125,7 @@ export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r
   return (
     <div className="page">
       <PageHeader
-        eyebrow="Analyzers"
         title="Analysis tools"
-        description="Every analyzer registered on this machine — category, profiles, and local status. Pentest scans run per workspace: open one and choose Pentest suite."
       />
       {analyzers.error ? <ErrorPanel error={analyzers.error} retry={analyzers.reload} /> : <>
         <div className="toolbar-row tools-toolbar">

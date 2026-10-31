@@ -93,9 +93,7 @@ export function SettingsPage({ notify }: { notify: (n: Notice) => void }) {
   return (
     <div className="page">
       <PageHeader
-        eyebrow="Preferences"
         title="Settings"
-        description="Local runtime, offline mode, and privacy configuration."
       />
       {/* A failed GET must not pass hardcoded defaults off as the stored config. */}
       {settings.error && <ErrorPanel error={settings.error} retry={settings.reload} />}

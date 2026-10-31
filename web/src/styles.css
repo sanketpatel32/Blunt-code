@@ -2665,7 +2665,7 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
    inside the 56px chrome budget — down to 56rem; below that, restack exactly
    as styles.css did (these rules must restate the stacked layout because they
    override the 64rem band above at every narrower width too). */
-@media (max-width: 64rem) {
+@media (max-width: 700px) {
   .nav-actions { margin-left: 0; }
 }
 @media (max-width: 56rem) {
@@ -4793,11 +4793,11 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .rail-util-btn:hover { color: var(--color-ink); background: var(--color-surface-muted); }
 
 /* ── Mobile bar ──────────────────────────────────────────────────────
-   The rail collapses below 64rem. It is hidden outright rather than turned
-   into a drawer: a drawer that has to be opened before you can see what the app
-   contains is worse than a bar you can see, and this app is desktop-first. */
+   Three tiers: the full rail from 1024px, an icon rail from 701px to 1023px
+   (see the responsive layer at the end of this file), and below 701px this
+   bar plus a drawer. */
 .app-topbar { display: none; }
-@media (max-width: 64rem) {
+@media (max-width: 700px) {
   :root { --rail-w: 0rem; }
   /* One column, two rows: the sticky bar, then the page. Without explicit
      rows the grid shared a short page's spare height between both auto rows,
@@ -4837,7 +4837,7 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .app-footer { padding-inline: var(--space-xl) var(--page-gutter); }
 .search-sidebar { top: var(--space-md); }
 [id] { scroll-margin-top: var(--space-lg); }
-@media (max-width: 64rem) {
+@media (max-width: 700px) {
   .page, .app-footer { padding-inline: var(--page-gutter); }
   [id] { scroll-margin-top: calc(var(--nav-h) + var(--space-lg)); }
 }
@@ -5362,10 +5362,6 @@ input, select, textarea { color: var(--color-ink); }
 .export-item small { display: block; font-size: var(--text-2xs); color: var(--color-ink-soft); }
 .app-footer { padding: 16px 32px; color: var(--color-ink-soft); }
 :focus-visible { outline: 2px solid var(--color-focus, var(--color-accent)); outline-offset: 3px; }
-@media (min-width: 701px) {
-  .app-topbar { display: none; }
-  .app-rail { display: flex; }
-}
 @media (max-width: 950px) {
   .board-columns, .split-section { grid-template-columns: minmax(0, 1fr); }
   .page-heading-actions { width: 100%; justify-content: flex-start; }
@@ -5613,3 +5609,113 @@ tbody tr:hover > td { background: color-mix(in oklch, var(--color-accent) 5%, tr
 .grade-provisional { outline: 2px dashed var(--color-warning, #b45309); outline-offset: 3px; }
 .risk-explain, .scan-hero-explain { margin: var(--space-2xs, 0.25rem) 0 0; max-width: 60ch; font-size: 0.875rem; line-height: 1.45; color: var(--color-text-muted, inherit); }
 .risk-hero .risk-explain { grid-column: 1 / -1; }
+
+
+/* ══ v0.48 responsive layer ═══════════════════════════════════════════
+   One source of truth for the shell tiers. Before this, a 64rem rule hid the
+   rail and a later 701px rule showed it again, so tablets got a 25px rail
+   under the content and no navigation at all. */
+@media (min-width: 701px) and (max-width: 1023.98px) {
+  :root { --rail-w: 4rem; }
+  .app-rail { padding: 16px 8px; gap: 16px; align-items: stretch; }
+  .rail-brand { justify-content: center; padding: 0 0 var(--space-sm); }
+  .rail-brand b,
+  .rail-group-label,
+  .rail-link-label,
+  .rail-search span,
+  .rail-search .kbd-hint {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+  }
+  .rail-link { justify-content: center; padding: 0; min-height: 40px; min-width: 40px; }
+  .rail-link-icon, .rail-link-icon > svg { width: 1.15rem; height: 1.15rem; }
+  .rail-workspace { padding-top: var(--space-xs); }
+  .rail-search { justify-content: center; padding: 0; min-height: 40px; }
+  .rail-util { flex-direction: column; padding-left: 0; gap: 4px; }
+  .rail-util-btn, .rail-util .nav-bell { width: 40px; height: 40px; }
+  .page, .app-footer { padding-inline: 24px; }
+}
+@media (max-width: 700px) {
+  :root { --rail-w: 0rem; }
+  .app-topbar { flex-wrap: nowrap; min-height: 56px; padding: 8px 12px; gap: 4px; }
+  .app-topbar .brand { margin-right: auto; order: 0; }
+  .app-topbar .topbar-menu { order: -1; }
+  .app-topbar .nav-actions { display: flex; align-items: center; gap: 2px; }
+  .app-topbar .rail-util-btn, .app-topbar .nav-bell { width: 40px; height: 40px; }
+}
+/* Touch: every interactive control gets a 40px target on coarse pointers. */
+@media (pointer: coarse) {
+  button, [role='button'], [role='tab'], select, .rail-link, a.btn, .button { min-height: 40px; }
+  .icon-button, .rail-util-btn, .nav-bell, button[data-size='icon'] { min-width: 40px; min-height: 40px; }
+  input[type='checkbox'], input[type='radio'] { width: 20px; height: 20px; }
+}
+
+/* ══ v0.48 visual layer: charts, tiles, chips ═══════════════════════════ */
+.viz-chart { width: 100%; min-width: 0; }
+.viz-chart .recharts-wrapper, .viz-chart svg { outline: none; }
+.viz-skeleton { display: block; border-radius: var(--radius-md); }
+.viz-spark { display: block; flex: none; overflow: visible; }
+.viz-ring { position: relative; display: inline-grid; place-items: center; flex: none; }
+.viz-ring svg { position: absolute; inset: 0; }
+.viz-ring-center { position: relative; display: inline-flex; align-items: baseline; font-variant-numeric: tabular-nums; }
+.viz-ring-center b { font: 700 var(--text-md) var(--font-display); color: var(--color-ink); }
+.viz-ring-center small { font-size: var(--text-2xs); color: var(--color-ink-faint); }
+.viz-donut, .viz-gauge { position: relative; flex: none; }
+.viz-donut-center, .viz-gauge-center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; pointer-events: none; }
+.viz-donut-center b { font: 700 1.5rem/1 var(--font-display); font-variant-numeric: tabular-nums; color: var(--color-ink); }
+.viz-gauge-center b { font: 800 2.1rem/1 var(--font-display); color: var(--color-ink); }
+.viz-gauge-center small { margin-top: 2px; font-size: var(--text-2xs); font-weight: 600; color: var(--color-ink-faint); font-variant-numeric: tabular-nums; }
+.viz-sevbar { display: grid; gap: 8px; min-width: 0; }
+.viz-sevbar-track { display: flex; gap: 2px; width: 100%; overflow: hidden; border-radius: 999px; background: var(--color-surface-muted); }
+.viz-sevbar-seg { display: block; min-width: 4px; transform-origin: left center; }
+.viz-sevbar-seg:first-child { border-radius: 999px 0 0 999px; }
+.viz-sevbar-seg:last-child { border-radius: 0 999px 999px 0; }
+.viz-sevbar-seg:only-child { border-radius: 999px; }
+.viz-sevbar-empty { flex: 1; }
+.viz-sevchips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.viz-sevchip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px 3px 7px; border: 1px solid var(--color-rule-faint); border-radius: 999px; background: var(--color-surface); color: var(--color-ink-soft); font-size: var(--text-2xs); line-height: 1.4; }
+button.viz-sevchip { cursor: pointer; transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out); }
+button.viz-sevchip:hover { border-color: var(--color-rule-strong); background: var(--color-surface-muted); }
+.viz-sevchip i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.viz-sevchip-name { text-transform: capitalize; }
+.viz-sevchip b { color: var(--color-ink); font-variant-numeric: tabular-nums; }
+.viz-heat { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.viz-heat-cell { display: grid; justify-items: center; gap: 4px; }
+.viz-heat-box { display: grid; place-items: center; width: 100%; aspect-ratio: 1; max-width: 40px; border-radius: 8px; background: var(--color-accent); color: var(--color-on-accent, #fff); font-size: var(--text-2xs); }
+.viz-heat-box[data-empty] { background: var(--color-surface-muted); border: 1px solid var(--color-rule-faint); }
+.viz-heat-cell small { font-size: var(--text-2xs); color: var(--color-ink-faint); }
+
+/* Stat tiles: a big number, an icon, and at most a two-word label. */
+.stat-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.stat-tile { position: relative; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 12px; align-items: center; min-width: 0; padding: 14px 16px; border: 1px solid var(--color-rule-faint); border-radius: var(--radius-card); background: var(--color-surface); box-shadow: var(--shadow-card); color: inherit; text-decoration: none; }
+a.stat-tile { transition: border-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out); }
+a.stat-tile:hover { border-color: var(--color-rule-strong); }
+.stat-tile-icon { grid-row: span 2; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: var(--color-accent-soft); color: var(--color-accent-strong); }
+.stat-tile-icon svg { width: 18px; height: 18px; }
+.stat-tile[data-tone='danger'] .stat-tile-icon { background: color-mix(in oklab, var(--sev-fill-critical) 18%, transparent); color: var(--color-sev-critical); }
+.stat-tile[data-tone='warn'] .stat-tile-icon { background: color-mix(in oklab, var(--sev-fill-medium) 24%, transparent); color: var(--color-sev-medium); }
+.stat-tile[data-tone='ok'] .stat-tile-icon { background: color-mix(in oklab, var(--grade-a) 30%, transparent); color: var(--color-success); }
+.stat-tile-value { font: 700 1.5rem/1.1 var(--font-display); color: var(--color-ink); font-variant-numeric: tabular-nums; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stat-tile-label { font-size: var(--text-2xs); font-weight: 600; color: var(--color-ink-soft); }
+.stat-tile-extra { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); }
+
+/* Bento panel: chart card with a short title and an optional corner chip. */
+.bento { display: grid; gap: 12px; grid-template-columns: repeat(12, minmax(0, 1fr)); }
+.bento > * { grid-column: span 12; min-width: 0; }
+@media (min-width: 900px) {
+  .bento > .span-4 { grid-column: span 4; }
+  .bento > .span-5 { grid-column: span 5; }
+  .bento > .span-6 { grid-column: span 6; }
+  .bento > .span-7 { grid-column: span 7; }
+  .bento > .span-8 { grid-column: span 8; }
+}
+.viz-card { display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 16px; border: 1px solid var(--color-rule-faint); border-radius: var(--radius-card); background: var(--color-surface); box-shadow: var(--shadow-card); }
+.viz-card > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.viz-card > header h2, .viz-card > header h3 { margin: 0; font: 600 var(--text-sm) var(--font-display); letter-spacing: -0.01em; color: var(--color-ink); }
+.viz-card-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; background: var(--color-surface-muted); color: var(--color-ink-soft); font-size: var(--text-2xs); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.viz-row { display: flex; align-items: center; gap: 16px; min-width: 0; flex-wrap: wrap; }
+.viz-empty { display: grid; place-items: center; gap: 6px; min-height: 96px; color: var(--color-ink-faint); font-size: var(--text-xs); text-align: center; }
+.viz-empty svg { width: 22px; height: 22px; opacity: .7; }
+
+/* Page transitions are driven by motion; this keeps the container stable. */
+.route-motion { min-width: 0; }

@@ -132,7 +132,6 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
     {/* 1 · Identify + Act — one PageHeader row: who this is on the left, the
         single primary (Run scan) and the overflow menu on the right. */}
     <PageHeader
-      eyebrow="Workspace"
       title={item.name}
       badge={
         item.languages?.length ? (
@@ -156,7 +155,7 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
           </>
         )
       }
-      description={
+      meta={
         <div className="workspace-path-row flex items-center gap-1.5 font-mono text-xs">
           {/* flex-1 + break-all, not truncate: an ellipsized text node still
               lays out at full width and runs under the copy button (73), and

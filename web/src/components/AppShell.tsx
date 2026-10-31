@@ -14,6 +14,7 @@ import {
   Info,
   Languages,
   LayoutDashboard,
+  Menu,
   Power,
   Search,
   Settings,
@@ -155,6 +156,7 @@ export function AppShell({ workspace, route, onNavigate, onClose, theme, onToggl
                         href={href(section.route)}
                         className={cn('rail-link', active && 'active')}
                         aria-current={active ? 'page' : undefined}
+                        title={section.label}
                         onClick={(event) => navigateFromLink(event, () => onNavigate(section.route))}
                       >
                         {/* section.icon is a ready-made ReactNode (WorkspaceContext
@@ -254,8 +256,8 @@ export function AppShell({ workspace, route, onNavigate, onClose, theme, onToggl
         </div>
       </aside>
 
-      {/* Mobile bar: the rail collapses below 64rem, and the nav has to go
-          somewhere. Same links, horizontal, scrollable. */}
+      {/* Phone bar (<=700px): brand, a drawer with every destination, and the
+          same utilities as the rail foot — search, notifications, theme. */}
       <header className={cn('app-topbar', reduced && 'nav-no-motion')}>
         <a className="brand" href={href({ page: 'home' })} onClick={(event) => navigateFromLink(event, () => onNavigate({ page: 'home' }))}>
           <svg className="brand-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
@@ -267,13 +269,13 @@ export function AppShell({ workspace, route, onNavigate, onClose, theme, onToggl
           <b>Blunt Code</b>
         </a>
         <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-          <SheetTrigger asChild><Button variant="outline" size="sm" aria-label="Open navigation">Menu</Button></SheetTrigger>
+          <SheetTrigger asChild><Button variant="ghost" size="icon" className="rail-util-btn topbar-menu" aria-label="Open navigation" title="Menu"><Menu className="h-5 w-5" aria-hidden="true" /></Button></SheetTrigger>
           <SheetContent side="left" className="w-72 bg-[var(--color-surface)]">
             <SheetTitle>Blunt Code</SheetTitle>
             <SheetDescription>Pages and workspace sections</SheetDescription>
             <nav aria-label="Mobile navigation" className="mt-6" onClick={(event) => { if ((event.target as Element).closest('a')) setMobileOpen(false); }}>
               <ul className="rail-group">{items([...PRIMARY, ...SECONDARY, ...SETTINGS_PAGES]).map((item) => <li key={item.route.page}>{link(item)}</li>)}</ul>
-              {workspaceNav.length > 0 && <><p className="rail-group-label mt-6">{workspace?.name ?? 'This workspace'}</p><ul>{workspaceNav.map((section) => <li key={section.key}><a className="rail-link" href={href(section.route)} onClick={(e) => navigateFromLink(e, () => onNavigate(section.route))}>{section.label}</a></li>)}</ul></>}
+              {workspaceNav.length > 0 && <><p className="rail-group-label mt-6">{workspace?.name ?? 'This workspace'}</p><ul className="rail-group">{workspaceNav.map((section) => <li key={section.key}><a className={cn('rail-link', isSameSection(route, section.route) && 'active')} aria-current={isSameSection(route, section.route) ? 'page' : undefined} href={href(section.route)} onClick={(e) => navigateFromLink(e, () => onNavigate(section.route))}><span className="rail-link-icon" aria-hidden="true">{section.icon}</span><span className="rail-link-label">{section.label}</span></a></li>)}</ul></>}
             </nav>
           </SheetContent>
         </Sheet>
@@ -295,6 +297,7 @@ export function AppShell({ workspace, route, onNavigate, onClose, theme, onToggl
           <Button variant="ghost" size="icon" className="rail-util-btn" onClick={openCommandPalette} aria-label="Search and commands" title="Search and commands (Ctrl+K)">
             <Search className="h-4 w-4" aria-hidden="true" />
           </Button>
+          <NotificationsCenter routeKey={href(route)} />
           <SwitchButton className={cn(buttonVariants({ variant: 'ghost', size: 'icon' }), 'rail-util-btn')} theme={theme} onThemeChange={(next) => { if (next !== theme) onToggleTheme(); }} aria-label={theme === 'dark' ? t('common.switchToLight') : t('common.switchToDark')} title={theme === 'dark' ? t('common.switchToLight') : t('common.switchToDark')} />
         </div>
       </header>

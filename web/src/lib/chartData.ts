@@ -28,6 +28,18 @@ export const SEVERITY_ORDER: Severity[] = ['critical', 'high', 'medium', 'low', 
  *  This map is the JS-side door to it, so a surface cannot opt out by accident.
  */
 export const SEVERITY_COLOR: Record<Severity, string> = {
+  critical: 'var(--sev-fill-critical)',
+  high: 'var(--sev-fill-high)',
+  medium: 'var(--sev-fill-medium)',
+  low: 'var(--sev-fill-low)',
+  info: 'var(--sev-fill-info)',
+};
+
+/** v0.48: fills (bars, donut slices, dots) use the bright `--sev-fill-*` ramp
+ *  that the stacked severity bar already used, so a chart and a bar never
+ *  disagree (the donut used to paint Medium brown). Text on a surface uses the
+ *  darker, contrast-safe `--color-sev-*` ink via SEVERITY_INK. */
+export const SEVERITY_INK: Record<Severity, string> = {
   critical: 'var(--color-sev-critical)',
   high: 'var(--color-sev-high)',
   medium: 'var(--color-sev-medium)',
@@ -65,9 +77,18 @@ export function languageCoverageFromSnapshot(snapshot?: { languages?: Record<str
   return [...visible, { language: `${tail.length} more`, files: tail.reduce((sum, row) => sum + row.files, 0), aggregate: true }];
 }
 
-export function trendPointsFromScans(scans: Array<{ total_findings?: number; finished_at?: string | null; started_at?: string | null }>): TrendPoint[] {
-  if (!scans.length) return [];
-  return scans.slice(0, 8).reverse().map((s, i) => ({
+/** Points from GET /workspaces/{id}/trends, which already carries only
+ *  completed scans (oldest first) — a failed scan is a gap, never a 0. */
+export function trendPointsFromSeries(points: Array<{ total: number; finished_at?: string | null }>): TrendPoint[] {
+  return points.map((p, i) => ({ label: p.finished_at ?? `T${i + 1}`, total: p.total }));
+}
+
+/** Legacy fallback; skips failed, cancelled and in-flight scans so their
+ *  stored zero never plots as a fake "all clear" dip. */
+export function trendPointsFromScans(scans: Array<{ total_findings?: number; finished_at?: string | null; started_at?: string | null; state?: string }>): TrendPoint[] {
+  const done = scans.filter((s) => !s.state || s.state === 'completed' || s.state === 'completed_with_warnings');
+  if (!done.length) return [];
+  return done.slice(0, 8).reverse().map((s, i) => ({
     label: s.finished_at ?? s.started_at ?? `T${i + 1}`,
     total: s.total_findings ?? 0,
   }));
