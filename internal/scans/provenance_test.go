@@ -13,8 +13,6 @@ import (
 // mutatingAnalyzer routes to Python files like the blocking one, but its Run
 // edits a selected workspace file mid-scan: the drift-detection fixture.
 type mutatingAnalyzer struct {
-	root   string
-	rel    string
 	mutate func()
 }
 

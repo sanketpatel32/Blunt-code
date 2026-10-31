@@ -12,24 +12,36 @@ export const OWASP_TOP10: Array<{ id: OwaspId; title: string; cwe: string[]; cat
   { id: 'A04', title: 'Insecure Design', cwe: ['CWE-657','CWE-799'], categoryHints: ['design','threat'] },
   { id: 'A05', title: 'Security Misconfiguration', cwe: ['CWE-16','CWE-611'], categoryHints: ['misconfig','config','dockerfile','yaml'] },
   { id: 'A06', title: 'Vulnerable and Outdated Components', cwe: ['CWE-937','CWE-1104'], categoryHints: ['dependencies','vulnerable','outdated'] },
-  { id: 'A07', title: 'Identification and Authentication Failures', cwe: ['CWE-287','CWE-384'], categoryHints: ['auth','authentication','session'] },
+  { id: 'A07', title: 'Identification and Authentication Failures', cwe: ['CWE-287','CWE-384'], categoryHints: ['authentication','auth bypass','session','jwt'] },
   { id: 'A08', title: 'Software and Data Integrity Failures', cwe: ['CWE-829','CWE-502'], categoryHints: ['integrity','deserialization','supply'] },
-  { id: 'A09', title: 'Security Logging and Monitoring Failures', cwe: ['CWE-117','CWE-223'], categoryHints: ['logging','monitoring','todo'] },
-  { id: 'A10', title: 'Server-Side Request Forgery (SSRF)', cwe: ['CWE-918'], categoryHints: ['ssrf','request'] },
+  { id: 'A09', title: 'Security Logging and Monitoring Failures', cwe: ['CWE-117','CWE-223'], categoryHints: ['logging','monitoring','log injection'] },
+  { id: 'A10', title: 'Server-Side Request Forgery (SSRF)', cwe: ['CWE-918'], categoryHints: ['ssrf','server-side request'] },
 ];
 
-// heuristic mapping finding -> owasp id
-function mapFindingToOwasp(f: Finding): OwaspId | null {
+/** Code-quality categories and the TODO tracker never classify as an OWASP
+ *  risk: a FIXME comment is tech debt, not a "Security Logging and
+ *  Monitoring Failure", and counting them swamped A09. */
+const NON_SECURITY_CATEGORIES = new Set(['maintainability', 'code_smell', 'performance', 'complexity', 'duplication', 'style']);
+export function isSecurityRelevant(f: Finding): boolean {
+  return f.analyzer_id !== 'todo' && !NON_SECURITY_CATEGORIES.has(f.category);
+}
+
+const hintPatterns = new Map(OWASP_TOP10.map((o) => [o.id, o.categoryHints.map((h) => new RegExp(`\\b${h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`))]));
+
+// heuristic mapping finding -> owasp id; hints match at word starts so
+// "auth" does not fire on "author" or "request" on every HTTP mention.
+export function mapFindingToOwasp(f: Finding): OwaspId | null {
+  if (!isSecurityRelevant(f)) return null;
   const hay = `${f.category} ${f.rule_id ?? ''} ${f.title ?? ''} ${f.message}`.toLowerCase();
   for (const o of OWASP_TOP10) {
-    if (o.categoryHints.some((h) => hay.includes(h))) return o.id as OwaspId;
+    if (hintPatterns.get(o.id)!.some((pattern) => pattern.test(hay))) return o.id as OwaspId;
   }
   // fallback by analyzer/category
   if (f.category === 'secrets' || hay.includes('secret') || hay.includes('hardcoded')) return 'A02';
   if (f.category === 'dependencies' || hay.includes('depend')) return 'A06';
   if (f.category === 'container' || f.category === 'iac') return 'A05';
   if (hay.includes('injection') || hay.includes('xss') || hay.includes('sqli')) return 'A03';
-  if (hay.includes('auth')) return 'A07';
+  if (/\bauth(n|z)?\b/.test(hay)) return 'A07';
   // no match
   return null;
 }
@@ -56,7 +68,9 @@ export function ComplianceMatrix({ findings, scanId }: { findings: Finding[]; sc
       if (ow) byOwasp.get(ow)!.push(f);
       else unmapped.push(f);
     }
-    const total = findings.length || 1;
+    // Percentages are of the security-relevant findings, the only ones that
+    // can land in a row.
+    const total = findings.filter(isSecurityRelevant).length || 1;
     return OWASP_TOP10.map((o) => {
       const list = byOwasp.get(o.id)!;
       const count = list.length;
@@ -76,7 +90,7 @@ export function ComplianceMatrix({ findings, scanId }: { findings: Finding[]; sc
         <h3 className="font-display text-sm font-semibold tracking-tight">OWASP Top 10 (2021) — finding classification</h3>
         <span className="text-xs text-[var(--color-ink-faint)]">{rows.reduce((sum, row) => sum + row.count, 0)} {findings.length === 1 ? 'finding' : 'findings'} mapped</span>
       </div>
-      <p className="availability-note mx-4 mb-3">Heuristic classification of loaded findings, not a compliance assessment. No evidence does not mean a category passed.</p>
+      <p className="availability-note mx-4 mb-3">Heuristic classification of loaded security findings, not a compliance assessment. Code-quality findings and TODO markers are not classified. No evidence does not mean a category passed.</p>
       <Table>
         <TableHeader>
           <TableRow>

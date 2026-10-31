@@ -126,9 +126,19 @@ await check('tools page + filter', async () => {
 });
 
 // 6 · Rules editor validates a draft.
-await check('rules editor renders and validates', async () => {
+await check('hidden features: /rules is a graceful 404 and nothing links to it', async () => {
   await visit('/rules');
-  await page.getByText(/Draft validation/i).first().waitFor();
+  await page.getByText(/Page not found|not found/i).first().waitFor();
+  await visit('/');
+  assert(!(await page.locator('a[href="/rules"]').count()), 'a link to /rules is still on screen');
+});
+await check('hidden features: no ZAP/Nuclei/Burp tabs or Execute Check on the pentest page', async () => {
+  await visit(`/workspaces/${wsId}/pentest`);
+  const tabs = await page.getByRole('tab').allInnerTexts();
+  assert(!tabs.some((t) => /ZAP|Nuclei|Burp/.test(t)), `tabs: ${tabs.join(' | ')}`);
+  assert(!(await page.getByRole('button', { name: /Execute Check/ }).count()), 'Execute Check is still shown');
+  await visit(`/workspaces/${wsId}`);
+  assert(!(await page.getByRole('tab', { name: 'Dependencies' }).count()), 'Dependencies tab is still shown');
 });
 
 // 7 · Settings: language switch and back.
@@ -193,7 +203,7 @@ await check('404 page', async () => {
 });
 
 // 12 · Every route renders, light, desktop + phone.
-const routes = ['/', '/workspaces', `/workspaces/${wsId}`, `/workspaces/${wsId}/files`, `/workspaces/${wsId}/scans`, `/workspaces/${wsId}/pentest`, `/scans/${scanId}`, '/search', '/tools', '/rules', '/settings', '/about', '/cli'];
+const routes = ['/', '/workspaces', `/workspaces/${wsId}`, `/workspaces/${wsId}/files`, `/workspaces/${wsId}/scans`, `/workspaces/${wsId}/pentest`, `/scans/${scanId}`, '/search', '/tools', '/settings', '/about', '/cli'];
 for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {
   await check(`every route renders at ${viewport.width}px`, async () => {
     await page.setViewportSize(viewport);
@@ -246,6 +256,53 @@ await check('phone: workspace profile picker keeps its options on one row', asyn
   const pressed = page.locator('.profile-picker.segmented > button', { hasText: 'deep' });
   await pressed.click();
   assert((await pressed.getAttribute('aria-pressed')) === 'true', 'tapping "deep" did not select it');
+});
+
+// Deep-audit regressions (fix/deep-audit).
+await check('add workspace: missing folder shows a plain-language inline error', async () => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await visit('/workspaces');
+  const mark = consoleErrors.length;
+  await page.getByRole('button', { name: /^Add workspace$/ }).first().click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel(/Folder path/).fill(join(tmpdir(), 'bluntcode-smoke-does-not-exist'));
+  await dialog.getByLabel(/Workspace name/).fill('nope');
+  await dialog.getByRole('button', { name: /^Add workspace$/ }).click();
+  await dialog.getByText(/does not exist/i).first().waitFor({ timeout: 5000 });
+  const text = await dialog.innerText();
+  assert(!/stat |no such file|lstat|errno/i.test(text), 'raw Go error leaked into the dialog');
+  await page.keyboard.press('Escape');
+  // The browser logs the deliberate 400 as a resource error; it is the point of this check.
+  consoleErrors.splice(mark, consoleErrors.length - mark, ...consoleErrors.slice(mark).filter((e) => !/status of 400/.test(e)));
+});
+await check('phone: finding detail opens as a sheet in view, not below the list', async () => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await visit(`/scans/${scanId}`);
+  await page.locator('.findings-table tbody tr').first().click();
+  const pane = page.locator('aside.source-pane');
+  await pane.waitFor({ timeout: 5000 });
+  const box = await pane.boundingBox();
+  assert(box && box.y < 844 && box.y + 40 > 0, `sheet top at ${box?.y}px, outside the viewport`);
+  assert(box.x >= -1 && box.x + box.width <= 391, `sheet overflows horizontally (${box.x}+${box.width})`);
+  await page.keyboard.press('Escape');
+});
+await check('suppression lowers the scan counts, unsuppress restores them', async () => {
+  const before = await api('GET', `/scans/${scanId}`);
+  const { items } = await api('GET', `/scans/${scanId}/findings?limit=25`);
+  const target = items.find((f) => f.status !== 'suppressed') ?? items[0];
+  await api('POST', `/workspaces/${wsId}/suppressions`, { fingerprint: target.fingerprint, reason: 'smoke: accepted risk' });
+  const after = await api('GET', `/scans/${scanId}`);
+  assert(after.total_findings === before.total_findings - 1, `total ${before.total_findings} -> ${after.total_findings}`);
+  await api('DELETE', `/workspaces/${wsId}/suppressions/${target.fingerprint}`);
+  const restored = await api('GET', `/scans/${scanId}`);
+  assert(restored.total_findings === before.total_findings, `restore ${restored.total_findings} != ${before.total_findings}`);
+});
+await check('search defaults to each workspace\'s latest scan (no duplicates)', async () => {
+  const latest = await api('GET', '/findings/search?limit=100');
+  const all = await api('GET', '/findings/search?limit=100&scope=all');
+  const keys = (latest.items ?? []).map((f) => `${f.workspace_id}|${f.fingerprint}`);
+  assert(new Set(keys).size === keys.length, 'duplicate findings across scans of one workspace');
+  assert((all.total ?? all.items?.length ?? 0) >= (latest.total ?? latest.items?.length ?? 0), 'scope=all returned fewer results than the default');
 });
 
 await check('no console errors across the run', async () => {

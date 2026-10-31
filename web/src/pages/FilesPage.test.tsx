@@ -258,7 +258,7 @@ describe('FilesPage save', () => {
     fetchMock.mockClear();
     const { host, seen } = await renderWithNotify();
     expect(saveButton(host).disabled).toBe(true); // nothing changed yet — Save stays disabled
-    await act(async () => { [...host.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.includes('Add rule'))!.click(); await flush(); }); // a draft marks the selection dirty
+    await act(async () => { [...host.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.includes('Add path pattern'))!.click(); await flush(); }); // a draft marks the selection dirty
     expect(saveButton(host).disabled).toBe(false);
     await act(async () => { saveButton(host).click(); await flush(); await flush(); });
     const puts = putBodies();
@@ -276,7 +276,7 @@ describe('FilesPage save', () => {
     const { host } = await renderWithNotify();
     await act(async () => { toggle(host, 'Expand src')!.click(); await flush(); });
     await act(async () => { host.querySelector<HTMLInputElement>('[aria-label="Include src"]')!.click(); await flush(); });
-    await act(async () => { [...host.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.includes('Add rule'))!.click(); await flush(); });
+    await act(async () => { [...host.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.includes('Add path pattern'))!.click(); await flush(); });
     await act(async () => { saveButton(host).click(); await flush(); await flush(); });
     const puts = putBodies();
     expect(puts[0]!.body).toEqual({ rules: [] }); // the untouched draft never leaves the client
@@ -383,13 +383,13 @@ describe('FilesPage language filter', () => {
     expect(Math.max(...delays)).toBe(200);
   });
 
-  it('labels the summary count as saved rules, distinct from the bulk bar’s shown-included count', async () => {
+  it('labels the summary count as saved path choices, distinct from the bulk bar’s shown-included count', async () => {
     enqueueChild('src', { items: [py] });
     const host = await render();
-    expect(host.querySelector('.tree-summary-bar')!.textContent).toContain('0 saved rules');
+    expect(host.querySelector('.tree-summary-bar')!.textContent).toContain('0 saved path choices');
     await act(async () => { toggle(host, 'Include docs')!.click(); await flush(); }); // exclude docs
     await act(async () => { toggle(host, 'Include docs')!.click(); await flush(); }); // back to include — one include override
-    expect(host.querySelector('.tree-summary-bar')!.textContent).toContain('1 saved rule');
+    expect(host.querySelector('.tree-summary-bar')!.textContent).toContain('1 saved path choice');
   });
 });
 

@@ -5,7 +5,7 @@ import type { Workspace } from '../types';
 import { Search } from 'lucide-react';
 
 const LABELS: Record<Route['page'], string> = {
-  home: 'Overview', workspaces: 'Workspaces', workspace: 'Overview', files: 'Files & rules',
+  home: 'Overview', workspaces: 'Workspaces', workspace: 'Overview', files: 'Files & paths',
   history: 'Scan history', scan: 'Scan report', search: 'Findings', tools: 'Analyzers', pentest: 'Pentest & security',
   rules: 'Rule drafts', settings: 'Settings', about: 'About', cli: 'CLI reference', 'not-found': 'Page not found',
 };

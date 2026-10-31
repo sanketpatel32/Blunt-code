@@ -186,10 +186,10 @@ describe('ScanPage what-changed panel', () => {
 
   it('names analyzers (not engines) in the hero meta and verdict stats, in the hero meta line', async () => {
     const { host } = await renderScanPage(scanFixture({ total_findings: 5, new_count: 2, critical_count: 1 }));
-    expect(host.querySelector('.scan-hero-meta')?.textContent).toContain('1 of 1 analyzer succeeded');
+    expect(host.querySelector('.scan-hero-meta')?.textContent).toContain('1 of 1 analyzer ran');
     expect(host.querySelector('.scan-hero-meta')?.textContent).toContain('profile');
     const stats = [...host.querySelectorAll('.verdict-stats .verdict-stat')];
-    expect(stats.map((stat) => stat.querySelector('dt')?.textContent)).toEqual(['Risk score', 'New', 'Fixed', 'Persistent', 'Analyzers']);
+    expect(stats.map((stat) => stat.querySelector('dt')?.textContent)).toEqual(['Risk score', 'New', 'Fixed', 'Persistent', 'Analyzers ran']);
     expect(host.textContent).not.toContain('engine');
   });
 
@@ -293,8 +293,8 @@ describe('ScanPage live results panel', () => {
     expect(metric).toBe('10771');
     expect(metric).not.toBe('21542');
     const flow = [...host.querySelectorAll('.scan-flow li strong')].map((node) => node.textContent);
-    expect(flow.filter((text) => text?.includes('biome finished'))).toHaveLength(1);
-    expect(flow.filter((text) => text?.includes('gitleaks-secrets finished'))).toHaveLength(1);
+    expect(flow.filter((text) => text?.includes('Biome finished'))).toHaveLength(1);
+    expect(flow.filter((text) => text?.includes('Gitleaks finished'))).toHaveLength(1);
   });
 
   it('shows live severity totals and per-analyzer findings from completion events', async () => {
@@ -345,6 +345,9 @@ describe('ScanPage terminal and action states (IMP-14)', () => {
     // resolves the error panel shows and no reconnect may ever be scheduled.
     expect(DispatchingEventSource.instances).toHaveLength(1);
     expect(host.querySelector('.error-panel')).not.toBeNull();
+    // A missing scan is final: a way back instead of a retry that cannot work.
+    const buttons = [...host.querySelectorAll('.error-panel button')].map((button) => button.textContent);
+    expect(buttons).toEqual(['Back to overview', 'Workspaces']);
     const source = DispatchingEventSource.instances[0]!;
     await act(async () => { source.onerror?.(new Event('error')); });
     await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });

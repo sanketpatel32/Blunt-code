@@ -120,6 +120,8 @@ export interface SearchFindingsPage {
   has_next: boolean;
   /** Severity → total across the whole filtered result set (not just the served page); omitted by older backends. */
   severity_counts?: Partial<Record<Severity, number>>;
+  /** `latest` (default): each workspace's newest completed scan only; `all`: every stored scan. Omitted by older backends. */
+  scope?: 'latest' | 'all';
 }
 
 /** Weighted risk score from `GET /workspaces/{id}/risk`. Weights: critical 10, high 5, medium 2, low 1. Grade A<5, B<20, C<50, D otherwise. */
@@ -210,6 +212,8 @@ export interface FindingPage {
   page?: number;
   page_size?: number;
   has_next?: boolean;
+  /** First page in page mode only: finding counts per comparison status under the same non-status filters, suppressed included. */
+  status_counts?: Partial<Record<'new' | 'persistent' | 'suppressed', number>>;
 }
 
 /** Query for GET /scans/{id}/findings. `severity`/`status` accept comma lists, `analyzer`/`rule` match exactly (rule case-insensitively), `path` is a substring match and `path_prefix` anchors at the start, `page`/`page_size` (1..200) page the results (never mixed with legacy `limit`/`offset`), and `sort`/`order` pick the ordering (`sort` also accepts a `-` prefix for descending). */

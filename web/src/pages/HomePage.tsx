@@ -20,7 +20,7 @@ import { Activity, ChevronRight, FolderOpen, FolderPlus } from 'lucide-react';
 
 import { SEVERITY_ORDER, trendPointsFromScans } from '../lib/chartData';
 import { isActiveScanState } from '../lib/scanEvents';
-import { GRADE_BANDS, bandFor, gradeDepth, riskGrade, riskScore, severityCountsOf } from '../lib/risk';
+import { GRADE_BANDS, bandFor, coverageText, gradeDepth, riskGrade, riskScore, severityCountsOf } from '../lib/risk';
 import { GradeTile } from '../components/GradeTile';
 
 const FEED_LIMIT = 10;
@@ -230,6 +230,8 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
 
   const activeScans = summary?.active_scans ?? 0;
   const verdictTallied = verdict.scanned > 0;
+  // The workspace list failed to load: nothing on the board can be counted.
+  const boardFailed = !!workspaces.error && !workspaces.data;
 
   return (
     <div className="page board-page">
@@ -306,16 +308,18 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
               role="img"
               aria-label={verdictTallied
                 ? `Grade ${verdict.grade}, ${bandFor(verdict.grade).label.toLowerCase()}, score ${verdict.score}. Grade bands: ${GRADE_BANDS.map((band) => `${band.grade} ${band.range}`).join(', ')}.`
-                : 'Not graded yet: no completed scans.'}
+                : boardFailed ? 'Grade unavailable: your workspaces could not be loaded.' : 'Not graded yet: no completed scans.'}
             >
-              <GradeTile grade={verdictTallied ? verdict.grade : null} size="xl" flip className="verdict-letter" />
+              {boardFailed
+                ? <GradeTile grade={null} placeholder="!" tone="warning" size="xl" className="verdict-letter" />
+                : <GradeTile grade={verdictTallied ? verdict.grade : null} size="xl" flip className="verdict-letter" />}
               {/* The grade owns the color; its label and band range stay neutral ink. */}
               <span className="verdict-grade-text" aria-hidden="true">
                 <span className="verdict-bandlabel">{verdictTallied && <>{bandFor(verdict.grade).label}.</>}</span>
                 <span className="verdict-score">
                   {verdictTallied ? (
                     <>score <strong className="tabular-nums">{verdict.score}</strong></>
-                  ) : (
+                  ) : boardFailed ? 'grade unavailable' : (
                     'not graded yet'
                   )}
                 </span>
@@ -409,7 +413,9 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
             <SeverityTally counts={verdict.counts} total={verdict.totalFindings} />
           )}
 
-          <dl className="verdict-rail" aria-label="Scan activity at a glance">
+          {/* Without the workspace list these would be invented zeros
+              ("Workspaces scanned 0 of 0"), so a failed load shows none. */}
+          {!boardFailed && <dl className="verdict-rail" aria-label="Scan activity at a glance">
             {/* Active scans deliberately absent: the header's live pill already
                 carries that count, and a count must never appear twice. */}
             <div className="rail-stat">
@@ -432,7 +438,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
                 {readyTools} <span className="rail-of">of {totalTools}</span>
               </dd>
             </div>
-          </dl>
+          </dl>}
         </section>
       )}
 
@@ -971,7 +977,7 @@ function LedgerRow({
               {partialCoverage && coverage && (
                 <span
                   className="ledger-partial-badge"
-                  title={`Partial analyzer coverage: ${coverage.succeeded}/${coverage.total} clean${coverage.failed > 0 ? `, ${coverage.failed} failed` : ''}${coverage.warned > 0 ? `, ${coverage.warned} degraded` : ''}`}
+                  title={`Partial coverage: ${coverageText(coverage)}. The grade reflects only what ran.`}
                 >
                   partial
                 </span>

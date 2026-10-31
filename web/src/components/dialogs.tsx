@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { api, type CreatedWorkspace } from '../api';
+import { api, ApiError, type CreatedWorkspace } from '../api';
 import type { Finding, SourcePreview } from '../types';
 import type { Notice } from '../lib/notice';
 import { message } from '../lib/notice';
@@ -44,10 +44,25 @@ export function AddWorkspaceDialog({ onClose, onCreated, notify }: { onClose: ()
   const pathInputRef = useRef<HTMLInputElement>(null);
   const { dialogRef, onBackdropMouseDown } = useDialogA11y({ onClose, busy, autoFocusRef: pathInputRef });
   const pick = async () => { setBusy(true); try { const result = await api.selectFolder(); if (!result.cancelled && result.path) { const folder = result.path; setPath(folder); setName((current) => current || folder.split(/[\\/]/).filter(Boolean).pop() || 'Workspace'); } } catch (e) { notify({ kind: 'error', text: message(e) }); } finally { setBusy(false); } };
-  const submit = async (event: FormEvent) => { event.preventDefault(); if (!path.trim()) return; setBusy(true); try { onCreated(await api.createWorkspace({ root_path: path.trim(), name: name.trim() || undefined })); } catch (e) { notify({ kind: 'error', text: message(e) }); } finally { setBusy(false); } };
+  /** Path problems show under the field (and keep focus there) instead of a toast in the corner. */
+  const [pathError, setPathError] = useState('');
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    const value = path.trim();
+    if (!value) return;
+    const local = folderPathProblem(value);
+    if (local) { setPathError(local); pathInputRef.current?.focus(); return; }
+    setBusy(true);
+    try {
+      onCreated(await api.createWorkspace({ root_path: value, name: name.trim() || undefined }));
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'INVALID_PATH') { setPathError(e.message); pathInputRef.current?.focus(); }
+      else notify({ kind: 'error', text: message(e) });
+    } finally { setBusy(false); }
+  };
   return (
   // biome-ignore lint/a11y/noStaticElementInteractions: backdrop-only dismissal is pointer convenience; keyboard users close via Escape and the dialog's own Cancel/close button.
-    <div className="dialog-backdrop" role="presentation" onMouseDown={onBackdropMouseDown}><dialog ref={dialogRef} open aria-modal="true" aria-labelledby="add-workspace-title"><form onSubmit={(event) => void submit(event)}><header><h2 id="add-workspace-title">Add workspace</h2><Button variant="ghost" size="icon" type="button" onClick={onClose} disabled={busy} aria-label="Close">×</Button></header><p>Choose a project folder. Blunt Code keeps a reference and never changes your source files.</p><label>Folder path<div className="picker-row flex gap-2"><Input ref={pathInputRef} value={path} onChange={(event) => setPath(event.target.value)} placeholder="C:\Projects\my-app" required className="flex-1" /><Button type="button" variant="outline" onClick={() => void pick()} disabled={busy}>Browse…</Button></div></label><label>Workspace name <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Optional" /></label><footer className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={onClose} disabled={busy}>Cancel</Button><Button type="submit" disabled={busy || !path.trim()}>{busy ? 'Adding…' : 'Add workspace'}</Button></footer></form></dialog></div>);
+    <div className="dialog-backdrop" role="presentation" onMouseDown={onBackdropMouseDown}><dialog ref={dialogRef} open aria-modal="true" aria-labelledby="add-workspace-title"><form onSubmit={(event) => void submit(event)}><header><h2 id="add-workspace-title">Add workspace</h2><Button variant="ghost" size="icon" type="button" onClick={onClose} disabled={busy} aria-label="Close">×</Button></header><p>Choose a project folder. Blunt Code keeps a reference and never changes your source files.</p><label htmlFor="add-workspace-path">Folder path</label><div className="picker-row flex gap-2"><Input id="add-workspace-path" ref={pathInputRef} value={path} onChange={(event) => { setPath(event.target.value); if (pathError) setPathError(''); }} placeholder="C:\Projects\my-app" required className="flex-1" aria-invalid={pathError ? true : undefined} aria-describedby={pathError ? 'add-workspace-path-error' : undefined} /><Button type="button" variant="outline" onClick={() => void pick()} disabled={busy}>Browse…</Button></div>{pathError && <p id="add-workspace-path-error" className="field-error" role="alert">{pathError}</p>}<label>Workspace name <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Optional" /></label><footer className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={onClose} disabled={busy}>Cancel</Button><Button type="submit" disabled={busy || !path.trim()}>{busy ? 'Adding…' : 'Add workspace'}</Button></footer></form></dialog></div>);
 }
 
 export function ConfirmationDialog({ title, description, confirmLabel, busy, onCancel, onConfirm, tone = 'destructive' }: { title: string; description: string; confirmLabel: string; busy: boolean; onCancel: () => void; onConfirm: () => void; /** destructive (default) for irreversible actions; primary for safe starts like running a scan. */ tone?: 'destructive' | 'primary' }) {
@@ -61,24 +76,37 @@ export function ConfirmationDialog({ title, description, confirmLabel, busy, onC
 /** Upper bound on the optional suppression note; mirrors the backend's maxSuppressionReasonLength. */
 export const SUPPRESSION_REASON_MAX = 500;
 
+/** Client-side check for the one mistake the server cannot fix: a relative
+ *  path means nothing to the app, which runs from its own folder. Absolute
+ *  Windows (C:\\, \\\\server\\share), POSIX (/…) and home (~) paths pass. */
+export function folderPathProblem(value: string): string {
+  const path = value.trim().replace(/^["']|["']$/g, '');
+  if (/^[A-Za-z]:[\\/]/.test(path) || path.startsWith('\\\\') || path.startsWith('/') || path === '~' || /^~[\\/]/.test(path)) return '';
+  if (/^[A-Za-z]:$/.test(path)) return `Add a backslash to scan the whole drive (${path}\\), or pick a folder on it.`;
+  return 'Use the full folder path, for example C:\\Projects\\my-app, or use Browse to pick it.';
+}
+
 /**
  * "Suppress this finding" dialog: records a fingerprint dismissal for the workspace.
- * The reason is optional and capped at 500 characters; confirming posts the
+ * A reason is required (capped at 500 characters) so the list explains itself
+ * later; the quick picks fill it in one click. Confirming posts the
  * suppression and hands control back to the caller (which closes the dialog and
  * refreshes the findings list). Errors keep the dialog open so nothing is lost.
  */
 export function SuppressFindingDialog({ workspaceId, finding, onClose, onSuppressed, notify }: { workspaceId: string; finding: Finding; onClose: () => void; onSuppressed: (reason: string) => void; notify: (n: Notice) => void }) {
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
+  const [reasonMissing, setReasonMissing] = useState(false);
   const reasonRef = useRef<HTMLTextAreaElement>(null);
   const { dialogRef, onBackdropMouseDown } = useDialogA11y({ onClose, busy, autoFocusRef: reasonRef });
   const name = finding.title ?? finding.rule_id ?? 'finding';
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!finding.fingerprint) return;
+    if (!reason.trim()) { setReasonMissing(true); reasonRef.current?.focus(); return; }
     setBusy(true);
     try {
-      await api.addSuppression(workspaceId, finding.fingerprint, reason.trim() || undefined);
+      await api.addSuppression(workspaceId, finding.fingerprint, reason.trim());
       onSuppressed(reason.trim());
     } catch (e) {
       notify({ kind: 'error', text: message(e) });
@@ -87,7 +115,7 @@ export function SuppressFindingDialog({ workspaceId, finding, onClose, onSuppres
   };
   return (
   // biome-ignore lint/a11y/noStaticElementInteractions: backdrop-only dismissal is pointer convenience; keyboard users close via Escape and the dialog's own Cancel/close button.
-    <div className="dialog-backdrop" role="presentation" onMouseDown={onBackdropMouseDown}><dialog ref={dialogRef} open aria-modal="true" aria-labelledby="suppress-finding-title"><form onSubmit={(event) => void submit(event)}><header><h2 id="suppress-finding-title">Suppress this finding?</h2><button type="button" className="icon-button" onClick={onClose} aria-label="Close">×</button></header><p className="suppress-finding-context"><strong>{name}</strong> <code>{findingLocation(finding)}</code></p><p id="suppress-finding-hint">Suppressing hides this finding, matched by its fingerprint, from all future scans, reports, and the CI gate for this workspace.</p><label htmlFor="suppress-finding-reason">Reason (optional)<textarea id="suppress-finding-reason" ref={reasonRef} rows={3} maxLength={SUPPRESSION_REASON_MAX} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Why this finding is being hidden" aria-describedby="suppress-finding-hint suppress-finding-count" /></label><div className="reason-suggestions" role="group" aria-label="Common reasons">{['False positive', 'Safe by design', 'Documented in runbook', 'Third-party code', 'Tracked externally'].map((suggestion) => <button key={suggestion} type="button" className="text-button reason-suggestion" onClick={() => { setReason(suggestion); reasonRef.current?.focus(); }}>{suggestion}</button>)}</div><small id="suppress-finding-count" className="suppress-finding-count">{reason.length}/{SUPPRESSION_REASON_MAX} characters</small><footer><button type="button" className="button secondary" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" className="button danger" disabled={busy || !finding.fingerprint}>{busy ? 'Suppressing…' : 'Suppress finding'}</button></footer><small className="muted">You can restore it anytime from the workspace’s Suppressions list.</small></form></dialog></div>);
+    <div className="dialog-backdrop" role="presentation" onMouseDown={onBackdropMouseDown}><dialog ref={dialogRef} open aria-modal="true" aria-labelledby="suppress-finding-title"><form onSubmit={(event) => void submit(event)}><header><h2 id="suppress-finding-title">Suppress this finding?</h2><button type="button" className="icon-button" onClick={onClose} aria-label="Close">×</button></header><p className="suppress-finding-context"><strong>{name}</strong> <code>{findingLocation(finding)}</code></p><p id="suppress-finding-hint">Suppressing hides this finding, matched by its fingerprint, from this workspace’s counts, grade, reports, and CI gate — in this scan and all future ones.</p><label htmlFor="suppress-finding-reason">Reason<textarea id="suppress-finding-reason" ref={reasonRef} rows={3} maxLength={SUPPRESSION_REASON_MAX} value={reason} aria-required="true" onChange={(event) => { setReason(event.target.value); if (reasonMissing) setReasonMissing(false); }} placeholder="Why this finding is being hidden" aria-invalid={reasonMissing || undefined} aria-describedby={`suppress-finding-hint suppress-finding-count${reasonMissing ? ' suppress-finding-reason-error' : ''}`} /></label>{reasonMissing && <p id="suppress-finding-reason-error" className="field-error" role="alert">Add a reason, or pick one below, so the suppression explains itself later.</p>}<div className="reason-suggestions" role="group" aria-label="Common reasons">{['False positive', 'Safe by design', 'Documented in runbook', 'Third-party code', 'Tracked externally'].map((suggestion) => <button key={suggestion} type="button" className="text-button reason-suggestion" onClick={() => { setReason(suggestion); setReasonMissing(false); reasonRef.current?.focus(); }}>{suggestion}</button>)}</div><small id="suppress-finding-count" className="suppress-finding-count">{reason.length}/{SUPPRESSION_REASON_MAX} characters</small><footer><button type="button" className="button secondary" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" className="button danger" disabled={busy || !finding.fingerprint}>{busy ? 'Suppressing…' : 'Suppress finding'}</button></footer><small className="muted">You can restore it anytime from the workspace’s Suppressions list.</small></form></dialog></div>);
 }
 
 export function FindingPreviewDialog({ scanId, finding, onClose }: { scanId: string; finding: Finding; onClose: () => void }) {

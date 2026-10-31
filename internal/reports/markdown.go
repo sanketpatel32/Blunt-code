@@ -19,6 +19,7 @@ func Markdown(m Model) string {
 	var b strings.Builder
 	b.WriteString("# Blunt Code Analysis Report - " + escape(m.WorkspaceName) + "\n\n")
 	b.WriteString("Generated on: " + m.StartedAt.UTC().Format("2006-01-02 15:04:05 UTC") + "\n\n")
+	verdictSummary(&b, m)
 	qualityMetrics(&b, m)
 	findingsTable(&b, "Open Findings", m.Findings)
 	findingsTable(&b, "Security Findings", byCategories(m.Findings, analyzers.CategorySecurity, analyzers.CategoryVulnerability))
@@ -30,23 +31,66 @@ func Markdown(m Model) string {
 	return b.String()
 }
 
+// verdictSummary opens the report with the same verdict the app shows: grade,
+// score, severity totals, and analyzer coverage.
+func verdictSummary(b *strings.Builder, m Model) {
+	score, grade, label := Grade(m.Counts)
+	b.WriteString("## Summary\n\n")
+	b.WriteString(fmt.Sprintf("**Grade %s · %s** (risk score %d)", grade, label, score))
+	if !coverageComplete(m.Runs) && len(m.Runs) > 0 {
+		b.WriteString(" — provisional: not every analyzer ran cleanly")
+	}
+	b.WriteString("\n\n")
+	b.WriteString(fmt.Sprintf("%d findings: %d critical, %d high, %d medium, %d low, %d info.", len(m.Findings),
+		m.Counts[analyzers.SeverityCritical], m.Counts[analyzers.SeverityHigh], m.Counts[analyzers.SeverityMedium], m.Counts[analyzers.SeverityLow], m.Counts[analyzers.SeverityInfo]))
+	if line := CoverageLine(m.Runs); line != "" {
+		b.WriteString(" " + line + ".")
+	}
+	b.WriteString("\n\n")
+}
+
+// qualityMetrics prints the metrics table without placeholder rows: a metric
+// only an analyzer that did not run (SonarQube) can supply is left out
+// instead of printed as N/A, and a group keeps its label on its first row.
 func qualityMetrics(b *strings.Builder, m Model) {
+	type row struct{ name, value string }
+	groups := []struct {
+		label string
+		rows  []row
+	}{
+		{"**Size**", []row{{"Lines of Code (LOC)", metric(m, "ncloc", "")}}},
+		{"**Complexity**", []row{{"Cognitive Complexity", metric(m, "cognitive_complexity", "")}, {"Cyclomatic Complexity", metric(m, "complexity", "")}}},
+		{"**Issues**", []row{{"Total Findings", fmt.Sprintf("%d", len(m.Findings))}, {"Bugs", countCategory(m.Findings, analyzers.CategoryBug)}, {"Vulnerabilities", countCategory(m.Findings, analyzers.CategoryVulnerability)}, {"Code Smells", countCategory(m.Findings, analyzers.CategoryCodeSmell)}}},
+		{"**Security & Ratings**", []row{{"Security Hotspots", metricOrCount(m, "security_hotspots", countCategory(m.Findings, analyzers.CategorySecurity))}, {"Security Rating", ratingOr(m, "security_rating")}, {"Reliability Rating", ratingOr(m, "reliability_rating")}, {"Maintainability Rating", ratingOr(m, "sqale_rating")}}},
+		{"**Coverage & Duplication**", []row{{"Coverage", percentOr(m, "coverage")}, {"Duplicated Lines Density", percentOr(m, "duplicated_lines_density")}}},
+	}
 	b.WriteString("## Quality Metrics Summary\n\n")
 	b.WriteString("| Category | Metric | Value |\n| :--- | :--- | :--- |\n")
-	metricRow(b, "**Size**", "Lines of Code (LOC)", metric(m, "ncloc", "N/A"))
-	metricRow(b, "**Complexity**", "Cognitive Complexity", metric(m, "cognitive_complexity", "N/A"))
-	metricRow(b, "", "Cyclomatic Complexity", metric(m, "complexity", "N/A"))
-	metricRow(b, "**Issues**", "Total Findings", fmt.Sprintf("%d", len(m.Findings)))
-	metricRow(b, "", "Bugs", countCategory(m.Findings, analyzers.CategoryBug))
-	metricRow(b, "", "Vulnerabilities", countCategory(m.Findings, analyzers.CategoryVulnerability))
-	metricRow(b, "", "Code Smells", countCategory(m.Findings, analyzers.CategoryCodeSmell))
-	metricRow(b, "**Security & Ratings**", "Security Hotspots", metricOrCount(m, "security_hotspots", countCategory(m.Findings, analyzers.CategorySecurity)))
-	metricRow(b, "", "Security Rating", rating(m, "security_rating"))
-	metricRow(b, "", "Reliability Rating", rating(m, "reliability_rating"))
-	metricRow(b, "", "Maintainability Rating", rating(m, "sqale_rating"))
-	metricRow(b, "**Coverage & Duplication**", "Coverage", percent(m, "coverage"))
-	metricRow(b, "", "Duplicated Lines Density", percent(m, "duplicated_lines_density"))
+	for _, group := range groups {
+		label := group.label
+		for _, r := range group.rows {
+			if r.value == "" {
+				continue
+			}
+			metricRow(b, label, r.name, r.value)
+			label = ""
+		}
+	}
 	b.WriteString("\n")
+}
+
+func ratingOr(m Model, key string) string {
+	if value := rating(m, key); value != "N/A" {
+		return value
+	}
+	return ""
+}
+
+func percentOr(m Model, key string) string {
+	if value := percent(m, key); value != "N/A" {
+		return value
+	}
+	return ""
 }
 
 func metricRow(b *strings.Builder, category, name, value string) {

@@ -9,6 +9,7 @@ const JUST_NOW_WINDOW_MS = 45 * SECOND_MS;
 // per row), so both instances are hoisted to module level and reused for every call.
 const shortDate = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
 const dateTime = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+const dateTimeSeconds = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'medium' });
 // Hoisted for the same reason as the date formatters: live scan panels format
 // one number per severity chip and per analyzer pill per update.
 const countFmt = new Intl.NumberFormat(undefined);
@@ -24,6 +25,15 @@ export function date(value?: string | null) {
   // Intl.format() throws RangeError on an invalid time value, so hostile timestamps are defused here.
   if (Number.isNaN(time)) return 'Not analyzed yet';
   return dateTime.format(time);
+}
+
+/** date() with seconds, for places where two scans minutes apart must not
+ *  read as the same moment (comparisons, the history detail row). */
+export function preciseDate(value?: string | null) {
+  if (!value) return 'Not analyzed yet';
+  const time = new Date(value).getTime();
+  if (Number.isNaN(time)) return 'Not analyzed yet';
+  return dateTimeSeconds.format(time);
 }
 
 export function relativeTime(value?: string | null, now = Date.now()): string {
@@ -166,6 +176,13 @@ export function analyzerName(id: string) {
  *
  *  Returns a short sentence; the untouched text stays available to the caller
  *  for a title attribute, so nothing is actually hidden. */
+/** Analyzer errors that mean "this tool is not on this computer": the current
+ *  server wording plus the older managed-artifact phrasings stored in past scans. */
+const MISSING_TOOL_RE = /not installed on this computer|no pinned managed artifact|pinned managed artifact is not installed|isn['’]t installed|is not installed/i;
+export function isMissingToolMessage(text?: string | null): boolean {
+  return Boolean(text && MISSING_TOOL_RE.test(text));
+}
+
 export function humanizeAnalyzerError(raw: string): string {
   let text = raw.trim();
 
@@ -243,7 +260,10 @@ export function ruleDocsUrl(finding: Pick<Finding, 'analyzer_id' | 'rule_id' | '
 
 /** First sentence/clause of a message (cut at the first "." or ":"), capped near 80 chars — heading material. */
 function firstMessageClause(text: string): string {
-  const cut = text.search(/[.:]/);
+  // A clause ends at "." or ":" followed by whitespace or the end — not at
+  // the dot inside "package.json" or "v1.2", which split titles into
+  // "package" / "json declares GPL-3.0".
+  const cut = text.search(/[.:](?=\s|$)/);
   const clause = (cut > 0 ? text.slice(0, cut) : text).trim();
   if (clause.length > 80) return `${clause.slice(0, 79).trimEnd()}…`;
   return clause;

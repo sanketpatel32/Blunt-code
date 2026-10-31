@@ -54,6 +54,20 @@ const hit = (id: string, scanId: string, severity: string, rule: string) => ({
 });
 
 describe('SearchPage', () => {
+  it('searches the latest scan per workspace by default; Include older scans asks for scope=all', async () => {
+    const fetchMock = searchMock([['/api/v1/findings/search', { items: [hit('f1', 'scan-9', 'high', 'py-eval')], total: 1, page: 1, page_size: 25, has_next: false }]]);
+    const host = await renderPage(fetchMock);
+    const searchUrls = () => fetchMock.mock.calls.map(([input]) => String(input)).filter((url) => url.startsWith('/api/v1/findings/search'));
+    expect(searchUrls().every((url) => !url.includes('scope='))).toBe(true);
+    const toggle = [...host.querySelectorAll('button')].find((button) => button.textContent === 'Include older scans')!;
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    await act(async () => { toggle.click(); });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    expect(searchUrls().at(-1)).toContain('scope=all');
+    expect(window.location.search).toContain('scope=all');
+  });
+
   it('renders results with severity pills and links back to the originating report', async () => {
     const host = await renderPage(searchMock([
       ['/api/v1/findings/search', {

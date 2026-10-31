@@ -1,3 +1,5 @@
+//lint:file-ignore SA4023 the non-Windows credential store stub always errors; on Windows it returns data.
+
 package sonarqube
 
 import (
@@ -631,7 +633,7 @@ func selectLoopbackPort() (int, error) {
 
 func writeServerConfig(runtimeDir, configDir string, port int) (string, error) {
 	if runtimeDir == "" {
-		return "", fmt.Errorf("Blunt Code SonarQube runtime directory is required")
+		return "", fmt.Errorf("the SonarQube runtime directory is required")
 	}
 	if port < 1024 || port > 65535 {
 		return "", fmt.Errorf("SonarQube loopback port is invalid")
@@ -662,7 +664,7 @@ func writeServerConfig(runtimeDir, configDir string, port int) (string, error) {
 
 func prepareRuntime(root string) error {
 	if root == "" {
-		return fmt.Errorf("Blunt Code SonarQube runtime directory is required")
+		return fmt.Errorf("the SonarQube runtime directory is required")
 	}
 	for _, dir := range []string{filepath.Join(root, "data"), filepath.Join(root, "temp"), filepath.Join(root, "logs")} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {

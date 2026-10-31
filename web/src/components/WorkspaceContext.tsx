@@ -8,7 +8,7 @@ export function workspaceSections(id: string): WorkspaceSection[] {
   return [
     { key: 'overview', label: 'Overview', route: { page: 'workspace', id }, icon: <LayoutDashboard className="h-4 w-4" /> },
     { key: 'pentest', label: 'Pentest & Security', route: { page: 'pentest', id }, icon: <ShieldAlert className="h-4 w-4" /> },
-    { key: 'files', label: 'Files & rules', route: { page: 'files', id }, icon: <FolderCog className="h-4 w-4" /> },
+    { key: 'files', label: 'Files & paths', route: { page: 'files', id }, icon: <FolderCog className="h-4 w-4" /> },
     { key: 'history', label: 'Scan history', route: { page: 'history', id }, icon: <Clock className="h-4 w-4" /> },
   ];
 }

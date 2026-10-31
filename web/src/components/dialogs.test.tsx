@@ -1,7 +1,7 @@
 import { act, useState, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { AddWorkspaceDialog, ConfirmationDialog, FindingPreviewDialog, SuppressFindingDialog, SUPPRESSION_REASON_MAX } from './dialogs';
+import { AddWorkspaceDialog, folderPathProblem, ConfirmationDialog, FindingPreviewDialog, SuppressFindingDialog, SUPPRESSION_REASON_MAX } from './dialogs';
 import type { Finding } from '../types';
 import type { Notice } from '../lib/notice';
 
@@ -194,7 +194,7 @@ describe('suppress finding dialog', () => {
     expect(SUPPRESSION_REASON_MAX).toBe(500);
     expect(document.activeElement).toBe(textarea); // the note field is the primary control
     expect(textarea.getAttribute('aria-describedby')).toContain('suppress-finding-hint');
-    expect(dialog.textContent).toContain('Suppressing hides this finding, matched by its fingerprint, from all future scans, reports, and the CI gate for this workspace.');
+    expect(dialog.textContent).toContain('Suppressing hides this finding, matched by its fingerprint, from this workspace’s counts, grade, reports, and CI gate — in this scan and all future ones.');
     "You can restore it anytime from the workspace’s Suppressions list." // restoration is one click away
     expect(dialog.textContent).toContain('Example finding'); // names the finding being hidden
   });
@@ -217,15 +217,22 @@ describe('suppress finding dialog', () => {
     expect(host.querySelector('dialog')).toBeNull(); // caller closed it on success
   });
 
-  it('posts an empty reason when the note is left blank', async () => {
+  it('requires a reason: a blank note posts nothing and explains why, a quick pick fills it', async () => {
     vi.stubGlobal('fetch', fetchMock);
     fetchMock.mockClear();
     const host = await renderHarness((close) => suppressDialog(close));
     await openDialog(host);
-    await act(async () => { ([...host.querySelectorAll('button')].find((button) => button.textContent === 'Suppress finding') as HTMLButtonElement).click(); });
+    const confirm = () => ([...host.querySelectorAll('button')].find((button) => button.textContent === 'Suppress finding') as HTMLButtonElement);
+    await act(async () => { confirm().click(); });
+    await flush();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(host.querySelector('#suppress-finding-reason-error')?.textContent).toMatch(/Add a reason/);
+    await act(async () => { ([...host.querySelectorAll('button')].find((button) => button.textContent === 'Safe by design') as HTMLButtonElement).click(); });
+    expect(host.querySelector('#suppress-finding-reason-error')).toBeNull();
+    await act(async () => { confirm().click(); });
     await flush();
     const [, init] = fetchMock.mock.calls[0];
-    expect(JSON.parse(String(init?.body))).toEqual({ fingerprint: FINGERPRINT, reason: '' });
+    expect(JSON.parse(String(init?.body))).toEqual({ fingerprint: FINGERPRINT, reason: 'Safe by design' });
   });
 
   it('closes on Escape and on Cancel without posting anything', async () => {
@@ -249,9 +256,60 @@ describe('suppress finding dialog', () => {
     const notify = vi.fn();
     const host = await renderHarness((close) => suppressDialog(close, () => {}, notify));
     await openDialog(host);
+    await typeReason(host.querySelector<HTMLTextAreaElement>('#suppress-finding-reason')!, 'False positive');
     await act(async () => { ([...host.querySelectorAll('button')].find((button) => button.textContent === 'Suppress finding') as HTMLButtonElement).click(); });
     await flush();
     expect(notify).toHaveBeenCalledWith({ kind: 'error', text: 'DATABASE_ERROR: Could not save suppression.' });
     expect(host.querySelector('dialog')).not.toBeNull(); // nothing is lost; the user can retry or cancel
+  });
+});
+
+describe('add workspace path errors', () => {
+  async function typePath(input: HTMLInputElement, value: string) {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+    await act(async () => {
+      setter.call(input, value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  }
+  async function submit(host: HTMLElement) {
+    await act(async () => { ([...host.querySelectorAll('button')].find((button) => button.textContent === 'Add workspace') as HTMLButtonElement).click(); });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
+  }
+
+  it('accepts absolute Windows, UNC, POSIX and home paths, and explains relative ones', () => {
+    for (const ok of ['C:\\code\\app', 'd:/work', '\\\\server\\share\\app', '/home/me/app', '~', '~/app', '"C:\\quoted path"']) expect(folderPathProblem(ok)).toBe('');
+    expect(folderPathProblem('src\\app')).toMatch(/full folder path/);
+    expect(folderPathProblem('C:')).toMatch(/backslash/);
+  });
+
+  it('shows a relative path problem under the field without calling the API', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const notify = vi.fn();
+    const host = await renderHarness((close) => <AddWorkspaceDialog onClose={close} onCreated={() => {}} notify={notify} />);
+    await openDialog(host);
+    const input = host.querySelector<HTMLInputElement>('#add-workspace-path')!;
+    await typePath(input, 'my-app');
+    await submit(host);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(notify).not.toHaveBeenCalled();
+    expect(host.querySelector('#add-workspace-path-error')?.textContent).toMatch(/full folder path/);
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(document.activeElement).toBe(input);
+    await typePath(input, 'my-app2');
+    expect(host.querySelector('#add-workspace-path-error')).toBeNull(); // editing clears the stale message
+  });
+
+  it('puts the server INVALID_PATH message inline instead of a toast', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(json({ error: { code: 'INVALID_PATH', field: 'root_path', message: 'That folder does not exist. Check the spelling, or use Browse to pick it.' } }, 400))));
+    const notify = vi.fn();
+    const host = await renderHarness((close) => <AddWorkspaceDialog onClose={close} onCreated={() => {}} notify={notify} />);
+    await openDialog(host);
+    await typePath(host.querySelector<HTMLInputElement>('#add-workspace-path')!, 'C:\\nope');
+    await submit(host);
+    expect(notify).not.toHaveBeenCalled();
+    expect(host.querySelector('#add-workspace-path-error')?.textContent).toBe('That folder does not exist. Check the spelling, or use Browse to pick it.');
+    expect(host.querySelector('dialog')).not.toBeNull();
   });
 });

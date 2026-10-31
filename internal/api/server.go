@@ -55,6 +55,7 @@ type Server struct {
 	mux        *http.ServeMux
 	shutdown   func()
 	openFolder func(dir string) error
+	cache      *workspaceCaches
 }
 
 // scanDetail is a scan payload enriched for single-scan views: the analyzer
@@ -89,11 +90,13 @@ func New(db *database.DB, bus *events.Bus, scanService *scans.Service, toolServi
 	if logger == nil {
 		logger = slog.Default()
 	}
-	s := &Server{db: db, bus: bus, scans: scanService, tools: toolService, paths: paths, version: version, log: logger, mux: http.NewServeMux(), openFolder: openFolderInExplorer}
+	s := &Server{db: db, bus: bus, scans: scanService, tools: toolService, paths: paths, version: version, log: logger, mux: http.NewServeMux(), openFolder: openFolderInExplorer, cache: newWorkspaceCaches()}
 	s.routes()
 	return s
 }
-func (s *Server) Handler() http.Handler { return securityMiddleware(rateLimitMiddleware(s.mux)) }
+func (s *Server) Handler() http.Handler {
+	return securityMiddleware(rateLimitMiddleware(jsonRouteErrors(s.mux)))
+}
 
 // StaticGuard applies the API's loopback Host check and baseline security
 // headers to a non-API handler (the embedded UI). The UI has no
@@ -155,6 +158,9 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings", s.findings)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings.csv", s.findingsCSV)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings.json", s.findingsJSON)
+	// report.json is the same versioned document under the report.* naming
+	// the other full-report exports use.
+	s.mux.HandleFunc("GET /api/v1/scans/{id}/report.json", s.findingsJSON)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings.jsonl", s.findingsJSONL)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/fixed", s.fixedFindings)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/compare", s.scanCompare)
@@ -180,6 +186,18 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 func fail(w http.ResponseWriter, status int, code, message string) {
 	writeJSON(w, status, map[string]any{"error": map[string]any{"code": code, "message": message}})
 }
+
+// failField is fail plus the request field the error belongs to, so a form
+// can show the message under the input that caused it instead of a toast.
+func failField(w http.ResponseWriter, status int, code, message, field string) {
+	writeJSON(w, status, map[string]any{"error": map[string]any{"code": code, "message": message, "field": field}})
+}
+
+// invalidJSONMessage is the one message every handler answers a body that
+// does not decode with; naming a single field there misled callers whose
+// JSON was simply malformed.
+const invalidJSONMessage = "Request body is not valid JSON for this endpoint."
+
 func decode(r *http.Request, into any) error {
 	d := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
 	d.DisallowUnknownFields()
@@ -244,7 +262,16 @@ func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
 		Offline     *bool `json:"offline"`
 		OpenBrowser *bool `json:"open_browser"`
 	}
-	if err := decode(r, &input); err != nil || (input.Offline == nil && input.OpenBrowser == nil) {
+	if err := decode(r, &input); err != nil {
+		var syntax *json.SyntaxError
+		if errors.As(err, &syntax) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) {
+			fail(w, 400, "INVALID_JSON", invalidJSONMessage)
+			return
+		}
+		fail(w, 400, "INVALID_SETTINGS", "Provide offline or open_browser as a boolean.")
+		return
+	}
+	if input.Offline == nil && input.OpenBrowser == nil {
 		fail(w, 400, "INVALID_SETTINGS", "Provide offline or open_browser as a boolean.")
 		return
 	}
@@ -292,11 +319,14 @@ func (s *Server) listWorkspaces(w http.ResponseWriter, r *http.Request) {
 	// pays nothing for it.
 	var completedByWorkspace map[string]core.Scan
 	completedLoaded := false
-	views := make([]workspaceView, 0, len(items))
-	for _, item := range items {
+	type pair struct{ latest, lastCompleted *core.Scan }
+	pairs := make([]pair, len(items))
+	var scanIDs []string
+	for i, item := range items {
 		var latest *core.Scan
 		if scan, ok := latestByWorkspace[item.ID]; ok {
 			latest = &scan
+			scanIDs = append(scanIDs, scan.ID)
 		}
 		var lastCompleted *core.Scan
 		if latest == nil || (latest.State != "completed" && latest.State != "completed_with_warnings") {
@@ -310,9 +340,21 @@ func (s *Server) listWorkspaces(w http.ResponseWriter, r *http.Request) {
 			}
 			if scan, ok := completedByWorkspace[item.ID]; ok {
 				lastCompleted = &scan
+				scanIDs = append(scanIDs, scan.ID)
 			}
 		}
-		view, err := s.workspaceView(r.Context(), item, latest, lastCompleted)
+		pairs[i] = pair{latest, lastCompleted}
+	}
+	// One query for every card's analyzer runs instead of one per scan, and
+	// no directory walk: never-scanned workspaces read cached languages.
+	runsByScan, err := s.db.AnalyzerRunsForScans(r.Context(), scanIDs)
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not load workspace analysis.")
+		return
+	}
+	views := make([]workspaceView, 0, len(items))
+	for i, item := range items {
+		view, err := s.buildWorkspaceView(r.Context(), item, pairs[i].latest, pairs[i].lastCompleted, &viewPrefetch{runs: runsByScan, list: true})
 		if err != nil {
 			fail(w, 500, "DATABASE_ERROR", "Could not load workspace analysis.")
 			return
@@ -331,12 +373,12 @@ func (s *Server) createWorkspace(w http.ResponseWriter, r *http.Request) {
 		Name     string `json:"name"`
 	}
 	if err := decode(r, &input); err != nil {
-		fail(w, 400, "INVALID_JSON", "root_path is required.")
+		fail(w, 400, "INVALID_JSON", invalidJSONMessage)
 		return
 	}
-	root, err := workspace.NormalizeRoot(input.RootPath)
+	root, err := apiWorkspaceRoot(input.RootPath)
 	if err != nil {
-		fail(w, 400, "INVALID_PATH", err.Error())
+		failField(w, 400, "INVALID_PATH", err.Error(), "root_path")
 		return
 	}
 	if input.Name == "" {
@@ -359,6 +401,9 @@ func (s *Server) createWorkspace(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, "DATABASE_ERROR", "Could not save workspace.")
 		return
 	}
+	// Warm the language cache so the new card's chips appear on the next
+	// list refresh without the list itself walking the folder.
+	s.workspaceLanguages(context.WithoutCancel(r.Context()), created, false)
 	writeJSON(w, 201, created)
 }
 
@@ -406,7 +451,18 @@ func (s *Server) getWorkspace(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, view)
 }
 
+// viewPrefetch carries what the list endpoint loaded in bulk: analyzer runs
+// keyed by scan id, and list mode, which never walks the filesystem.
+type viewPrefetch struct {
+	runs map[string][]reports.Run
+	list bool
+}
+
 func (s *Server) workspaceView(ctx context.Context, workspace core.Workspace, latest *core.Scan, lastCompleted *core.Scan) (workspaceView, error) {
+	return s.buildWorkspaceView(ctx, workspace, latest, lastCompleted, nil)
+}
+
+func (s *Server) buildWorkspaceView(ctx context.Context, workspace core.Workspace, latest *core.Scan, lastCompleted *core.Scan, pre *viewPrefetch) (workspaceView, error) {
 	view := workspaceView{Workspace: workspace}
 	attach := func(scan *core.Scan) (*scanDetail, error) {
 		if scan == nil {
@@ -420,11 +476,16 @@ func (s *Server) workspaceView(ctx context.Context, workspace core.Workspace, la
 		// serves), so both are loaded while the immutable snapshot is still
 		// at hand; the snapshot itself is then dropped because the dashboard
 		// does not need every selected path from it.
-		runs, err := s.db.AnalyzerRuns(ctx, scan.ID)
-		if err != nil {
-			return nil, err
+		var runs []reports.Run
+		if pre != nil && pre.runs != nil {
+			runs = pre.runs[scan.ID]
+		} else {
+			var err error
+			if runs, err = s.db.AnalyzerRuns(ctx, scan.ID); err != nil {
+				return nil, err
+			}
 		}
-		newCount, fixedCount, err := s.scanComparisonCounts(ctx, *scan)
+		newCount, fixedCount, err := s.cachedComparisonCounts(ctx, *scan)
 		if err != nil {
 			return nil, err
 		}
@@ -455,12 +516,7 @@ func (s *Server) workspaceView(ctx context.Context, workspace core.Workspace, la
 		view.AssessmentCoverage = &coverage
 	}
 	if len(view.Languages) == 0 {
-		patterns, err := s.userExcludes(ctx, workspace.ID)
-		if err == nil {
-			if discovered, err := discovery.Discover(ctx, workspace.RootPath, patterns); err == nil {
-				view.Languages = languageNames(discovered.Languages)
-			}
-		}
+		view.Languages = s.workspaceLanguages(ctx, workspace, pre == nil || !pre.list)
 	}
 	return view, nil
 }
@@ -583,6 +639,7 @@ func (s *Server) deleteWorkspace(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, "DATABASE_ERROR", "Could not delete workspace.")
 		return
 	}
+	s.cache.invalidate(workspace.ID)
 	w.WriteHeader(http.StatusNoContent)
 }
 func (s *Server) selectFolder(w http.ResponseWriter, r *http.Request) {
@@ -1025,11 +1082,22 @@ func (s *Server) addSuppression(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, "DATABASE_ERROR", "Could not save suppression.")
 		return
 	}
+	s.suppressionsChanged(r.Context(), work.ID)
 	writeJSON(w, 201, item)
 }
 
-// removeSuppression deletes one dismissal; the next scan stores and counts the
-// finding normally again.
+// suppressionsChanged re-derives the workspace's persisted scan counts after a
+// suppression is added, removed or imported. A failure only leaves the old
+// counts in place until the next scan, so it is logged, not surfaced.
+func (s *Server) suppressionsChanged(ctx context.Context, workspaceID string) {
+	s.cache.invalidate(workspaceID)
+	if err := s.db.RecountWorkspaceScans(ctx, workspaceID); err != nil {
+		s.log.Warn("recount scans after suppression change failed", "workspace", workspaceID, "error", err)
+	}
+}
+
+// removeSuppression deletes one dismissal; the finding counts again in every
+// scan of the workspace right away.
 func (s *Server) removeSuppression(w http.ResponseWriter, r *http.Request) {
 	work, ok := s.workspace(r)
 	if !ok {
@@ -1049,6 +1117,7 @@ func (s *Server) removeSuppression(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, "DATABASE_ERROR", "Could not remove suppression.")
 		return
 	}
+	s.suppressionsChanged(r.Context(), work.ID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -1158,6 +1227,9 @@ func (s *Server) importSuppressions(w http.ResponseWriter, r *http.Request) {
 		}
 		seen[fingerprint] = true
 		imported++
+	}
+	if imported > 0 {
+		s.suppressionsChanged(r.Context(), work.ID)
 	}
 	writeJSON(w, 200, map[string]int{"imported": imported, "skipped_invalid": skippedInvalid, "duplicate": duplicate})
 }
@@ -1538,6 +1610,18 @@ func (s *Server) searchFindings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	filter.IncludeSuppressed = strings.EqualFold(strings.TrimSpace(query.Get("include_suppressed")), "true")
+	// scope=latest (default) searches each workspace's newest completed scan;
+	// scope=all keeps the full history, one hit per scan.
+	scope := strings.ToLower(strings.TrimSpace(query.Get("scope")))
+	switch scope {
+	case "", "latest":
+		scope = "latest"
+	case "all":
+		filter.AllScans = true
+	default:
+		fail(w, 400, "INVALID_SEARCH_QUERY", "scope must be latest or all.")
+		return
+	}
 	if raw := strings.TrimSpace(query.Get("page")); raw != "" {
 		value, err := strconv.Atoi(raw)
 		if err != nil || value < 1 {
@@ -1564,7 +1648,7 @@ func (s *Server) searchFindings(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, "DATABASE_ERROR", "Could not count findings by severity.")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"items": items, "total": total, "page": filter.Page, "page_size": filter.PageSize, "has_next": (filter.Page-1)*filter.PageSize+len(items) < total, "severity_counts": severityCounts})
+	writeJSON(w, 200, map[string]any{"items": items, "total": total, "page": filter.Page, "page_size": filter.PageSize, "has_next": (filter.Page-1)*filter.PageSize+len(items) < total, "severity_counts": severityCounts, "scope": scope})
 }
 
 // deleteScan removes one terminal scan and everything stored under it
@@ -1595,6 +1679,7 @@ func (s *Server) deleteScan(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, "DATABASE_ERROR", "Could not delete scan.")
 		return
 	}
+	s.cache.invalidate(scan.WorkspaceID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -1701,7 +1786,16 @@ func (s *Server) findings(w http.ResponseWriter, r *http.Request) {
 	// byte-for-byte; page-mode responses add page, page_size, and has_next on
 	// top of the legacy fields so both client generations can read them.
 	if filter.PageSize > 0 {
-		writeJSON(w, 200, map[string]any{"items": page.Items, "total": page.Total, "limit": page.Limit, "offset": page.Offset, "next_offset": page.NextOffset, "has_more": page.HasMore, "page": filter.Page, "page_size": filter.PageSize, "has_next": page.HasMore})
+		body := map[string]any{"items": page.Items, "total": page.Total, "limit": page.Limit, "offset": page.Offset, "next_offset": page.NextOffset, "has_more": page.HasMore, "page": filter.Page, "page_size": filter.PageSize, "has_next": page.HasMore}
+		// The first page also carries per-status totals under the same
+		// non-status filters, so the status chips count suppressed findings
+		// (which the report payload leaves out) without extra requests.
+		if filter.Page <= 1 {
+			if counts, err := s.db.FindingStatusCounts(r.Context(), scan, filter); err == nil {
+				body["status_counts"] = counts
+			}
+		}
+		writeJSON(w, 200, body)
 		return
 	}
 	writeJSON(w, 200, map[string]any{"items": page.Items, "total": page.Total, "limit": page.Limit, "offset": page.Offset, "next_offset": page.NextOffset, "has_more": page.HasMore})
@@ -1871,7 +1965,7 @@ func (s *Server) findingsJSON(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="bluntcode-scan-%s-findings.json"`, shortID(scan.ID)))
+	reportDisposition(w, r, fmt.Sprintf("bluntcode-scan-%s-findings.json", shortID(scan.ID)), "")
 	_, _ = w.Write(reports.JSON(model))
 }
 
@@ -2450,7 +2544,7 @@ func (s *Server) reportMarkdown(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
-	w.Header().Set("Content-Disposition", `attachment; filename="blunt-code-report.md"`)
+	reportDisposition(w, r, "blunt-code-report.md", "text/plain; charset=utf-8")
 	_, _ = w.Write([]byte(reports.Markdown(model)))
 }
 
@@ -2484,7 +2578,7 @@ func (s *Server) reportSARIF(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="bluntcode-scan-%s.sarif"`, shortID(scan.ID)))
+	reportDisposition(w, r, fmt.Sprintf("bluntcode-scan-%s.sarif", shortID(scan.ID)), "")
 	_ = json.NewEncoder(w).Encode(reports.SARIF(model))
 }
 
@@ -2518,8 +2612,25 @@ func (s *Server) reportHTML(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="bluntcode-scan-%s.html"`, shortID(scan.ID)))
+	reportDisposition(w, r, fmt.Sprintf("bluntcode-scan-%s.html", shortID(scan.ID)), "")
 	_, _ = w.Write(reports.HTML(model))
+}
+
+// reportDisposition sends a report as a download, or, with ?inline=1, for
+// viewing in a browser tab ("Open in new tab"). Inline responses are
+// sandboxed: the document gets an opaque origin, so its own script (the HTML
+// report's filter) runs but cannot reach the local API. inlineType replaces
+// the Content-Type for formats browsers would otherwise download (Markdown).
+func reportDisposition(w http.ResponseWriter, r *http.Request, filename, inlineType string) {
+	if r.URL.Query().Get("inline") != "1" {
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+		return
+	}
+	if inlineType != "" {
+		w.Header().Set("Content-Type", inlineType)
+	}
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`inline; filename="%s"`, filename))
+	w.Header().Set("Content-Security-Policy", "sandbox allow-scripts; default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:")
 }
 
 // shortID keeps attachment filenames readable while staying scan-unique.

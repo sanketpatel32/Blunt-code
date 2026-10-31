@@ -5,8 +5,8 @@ import type { Route } from '../lib/router';
 import type { Notice } from '../lib/notice';
 import { message } from '../lib/notice';
 import { SEVERITY_LABELS, analyzerName, count, date, elapsed, findingLocation, scanStateDisplay } from '../lib/format';
-import { analyzerStatusLabels, eventCopy, isTerminalScanState, latestAnalyzerCompletions, liveHeadline, severityTotalsSoFar, stageLabels, type ScanEvent } from '../lib/scanEvents';
-import { bandFor, riskGrade, riskScore, severityCountsOf } from '../lib/risk';
+import { analyzerStatusLabels, eventCopy, isTerminalScanState, latestAnalyzerCompletions, effectiveLiveState, liveHeadline, severityTotalsSoFar, stageLabels, type ScanEvent } from '../lib/scanEvents';
+import { bandFor, coverageFromRuns, coveragePartial, coverageText, gradeExplanation, riskGrade, riskScore, severityCountsOf } from '../lib/risk';
 import { useLoad } from '../hooks/useLoad';
 import { useTicker } from '../hooks/useTicker';
 import { ErrorPanel, Loading, SeverityCounts } from '../components/ui';
@@ -20,6 +20,17 @@ import { GradeTile } from '../components/GradeTile';
 
 export type { ScanEvent } from '../lib/scanEvents';
 
+/** Pushes "Scan completed · big-monorepo (standard)" to the notification
+ *  center; falls back to the profile alone when the workspace can't load. */
+function announceCompleted(current?: Scan | null) {
+  const push = (name?: string) => {
+    const what = [name, current?.profile ? `${current.profile} scan` : 'scan'].filter(Boolean).join(' · ');
+    try { pushNotification({ title: 'Scan completed', message: `${what.charAt(0).toUpperCase()}${what.slice(1)} finished`, kind: 'success' }); } catch { /* storage unavailable */ }
+  };
+  if (!current?.workspace_id) { push(); return; }
+  api.workspace(current.workspace_id).then((work) => push(work?.name), () => push());
+}
+
 export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => void; notify: (n: Notice) => void }) {
   const scan = useLoad(() => api.scan(id), [id]);
   const [events, setEvents] = useState<ScanEvent[]>([]);
@@ -30,6 +41,9 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
   // otherwise surface the server's 409 as an error toast for a normal race.
   const [cancelling, setCancelling] = useState(false);
   const scanState = scan.data?.state;
+  // The completion notice names the project, not a raw scan id prefix.
+  const scanRef = useRef(scan.data);
+  scanRef.current = scan.data;
   const scanReload = scan.reload;
   // A scan that answers NOT_FOUND is gone for good (pruned, or a stale deep link);
   // the live stream and its scanReload loop must stop instead of retrying forever.
@@ -70,7 +84,7 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
         const next: ScanEvent = { ...data, type: envelope.type ?? event.type, at: Date.now(), seq: eventSeq.current++ };
         setEvents((old) => { if (replaceNext) { replaceNext = false; return [next]; } return [...old.slice(-31), next]; });
         setStreamState('live');
-        if (next.type === 'scan.completed') { try { pushNotification({ title: 'Scan completed', message: `Scan ${id.slice(0,8)} finished`, kind: 'success' }); } catch {} void scanReload(); } else if (next.type === 'scan.cancelled') void scanReload();
+        if (next.type === 'scan.completed') { announceCompleted(scanRef.current); void scanReload(); } else if (next.type === 'scan.cancelled') void scanReload();
       } catch { /* Invalid optional event payloads do not interrupt the scan. */ }
     };
     let attempt = 0;
@@ -113,11 +127,17 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
     setCancelling(true);
     try { await api.cancelScan(id); await scan.reload(); } catch (e) { notify({ kind: 'error', text: message(e) }); } finally { setCancelling(false); }
   }
-  if (scan.loading) return <div className="page"><Loading /></div>;
-  if (scan.error) return <div className="page"><ErrorPanel error={scan.error} retry={scan.reload} /></div>;
+  // A background reload (after suppress/restore) keeps the page mounted.
+  if (scan.loading && !scan.data) return <div className="page"><Loading /></div>;
+  if (scan.error && !scan.data) return <div className="page"><ErrorPanel error={scan.error} retry={scan.reload} actions={go && <>
+    <Button size="sm" onClick={() => go({ page: 'home' })}>Back to overview</Button>
+    <Button variant="outline" size="sm" onClick={() => go({ page: 'workspaces' })}>Workspaces</Button>
+  </>} /></div>;
   if (!current) return <div className="page"><Loading /></div>;
-  const state = scanStateDisplay(current.state);
   const live = !terminal;
+  // The badge follows the event log: analyzers running means "Running", not
+  // the stale "Preparing" the last persisted state carried.
+  const state = scanStateDisplay(live ? effectiveLiveState(events, current.state) : current.state);
   const counts = severityCountsOf(current);
   const total = current.total_findings ?? 0;
   const critical = counts.critical ?? 0;
@@ -173,7 +193,8 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
   const statsLabel = stats.join(', ');
   const caveat = interrupted ? 'partial results below' : incomplete ? 'coverage incomplete' : '';
   const runs = current.analyzer_runs ?? [];
-  const succeeded = runs.filter((run) => run.status === 'succeeded').length;
+  const coverage = coverageFromRuns(runs);
+  const explanation = graded && grade ? gradeExplanation(counts, coverage) : null;
   /** Card accent follows the worst finding on the page: danger > warning > success > neutral. */
   const heroTone = live ? 'live' : critical > 0 || (counts.high ?? 0) > 0 ? 'danger' : (counts.medium ?? 0) > 0 || incomplete ? 'warning' : total === 0 ? 'success' : 'neutral';
   const startedText = date(current.started_at);
@@ -183,7 +204,7 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
       <div className="scan-hero-main">
         <div className="scan-hero-title-row">
           {graded && grade
-            ? <GradeTile grade={grade} size="lg" flip className="scan-grade" />
+            ? <GradeTile grade={grade} size="lg" flip className={`scan-grade${coveragePartial(coverage) ? ' grade-provisional' : ''}`} />
             : incomplete
               ? <GradeTile grade={null} placeholder="!" tone="warning" size="lg" className="scan-grade scan-grade-clear" />
               : <GradeTile grade={null} placeholder="✓" tone="clear" size="lg" className="scan-grade scan-grade-clear" />}
@@ -209,12 +230,13 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
               <span>{live ? `elapsed ${durationText}` : durationText}</span>
               {runs.length > 0 && <>
                 <span aria-hidden="true">·</span>
-                <span>{succeeded} of {runs.length} {runs.length === 1 ? 'analyzer' : 'analyzers'} succeeded</span>
+                <span>{coverageText(coverage!)}</span>
               </>}
             </p>
             {/* The reason a scan failed or warned must survive outside the
                 live panel — "no eligible inputs" scans fail instantly, so
                 their explanation would otherwise never be seen here. */}
+            {explanation && <p className="scan-hero-explain">{explanation}</p>}
             {terminal && current.error_summary && (
               <p className="scan-hero-reason" role="note">{current.error_summary}</p>
             )}
@@ -276,7 +298,7 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
         <div className="verdict-stat" title={VERDICT_TRIO_TOOLTIP}><dt>New</dt><dd>{current.new_count ?? 0}</dd></div>
         <div className="verdict-stat" title={VERDICT_TRIO_TOOLTIP}><dt>Fixed</dt><dd>{current.fixed_count ?? 0}</dd></div>
         <div className="verdict-stat" title={VERDICT_TRIO_TOOLTIP}><dt>Persistent</dt><dd>{Math.max(0, total - (current.new_count ?? 0))}</dd></div>
-        <div className="verdict-stat"><dt>Analyzers</dt><dd>{runs.length ? `${succeeded}/${runs.length}` : '—'}</dd></div>
+        <div className="verdict-stat"><dt>Analyzers ran</dt><dd>{coverage ? `${coverage.succeeded} of ${coverage.total}` : '—'}</dd></div>
       </dl>
     </section>}
     {terminal && (current.fixed_count ?? 0) > 0 && (current.state === 'completed' || current.state === 'completed_with_warnings'
@@ -284,7 +306,7 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
       : current.state === 'cancelled' || current.state === 'interrupted'
         ? <CancelledDiffNote fixedCount={current.fixed_count ?? 0} state={current.state} />
         : null)}
-    {terminal && <ReportView scanId={id} notify={notify} go={go} runs={current.analyzer_runs ?? []} />}
+    {terminal && <ReportView scanId={id} notify={notify} go={go} runs={current.analyzer_runs ?? []} onCountsChanged={() => { void scanReload(); }} />}
   </div>;
 }
 
@@ -315,12 +337,24 @@ function ScanProgressBar({ scan, events }: { scan: Scan; events: ScanEvent[] }) 
 
 /** Live per-analyzer pills grouped by category with colored left border per category, stagger fadeIn. */
 export function LiveAnalyzerStrip({ runs, events }: { runs?: AnalyzerRun[]; events: ScanEvent[] }) {
-  const started = new Map<string, boolean>();
+  // Latest outcome per analyzer from the live log, so a pill never reads
+  // "Running" after the event list already said it finished or failed.
+  const live = new Map<string, { status: string; message?: string }>();
   for (const event of events) {
-    if (event.type === 'analyzer.started') started.set(event.analyzer_id ?? event.name ?? '', true);
+    const id = event.analyzer_id ?? event.name;
+    if (!id) continue;
+    if (event.type === 'analyzer.started') live.set(id, { status: 'running' });
+    else if (event.type === 'analyzer.completed') live.set(id, { status: 'succeeded' });
+    else if (event.type === 'analyzer.failed') live.set(id, { status: 'failed', message: event.error });
+    else if (event.type === 'analyzer.skipped') live.set(id, { status: 'skipped', message: event.message });
   }
   const completions = latestAnalyzerCompletions(events);
-  const pills = (runs?.length ? runs.map((run) => ({ id: run.analyzer_id, status: run.status, message: run.message })) : [...started.keys()].map((id) => ({ id, status: 'running', message: undefined as string | undefined })));
+  const pills = runs?.length
+    ? runs.map((run) => {
+      const seen = live.get(run.analyzer_id);
+      return seen && (run.status === 'running' || run.status === 'pending') ? { id: run.analyzer_id, status: seen.status, message: seen.message ?? run.message } : { id: run.analyzer_id, status: run.status, message: run.message };
+    })
+    : [...live.entries()].map(([id, seen]) => ({ id, status: seen.status, message: seen.message }));
   if (!pills.length) return null;
   const grouped = new Map<string, typeof pills>();
   for (const p of pills) {
@@ -396,7 +430,7 @@ function ScanStageList({ scan, events }: { scan: Scan; events: ScanEvent[] }) {
   const fallback = scan.state === 'queued' ? 'Waiting for the scan to begin.' : scan.state === 'interrupted' ? 'Scan interrupted before every analyzer finished.' : stageLabels[scan.state] ?? 'Working';
   const entries = journey.length ? journey : [{ type: 'scan.stage', stage: fallback, at: Date.now() } as ScanEvent];
   const active = !isTerminalScanState(scan.state) ? entries.at(-1) : undefined;
-  const status = active?.type === 'analyzer.started' ? `${active.name ?? active.analyzer_id ?? 'Analyzer'} is checking your code` : active ? eventCopy(active) : scan.state === 'interrupted' ? 'Scan interrupted — completed checks are still available.' : scan.state.replaceAll('_', ' ');
+  const status = active ? `Latest: ${eventCopy(active)}` : scan.state === 'interrupted' ? 'Scan interrupted — completed checks are still available.' : scan.state.replaceAll('_', ' ');
   const reduced = useReducedMotion();
   const terminal = isTerminalScanState(scan.state);
   // On completed/failed scans the status line just repeats the page title's

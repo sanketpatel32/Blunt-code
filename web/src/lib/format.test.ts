@@ -216,6 +216,10 @@ describe('ruleDocsUrl', () => {
 });
 
 describe('friendlyFindingTitle', () => {
+  it('does not split a synthesized title at a dot inside a file name or version', () => {
+    expect(friendlyFindingTitle({ rule_id: 'license.manifest', title: 'license.manifest', message: 'package.json declares GPL-3.0' })).toBe('package.json declares GPL-3.0');
+    expect(friendlyFindingTitle({ rule_id: 'x', title: 'x', message: 'Uses v1.2 API. Upgrade it.' })).toBe('Uses v1.2 API');
+  });
   it('keeps a real title untouched', () => {
     expect(friendlyFindingTitle({ title: 'Unused import', rule_id: 'F401', message: 'Imported but unused.' })).toBe('Unused import');
   });

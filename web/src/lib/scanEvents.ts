@@ -1,4 +1,4 @@
-import { count } from './format';
+import { analyzerName, count, isMissingToolMessage } from './format';
 
 export type ScanEvent = { type: string; stage?: string; status?: string; message?: string; analyzer_id?: string; name?: string; findings?: number; /** Per-severity finding counts the backend attaches to analyzer.completed, so live panels can show real severity totals before the final summary lands. */ severities?: Record<string, number>; error?: string; state?: string; at: number; /** Receive-order sequence assigned by the live stream; a stable React key even when two events share a millisecond. */ seq?: number };
 
@@ -23,19 +23,52 @@ export function isActiveScanState(state: string) {
   return !isTerminalScanState(state);
 }
 
+/** Analyzer progress folded from the event log: which analyzers have started
+ *  and which reached an outcome. Analyzers run concurrently, so progress is a
+ *  count — never "the" analyzer that is running. */
+export function analyzerProgress(events: ScanEvent[]) {
+  const started = new Set<string>();
+  const finished = new Set<string>();
+  const failed = new Set<string>();
+  for (const event of events) {
+    const id = event.analyzer_id ?? event.name;
+    if (!id || !event.type.startsWith('analyzer.')) continue;
+    started.add(id);
+    if (event.type === 'analyzer.completed' || event.type === 'analyzer.skipped') finished.add(id);
+    if (event.type === 'analyzer.failed') { finished.add(id); failed.add(id); }
+  }
+  return { started: started.size, finished: finished.size, failed: failed.size };
+}
+
+/** The pre-analyzer lifecycle states. Once an analyzer event arrives the scan
+ *  is running whatever the last persisted state said, so the badge must not
+ *  read "Preparing" over a list of running analyzers. */
+const SETUP_STATES = new Set(['queued', 'preparing', 'installing_tools', 'discovering', 'checking_tools']);
+
+export function effectiveLiveState(events: ScanEvent[], state: string) {
+  return SETUP_STATES.has(state) && analyzerProgress(events).started > 0 ? 'running' : state;
+}
+
+/** One headline for a live scan, consistent with the state badge and the
+ *  event list: a setup stage until analyzers start, then a running count. */
 export function liveHeadline(events: ScanEvent[], state: string) {
-  const latest = events.at(-1);
-  if (latest?.type === 'analyzer.started') return `${latest.name ?? latest.analyzer_id ?? 'Analyzer'} is checking your code`;
-  if (latest?.type === 'analyzer.completed') return `${latest.analyzer_id ?? 'Analyzer'} finished its pass`;
-  if (latest?.stage) return latest.stage;
-  return stageLabels[state] ?? 'Getting your scan ready';
+  const progress = analyzerProgress(events);
+  const live = effectiveLiveState(events, state);
+  if (progress.started > 0 && (live === 'running' || live === 'normalizing' || live === 'generating_report')) {
+    if (live !== 'running') return stageLabels[live];
+    const failed = progress.failed ? ` · ${progress.failed} need${progress.failed === 1 ? 's' : ''} attention` : '';
+    return `Running analyzers · ${progress.finished} of ${progress.started} finished${failed}`;
+  }
+  return stageLabels[live] ?? events.at(-1)?.stage ?? 'Getting your scan ready';
 }
 
 export function eventCopy(event: ScanEvent) {
-  if (event.type === 'analyzer.started') return `${event.name ?? event.analyzer_id ?? 'Analyzer'} started`;
-  if (event.type === 'analyzer.completed') return `${event.analyzer_id ?? 'Analyzer'} finished${event.findings === undefined ? '' : ` · ${count(event.findings)} findings`}`;
-  if (event.type === 'analyzer.failed') return `${event.analyzer_id ?? 'Analyzer'} needs attention${event.error ? ` · ${event.error}` : ''}`;
-  if (event.type === 'analyzer.skipped') return `${event.analyzer_id ?? 'Analyzer'} skipped${event.message ? ` · ${event.message}` : ''}`;
+  const who = event.name ?? (event.analyzer_id ? analyzerName(event.analyzer_id) : 'Analyzer');
+  if (event.type === 'analyzer.started') return `${who} started`;
+  if (event.type === 'analyzer.completed') return `${who} finished${event.findings === undefined ? '' : ` · ${count(event.findings)} findings`}`;
+  if (event.type === 'analyzer.failed' && isMissingToolMessage(event.error)) return `${who} isn’t installed · skipped (set it up from Tools)`;
+  if (event.type === 'analyzer.failed') return `${who} needs attention${event.error ? ` · ${event.error}` : ''}`;
+  if (event.type === 'analyzer.skipped') return `${who} skipped${event.message ? ` · ${event.message}` : ''}`;
   if (event.type === 'scan.cancelled') return 'Scan cancelled';
   if (event.type === 'scan.completed') return 'Report complete';
   return event.stage ?? event.message ?? 'Scan update';

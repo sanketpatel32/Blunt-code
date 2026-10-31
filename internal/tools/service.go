@@ -54,7 +54,7 @@ func (s *Service) Status(id string) (status Status) {
 	}
 	artifact, ok := s.Manager.Manifest.Find(id, platform())
 	if !ok {
-		return Status{ID: id, Detail: "No pinned managed artifact is configured.", CanInstall: false}
+		return Status{ID: id, Detail: "Not installed. Blunt Code has no download for " + platform() + "; install it yourself and put it on PATH.", CanInstall: false}
 	}
 	if artifact.InstallKind == "uv_tool" {
 		if artifact.ToolID == "semgrep" {
@@ -65,7 +65,7 @@ func (s *Service) Status(id string) (status Status) {
 	ready := s.Manager.IsReady(artifact)
 	detail := "Ready"
 	if !ready {
-		detail = "Pinned managed artifact is not installed."
+		detail = "Not installed yet. Install it here or start a scan to set it up."
 	}
 	return Status{ID: id, Version: artifact.Version, Ready: ready, Detail: detail, CanInstall: true}
 }
@@ -100,6 +100,17 @@ func (s *Service) All() []Status {
 	}
 	return out
 }
+
+// NotInstallableError reports a tool Blunt Code cannot set up by itself on
+// this computer (no managed download for the platform). Scans record it as
+// "not installed" so the UI can group every such tool into one notice.
+type NotInstallableError struct {
+	ID     string
+	Detail string
+}
+
+func (e *NotInstallableError) Error() string { return toolName(e.ID) + ": " + e.Detail }
+
 func (s *Service) Ensure(ctx context.Context, id string) error {
 	s.installMu.Lock()
 	defer s.installMu.Unlock()
@@ -108,7 +119,7 @@ func (s *Service) Ensure(ctx context.Context, id string) error {
 	}
 	status := s.Status(id)
 	if !status.CanInstall {
-		return fmt.Errorf("%s: %s", id, status.Detail)
+		return &NotInstallableError{ID: id, Detail: status.Detail}
 	}
 	if status.Ready {
 		return nil

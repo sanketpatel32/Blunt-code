@@ -48,7 +48,9 @@ describe('navigation resilience', () => {
     // About behind a "More" menu, so half the app was invisible unless you
     // happened to know it existed. A vertical rail has room for all of them.
     const labels = [...host.querySelectorAll('.rail-nav .rail-link-label')].map((link) => link.textContent);
-    expect(labels).toEqual(expect.arrayContaining(['Home', 'Workspaces', 'Search', 'Tools', 'Rules', 'CLI Docs']));
+    expect(labels).toEqual(expect.arrayContaining(['Home', 'Workspaces', 'Search', 'Tools', 'CLI Docs']));
+    // Rule drafts are hidden until scans execute them (lib/features.ts): no dead nav entry.
+    expect(labels).not.toContain('Rules');
     // Settings/About sit in the rail's foot group, still one click away.
     const foot = [...host.querySelectorAll('.rail-foot .rail-link-label')].map((link) => link.textContent);
     expect(foot).toEqual(expect.arrayContaining(['Settings', 'About']));

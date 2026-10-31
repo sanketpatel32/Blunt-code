@@ -117,7 +117,7 @@ git clone https://github.com/sanketpatel32/Blunt-code.git; cd Blunt-code
 
 1. **Launch** from Start Menu or `bluntcode.exe` → opens `http://127.0.0.1:<port>` automatically
 2. **Add workspace** → pick a project folder
-3. **Files & rules** (optional) → exclude `dist/`, `vendor/`, or add `.bluntcodeignore` to commit excludes
+3. **Files & paths** (optional) → exclude `dist/`, `vendor/`, or add `.bluntcodeignore` to commit excludes
 4. **Run scan** → first run downloads tools, next runs instant; progress bar `finished/total` + live analyzer pills
 5. **Inspect** → click a finding → source preview with highlight, **Copy location/fingerprint**
 6. **Export** → Markdown / HTML / SARIF / CSV (filters honoured) / JSON — or `Scan history → Prune history --keep 20`

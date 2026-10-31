@@ -88,6 +88,12 @@ afterEach(async () => {
 });
 
 describe('WorkspaceDetailPage per-language coverage', () => {
+  it('hides the unfinished Dependencies insight tab without leaving a gap', async () => {
+    const host = await render(detailFetchMock({ scans: [scanRow({ snapshot: { languages: { Go: 3 } } })] }));
+    const tabs = [...host.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent);
+    expect(tabs).toEqual(['Trends', 'Pentest & OWASP', 'Severity', 'Languages', 'Compliance']);
+  });
+
   it('backfills the workspace latest_scan snapshot from the scans list so the Languages tab shows real counts', async () => {
     const host = await render(detailFetchMock({
       scans: [scanRow({ snapshot: { languages: { TypeScript: 42, Go: 28 } } })],
@@ -214,7 +220,14 @@ describe('RiskCard trend words (C8, D2 audit: grade owns the color)', () => {
   it('explains the score on hover (C3) and rewords partial coverage', async () => {
     const host = await renderElement(<RiskCard risk={{ available: true, score: 60, grade: 'C', complete: false, coverage: { total: 10, succeeded: 9, failed: 1, warned: 0 } }} />);
     expect(host.querySelector('.risk-score')?.getAttribute('title')).toContain('critical ×10');
-    expect(host.textContent).toContain('9 of 10 analyzers completed');
+    expect(host.textContent).toContain('9 of 10 analyzers ran');
     expect(host.textContent).not.toContain('9/10');
+  });
+
+  it('explains the grade in plain language and marks a partial-coverage grade provisional', async () => {
+    const host = await renderElement(<RiskCard risk={{ available: true, score: 12, grade: 'B', complete: false, counts: { high: 2, low: 2 }, coverage: { total: 4, succeeded: 3, failed: 1, warned: 0 } }} />);
+    expect(host.querySelector('.risk-explain')?.textContent).toContain('B means moderate risk. The score of 12 comes mostly from 2 high and 2 low findings');
+    expect(host.querySelector('.risk-explain')?.textContent).toContain('treat this grade as provisional');
+    expect(host.querySelector('.grade-provisional')).not.toBeNull();
   });
 });

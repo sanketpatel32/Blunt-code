@@ -1083,6 +1083,30 @@ func (d *DB) CompleteScan(ctx context.Context, scanID, state, reportPath string)
 	}
 	return tx.Commit()
 }
+
+// RecountWorkspaceScans recomputes the persisted severity counts and totals
+// of every finished scan in a workspace with the same rule CompleteScan uses:
+// suppressed fingerprints do not count. Suppressing or restoring a finding
+// calls it so the scan header, grade, history and home totals change at once
+// instead of only after the next scan.
+func (d *DB) RecountWorkspaceScans(ctx context.Context, workspaceID string) error {
+	tx, err := d.SQL.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	count := func(severity string) string {
+		return `(SELECT COUNT(*) FROM findings f WHERE f.scan_id=scans.id AND f.severity='` + severity + `' AND NOT EXISTS (SELECT 1 FROM suppressed_findings s WHERE s.workspace_id=scans.workspace_id AND s.fingerprint=f.fingerprint))`
+	}
+	_, err = tx.ExecContext(ctx, `UPDATE scans SET critical_count=`+count("critical")+`,high_count=`+count("high")+`,medium_count=`+count("medium")+`,low_count=`+count("low")+`,info_count=`+count("info")+` WHERE workspace_id=? AND finished_at IS NOT NULL`, workspaceID)
+	if err == nil {
+		_, err = tx.ExecContext(ctx, `UPDATE scans SET total_findings=critical_count+high_count+medium_count+low_count+info_count WHERE workspace_id=? AND finished_at IS NOT NULL`, workspaceID)
+	}
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
 func (d *DB) Findings(ctx context.Context, scanID string) ([]analyzers.Finding, error) {
 	rows, err := d.SQL.QueryContext(ctx, `SELECT id,analyzer_id,COALESCE(rule_id,''),fingerprint,severity,category,COALESCE(title,''),message,COALESCE(relative_path,''),COALESCE(start_line,0),COALESCE(start_column,0),COALESCE(end_line,0),COALESCE(end_column,0),COALESCE(remediation,''),COALESCE(documentation_url,''),COALESCE(raw_severity,''),metadata_json FROM findings WHERE scan_id=? ORDER BY relative_path,start_line`, scanID)
 	if err != nil {
@@ -1431,6 +1455,35 @@ func scanFindingRow(rows *sql.Rows) (analyzers.Finding, error) {
 // modes: the legacy limit (25/50/100) plus offset pair, and the page-based
 // mode enabled by PageSize > 0 (1-based Page, any size up to
 // MaxFindingsPageSize), which derives limit and offset from the page window.
+// FindingStatusCounts counts a scan's findings per comparison status (new,
+// persistent, suppressed) under the filter's non-status controls, so the
+// report's status chips show real totals, suppressed included.
+func (d *DB) FindingStatusCounts(ctx context.Context, scan core.Scan, filter FindingFilter) (map[string]int, error) {
+	filter.Status, filter.Statuses, filter.ExcludeSuppressed = "", nil, false
+	filter.Sort, filter.Order = "", ""
+	query, err := d.buildFindingQuery(ctx, scan, filter)
+	if err != nil {
+		return nil, err
+	}
+	args := []any{query.workspaceID, query.previousID}
+	args = append(args, query.args...)
+	rows, err := d.SQL.QueryContext(ctx, `SELECT `+query.statusExpr+` AS status, COUNT(*) FROM findings WHERE `+query.whereSQL+` GROUP BY status`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	counts := map[string]int{"new": 0, "persistent": 0, "suppressed": 0}
+	for rows.Next() {
+		var status string
+		var n int
+		if err := rows.Scan(&status, &n); err != nil {
+			return nil, err
+		}
+		counts[status] += n
+	}
+	return counts, rows.Err()
+}
+
 func (d *DB) FindingsPage(ctx context.Context, scan core.Scan, filter FindingFilter) (FindingsPage, error) {
 	if filter.PageSize > 0 {
 		if filter.PageSize > MaxFindingsPageSize {
@@ -1674,6 +1727,37 @@ func (d *DB) AnalyzerRuns(ctx context.Context, scanID string) ([]reports.Run, er
 		}
 		run.Duration = time.Duration(duration) * time.Millisecond
 		output = append(output, run)
+	}
+	return output, rows.Err()
+}
+
+// AnalyzerRunsForScans loads the analyzer runs of several scans in one
+// query, keyed by scan id, in the same per-scan order AnalyzerRuns returns.
+func (d *DB) AnalyzerRunsForScans(ctx context.Context, scanIDs []string) (map[string][]reports.Run, error) {
+	output := make(map[string][]reports.Run, len(scanIDs))
+	if len(scanIDs) == 0 {
+		return output, nil
+	}
+	placeholders := make([]string, len(scanIDs))
+	args := make([]any, len(scanIDs))
+	for i, id := range scanIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	rows, err := d.SQL.QueryContext(ctx, `SELECT scan_id,analyzer_id,COALESCE(version,''),state,COALESCE(error_summary,''),finding_count,COALESCE(warning_count,0),COALESCE(duration_ms,0) FROM analyzer_runs WHERE scan_id IN (`+strings.Join(placeholders, ",")+`) ORDER BY scan_id, started_at`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var scanID string
+		var run reports.Run
+		var duration int64
+		if err := rows.Scan(&scanID, &run.AnalyzerID, &run.Version, &run.State, &run.ErrorSummary, &run.FindingCount, &run.WarningCount, &duration); err != nil {
+			return nil, err
+		}
+		run.Duration = time.Duration(duration) * time.Millisecond
+		output[scanID] = append(output[scanID], run)
 	}
 	return output, rows.Err()
 }
@@ -2000,8 +2084,12 @@ type GlobalFindingsFilter struct {
 	Analyzer          string
 	WorkspaceID       string
 	IncludeSuppressed bool
-	Page              int
-	PageSize          int
+	// AllScans searches every stored scan. Off (the default), only each
+	// workspace's latest completed scan is searched, so a finding that
+	// persisted across ten scans is one hit, not ten.
+	AllScans bool
+	Page     int
+	PageSize int
 }
 
 // SearchedFinding is a finding enriched with its scan and workspace identity
@@ -2017,6 +2105,10 @@ type SearchedFinding struct {
 // population the paged list draws from. All values are bound as parameters;
 // the text filter escapes LIKE wildcards so q is a substring match, never a
 // wildcard expression.
+// latestCompletedScanIDsSQL restricts a findings⋈scans query to each
+// workspace's newest completed scan.
+const latestCompletedScanIDsSQL = `scans.id IN (SELECT id FROM (SELECT id,ROW_NUMBER() OVER (PARTITION BY workspace_id ORDER BY COALESCE(finished_at,started_at) DESC,id DESC) AS recency FROM scans WHERE state IN ('completed','completed_with_warnings')) WHERE recency=1)`
+
 func searchFindingsWhere(filter GlobalFindingsFilter) (string, []any) {
 	where := []string{}
 	args := []any{}
@@ -2026,6 +2118,9 @@ func searchFindingsWhere(filter GlobalFindingsFilter) (string, []any) {
 	}
 	if !filter.IncludeSuppressed {
 		where = append(where, "NOT EXISTS (SELECT 1 FROM suppressed_findings suppressed WHERE suppressed.workspace_id=scans.workspace_id AND suppressed.fingerprint=findings.fingerprint)")
+	}
+	if !filter.AllScans {
+		where = append(where, latestCompletedScanIDsSQL)
 	}
 	if len(filter.Severities) == 1 {
 		where = append(where, "LOWER(findings.severity)=LOWER(?)")

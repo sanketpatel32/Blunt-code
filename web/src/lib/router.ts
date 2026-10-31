@@ -1,3 +1,4 @@
+import { FEATURES } from './features';
 export type Route = { page: 'home' | 'workspaces' | 'workspace' | 'files' | 'history' | 'scan' | 'search' | 'tools' | 'pentest' | 'rules' | 'settings' | 'about' | 'cli' | 'not-found'; id?: string; q?: string };
 
 /**
@@ -24,6 +25,8 @@ export function parseRoute(pathname = window.location.pathname, search = window.
   if (segments[0] === 'workspaces' && segments[1]) return withQuery({ page: 'workspace', id: segments[1] });
   if (segments[0] === 'workspaces') return withQuery({ page: 'workspaces' });
   if (segments[0] === 'scans' && segments[1]) return withQuery({ page: 'scan', id: segments[1] });
+  // A hidden feature's address reads as "page not found", not a crash or a dead page.
+  if (segments[0] === 'rules' && !FEATURES.ruleStudio) return withQuery({ page: 'not-found' });
   if (segments[0] === 'tools' || segments[0] === 'pentest' || segments[0] === 'rules' || segments[0] === 'settings' || segments[0] === 'about' || segments[0] === 'cli' || segments[0] === 'search') return withQuery({ page: segments[0] });
   if (segments[0] === 'docs') return withQuery({ page: 'cli' });
   if (segments[0] === 'findings') return withQuery({ page: 'search' });

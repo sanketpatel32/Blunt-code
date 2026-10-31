@@ -103,3 +103,57 @@ export function severityCountsOf(scan: ScanLikeCounts | null | undefined): Sever
     info: scan?.info_count,
   };
 }
+
+/** Analyzer coverage in one shape for every surface (API ScanCoverage or a
+ *  scan's analyzer runs). `succeeded` includes runs that finished with
+ *  warnings; `warned` is the degraded subset of them. */
+export interface CoverageCounts {
+  total: number;
+  succeeded: number;
+  failed: number;
+  warned: number;
+}
+
+/** Coverage from a scan's analyzer run rows, matching the server's ScanCoverage. */
+export function coverageFromRuns(runs: ReadonlyArray<{ status?: string; warning_count?: number }> | undefined): CoverageCounts | undefined {
+  if (!runs?.length) return undefined;
+  const succeeded = runs.filter((run) => run.status === 'succeeded' || run.status === 'completed');
+  return { total: runs.length, succeeded: succeeded.length, failed: runs.length - succeeded.length, warned: succeeded.filter((run) => (run.warning_count ?? 0) > 0).length };
+}
+
+/** True when the grade rests on less than the full analyzer set. */
+export function coveragePartial(coverage: CoverageCounts | undefined): boolean {
+  return !!coverage && (coverage.failed > 0 || coverage.warned > 0);
+}
+
+/** The one coverage sentence every surface prints: "7 of 9 analyzers ran". */
+export function coverageText(coverage: CoverageCounts): string {
+  const parts = [`${coverage.succeeded} of ${coverage.total} ${coverage.total === 1 ? 'analyzer' : 'analyzers'} ran`];
+  if (coverage.failed > 0) parts.push(`${coverage.failed} didn't run`);
+  if (coverage.warned > 0) parts.push(`${coverage.warned} with warnings`);
+  return parts.join(' · ');
+}
+
+const SEVERITY_ORDER: Severity[] = ['critical', 'high', 'medium', 'low'];
+
+/**
+ * A plain-language reason for a grade: what the letter means, which findings
+ * produced the score, and what the next better grade needs. Partial coverage
+ * adds that the grade is provisional.
+ */
+export function gradeExplanation(counts: SeverityCountFields, coverage?: CoverageCounts): string {
+  const score = riskScore(counts);
+  const grade = riskGrade(score);
+  const band = bandFor(grade);
+  const top = SEVERITY_ORDER.filter((severity) => (counts[severity] ?? 0) > 0).slice(0, 2);
+  const drivers = top.map((severity) => `${counts[severity]} ${severity}`);
+  const driverTotal = top.reduce((sum, severity) => sum + (counts[severity] ?? 0), 0);
+  let text = `${grade} means ${band.label.toLowerCase()}.`;
+  text += drivers.length
+    ? ` The score of ${score} comes mostly from ${drivers.join(' and ')} ${driverTotal === 1 ? 'finding' : 'findings'} (critical counts 10, high 5, medium 2, low 1).`
+    : ` The score is ${score}: no findings above info.`;
+  const index = GRADE_BANDS.indexOf(band);
+  if (index > 0) text += ` ${GRADE_BANDS[index - 1].grade} needs a score under ${GRADE_BANDS[index - 1].max}.`;
+  if (coverage && coveragePartial(coverage)) text += ` Only ${coverage.succeeded} of ${coverage.total} analyzers ran cleanly, so treat this grade as provisional.`;
+  return text;
+}

@@ -1,11 +1,12 @@
 import { Suspense, lazy, useEffect, useState, type ReactNode } from 'react';
+import { type SeverityCountFields, coveragePartial, coverageText, gradeExplanation } from '../lib/risk';
 import { ChevronDown } from 'lucide-react';
 import { api } from '../api';
 import type { AnalyzerRun, RiskProfile, Scan } from '../types';
 import type { Route } from '../lib/router';
 import type { Notice } from '../lib/notice';
 import { message } from '../lib/notice';
-import { analyzerName, date, findingLocation, languageColor } from '../lib/format';
+import { analyzerName, date, findingLocation, isMissingToolMessage, languageColor } from '../lib/format';
 import { useLoad } from '../hooks/useLoad';
 import { Empty, ErrorPanel, LanguageBadges, Loading } from '../components/ui';
 import { ScanIcon } from '../components/icons';
@@ -24,6 +25,7 @@ import { ScanActionDropdown } from '../components/ScanActionDropdown';
 import { PreScanSummary } from '../components/PreScanSummary';
 import { PageHeader } from '../components/PageHeader';
 import { GradeTile } from '../components/GradeTile';
+import { FEATURES } from '../lib/features';
 
 const AnalyticsCharts = lazy(() => import('../components/AnalyticsCharts').then((m) => ({ default: m.AnalyticsCharts })));
 const DependencyGraph = lazy(() => import('../components/DependencyGraph').then((m) => ({ default: m.DependencyGraph })) );
@@ -109,7 +111,7 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
   async function remove() { setDeleting(true); try { await api.deleteWorkspace(id); go({ page: 'workspaces' }); notify({ kind: 'info', text: 'Workspace removed from Blunt Code.' }); } catch (e) { notify({ kind: 'error', text: message(e) }); setDeleting(false); } }
   if (workspace.loading) return <div className="page"><Loading /></div>;
   // A NOT_FOUND workspace never loads, so "Try again" alone is a dead end — offer the way back.
-  if (workspace.error) return <div className="page"><ErrorPanel error={workspace.error} retry={workspace.reload} />{workspace.error.includes('NOT_FOUND') && <div className="mt-4 flex justify-center"><button type="button" className="button secondary" onClick={() => go({ page: 'workspaces' })}>Back to Workspaces</button></div>}</div>;
+  if (workspace.error) return <div className="page"><ErrorPanel error={workspace.error} retry={workspace.reload} actions={workspace.error.includes('NOT_FOUND') && <button type="button" className="button secondary" onClick={() => go({ page: 'workspaces' })}>Back to Workspaces</button>} /></div>;
   if (!item) return <div className="page"><Loading /></div>;
   // Null (not 0) when nothing has completed: an unscanned workspace must not read as "all clear".
   const criticalHigh = latest ? (latest.critical_count ?? 0) + (latest.high_count ?? 0) : null;
@@ -236,7 +238,7 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
           <TabsTrigger value="pentest">Pentest &amp; OWASP</TabsTrigger>
           <TabsTrigger value="severity">Severity</TabsTrigger>
           <TabsTrigger value="languages">Languages</TabsTrigger>
-          <TabsTrigger value="dependencies">Dependencies</TabsTrigger>
+          {FEATURES.workspaceDependencies && <TabsTrigger value="dependencies">Dependencies</TabsTrigger>}
           <TabsTrigger value="compliance">Compliance</TabsTrigger>
         </TabsList>
       </div>
@@ -256,11 +258,11 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
           ? <LanguageDistributionDonut names={item.languages} coverage={coverage} workspaceId={id} go={go} />
           : <Empty title="No languages detected" icon={<FileSearch />}>Run a scan to see how this project is split across languages.</Empty>}
       </TabsContent>
-      <TabsContent value="dependencies">
+      {FEATURES.workspaceDependencies && <TabsContent value="dependencies">
         <Suspense fallback={<SkeletonCards count={1} variant="chart" />}>
           <DependencyGraph languages={item.languages} />
         </Suspense>
-      </TabsContent>
+      </TabsContent>}
       <TabsContent value="compliance">
         {latest
           ? <ComplianceSection scanId={latest.id} go={go} />
@@ -271,7 +273,7 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
     {/* 5 · Activity — what ran, and what it found. The panel shows the scan that actually
         ran last (even a cancelled one — that is the truthful "latest attempt"); when the
         verdict cards above grade on an older completed scan instead, the notice says so. */}
-    <section className="split-section workspace-history-section"><div className="workspace-section-card"><h2>Latest scan</h2>{(rawLatest ?? latest) ? <>{fallbackNotice && <p className="muted" role="note">{fallbackNotice}</p>}<p className="muted">{(rawLatest ?? latest)!.state.replaceAll('_', ' ')} · {date((rawLatest ?? latest)!.finished_at ?? (rawLatest ?? latest)!.started_at)}</p>{(rawLatest ?? latest)!.error_summary && <div className="inline-warning">Warning: {(rawLatest ?? latest)!.error_summary}</div>}<AnalyzerStatuses runs={(rawLatest ?? latest)!.analyzer_runs} /></> : <Empty title="Ready when you are" icon={<ScanIcon />}>Run the first scan to get a combined report.</Empty>}</div><div className="workspace-section-card"><h2>Scan history</h2>{scans.loading ? <SkeletonTable rows={4} cols={10} /> : scans.error ? <ErrorPanel error={scans.error} retry={scans.reload} /> : <HistoryTable scans={scans.data ?? []} go={go} />}</div></section>
+    <section className="split-section workspace-history-section"><div className="workspace-section-card"><h2>Latest scan</h2>{(rawLatest ?? latest) ? <>{fallbackNotice && <p className="muted" role="note">{fallbackNotice}</p>}<p className="muted">{(rawLatest ?? latest)!.state.replaceAll('_', ' ')} · {date((rawLatest ?? latest)!.finished_at ?? (rawLatest ?? latest)!.started_at)}</p>{(rawLatest ?? latest)!.error_summary && <div className="inline-warning">Warning: {(rawLatest ?? latest)!.error_summary}</div>}<AnalyzerStatuses runs={(rawLatest ?? latest)!.analyzer_runs} go={go} /></> : <Empty title="Ready when you are" icon={<ScanIcon />}>Run the first scan to get a combined report.</Empty>}</div><div className="workspace-section-card"><h2>Scan history</h2>{scans.loading ? <SkeletonTable rows={4} cols={10} /> : scans.error ? <ErrorPanel error={scans.error} retry={scans.reload} /> : <HistoryTable scans={scans.data ?? []} go={go} />}</div></section>
 
     {/* 6 · Housekeeping — set once, then ignored. The gloss keeps "Suppress" from reading as jargon. */}
     <p className="muted suppressions-gloss">Suppress = “not an issue for us” — hides a finding from all future scans and reports for this workspace.</p>
@@ -372,7 +374,10 @@ function PremiumSummaryCard({ label, value, tone, spark, delay }: { label: strin
   </div>;
 }
 
-export function AnalyzerStatuses({ runs }: { runs?: AnalyzerRun[] }) {
+/** Analyzer status for the latest scan: one summary line (ran / not installed
+ *  / failed, with a Set up tools action) and the per-analyzer rows folded
+ *  into a disclosure, so a clean scan does not push history down the page. */
+export function AnalyzerStatuses({ runs, go }: { runs?: AnalyzerRun[]; go?: (r: Route) => void }) {
   if (!runs?.length) return <div className="analyzers"><h3>Analyzer status</h3><p className="muted">Analyzer detail appears after a scan.</p></div>;
   const grouped = new Map<string, typeof runs>();
   for (const r of runs) {
@@ -381,12 +386,26 @@ export function AnalyzerStatuses({ runs }: { runs?: AnalyzerRun[] }) {
     arr.push(r);
     grouped.set(cat, arr);
   }
-  return <div className="analyzers"><h3>Analyzer status</h3>{[...grouped.entries()].map(([cat, items]) => <div key={cat} className="analyzer-group"><span className="analyzer-group-label" style={{ borderLeftColor: categoryColor(cat as never) }}>{(CATEGORY_LABELS as Record<string, string>)[cat] ?? cat}</span>{items.map((run) => {
-    const skipped = run.status === 'skipped';
+  const missing = runs.filter((run) => run.status === 'failed' && isMissingToolMessage(run.message));
+  const failed = runs.filter((run) => run.status === 'failed' && !isMissingToolMessage(run.message));
+  const ran = runs.filter((run) => ['completed', 'succeeded', 'success'].includes(run.status));
+  const skipped = runs.filter((run) => run.status === 'skipped');
+  const parts = [`${ran.length} of ${runs.length - skipped.length} ${runs.length - skipped.length === 1 ? 'analyzer' : 'analyzers'} ran`];
+  if (missing.length) parts.push(`${missing.length} not installed`);
+  if (failed.length) parts.push(`${failed.length} failed`);
+  if (skipped.length) parts.push(`${skipped.length} not needed`);
+  return <div className="analyzers"><h3>Analyzer status</h3>
+    <p className="analyzer-summary" role="note">{parts.join(' · ')}{missing.length > 0 && go && <> <button type="button" className="text-button" onClick={() => go({ page: 'tools' })}>Set up tools →</button></>}</p>
+    <details className="analyzer-details" open={failed.length > 0 || undefined}><summary>Show each analyzer</summary>
+    {[...grouped.entries()].map(([cat, items]) => <div key={cat} className="analyzer-group"><span className="analyzer-group-label" style={{ borderLeftColor: categoryColor(cat as never) }}>{(CATEGORY_LABELS as Record<string, string>)[cat] ?? cat}</span>{items.map((run) => {
+    const isSkipped = run.status === 'skipped';
+    const notInstalled = run.status === 'failed' && isMissingToolMessage(run.message);
     // Display names read like products ("Gitleaks", not "gitleaks-secrets"); an
     // id missing from the map falls back to itself, and the raw id stays on hover.
-    return <div className="analyzer-row" key={run.analyzer_id}><span title={run.analyzer_id}>{analyzerName(run.analyzer_id)}</span><span className={`state ${run.status}`}>{run.status}</span>{skipped ? <small role="note" className="text-amber-600">Skipped: {run.message || 'no applicable files or profile excluded this analyzer'}</small> : run.message ? <small>{run.message}</small> : null}</div>;
-  })}</div>)}</div>;
+    return <div className="analyzer-row" key={run.analyzer_id}><span title={run.analyzer_id}>{analyzerName(run.analyzer_id)}</span><span className={`state ${notInstalled ? 'not-installed' : run.status}`}>{notInstalled ? 'not installed' : run.status}</span>{isSkipped ? <small role="note" className="text-amber-600">Skipped: {run.message || 'no applicable files or profile excluded this analyzer'}</small> : notInstalled ? <small>Checks skipped until it is set up in Tools.</small> : run.message ? <small>{run.message}</small> : null}</div>;
+  })}</div>)}
+    </details>
+  </div>;
 }
 
 function LanguageDistributionDonut({ names, coverage, workspaceId, go }: { names: string[]; coverage: LanguageCoverage[]; workspaceId: string; go: (r: Route) => void }) {
@@ -516,14 +535,11 @@ export function RiskCard({ risk, unscanned }: { risk?: RiskProfile | null; /** t
   // failed or degraded, the score reflects partial coverage and the card
   // must say so instead of implying full assurance.
   const coverage = risk.coverage;
-  const partial = coverage && risk.complete === false;
-  const coverageNote = partial
-    ? `partial coverage: ${coverage!.succeeded} of ${coverage!.total} analyzers completed` +
-      (coverage!.failed > 0 ? `, ${coverage!.failed} failed` : '') +
-      (coverage!.warned > 0 ? `, ${coverage!.warned} degraded` : '')
-    : null;
+  const partial = !!coverage && (risk.complete === false || coveragePartial(coverage));
+  const coverageNote = partial ? `Partial coverage: ${coverageText(coverage!)}` : null;
+  const explanation = risk.counts ? gradeExplanation(risk.counts as SeverityCountFields, coverage) : null;
   return <div className={`summary-card premium-card risk-hero ${gradeTone}`} title={risk.finished_at ? `Latest scan finished ${risk.finished_at}` : undefined}>
-    <GradeTile grade={risk.grade} size="lg" className="risk-grade" />
+    <GradeTile grade={risk.grade} size="lg" className={`risk-grade${partial ? ' grade-provisional' : ''}`} />
     <strong className="risk-score" title={RISK_SCORE_EXPLAINER}>{Math.round(risk.score)}</strong>
     {/* "Risk score", not "Risk D". The grade letter is already the tile beside
         it, so repeating it here printed the same D twice on one card and read
@@ -532,6 +548,7 @@ export function RiskCard({ risk, unscanned }: { risk?: RiskProfile | null; /** t
     <span>Risk score</span>
     {trendNote && <small role="note" className="risk-trend">{trendNote.arrow}{trendNote.text}</small>}
     {coverageNote && <span className="risk-coverage-note" data-partial="true">{coverageNote}</span>}
+    {explanation && <p className="risk-explain">{explanation}</p>}
   </div>;
 }
 

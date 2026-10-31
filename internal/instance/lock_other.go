@@ -4,7 +4,7 @@ package instance
 
 import "errors"
 
-var ErrAlreadyRunning = errors.New("Blunt Code is already running for this data directory")
+var ErrAlreadyRunning = errors.New("another Blunt Code instance is already running for this data directory")
 
 // Guard is a no-op outside Windows. Blunt Code's supported desktop target is
 // Windows, while this fallback keeps cross-platform package tests buildable.

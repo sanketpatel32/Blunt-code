@@ -1,4 +1,5 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../../components/ui/dialog';
+import { coverageFromRuns, coverageText } from '../../lib/risk';
 import * as React from 'react';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { api } from '../../api';
@@ -6,7 +7,7 @@ import type { AnalyzerRun, Finding, FindingPage, Report, Scan, Severity } from '
 import type { Route } from '../../lib/router';
 import type { Notice } from '../../lib/notice';
 import { message } from '../../lib/notice';
-import { SEVERITY_LABELS, analyzerName, compactDuration, findingLocation, friendlyFindingTitle, humanizeAnalyzerError, shortFindingLocation } from '../../lib/format';
+import { SEVERITY_LABELS, analyzerName, compactDuration, findingLocation, friendlyFindingTitle, humanizeAnalyzerError, isMissingToolMessage, shortFindingLocation } from '../../lib/format';
 import { copyToClipboard } from '../../lib/clipboard';
 import { useLoad } from '../../hooks/useLoad';
 import { findingCategoryLabel } from '../../lib/analyzerCatalog';
@@ -177,7 +178,7 @@ function rowTitleFor(finding: Finding): string {
   return title;
 }
 
-export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: string; notify?: (n: Notice) => void; runs?: AnalyzerRun[]; /** Navigation callback from the hosting page; present, the suppress toast gains a "View suppressions" jump to the workspace. */ go?: (r: Route) => void }) {
+export function ReportView({ scanId, notify, runs: runsProp, go, onCountsChanged }: { scanId: string; notify?: (n: Notice) => void; runs?: AnalyzerRun[]; /** Navigation callback from the hosting page; present, the suppress toast gains a "View suppressions" jump to the workspace. */ go?: (r: Route) => void; /** Called after a suppress/restore changed the scan's persisted counts, so the host can refresh its header and grade. */ onCountsChanged?: () => void }) {
   const report = useLoad(() => api.report(scanId), [scanId]);
   // Read the shareable URL state exactly once per mount so all three slices
   // stay mutually consistent even if the address changes mid-render.
@@ -247,10 +248,16 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
    *  refresh never duplicates a row and status flips land where the user can see them. */
   const [items, setItems] = useState<Finding[]>([]);
   const [envelope, setEnvelope] = useState<FindingPage>();
+  /** Status chip counts come from the findings endpoint's first page
+   *  (status_counts): the report payload leaves suppressed findings out, so
+   *  counting it would always show Suppressed 0. Older servers omit the field
+   *  and the chips fall back to the report payload. */
+  const [statusCounts, setStatusCounts] = useState<FindingPage['status_counts']>();
   useEffect(() => {
     const data = findings.data;
     if (!data) return;
     setEnvelope(data);
+    if (data.status_counts) setStatusCounts(data.status_counts);
     setItems((prev) => {
       if (pages === 1) return data.items ?? [];
       const merged = new Map(prev.map((finding, index) => [findingKey(finding, index), finding]));
@@ -266,6 +273,7 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
     for (let page = 1; page <= pages; page += 1) {
       try {
         last = await api.findings(scanId, { ...params, page: String(page) });
+        if (page === 1 && last.status_counts) setStatusCounts(last.status_counts);
         collected.push(...(last.items ?? []));
       } catch { /* a failed refresh keeps the rows already on screen */ }
     }
@@ -293,6 +301,10 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
   const [suppressionVersion, setSuppressionVersion] = useState(0);
   const reportWorkspaceId = report.data?.scan?.workspace_id ?? '';
   const suppressions = useLoad(() => (reportWorkspaceId ? api.suppressions(reportWorkspaceId) : Promise.resolve([])), [reportWorkspaceId, suppressionVersion]);
+  /** After a suppression change the server has already recounted the scan:
+   *  refresh the severity chips (report), the status chips, and the host's
+   *  header/grade without a loading flash. */
+  const countsChanged = () => { void report.reload(); onCountsChanged?.(); };
   /* Open/closed state for the two collapsed filter rails (see RAIL_LEAD below).
    * These two hooks MUST sit above the loading/error early returns: React
    * compares hook counts between renders, so a hook added after an early
@@ -304,8 +316,8 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
   // Any change to the selection closes both: a disclosure left open after the
   // filter changed shows a list that no longer matches the results.
   useEffect(() => { setToolsOpen(false); setCategoriesOpen(false); }, [filters.analyzer, filters.category]);
-  if (report.loading) return <section className="report"><SkeletonTable rows={6} cols={5} className="findings-table" /></section>;
-  if (report.error) return <ErrorPanel error={report.error} retry={report.reload} />;
+  if (report.loading && !report.data) return <section className="report"><SkeletonTable rows={6} cols={5} className="findings-table" /></section>;
+  if (report.error && !report.data) return <ErrorPanel error={report.error} retry={report.reload} />;
   const data = report.data ?? ({} as Report);
   /** A report payload without its scan still renders: zeroed controls beat a crashed report view. */
   const dataScan = data.scan ?? ({ id: scanId, workspace_id: '', state: '' } as Scan);
@@ -329,7 +341,8 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
     try {
       await api.removeSuppression(workspaceId, finding.fingerprint);
       setSuppressionVersion((version) => version + 1);
-      notify?.({ kind: 'success', text: 'Finding restored. It will be counted again on the next scan.' });
+      notify?.({ kind: 'success', text: 'Finding restored. It counts toward this scan’s totals and grade again.' });
+      countsChanged();
       await reloadAllPages();
     } catch (e) {
       notify?.({ kind: 'error', text: message(e) });
@@ -344,7 +357,8 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
     if (queue.length <= 1) {
       setSuppressQueue([]);
       setSuppressionVersion((version) => version + 1);
-      notify?.({ kind: 'success', text: `Finding suppressed${reason ? ` (${reason})` : ''}. It will not appear in future scans, reports, or the CI gate.${suppressionHint}`, action: suppressionAction });
+      notify?.({ kind: 'success', text: `Finding suppressed${reason ? ` (${reason})` : ''}. Counts and grade are updated, and it stays out of future scans, reports, and the CI gate.${suppressionHint}`, action: suppressionAction });
+      countsChanged();
       await reloadAllPages();
       return;
     }
@@ -364,7 +378,8 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
     setSuppressQueue([]);
     setSelectionEpoch((epoch) => epoch + 1);
     setSuppressionVersion((version) => version + 1);
-    notify?.({ kind: failed ? 'error' : 'success', text: failed ? `Suppressed ${done} of ${queue.length} findings — ${failed} failed; retry the rest.` : `Suppressed ${done} findings${reason ? ` (${reason})` : ''}. They will not appear in future scans, reports, or the CI gate.${suppressionHint}`, action: failed ? undefined : suppressionAction });
+    notify?.({ kind: failed ? 'error' : 'success', text: failed ? `Suppressed ${done} of ${queue.length} findings — ${failed} failed; retry the rest.` : `Suppressed ${done} findings${reason ? ` (${reason})` : ''}. Counts and grade are updated, and they stay out of future scans, reports, and the CI gate.${suppressionHint}`, action: failed ? undefined : suppressionAction });
+    countsChanged();
     await reloadAllPages();
   }
   /** Bulk entry point from the selection toolbar: confirm the reason once in the dialog, then apply it to every selected finding. */
@@ -377,7 +392,7 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
   const clearFilters = () => updateFilters({ severity: '', category: '', analyzer: '', rule: '', path: '', status: '', q: '' });
   const counts = severityCounts(dataScan);
   const selectedSeverities = filters.severity ? filters.severity.split(',').filter(Boolean) : [];
-  /** Tool chips carry each engine's finding count (from the report payload, which holds every finding). The report's scan object omits analyzer_runs, so the hosting ScanPage passes its /scans/{id} runs down; zero-finding engines stay visible with a 0 count. */
+  /** Tool chips carry each engine's finding count (from the report payload, which holds every finding). The report's scan object omits analyzer_runs, so the hosting ScanPage passes its /scans/{id} runs down; engines that ran clean stay visible with a 0 count; failed engines with nothing to filter are left to the incomplete-analysis notice. */
   const runs = runsProp ?? dataScan.analyzer_runs ?? [];
   const runById = new Map<string, AnalyzerRun | undefined>(runs.map((run) => [run.analyzer_id, run] as const));
   const countByAnalyzer = new Map<string, number>();
@@ -387,7 +402,11 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
     if (finding.status) countByStatus.set(finding.status, (countByStatus.get(finding.status) ?? 0) + 1);
     if (!runById.has(finding.analyzer_id)) runById.set(finding.analyzer_id, undefined);
   }
-  const tools = [...runById.keys()];
+  // A tool that failed and reported nothing gets no chip: "Ruff 0" read as
+  // "ran clean". The incomplete-analysis notice above already names it.
+  const tools = [...runById.keys()].filter((tool) => runById.get(tool)?.status !== 'failed' || (countByAnalyzer.get(tool) ?? 0) > 0);
+  /** The foot prints the same "X of Y analyzers ran" as the scan header, from the run rows. */
+  const footCoverage = coverageFromRuns(runs);
   /** Type rail: the categories actually present in this scan, most findings first. */
   const categories = [...(data.findings ?? []).reduce((map, finding) => { if (finding.category) map.set(finding.category, (map.get(finding.category) ?? 0) + 1); return map; }, new Map<string, number>())].sort((a, b) => b[1] - a[1]);
   /* The tool rail collapses past its leaders.
@@ -433,7 +452,7 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
   return <section className="report">
     {/* Loop 145 · the raw engine text is still there, on `title`, for anyone
         debugging it. What is on screen is the part a reader can act on. */}
-    {data.warnings?.length ? <div className="inline-warning report-warnings"><strong>Incomplete analysis</strong>{groupAnalyzerWarnings(data.warnings).map((group) => <span key={group.key} title={group.raw.join('\n')}>{group.tools.length ? <><b>{group.tools.join(', ')}</b> — {group.reason}</> : group.reason}</span>)}</div> : null}
+    {data.warnings?.length ? <ReportWarnings warnings={data.warnings} go={go} /> : null}
     <div className="analysis-toolbar" role="search">
       <div className="toolbar-top">
         <label className="analysis-search"><MagnifierIcon aria-hidden="true" /><span className="sr-only">Search findings</span><input value={filters.q} onChange={(event) => updateFilters({ ...filters, q: event.target.value })} placeholder="Search message, rule, or file" /></label>
@@ -448,7 +467,7 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
         </div>
         <div className="filter-group">
           <span className="filter-group-label" aria-hidden="true">Status</span>
-          <fieldset className="chip-group" aria-label="Status">{STATUS_OPTIONS.map((status) => <button type="button" key={status} className={`chip${filters.status === status ? ' pressed' : ''}`} aria-pressed={filters.status === status} onClick={() => toggleStatus(status)}>{STATUS_LABELS[status]}<span className="chip-count">{countByStatus.get(status) ?? 0}</span></button>)}</fieldset>
+          <fieldset className="chip-group" aria-label="Status">{STATUS_OPTIONS.map((status) => <button type="button" key={status} className={`chip${filters.status === status ? ' pressed' : ''}`} aria-pressed={filters.status === status} onClick={() => toggleStatus(status)}>{STATUS_LABELS[status]}<span className="chip-count">{statusCounts?.[status] ?? countByStatus.get(status) ?? 0}</span></button>)}</fieldset>
         </div>
         {/* Sorting for the collapsed rails happens on the whole set, so the
             order a reader sees in "+N" matches the order they saw in the rail.
@@ -484,17 +503,17 @@ export function ReportView({ scanId, notify, runs: runsProp, go }: { scanId: str
           {loadingMore ? <span className="loading-more" role="status"><i className="spinner" aria-hidden="true" />Loading more…</span> : hasNext ? <button type="button" className="button secondary" onClick={() => setPages((current) => current + 1)}>Show more</button> : <span className="load-more-status">End of list</span>}
         </div>}
       </div>
-      {selected && <SourcePane scanId={scanId} finding={selected} workspaceId={workspaceId} onClose={() => setSelectedKey(undefined)} onPrev={() => { if (selectedIndex > 0) setSelectedKey(findingKey(items[selectedIndex - 1]!, selectedIndex - 1)); }} onNext={() => { if (selectedIndex >= 0 && selectedIndex < items.length - 1) setSelectedKey(findingKey(items[selectedIndex + 1]!, selectedIndex + 1)); }} hasPrev={selectedIndex > 0} hasNext={selectedIndex >= 0 && selectedIndex < items.length - 1} onSuppress={setSuppressing} onRestore={restoreFinding} />}
+      {selected && <SourcePane scanId={scanId} finding={selected} workspaceId={workspaceId} onClose={() => setSelectedKey(undefined)} onPrev={() => { if (selectedIndex > 0) setSelectedKey(findingKey(items[selectedIndex - 1]!, selectedIndex - 1)); }} onNext={() => { if (selectedIndex >= 0 && selectedIndex < items.length - 1) setSelectedKey(findingKey(items[selectedIndex + 1]!, selectedIndex + 1)); }} hasPrev={selectedIndex > 0} hasNext={selectedIndex >= 0 && selectedIndex < items.length - 1} onSuppress={setSuppressing} onRestore={restoreFinding} workspaceRoot={data.workspace?.root_path} />}
     </div>
     <footer className="report-foot">
-      <span className="report-foot-count">{total} {total === 1 ? 'finding' : 'findings'} · {tools.length || 0} {tools.length === 1 ? 'analyzer' : 'analyzers'} ran</span>
+      <span className="report-foot-count">{total} {total === 1 ? 'finding' : 'findings'}{footCoverage ? ` · ${coverageText(footCoverage)}` : ''}</span>
       <ExportMenu scanId={scanId} csvParams={csvParams} findings={items} />
     </footer>
     {suppressing && <SuppressFindingDialog workspaceId={workspaceId} finding={suppressing} onClose={() => { setSuppressing(undefined); setSuppressQueue([]); }} onSuppressed={(reason) => { void suppressQueued(reason); }} notify={notify ?? noopNotify} />}
   </section>;
 }
 
-/** Flat export row — plain `<a download>` GET links for the Markdown/HTML/SARIF attachments plus a CSV of the currently filtered findings and a client-side Jira CSV. */
+/** Flat export row — plain `<a download>` GET links for the Markdown/HTML/SARIF/JSON attachments, an inline "open in a new tab" view of the HTML report, plus a CSV of the currently filtered findings and a client-side Jira CSV. */
 function ExportMenu({ scanId, csvParams, findings }: { scanId: string; csvParams: Record<string, string>; findings?: Finding[] }) {
   const [open, setOpen] = useState(false);
   const returnFocus = useRef<HTMLButtonElement>(null);
@@ -502,6 +521,7 @@ function ExportMenu({ scanId, csvParams, findings }: { scanId: string; csvParams
     { label: 'Markdown', ext: '.md', href: api.markdownUrl(scanId) },
     { label: 'HTML', ext: '.html', href: api.exportUrl(scanId, 'html') },
     { label: 'SARIF', ext: '.sarif', href: api.exportUrl(scanId, 'sarif') },
+    { label: 'JSON', ext: '.json', href: api.exportUrl(scanId, 'json') },
   ];
   return <>
     <button ref={returnFocus} className="button secondary" onClick={() => setOpen(true)}>Export report</button>
@@ -509,6 +529,7 @@ function ExportMenu({ scanId, csvParams, findings }: { scanId: string; csvParams
       <DialogHeader><DialogTitle>Export report</DialogTitle><DialogDescription>Choose the scope to include. Exports describe this scan, not the current source files.</DialogDescription></DialogHeader>
       <section><h3>Full scan report</h3><p className="muted">Includes the whole report regardless of visible filters.</p>
         <div className="export-inline">{items.map((item) => <a key={item.label} className="export-item" href={item.href} download>{item.label}<small>{item.ext}</small></a>)}</div>
+        <a className="export-open" href={api.exportUrl(scanId, 'html', { inline: '1' })} target="_blank" rel="noopener noreferrer">Open HTML report in a new tab<span aria-hidden="true"> ↗</span></a>
       </section>
       <section><h3>All findings matching current filters</h3><p className="muted">Includes matching rows beyond the loaded page.</p><a className="export-item" href={api.exportUrl(scanId, 'csv', csvParams)} download>CSV (current filters)<small>.csv</small></a></section>
       <section><h3>Loaded findings only</h3><p className="muted">{findings?.length ?? 0} rows currently loaded. Load more findings first to include more rows.</p><button className="export-item whitespace-nowrap" disabled={!findings?.length} onClick={() => downloadJiraCsv(findings ?? [], `jira-${scanId}.csv`)}>Jira CSV<small className="whitespace-nowrap">.csv · loaded rows</small></button></section>
@@ -722,17 +743,36 @@ function FindingsTable({ findings, sort, onSort, activeKey, onSelect, canSuppres
     </tr></thead><tbody>{findings.map((finding, index) => { const rowKey = findingKey(finding, index); const rowTitle = rowTitleFor(finding); const rowBody = rowMessage(finding); const suppressed = finding.status === 'suppressed'; const isSelected = selectedIds.has(rowKey); const isActive = activeKey === rowKey; const rowMenuItems = [{ label: 'Copy details', onSelect: () => { void copyFinding(finding); } }, ...(canSuppress && finding.fingerprint ? [suppressed ? { label: 'Restore', onSelect: () => onRestore(finding) } : { label: 'Suppress…', onSelect: () => onSuppress(finding) }] : [])]; return <tr key={rowKey} data-index={index} className={`${severityEdgeClass(finding.severity)}${isSelected ? ' selected' : ''}${isActive ? ' active' : ''}`} aria-label={`${finding.severity} ${rowTitle}${finding.relative_path ? ` in ${finding.relative_path}` : ''} — open in the source pane`} tabIndex={0} onClick={()=>onSelect(finding, index)} onKeyDown={(e)=>onRowKeyDown(e, index)}><td className="sticky left-0 z-[1] bg-[var(--color-surface)] shadow-[var(--shadow-card)]" style={headerStyle('severity')} onClick={(e)=>e.stopPropagation()} onKeyDown={(e)=>e.stopPropagation()}><span className="flex items-center gap-2"><input type="checkbox" role="checkbox" aria-label={'Select row '+rowKey} checked={isSelected} onChange={(e)=>toggleRowSelect(rowKey,e.target.checked)} onClick={(e)=>e.stopPropagation()} /><span className={'severity '+finding.severity}><i className="sev-dot" aria-hidden="true" />{SEVERITY_LABELS[finding.severity] ?? finding.severity}</span></span></td><td className="finding-summary" style={headerStyle('finding')} title={finding.message ?? rowTitle}><strong>{rowTitle}</strong>{rowBody && <span className="finding-message">{rowBody}</span>}</td><td data-label="File" style={headerStyle('path')}><code className="finding-path" title={findingLocation(finding)}>{shortFindingLocation(finding)}</code></td><td data-label="Tool" style={headerStyle('analyzer')}><span className="tag">{analyzerName(finding.analyzer_id)}</span></td><td data-label="Status" style={headerStyle('status')} onClick={(e)=>e.stopPropagation()} onKeyDown={(e)=>e.stopPropagation()}><div className="finding-actions-cell">{finding.status ? <span className={'status-text'+(suppressed ? ' suppressed' : '')}>{finding.status}</span> : '—'}{suppressed && finding.fingerprint && suppressionReasons?.has(finding.fingerprint) && <span className="suppression-reason" title={`Suppressed: ${suppressionReasons.get(finding.fingerprint)}`}>{suppressionReasons.get(finding.fingerprint)}</span>}<span className="finding-row-actions"><RowMenu label={'Actions for '+rowTitle} items={rowMenuItems} /></span></div></td></tr>; })}</tbody></table></div></div>;
 }
 
+/** The incomplete-analysis banner. Every "tool is not installed" warning,
+ *  whatever its wording, folds into ONE line naming the tools with a single
+ *  Set up tools action; other reasons keep the per-reason grouping below. */
+export function ReportWarnings({ warnings, go }: { warnings: string[]; go?: (r: Route) => void }) {
+  const groups = groupAnalyzerWarnings(warnings);
+  const missing = groups.filter((group) => group.missing);
+  const missingTools = missing.flatMap((group) => group.tools);
+  const rest = groups.filter((group) => !group.missing);
+  return <div className="inline-warning report-warnings" role="note">
+    <strong>Incomplete analysis</strong>
+    {missingTools.length > 0 && <span className="missing-tools" title={missing.flatMap((group) => group.raw).join('\n')}>
+      <b>{missingTools.length === 1 ? '1 tool isn’t installed' : `${missingTools.length} tools aren’t installed`}</b>{' '}({missingTools.join(', ')}), so {missingTools.length === 1 ? 'its checks were' : 'their checks were'} skipped and this report covers fewer checks.
+      {go ? <> <button type="button" className="text-button" onClick={() => go({ page: 'tools' })}>Set up tools →</button></> : <> <a href="/tools">Set up tools →</a></>}
+    </span>}
+    {rest.map((group) => <span key={group.key} title={group.raw.join('\n')}>{group.tools.length ? <><b>{group.tools.join(', ')}</b> — {group.reason}</> : group.reason}</span>)}
+  </div>;
+}
+
 /** Seven analyzers failing for the same reason read as one line, not seven:
- *  "Ruff, Biome, Gitleaks — No pinned managed artifact is configured." */
-function groupAnalyzerWarnings(warnings: string[]) {
-  const groups = new Map<string, { key: string; reason: string; tools: string[]; raw: string[] }>();
+ *  "Ruff, Biome, Gitleaks — Not installed on this computer." */
+export function groupAnalyzerWarnings(warnings: string[]) {
+  const groups = new Map<string, { key: string; reason: string; tools: string[]; raw: string[]; missing: boolean }>();
   for (const warning of warnings) {
     const text = humanizeAnalyzerError(warning);
     const split = /^([^:]{1,40}): (.+)$/.exec(text);
     const tool = split && !/\s{2,}/.test(split[1]) ? split[1] : null;
     const reason = tool ? split![2] : text;
-    const key = tool ? `t:${reason}` : `r:${text}`;
-    const group = groups.get(key) ?? { key, reason, tools: [], raw: [] };
+    const missing = Boolean(tool) && isMissingToolMessage(reason);
+    const key = missing ? 'missing' : tool ? `t:${reason}` : `r:${text}`;
+    const group = groups.get(key) ?? { key, reason, tools: [], raw: [], missing };
     if (tool && !group.tools.includes(tool)) group.tools.push(tool);
     group.raw.push(warning);
     groups.set(key, group);

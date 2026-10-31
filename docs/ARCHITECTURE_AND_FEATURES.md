@@ -208,7 +208,7 @@ The frontend is built with **React 19**, **TypeScript**, **Tailwind CSS**, and *
 4. **Unified Tools Page (`ToolsPage.tsx`)**:
    - Single consolidated table showing all managed and built-in analyzer engines.
    - Status, version, category badge, and one-click Install / Repair / Update controls.
-5. **Rule Studio & File Exclusions (`FilesPage.tsx`)**:
+5. **Files & Path Exclusions (`FilesPage.tsx`)**:
    - Visual file tree explorer showing candidate files vs. excluded files.
    - Interactive rule authoring for custom inclusion/exclusion globs.
 6. **Pentest Suite (`PentestPage.tsx`)**:

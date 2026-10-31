@@ -239,7 +239,7 @@ describe('Blunt Code home', () => {
     expect(toolChips.map((chip) => chip.textContent)).toEqual(['Biome1', 'Semgrep0', 'SonarQube0']);
     expect([...host.querySelectorAll('button')].find((button) => button.textContent === 'Filters')).toBeUndefined();
     expect(host.textContent).toContain('Showing 1 of 1');
-    expect(host.textContent).toContain('3 of 3 analyzers succeeded'); // the meta line carries the outcome
+    expect(host.textContent).toContain('3 of 3 analyzers ran'); // the meta line carries the outcome
     await act(async () => { toolChips.find((chip) => chip.textContent === 'Semgrep0')!.click(); await Promise.resolve(); await Promise.resolve(); });
     expect(host.textContent).toContain('Semgrep reported no findings');
     await act(async () => { toolChips.find((chip) => chip.textContent === 'Semgrep0')!.click(); await Promise.resolve(); await Promise.resolve(); }); // clicking the active chip clears it

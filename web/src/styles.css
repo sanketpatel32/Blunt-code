@@ -318,6 +318,7 @@ tr.is-expanded .history-date::before { border-color: var(--color-accent); backgr
 }
 .compare-panel-header { display: grid; gap: var(--space-2xs); padding-bottom: var(--space-md); border-bottom: var(--rule) solid var(--color-rule-faint); }
 .compare-panel-header h2 { margin: 0; font-family: var(--font-display); font-size: var(--text-xl); font-weight: 600; }
+.compare-panel-title { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-md); flex-wrap: wrap; }
 .compare-headline { margin: 0; color: var(--color-ink-soft); font-size: var(--text-sm); }
 .compare-headline strong { color: var(--color-ink); }
 /* Counts stay body-size — number hierarchy without display-size inflation. */
@@ -896,6 +897,12 @@ tr.is-expanded .history-date::before { border-color: var(--color-accent); backgr
      (the page-level overflow-x: clip hides anything that spills). */
   overflow-x: auto;
   scrollbar-width: none;
+}
+/* Phones: three tabs no longer fit one row, and a scrolled rail hid the
+   third tab entirely (no scrollbar, no cue). Wrap so every tab is visible. */
+@media (max-width: 40rem) {
+  .cli-tabs { flex-wrap: wrap; overflow-x: visible; }
+  .cli-tabs .cli-tab { flex: 1 1 auto; justify-content: center; }
 }
 .cli-tab {
   display: inline-flex;
@@ -1776,7 +1783,7 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .severity.info { color: var(--color-sev-info); border-color: color-mix(in oklch, var(--color-sev-info) 30%, var(--color-rule)); background: color-mix(in oklch, var(--color-sev-info) 10%, transparent); }
 .state { text-transform: capitalize; }
 .state.completed, .state.success, .state.ready { border-color: color-mix(in oklch, var(--color-success) 40%, var(--color-rule)); color: var(--color-success-text); background: var(--color-success-soft); }
-.state.completed_with_warnings, .state.warning { border-color: color-mix(in oklch, var(--color-warning) 40%, var(--color-rule)); color: var(--color-warning-text); background: var(--color-warning-soft); }
+.state.completed_with_warnings, .state.warning, .state.not-installed { border-color: color-mix(in oklch, var(--color-warning) 40%, var(--color-rule)); color: var(--color-warning-text); background: var(--color-warning-soft); }
 .state.failed, .state.error, .state.cancelled { border-color: color-mix(in oklch, var(--color-danger) 40%, var(--color-rule)); color: var(--color-danger-text); background: var(--color-danger-soft); }
 .state.running, .state.installing { border-color: color-mix(in oklch, var(--color-accent) 40%, var(--color-rule)); color: var(--color-accent-strong); background: var(--color-accent-soft); }
 .dot { margin-right: var(--space-xs); width: .5rem; height: .5rem; border-radius: 50%; background: var(--color-success); display: inline-block; }
@@ -1864,6 +1871,9 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .analyzer-group-label { display: inline-flex; align-items: center; gap: var(--space-xs); padding-left: var(--space-sm); border-left: 3px solid var(--color-accent); color: var(--color-ink-soft); font: 500 var(--text-xs) var(--font-body); letter-spacing: 0; }
 .analyzer-row { display: grid; grid-template-columns: minmax(5.6rem, 1fr) auto; gap: var(--space-sm); padding: var(--space-sm) 0; border-bottom: var(--rule) solid var(--color-rule-faint); color: var(--color-ink); font-size: var(--text-sm); }
 .analyzer-row small { grid-column: 1 / -1; color: var(--color-ink-soft); }
+.analyzer-summary { margin: var(--space-2xs) 0 var(--space-xs); color: var(--color-ink); font-size: var(--text-sm); }
+.analyzer-details > summary { cursor: pointer; color: var(--color-accent-strong); font-size: var(--text-sm); font-weight: 600; padding: var(--space-2xs) 0; }
+.report-warnings .missing-tools { display: block; }
 
 /* ── L5 · Tables · premium ─────────────────────────────────────── */
 .table-wrap { overscroll-behavior-x: contain;
@@ -2128,6 +2138,10 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .dialog-backdrop label { display: grid; gap: var(--space-xs); margin-top: var(--space-md); color: var(--color-ink); font-size: var(--text-sm); font-weight: 600; }
 .picker-row { display: flex; gap: var(--space-sm); }
 .picker-row input { flex: 1; }
+.dialog-backdrop label + .picker-row { margin-top: var(--space-xs); }
+.field-error { margin: var(--space-xs) 0 0; color: var(--color-danger-text); font-size: var(--text-sm); font-weight: 500; line-height: 1.45; }
+.dialog-backdrop .field-error { color: var(--color-danger-text); }
+[aria-invalid="true"] { border-color: var(--color-danger); }
 .dialog-backdrop footer { justify-content: flex-end; margin-top: var(--space-xl); gap: var(--space-sm); }
 .sr-only { position: absolute; width: .06rem; height: .06rem; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
 .dialog-backdrop dialog.code-preview-dialog { width: min(58rem, 100%); }
@@ -2507,7 +2521,8 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .search-columns[open] { border-color: var(--color-rule); }
 .search-columns-panel { position: absolute; top: calc(100% + var(--space-2xs)); right: 0; z-index: 3; display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-xs); min-width: 13rem; max-width: calc(100vw - 2 * var(--page-gutter)); padding: var(--space-sm); border: var(--rule) solid var(--color-rule); border-radius: var(--radius-button); background: var(--color-surface); box-shadow: var(--shadow-lg); }
 @media (max-width: 48rem) {
-  .search-columns-panel { position: static; max-width: none; width: 100%; }
+  .search-columns { max-width: calc(100% - 2 * var(--space-2xs)); }
+  .search-columns-panel { position: static; max-width: none; min-width: min(13rem, calc(100vw - 2 * var(--page-gutter))); width: 100%; }
 }
 .search-column-toggle {
   display: inline-flex; align-items: center; gap: var(--space-2xs);
@@ -4234,8 +4249,8 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .findings-col { min-width: 0; }
 /* Wide layout: the list scrolls inside its own viewport so the header row
    stays put and the docked pane holds its position while rows scroll. */
-@media (min-width: 72rem) {
-  .analysis-split[data-pane='open'] { grid-template-columns: minmax(0, 1fr) minmax(21rem, 30rem); }
+@media (min-width: 100rem) {
+  .analysis-split[data-pane='open'] { grid-template-columns: minmax(0, 1fr) minmax(26rem, 34rem); }
   .findings-col[data-scoped='true'] .table-wrap { max-height: calc(100dvh - var(--nav-h) - 11rem); overflow-y: auto; overscroll-behavior: contain; }
   .findings-col[data-scoped='true'] .findings-table thead th { position: sticky; top: var(--space-3xs); z-index: 2; background: var(--color-surface-muted); box-shadow: 0 1px 0 var(--color-rule-faint); }
 }
@@ -4387,16 +4402,16 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
   direction: rtl;
   text-align: left;
 }
-.source-pane-body {
+.source-pane-scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
+.source-pane-body { border-top: var(--rule) solid var(--color-rule-faint); }
 .source-pane-body pre.code-preview { margin: 0; max-height: none; border-radius: 0; }
 .source-pane-context {
   padding: var(--space-sm) var(--space-md);
-  border-top: var(--rule) solid var(--color-rule-faint);
   font-size: var(--text-xs);
   color: var(--color-ink-soft);
   display: flex;
@@ -4440,19 +4455,44 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
   from { opacity: 0; }
   to { opacity: 1; }
 }
-/* Narrow widths: the pane docks to the bottom as a sheet over the list. */
-@media (max-width: 71.99rem) {
+/* Below 100rem a docked column would squeeze the table until Tool/Status
+   fall off, so the pane becomes a drawer over the right edge instead: the
+   table keeps its full width and every column stays readable. */
+.source-pane-backdrop { display: none; }
+@media (max-width: 99.99rem) {
   .analysis-split[data-pane='open'] .source-pane {
     position: fixed;
-    left: var(--space-sm);
+    top: var(--space-sm);
     right: var(--space-sm);
     bottom: var(--space-sm);
-    top: auto;
+    left: auto;
     z-index: 60;
-    max-height: min(58dvh, 30rem);
-    min-height: 12rem;
+    width: min(36rem, calc(100vw - 2 * var(--space-sm)));
+    max-height: none;
+    min-height: 0;
     box-shadow: var(--shadow-lg, var(--shadow-card));
   }
+}
+/* Phones: a near-full-height sheet over a dimmed list, title and fix first. */
+@media (max-width: 700px) {
+  .analysis-split[data-pane='open'] .source-pane-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 59;
+    background: color-mix(in oklab, var(--color-ink) 38%, transparent);
+  }
+  .analysis-split[data-pane='open'] .source-pane {
+    top: 6dvh;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: auto;
+    border-radius: var(--radius-card) var(--radius-card) 0 0;
+    border-bottom: 0;
+  }
+  .source-pane-foot { padding-bottom: max(var(--space-xs), env(safe-area-inset-bottom)); }
+  .source-pane-foot .button, .source-pane-foot .text-button { min-height: 2.75rem; }
 }
 
 /* ── Report foot: exports after triage ───────────────────────────── */
@@ -4489,6 +4529,9 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .export-inline .export-item small { font-family: var(--font-body); font-weight: 500; color: var(--color-ink-faint); }
 .export-inline .export-item:hover { border-color: var(--color-accent); background: var(--color-accent-soft); color: var(--color-accent-strong); }
 .export-inline .export-item:hover small { color: inherit; }
+.export-open { display: inline-block; margin-top: var(--space-sm); font-size: var(--text-sm); font-weight: 600; color: var(--color-accent-strong); text-decoration: underline; text-underline-offset: 2px; }
+.export-open:hover { color: var(--color-ink); }
+.export-open:focus-visible { outline: 2px solid var(--color-focus, var(--color-accent)); outline-offset: 2px; border-radius: var(--radius-sm, 4px); }
 
 /* ── Reduced motion + print ──────────────────────────────────────── */
 @media (max-width: 60rem) {
@@ -5323,10 +5366,6 @@ input, select, textarea { color: var(--color-ink); }
   .app-topbar { display: none; }
   .app-rail { display: flex; }
 }
-@media (max-width: 1250px) {
-  .analysis-split[data-pane='open'] { grid-template-columns: minmax(0, 1fr); }
-  .analysis-split[data-pane='open'] .source-pane { position: relative; inset: auto; z-index: auto; max-height: none; min-height: 0; box-shadow: var(--shadow-card); }
-}
 @media (max-width: 950px) {
   .board-columns, .split-section { grid-template-columns: minmax(0, 1fr); }
   .page-heading-actions { width: 100%; justify-content: flex-start; }
@@ -5569,3 +5608,8 @@ tbody tr:hover > td { background: color-mix(in oklch, var(--color-accent) 5%, tr
 .suppressions-count { margin: 0 0 var(--space-sm); color: var(--color-ink-faint); font: 600 var(--text-xs) var(--font-mono); }
 /* Premium card hover — ensures trend cards lift */
 .trend-section .summary-card { transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-base) var(--ease-out); }
+/* Provisional grade (partial analyzer coverage): a dashed ring says the
+   letter rests on less than the full analyzer set. */
+.grade-provisional { outline: 2px dashed var(--color-warning, #b45309); outline-offset: 3px; }
+.risk-explain, .scan-hero-explain { margin: var(--space-2xs, 0.25rem) 0 0; max-width: 60ch; font-size: 0.875rem; line-height: 1.45; color: var(--color-text-muted, inherit); }
+.risk-hero .risk-explain { grid-column: 1 / -1; }

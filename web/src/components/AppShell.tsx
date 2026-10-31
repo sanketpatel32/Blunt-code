@@ -27,6 +27,7 @@ import { cn } from '../lib/utils';
 import { LOCALES, useT } from '../lib/i18n';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { workspaceSections } from './WorkspaceContext';
+import { FEATURES } from '../lib/features';
 
 type NavItem = { route: Route; label: string; icon: LucideIcon; hint: string };
 
@@ -53,7 +54,7 @@ type NavItem = { route: Route; label: string; icon: LucideIcon; hint: string };
  * the app-level utilities close the rail.
  */
 const PRIMARY: ReadonlyArray<Route['page']> = ['home', 'workspaces', 'search', 'tools'];
-const SECONDARY: ReadonlyArray<Route['page']> = ['rules', 'cli'];
+const SECONDARY: ReadonlyArray<Route['page']> = FEATURES.ruleStudio ? ['rules', 'cli'] : ['cli'];
 const SETTINGS_PAGES: ReadonlyArray<Route['page']> = ['settings', 'about'];
 
 const NAV_ICONS: Partial<Record<Route['page'], LucideIcon>> = {
