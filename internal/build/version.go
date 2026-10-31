@@ -5,4 +5,4 @@
 // incremental findings survive upgrades that should have invalidated them.
 package build
 
-const Version = "0.45.1"
+const Version = "0.46.0"
