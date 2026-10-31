@@ -1,8 +1,8 @@
-import { TrendArea, SeverityDonut } from './viz/RechartsViz';
+import { TrendArea, SeverityDonut } from './viz/Charts';
 import type { LanguageCoverage, SeverityCounts, TrendPoint } from '../lib/chartData';
 import { SEVERITY_COLOR, SEVERITY_ORDER } from '../lib/chartData';
 import type { SeverityTrendPoint } from '../types';
-import type { TrendDatum } from './viz/RechartsViz';
+import type { TrendDatum } from './viz/Charts';
 import { BarChart3, Code2, PieChart } from 'lucide-react';
 
 type Props = {

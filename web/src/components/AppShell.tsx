@@ -259,7 +259,7 @@ export function AppShell({ workspace, route, onNavigate, onClose, theme, onToggl
       {/* Phone bar (<=700px): brand, a drawer with every destination, and the
           same utilities as the rail foot — search, notifications, theme. */}
       <header className={cn('app-topbar', reduced && 'nav-no-motion')}>
-        <a className="brand" href={href({ page: 'home' })} onClick={(event) => navigateFromLink(event, () => onNavigate({ page: 'home' }))}>
+        <a className="brand" aria-label="Blunt Code home" href={href({ page: 'home' })} onClick={(event) => navigateFromLink(event, () => onNavigate({ page: 'home' }))}>
           <svg className="brand-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
             <rect width="32" height="32" rx="0" fill="var(--color-brand-mark)" />
             <path d="M16 5.2 L23.6 9 L23.6 17.2 C23.6 21 20.2 24.5 16 26.8 C11.8 24.5 8.4 21 8.4 17.2 L8.4 9 Z" fill="none" stroke="var(--color-brand-line)" strokeOpacity="0.14" strokeWidth="1" strokeLinejoin="round" />

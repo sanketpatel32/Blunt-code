@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react';
-import { animate } from 'motion/react';
 
 /**
  * A count-up number. It renders the final value in the DOM from the first
@@ -20,13 +19,20 @@ export function AnimatedNumber({ value, className, format = (n: number) => Math.
       last.current = value;
       return;
     }
-    const controls = animate(last.current, value, {
-      duration,
-      ease: [0.22, 1, 0.36, 1],
-      onUpdate: (v) => { node.textContent = format(v); },
-    });
+    // A tiny rAF tween (ease-out cubic) instead of the motion engine, so the
+    // count-up costs nothing in the shell bundle.
+    const from = last.current;
+    const start = performance.now();
+    let frame = 0;
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / (duration * 1000));
+      const eased = 1 - Math.pow(1 - t, 3);
+      node.textContent = format(from + (value - from) * eased);
+      if (t < 1) frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
     last.current = value;
-    return () => controls.stop();
+    return () => cancelAnimationFrame(frame);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, duration]);
   return <span ref={ref} className={`tabular-nums ${className ?? ''}`}>{format(value)}</span>;

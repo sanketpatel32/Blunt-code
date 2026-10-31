@@ -26,7 +26,11 @@ import { SearchPage } from './pages/SearchPage';
 import { ToolsPage } from './pages/ToolsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { SkeletonCards } from './components/skeletons';
-import { LazyMotion, MotionConfig, domAnimation, m } from 'motion/react';
+import { LazyMotion, MotionConfig, m } from 'motion/react';
+
+// Motion's animation features load after first paint; until then `m.*`
+// elements render statically at their final state.
+const loadMotionFeatures = () => import('./lib/motionFeatures').then((mod) => mod.default);
 
 const PentestPage = lazy(() => import('./pages/PentestPage').then((m) => ({ default: m.PentestPage })));
 const RuleStudioPage = lazy(() => import('./pages/RuleStudioPage').then((m) => ({ default: m.RuleStudioPage })));
@@ -214,7 +218,7 @@ export function App() {
   // The backend is gone once the farewell screen shows; render it instead of
   // the app frame so no dead buttons or error states can be clicked.
   if (farewell) return <div className="app-frame"><AppClosedScreen mode={farewell.mode} version={farewell.mode === 'updating' ? farewell.version : undefined} /></div>;
-  return <I18nProvider><MotionConfig reducedMotion="user"><LazyMotion features={domAnimation}><div className="app-frame">
+  return <I18nProvider><MotionConfig reducedMotion="user"><LazyMotion features={loadMotionFeatures}><div className="app-frame">
     <a href="#main-content" className="skip-link">Skip to main content</a>
     {/* The shell is a grid: the rail is the first column and everything else
         flows beside it. Previously the nav was a horizontal band and this
