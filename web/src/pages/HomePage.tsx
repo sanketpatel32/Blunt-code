@@ -581,10 +581,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
             </div>
           ) : (
             <ol className="ledger-list">
-              {/* The readable window is rendered, not CSS-scrolled: clipped
-                  rows still lay out under the panel and everything below it
-                  (73). The foot's link carries the rest. */}
-              {ledgerRows.slice(0, 12).map((row) => (
+              {ledgerRows.map((row) => (
                 <LedgerRow
                   key={row.workspace.id}
                   workspace={row.workspace}
@@ -1024,7 +1021,7 @@ function LedgerRow({
   const partialCoverage = !!current && !!coverage && (coverage.failed > 0 || coverage.warned > 0);
 
   return (
-    <li className="ledger-row" data-scored={score !== null || undefined}>
+    <li className="ledger-row" data-workspace-id={workspace.id} data-scored={score !== null || undefined}>
       {/* The grade tile and its score are one object: the letter answers "how
           bad", the number under it answers "how much of it". They used to live
           at opposite ends of the row (tile left, "6489 risk" chip right), so

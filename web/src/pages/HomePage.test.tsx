@@ -337,11 +337,44 @@ describe('HomePage risk board — verdict', () => {
       workspacesPage(items, 110, { scanned_workspaces: 90, partial_assessments: 0 }),
     ));
     expect(host.textContent).toContain('Showing 1–25 of 110 by risk');
+    const page1Ids = [...host.querySelectorAll('.ledger-row[data-workspace-id]')].map((el) => el.getAttribute('data-workspace-id'));
+    expect(page1Ids).toHaveLength(25);
+    expect(page1Ids[0]).toBe('ws-0');
+    expect(page1Ids[24]).toBe('ws-24');
     const next = findButton(host, 'Next');
     expect(next).toBeDefined();
     expect(next!.disabled).toBe(false);
     await act(async () => { next!.click(); await Promise.resolve(); await Promise.resolve(); });
     expect(host.textContent).toContain('Showing 26–50 of 110 by risk');
+    const page2Ids = [...host.querySelectorAll('.ledger-row[data-workspace-id]')].map((el) => el.getAttribute('data-workspace-id'));
+    expect(page2Ids).toHaveLength(25);
+    expect(page2Ids[0]).toBe('ws-25');
+    expect(page2Ids[24]).toBe('ws-49');
+    const union = new Set([...page1Ids, ...page2Ids]);
+    expect(union.size).toBe(50);
+  });
+
+  it('renders the last partial ledger page without skipping rows (26 workspaces → 25 + 1)', async () => {
+    const items = Array.from({ length: 26 }, (_, i) =>
+      workspaceItem({
+        id: `edge-${i}`,
+        name: `Edge ${i}`,
+        latest_scan: latestScan({ id: `scan-${i}`, total_findings: 100 - i, critical_count: 1, high_count: 0, medium_count: 0, low_count: 0, info_count: 0 }),
+      }),
+    );
+    const host = await render(homeFetchMock(
+      { scans: [], total: 0, summary },
+      workspacesPage(items, 26, { scanned_workspaces: 26, partial_assessments: 0 }),
+    ));
+    expect(host.querySelectorAll('.ledger-row[data-workspace-id]')).toHaveLength(25);
+    await act(async () => {
+      findButton(host, 'Next')!.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(host.textContent).toContain('Showing 26–26 of 26 by risk');
+    const lastIds = [...host.querySelectorAll('.ledger-row[data-workspace-id]')].map((el) => el.getAttribute('data-workspace-id'));
+    expect(lastIds).toEqual(['edge-25']);
   });
 
   it('claims no partial caveat when every analyzer run completed cleanly', async () => {

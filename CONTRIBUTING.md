@@ -48,6 +48,19 @@ only.
 `/opt/cursor/artifacts/bluntcode-scale/`. This exercises the web shell against
 synthetic data; it does **not** replace Windows-native analyzer runs.
 
+**Home ledger paging (opt-in, Windows):** the full desktop server path requires
+Windows (managed Sonar bootstrap fails on Linux). On **Windows**, point
+`LOCALAPPDATA` at a **fresh empty directory** so the SQLite DB is isolated, set
+`BLUNTCODE_DEMO_SEED=1`, start `bluntcode --no-browser --port 9876`, then run:
+
+`cd web && BASE=http://127.0.0.1:9876 npm run verify:synthetic-board`
+
+This calls `POST /api/v1/system/seed-demo` (`large`), asserts each Overview
+ledger page renders **25** rows matching the footer range, checks that **Next**
+does not repeat workspace ids, and writes PNGs under
+`/opt/cursor/artifacts/bluntcode-synthetic-verify/` (set `SKIP_SHOTS=1` for
+assertions only). **Vitest** on any OS still pins the same contract with mocks.
+
 Version bumps move `internal/build/version.go`, `web/package.json`,
 `scripts/package.ps1`, `CHANGELOG.md` and every agent-doc copy together —
 `go test ./cmd/bluntcode` fails while any of them disagree (see
