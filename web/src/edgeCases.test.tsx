@@ -71,6 +71,17 @@ describe('hostile API fixtures', () => {
       [/^\/api\/v1\/scans/, { scans: null, total: 0, summary: null }],
       ['/api/v1/tools', { tools: null }],
       [/^\/api\/v1\/workspaces(?:\?|$)/, { workspaces: null }],
+      ['/api/v1/stats', {
+        workspaces: 0,
+        scanned_workspaces: 0,
+        partial_assessments: 0,
+        last_assessment_at: '',
+        scans: { total: 0, completed: 0, running: 0 },
+        findings: { severity: { critical: 0, high: 0, medium: 0, low: 0, info: 0 }, total: 0 },
+        suppressions: 0,
+        scans_by_day: Array.from({ length: 7 }, (_, i) => ({ date: `2026-01-${i + 1}`, total: 0, completed: 0 })),
+        generated_at: '2026-01-07T12:00:00Z',
+      }],
     ]);
     const host = await renderAt('/', fetchMock);
     expectClean(host);

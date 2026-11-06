@@ -252,7 +252,13 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"status": "ready", "api_version": APIVersion})
 }
 func (s *Server) meta(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"version": s.version, "api_version": APIVersion, "os": runtime.GOOS, "architecture": runtime.GOARCH, "data_directory": s.paths.DataDir})
+	demoEnv := strings.EqualFold(strings.TrimSpace(os.Getenv("BLUNTCODE_DEMO_SEED")), "1")
+	demoToken := strings.TrimSpace(os.Getenv("BLUNTCODE_DEMO_TOKEN"))
+	writeJSON(w, http.StatusOK, map[string]any{
+		"version": s.version, "api_version": APIVersion, "os": runtime.GOOS, "architecture": runtime.GOARCH, "data_directory": s.paths.DataDir,
+		"demo_seed_env_enabled": demoEnv,
+		"demo_seed_requires_token": demoEnv && demoToken != "",
+	})
 }
 func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 	value, err := s.db.AppSettings(r.Context())

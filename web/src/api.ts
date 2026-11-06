@@ -44,7 +44,15 @@ export const api = {
   deleteFindingNote: (id: string, fingerprint: string, note: string) => request<void>(`/workspaces/${id}/notes/${encodeURIComponent(fingerprint)}/${note}`, { method: 'DELETE' }),
   scanPlan: (id: string, profile: string) => request<ScanPlan>(`/workspaces/${id}/scan-plan?profile=${encodeURIComponent(profile)}`),
   health: () => request<{ status?: string }>('/health'),
-  meta: () => request<Record<string, string>>('/meta'),
+  meta: () => request<{
+    version: string;
+    api_version: string;
+    os: string;
+    architecture: string;
+    data_directory: string;
+    demo_seed_env_enabled?: boolean;
+    demo_seed_requires_token?: boolean;
+  }>('/meta'),
   settings: () => request<{ offline: boolean; open_browser: boolean }>('/settings'),
   saveSettings: (input: Partial<{ offline: boolean; open_browser: boolean }>) => request<{ offline: boolean; open_browser: boolean }>('/settings', { method: 'PATCH', body: JSON.stringify(input) }),
   workspaces: async () => list<Workspace>(await request<Workspace[] | { workspaces?: Workspace[] }>('/workspaces')),
@@ -147,11 +155,15 @@ export const api = {
       '/system/clean',
       { method: 'POST', body: JSON.stringify(options ?? {}) }
     ),
-  /** Opt-in synthetic demo data for UI testing; server returns 403 unless data dir path contains "demo". */
-  seedDemo: (preset: 'small' | 'large' | 'stress') =>
-    request<{ preset: string; workspaces?: number; workspace_ids?: string[]; label?: string; approx_findings?: number }>(
+  /** Opt-in synthetic demo data for UI / harness testing; server returns 403 unless BLUNTCODE_DEMO_SEED=1 (and optional token header). */
+  seedDemo: (preset: 'small' | 'large' | 'stress', opts?: { demoToken?: string }) =>
+    request<{ preset: string; workspaces?: number; workspace_ids?: string[]; label?: string; approx_findings?: number; findings_cap?: number; data_directory?: string }>(
       '/system/seed-demo',
-      { method: 'POST', body: JSON.stringify({ preset }) }
+      {
+        method: 'POST',
+        body: JSON.stringify({ preset }),
+        headers: opts?.demoToken ? { 'X-Bluntcode-Demo-Token': opts.demoToken } : undefined,
+      }
     ),
   stopServer: () => request<{ state: string }>('/system/stop', { method: 'POST' }),
   /** In-app updater: check GitHub releases, then hand off to the staged installer. */

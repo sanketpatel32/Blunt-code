@@ -177,6 +177,12 @@ export interface StatsTools {
 /** Global overview from GET /api/v1/stats. Findings roll up the latest completed scan per workspace (rescanning one project never double-counts it), `tools` is omitted when unwired, and `generated_at` is the RFC3339 snapshot time. */
 export interface GlobalStats {
   workspaces: number;
+  /** Workspaces with at least one completed or completed_with_warnings scan (fleet-wide; not limited to one UI page). */
+  scanned_workspaces?: number;
+  /** Workspaces whose latest producing scan has incomplete analyzer coverage. */
+  partial_assessments?: number;
+  /** Newest assessment instant among latest producing scans per workspace (RFC3339). */
+  last_assessment_at?: string;
   scans: { total: number; completed: number; running: number };
   findings: { severity: Record<Severity, number>; total: number };
   suppressions: number;

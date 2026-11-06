@@ -14,17 +14,30 @@ import (
 	"bluntcode/internal/database"
 )
 
-// seedDemo inserts clearly tagged synthetic workspaces and scans for UI testing.
-// It only runs when the application data directory path contains "demo" (case-insensitive),
-// so production installs are never auto-filled.
+// Demo seed env (disabled by default; never auto-seeds production):
+//   BLUNTCODE_DEMO_SEED=1 — required to accept POST /system/seed-demo.
+//   BLUNTCODE_DEMO_TOKEN=<secret> — when set, the request must send header
+//     X-Bluntcode-Demo-Token with the same value (for shared dev hosts).
+
+func demoSeedAllowed(r *http.Request) bool {
+	if !strings.EqualFold(strings.TrimSpace(os.Getenv("BLUNTCODE_DEMO_SEED")), "1") {
+		return false
+	}
+	if want := strings.TrimSpace(os.Getenv("BLUNTCODE_DEMO_TOKEN")); want != "" {
+		return r.Header.Get("X-Bluntcode-Demo-Token") == want
+	}
+	return true
+}
+
+// seedDemo inserts clearly tagged synthetic workspaces and scans for UI / harness testing.
+// Opt-in only: BLUNTCODE_DEMO_SEED=1 (and optional BLUNTCODE_DEMO_TOKEN + matching header).
 func (s *Server) seedDemo(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		fail(w, 405, "METHOD_NOT_ALLOWED", "Method not allowed.")
 		return
 	}
-	dataDir := strings.ToLower(filepath.Clean(s.paths.DataDir))
-	if !strings.Contains(dataDir, "demo") {
-		fail(w, 403, "DEMO_DISABLED", "Demo seed is only allowed when the app data directory path contains \"demo\". This never runs on a normal install.")
+	if !demoSeedAllowed(r) {
+		fail(w, 403, "DEMO_DISABLED", "Demo seed is disabled. Set environment variable BLUNTCODE_DEMO_SEED=1 to enable (and BLUNTCODE_DEMO_TOKEN + X-Bluntcode-Demo-Token header if you use a shared token). This endpoint never runs automatically.")
 		return
 	}
 	var input struct {
@@ -44,8 +57,10 @@ func (s *Server) seedDemo(w http.ResponseWriter, r *http.Request) {
 	switch preset {
 	case "small":
 		summary, err = seedDemoSmall(ctx, s.db)
-	case "large", "stress":
-		summary, err = seedDemoLarge(ctx, s.db, preset == "stress")
+	case "large":
+		summary, err = seedDemoLarge(ctx, s.db, filepath.Clean(s.paths.DataDir), "large", demoLargeOptions{nWorkspaces: 120, scansWithHistory: 18, perScanFindings: 350, findingsCap: 500000})
+	case "stress":
+		summary, err = seedDemoLarge(ctx, s.db, filepath.Clean(s.paths.DataDir), "stress", demoLargeOptions{nWorkspaces: 1, scansWithHistory: 1, perScanFindings: 8000, findingsCap: 12000})
 	default:
 		fail(w, 400, "INVALID_PRESET", `preset must be "small", "large", or "stress".`)
 		return
@@ -91,13 +106,27 @@ func seedDemoSmall(ctx context.Context, db *database.DB) (map[string]any, error)
 	return map[string]any{"preset": "small", "workspaces": len(ids), "workspace_ids": ids, "label": "Synthetic demo dataset — tagged demo-ui; safe to delete workspaces from the app."}, nil
 }
 
-func seedDemoLarge(ctx context.Context, db *database.DB, stress bool) (map[string]any, error) {
-	nWorkspaces := 80
-	perScanFindings := 350
-	if stress {
-		perScanFindings = 12000
+type demoLargeOptions struct {
+	nWorkspaces        int
+	scansWithHistory   int
+	perScanFindings    int
+	findingsCap        int
+}
+
+func seedDemoLarge(ctx context.Context, db *database.DB, dataDir, presetName string, opts demoLargeOptions) (map[string]any, error) {
+	nWorkspaces := opts.nWorkspaces
+	if nWorkspaces < 1 {
 		nWorkspaces = 1
 	}
+	perScanFindings := opts.perScanFindings
+	if perScanFindings < 1 {
+		perScanFindings = 1
+	}
+	scansWithHistory := opts.scansWithHistory
+	if scansWithHistory < 1 {
+		scansWithHistory = 1
+	}
+	capRemaining := opts.findingsCap // 0 = no cap on total inserted findings
 	ids := make([]string, 0, nWorkspaces)
 	totalFindings := 0
 	severities := []analyzers.Severity{analyzers.SeverityCritical, analyzers.SeverityHigh, analyzers.SeverityMedium, analyzers.SeverityLow, analyzers.SeverityInfo}
@@ -120,12 +149,12 @@ func seedDemoLarge(ctx context.Context, db *database.DB, stress bool) (map[strin
 			return nil, err
 		}
 		scansToMake := 1
-		if !stress && w < 18 {
+		if w < scansWithHistory {
 			scansToMake = 24
 		}
 		for s := 0; s < scansToMake; s++ {
 			st := "completed"
-			if !stress && s == 0 && w%11 == 0 {
+			if s == 0 && w%11 == 0 {
 				st = "failed"
 			}
 			scan, err := db.CreateScan(ctx, core.Scan{WorkspaceID: created.ID, State: "queued", Profile: "standard"})
@@ -133,8 +162,14 @@ func seedDemoLarge(ctx context.Context, db *database.DB, stress bool) (map[strin
 				return nil, err
 			}
 			nFind := perScanFindings
-			if !stress && s < scansToMake-1 {
+			if s < scansToMake-1 {
 				nFind = 12 + (s+w)%20
+			}
+			if capRemaining > 0 && nFind > capRemaining {
+				nFind = capRemaining
+			}
+			if nFind < 0 {
+				nFind = 0
 			}
 			findings := make([]analyzers.Finding, 0, nFind)
 			for i := 0; i < nFind; i++ {
@@ -154,18 +189,19 @@ func seedDemoLarge(ctx context.Context, db *database.DB, stress bool) (map[strin
 			if s == scansToMake-1 {
 				totalFindings += nFind
 			}
+			if capRemaining > 0 {
+				capRemaining -= nFind
+			}
 		}
 		ids = append(ids, created.ID)
 	}
-	preset := "large"
-	if stress {
-		preset = "stress"
-	}
 	return map[string]any{
-		"preset":          preset,
+		"preset":          presetName,
 		"workspaces":      len(ids),
 		"workspace_ids":   ids,
 		"approx_findings": totalFindings,
+		"findings_cap":    opts.findingsCap,
+		"data_directory":  dataDir,
 		"label":           "Synthetic demo dataset — workspaces tagged demo-ui; remove from Blunt Code when finished testing.",
 	}, nil
 }

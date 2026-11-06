@@ -1094,6 +1094,17 @@ type GlobalStats struct {
 	Findings     GlobalFindings `json:"findings"`
 	RiskGrades   map[string]int `json:"risk_grades"`
 	Suppressions int            `json:"suppressions"`
+	// ScannedWorkspaces counts workspaces whose newest producing scan (completed
+	// or completed_with_warnings) exists — the same population as the findings
+	// rollup and risk_grades, so the overview never under-counts when the ledger
+	// loads one page at a time.
+	ScannedWorkspaces int `json:"scanned_workspaces"`
+	// PartialAssessments counts workspaces where that newest producing scan has
+	// incomplete analyzer coverage (a failed run or a succeeded run with warnings).
+	PartialAssessments int `json:"partial_assessments"`
+	// LastAssessmentAt is the newest COALESCE(finished_at, started_at) among each
+	// workspace's latest producing scan (RFC3339 UTC), or empty when none.
+	LastAssessmentAt string `json:"last_assessment_at"`
 }
 
 // GlobalScans splits the scan history into the counters the overview shows:
@@ -1133,9 +1144,31 @@ func (d *DB) GlobalStats(ctx context.Context) (GlobalStats, error) {
 		(SELECT COUNT(*) FROM suppressed_findings)`).Scan(&stats.Workspaces, &stats.Scans.Total, &stats.Scans.Completed, &stats.Scans.Running, &stats.Suppressions); err != nil {
 		return GlobalStats{}, err
 	}
-	if err := d.SQL.QueryRowContext(ctx, `SELECT COALESCE(SUM(latest.critical_count),0),COALESCE(SUM(latest.high_count),0),COALESCE(SUM(latest.medium_count),0),COALESCE(SUM(latest.low_count),0),COALESCE(SUM(latest.info_count),0),COALESCE(SUM(latest.total_findings),0) FROM (
-		SELECT critical_count,high_count,medium_count,low_count,info_count,total_findings,ROW_NUMBER() OVER (PARTITION BY workspace_id ORDER BY COALESCE(finished_at,started_at) DESC,id DESC) AS recency FROM scans WHERE state IN ('completed','completed_with_warnings')
-	) latest WHERE recency=1`).Scan(&stats.Findings.Severity.Critical, &stats.Findings.Severity.High, &stats.Findings.Severity.Medium, &stats.Findings.Severity.Low, &stats.Findings.Severity.Info, &stats.Findings.Total); err != nil {
+	if err := d.SQL.QueryRowContext(ctx, `SELECT COALESCE(SUM(latest.critical_count),0),COALESCE(SUM(latest.high_count),0),COALESCE(SUM(latest.medium_count),0),COALESCE(SUM(latest.low_count),0),COALESCE(SUM(latest.info_count),0),COALESCE(SUM(latest.total_findings),0),
+		COUNT(*),
+		COALESCE(MAX(latest.finished_or_started), '')
+	FROM (
+		SELECT critical_count,high_count,medium_count,low_count,info_count,total_findings,
+			COALESCE(finished_at, started_at) AS finished_or_started,
+			ROW_NUMBER() OVER (PARTITION BY workspace_id ORDER BY COALESCE(finished_at,started_at) DESC,id DESC) AS recency FROM scans WHERE state IN ('completed','completed_with_warnings')
+	) latest WHERE recency=1`).Scan(&stats.Findings.Severity.Critical, &stats.Findings.Severity.High, &stats.Findings.Severity.Medium, &stats.Findings.Severity.Low, &stats.Findings.Severity.Info, &stats.Findings.Total, &stats.ScannedWorkspaces, &stats.LastAssessmentAt); err != nil {
+		return GlobalStats{}, err
+	}
+	// Partial coverage: newest producing scan per workspace has a failed analyzer run or a succeeded run with parser warnings.
+	if err := d.SQL.QueryRowContext(ctx, `SELECT COUNT(*) FROM (
+		SELECT s.id FROM (
+			SELECT id, workspace_id, ROW_NUMBER() OVER (PARTITION BY workspace_id ORDER BY COALESCE(finished_at,started_at) DESC,id DESC) AS recency
+			FROM scans WHERE state IN ('completed','completed_with_warnings')
+		) r
+		JOIN scans s ON s.id = r.id AND r.recency = 1
+		JOIN (
+			SELECT scan_id,
+				COALESCE(SUM(CASE WHEN state <> 'succeeded' THEN 1 ELSE 0 END),0) AS failed,
+				COALESCE(SUM(CASE WHEN state = 'succeeded' AND warning_count > 0 THEN 1 ELSE 0 END),0) AS warned
+			FROM analyzer_runs GROUP BY scan_id
+		) ar ON ar.scan_id = s.id
+		WHERE ar.failed > 0 OR ar.warned > 0
+	)`).Scan(&stats.PartialAssessments); err != nil {
 		return GlobalStats{}, err
 	}
 	stats.RiskGrades = map[string]int{"A": 0, "B": 0, "C": 0, "D": 0}

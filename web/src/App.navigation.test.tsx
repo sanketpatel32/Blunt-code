@@ -15,8 +15,23 @@ function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
+const emptyStats = {
+  workspaces: 0,
+  scanned_workspaces: 0,
+  partial_assessments: 0,
+  last_assessment_at: '',
+  scans: { total: 0, completed: 0, running: 0 },
+  findings: { severity: { critical: 0, high: 0, medium: 0, low: 0, info: 0 }, total: 0 },
+  suppressions: 0,
+  scans_by_day: Array.from({ length: 7 }, (_, i) => ({ date: `2026-01-${String(i + 1).padStart(2, '0')}`, total: 0, completed: 0 })),
+  generated_at: '2026-01-07T12:00:00Z',
+};
+
 async function renderApp(fetchMock?: ReturnType<typeof vi.fn>) {
-  vi.stubGlobal('fetch', fetchMock ?? vi.fn(() => Promise.resolve(json({ items: [] }))));
+  vi.stubGlobal('fetch', fetchMock ?? vi.fn((input: string) => {
+    if (input === '/api/v1/stats') return Promise.resolve(json(emptyStats));
+    return Promise.resolve(json({ items: [] }));
+  }));
   const host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);
@@ -104,6 +119,7 @@ describe('navigation resilience', () => {
 
   it('appends lazily loaded workspace entries (labels starting "Go to ") behind the static commands when the palette opens', async () => {
     const fetchMock = vi.fn((input: string) => {
+      if (input === '/api/v1/stats') return Promise.resolve(json(emptyStats));
       if (String(input).split('?')[0] === '/api/v1/workspaces') {
         return Promise.resolve(json({ workspaces: [
           { id: 'ws-alpha', name: 'Alpha', root_path: 'C:\\code\\alpha' },

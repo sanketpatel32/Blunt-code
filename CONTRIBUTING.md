@@ -32,6 +32,22 @@ production behavior on Windows.
 **Authoritative local gate for shipping:** `powershell -File scripts\verify.ps1`
 on a Windows machine with the supported toolchain.
 
+## Demo / stress data (development only)
+
+`POST /api/v1/system/seed-demo` is **disabled unless** the server sets
+`BLUNTCODE_DEMO_SEED=1`. Optional `BLUNTCODE_DEMO_TOKEN` requires clients to send
+matching `X-Bluntcode-Demo-Token`. `GET /api/v1/meta` exposes
+`demo_seed_env_enabled` and `demo_seed_requires_token` so the UI can hide the
+control when seeding is off. Do **not** enable these in production or on real
+project databases — the endpoint is for isolated test data and bounded presets
+only.
+
+**Multi-width screenshots (opt-in):** with the API running and demo seed enabled,
+`cd web && BASE=http://127.0.0.1:8787 node e2e/visual-scale.mjs` (optional
+`DEMO_TOKEN=…`) seeds the `large` preset and writes PNGs under
+`/opt/cursor/artifacts/bluntcode-scale/`. This exercises the web shell against
+synthetic data; it does **not** replace Windows-native analyzer runs.
+
 Version bumps move `internal/build/version.go`, `web/package.json`,
 `scripts/package.ps1`, `CHANGELOG.md` and every agent-doc copy together —
 `go test ./cmd/bluntcode` fails while any of them disagree (see

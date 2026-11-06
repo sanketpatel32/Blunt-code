@@ -88,8 +88,62 @@ function workspaceItem(overrides: Partial<Workspace> = {}): Workspace {
 }
 
 /** Envelope for `api.workspacesPage` (Home dashboard ledger). */
-function workspacesPage(items: Workspace[]) {
-  return { items, total: items.length, page: 1, page_size: 100, has_next: false };
+function workspacesPage(items: Workspace[], total?: number, statsFleet?: { scanned_workspaces: number; partial_assessments: number }) {
+  const t = total ?? items.length;
+  const env = { items, total: t, page: 1, page_size: 25, has_next: t > 25 } as {
+    items: Workspace[];
+    total: number;
+    page: number;
+    page_size: number;
+    has_next: boolean;
+    statsFleet?: { scanned_workspaces: number; partial_assessments: number };
+  };
+  if (statsFleet) env.statsFleet = statsFleet;
+  return env;
+}
+
+/** `sort=findings` mirrors the API: `COALESCE(latest.total_findings, -1)` from each workspace's newest scan row. */
+function findingsSortKey(workspace: Workspace): number {
+  const latest = workspace.latest_scan;
+  if (!latest) return -1;
+  return latest.total_findings ?? 0;
+}
+
+/** Resolves GET /workspaces?... the way the API does for Home + riskiest-workspace probe. */
+function workspacesGETResponse(input: string, payload: unknown): unknown {
+  const url = new URL(input, 'http://127.0.0.1');
+  if (url.pathname !== '/api/v1/workspaces') return payload;
+  const page = Math.max(1, parseInt(url.searchParams.get('page') ?? '1', 10) || 1);
+  const pageSize = Math.min(100, Math.max(1, parseInt(url.searchParams.get('page_size') ?? '25', 10) || 25));
+  const sort = url.searchParams.get('sort') ?? '';
+  const order = url.searchParams.get('order') ?? 'desc';
+  let items: Workspace[] = [];
+  let total = 0;
+  if (Array.isArray(payload)) {
+    items = payload as Workspace[];
+    total = items.length;
+  } else if (payload && typeof payload === 'object' && 'items' in (payload as object)) {
+    const env = payload as { items: Workspace[]; total?: number };
+    items = env.items ?? [];
+    total = typeof env.total === 'number' ? env.total : items.length;
+  }
+  if (sort === 'findings') {
+    const dir = order === 'asc' ? 1 : -1;
+    items = [...items].sort((a, b) => {
+      const va = findingsSortKey(a);
+      const vb = findingsSortKey(b);
+      if (va !== vb) return dir * (va - vb);
+      const tie = a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+      return order === 'asc' ? tie : -tie;
+    });
+  }
+  if (pageSize === 1 && sort === 'findings' && order === 'desc') {
+    const row = items[0];
+    return { items: row ? [row] : [], total, page: 1, page_size: 1, has_next: total > 1 };
+  }
+  const start = (page - 1) * pageSize;
+  const slice = items.slice(start, start + pageSize);
+  return { items: slice, total, page, page_size: pageSize, has_next: start + slice.length < total };
 }
 
 /** GET /api/v1/workspaces (paged list), not POST create nor /workspaces/{id}. */
@@ -105,14 +159,18 @@ function isRecentScansGET(input: string, init?: RequestInit): boolean {
 }
 
 /** GET /api/v1/stats — fields HomePage reads for workspace count and 7-day sparkline. */
-function statsEnvelope(summary: ScanSummary, workspaceTotal: number) {
+function statsEnvelope(summary: ScanSummary, workspaceTotal: number, opts?: { scannedWorkspaces?: number; partial?: number; lastAssessmentAt?: string }) {
   const scansByDay = Array.from({ length: 7 }, (_, i) => ({
     date: `2026-01-${String(i + 1).padStart(2, '0')}`,
     total: i === 6 ? (summary.scans_last_7d ?? 0) : 0,
     completed: 0,
   }));
+  const scannedWs = opts?.scannedWorkspaces ?? summary.workspaces_scanned;
   return {
     workspaces: workspaceTotal,
+    scanned_workspaces: scannedWs,
+    partial_assessments: opts?.partial ?? 0,
+    last_assessment_at: opts?.lastAssessmentAt ?? '',
     scans: { total: summary.scans_total, completed: summary.workspaces_scanned, running: summary.active_scans },
     findings: {
       severity: {
@@ -139,7 +197,7 @@ function homeFetchMock(
     if (input.includes('/scan-plan?')) return Promise.resolve(json({ profile: 'standard', selected_files: 1, candidate_files: 1, dependency_inputs: [], exclusions: [], skip_counts: {}, analyzers: [{ id: 'ruff', display_name: 'Ruff', planned: true, ready: true, registered: true, reason: 'Ready to run', network: 'none' }] }));
     if (isRecentScansGET(input, init)) return Promise.resolve(json(scansPayload));
     if (input.split('?')[0] === '/api/v1/workspaces' && init?.method === 'POST') return Promise.resolve(json({ id: 'ws-new', name: 'New', root_path: 'C:\\code\\new' }));
-    if (isWorkspacesListGET(input, init)) return Promise.resolve(json(workspacesPayload));
+    if (isWorkspacesListGET(input, init)) return Promise.resolve(json(workspacesGETResponse(input, workspacesPayload)));
     if (input === '/api/v1/stats') {
       const s = typeof scansPayload === 'object' && scansPayload && 'summary' in (scansPayload as object)
         ? (scansPayload as { summary: ScanSummary }).summary
@@ -147,7 +205,26 @@ function homeFetchMock(
       const wt = typeof workspacesPayload === 'object' && workspacesPayload && 'total' in (workspacesPayload as object)
         ? (workspacesPayload as { total: number }).total
         : 1;
-      return Promise.resolve(json(statsEnvelope(s, wt)));
+      let extra: { scannedWorkspaces?: number; partial?: number } | undefined;
+      if (typeof workspacesPayload === 'object' && workspacesPayload && 'items' in (workspacesPayload as object)) {
+        const wp = workspacesPayload as { items: Workspace[]; statsFleet?: { scanned_workspaces: number; partial_assessments: number } };
+        const items = wp.items;
+        const partial = items.filter((w) => {
+          const cov = w.latest_scan_coverage ?? w.assessment_coverage;
+          return !!cov && (cov.failed > 0 || cov.warned > 0);
+        }).length;
+        const graded = items.filter((w) => {
+          const latest = w.latest_scan;
+          if (latest && (latest.state === 'completed' || latest.state === 'completed_with_warnings')) return true;
+          const c = w.last_completed_scan;
+          return !!(c && (c.state === 'completed' || c.state === 'completed_with_warnings'));
+        }).length;
+        extra = {
+          scannedWorkspaces: wp.statsFleet?.scanned_workspaces ?? graded,
+          partial: wp.statsFleet?.partial_assessments ?? partial,
+        };
+      }
+      return Promise.resolve(json(statsEnvelope(s, wt, extra)));
     }
     if (input.endsWith('/tools')) return Promise.resolve(json(toolsPayload));
     return Promise.resolve(json({ items: [] }));
@@ -177,14 +254,16 @@ afterEach(async () => {
 });
 
 describe('HomePage risk board — verdict', () => {
-  it('shows no invented zeros when the workspace list fails to load', async () => {
+  it('keeps fleet verdict from global stats when the workspace list fails to load', async () => {
     const base = homeFetchMock({ scans: [], total: 0, summary });
     const fetchMock = vi.fn((input: string, init?: RequestInit) => isWorkspacesListGET(input, init)
       ? Promise.resolve(json({ error: { code: 'INTERNAL', message: 'database is locked' } }, 500))
       : base(input, init));
     const host = await render(fetchMock);
-    expect(host.querySelector('.verdict-tiles')).toBeNull(); // no "Scanned 0/0"
-    expect(host.querySelector('.verdict-score')?.textContent).toBe('grade unavailable');
+    expect(host.querySelector('.verdict-letter')?.getAttribute('data-grade')).toBe('D');
+    expect(host.querySelector('.verdict-hero-num')?.textContent).toBe('21');
+    // Activity tiles are hidden when the ledger fails so we do not invent "0/N scanned".
+    expect(host.querySelector('.verdict-tiles')).toBeNull();
     expect(host.textContent).toContain("Couldn't load your workspaces");
   });
 
@@ -243,6 +322,26 @@ describe('HomePage risk board — verdict', () => {
     expect(badge?.getAttribute('title')).toContain('3 of 5 analyzers ran');
     expect(badge?.getAttribute('title')).toContain("1 didn't run");
     expect(badge?.getAttribute('title')).toContain('1 with warnings');
+  });
+
+  it('pages the ledger for large fleets and names total count in the footer', async () => {
+    const items = Array.from({ length: 110 }, (_, i) =>
+      workspaceItem({
+        id: `ws-${i}`,
+        name: `Service ${i}`,
+        latest_scan: latestScan({ id: `scan-${i}`, total_findings: 200 - i, critical_count: 1, high_count: 0, medium_count: 0, low_count: 0, info_count: 0 }),
+      }),
+    );
+    const host = await render(homeFetchMock(
+      { scans: [], total: 0, summary },
+      workspacesPage(items, 110, { scanned_workspaces: 90, partial_assessments: 0 }),
+    ));
+    expect(host.textContent).toContain('Showing 1–25 of 110 by risk');
+    const next = findButton(host, 'Next');
+    expect(next).toBeDefined();
+    expect(next!.disabled).toBe(false);
+    await act(async () => { next!.click(); await Promise.resolve(); await Promise.resolve(); });
+    expect(host.textContent).toContain('Showing 26–50 of 110 by risk');
   });
 
   it('claims no partial caveat when every analyzer run completed cleanly', async () => {
@@ -307,7 +406,8 @@ describe('HomePage risk board — verdict', () => {
       id: 'ws-low', name: 'Mild',
       latest_scan: latestScan({ critical_count: 0, high_count: 0, medium_count: 0, low_count: 7, total_findings: 7 }),
     });
-    const host = await render(homeFetchMock({ scans: [], total: 0, summary }, workspacesPage([lowOnly])));
+    const lowOnlySummary = { ...summary, critical_count: 0, high_count: 0, medium_count: 0, low_count: 7, info_count: 0, total_findings: 7 };
+    const host = await render(homeFetchMock({ scans: [], total: 0, summary: lowOnlySummary }, workspacesPage([lowOnly])));
     expect(findButton(host, 'Skim the')).toBeDefined();
     expect(findButton(host, 'Fix the')).toBeUndefined();
   });
@@ -393,7 +493,18 @@ describe('HomePage cancelled-scan fallback and trajectory', () => {
         fixed_count: 4,
       }),
     });
-    const host = await render(homeFetchMock({ scans: [], total: 0, summary }, workspacesPage([fallback])));
+    const fallbackSummary = {
+      ...summary,
+      critical_count: 1,
+      high_count: 1,
+      medium_count: 2,
+      low_count: 3,
+      info_count: 0,
+      total_findings: 7,
+      workspaces_scanned: 1,
+      workspaces_total: 1,
+    };
+    const host = await render(homeFetchMock({ scans: [], total: 0, summary: fallbackSummary }, workspacesPage([fallback])));
 
     // The row grades the completed report, not the dead run.
     expect(host.querySelector('.ledger-grade')?.textContent).toBe('C');
@@ -465,7 +576,10 @@ describe('HomePage cancelled-scan fallback and trajectory', () => {
       name: 'Second',
       latest_scan: latestScan({ total_findings: 5, critical_count: 0, high_count: 1, medium_count: 2, low_count: 0, info_count: 0 }),
     });
-    const host = await render(homeFetchMock({ scans: [scanItem()], total: 1, summary }, workspacesPage([workspaceItem(), second])));
+    const host = await render(homeFetchMock(
+      { scans: [scanItem()], total: 1, summary },
+      workspacesPage([workspaceItem(), second]),
+    ));
     expect(host.textContent).toContain('across the latest completed scans of 2 workspaces.');
   });
 

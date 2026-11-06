@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../api';
 import type { RecentScanItem, Scan, Severity, Workspace } from '../types';
 import type { Route } from '../lib/router';
@@ -6,6 +6,7 @@ import type { Notice } from '../lib/notice';
 import { message } from '../lib/notice';
 import { count, date, languageNames, relativeTime, scanStateDisplay } from '../lib/format';
 import { useLoad } from '../hooks/useLoad';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { Empty, ErrorPanel, PrivacyNotice } from '../components/ui';
 import { Button } from '../components/ui/button';
 import { SkeletonCards, SkeletonLines, SkeletonTable } from '../components/skeletons';
@@ -28,7 +29,8 @@ import { GRADE_BANDS, bandFor, coverageText, gradeDepth, riskGrade, riskScore, s
 import { GradeTile } from '../components/GradeTile';
 
 const FEED_LIMIT = 12;
-const LEDGER_PAGE_SIZE = 100;
+const LEDGER_PAGE_SIZE = 25;
+const LEDGER_STORAGE_KEY = 'bluntcode.homeLedgerPage';
 
 /** Short date for the cancelled-scan fallback note ("showing 15 Sep 2026 results"). */
 const shortDateFmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
@@ -73,12 +75,36 @@ function feedFilterLabel(filter: FeedFilter): string {
 }
 
 export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd: () => void; notify: (n: Notice) => void }) {
-  const workspaces = useLoad(
-    () => api.workspacesPage({ page: 1, page_size: LEDGER_PAGE_SIZE, sort: 'findings', order: 'desc' }),
-    []
+  const [ledgerPage, setLedgerPage] = useState(1);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(LEDGER_STORAGE_KEY);
+      const n = raw ? parseInt(raw, 10) : 1;
+      if (Number.isInteger(n) && n >= 1) setLedgerPage(n);
+    } catch { /* ignore */ }
+  }, []);
+  const [ledgerFilter, setLedgerFilter] = useState('');
+  const debouncedLedgerSearch = useDebouncedValue(ledgerFilter.trim(), 280);
+  const loadWorkspacesPage = useCallback(
+    () =>
+      api.workspacesPage({
+        page: ledgerPage,
+        page_size: LEDGER_PAGE_SIZE,
+        sort: 'findings',
+        order: 'desc',
+        search: debouncedLedgerSearch || undefined,
+      }),
+    [ledgerPage, debouncedLedgerSearch],
+  );
+  const workspaces = useLoad(loadWorkspacesPage, [loadWorkspacesPage]);
+  const riskiestWorkspace = useLoad(
+    () => api.workspacesPage({ page: 1, page_size: 1, sort: 'findings', order: 'desc' }),
+    [],
   );
   const workspaceItems = workspaces.data?.items ?? [];
   const workspaceTotal = workspaces.data?.total ?? workspaceItems.length;
+  const ledgerHasPrev = ledgerPage > 1;
+  const ledgerHasNext = workspaces.data?.has_next === true;
   const tools = useLoad(api.tools, []);
   const [feedOffset, setFeedOffset] = useState(0);
   const loadRecent = useCallback(() => api.recentScans({ limit: FEED_LIMIT, offset: feedOffset }), [feedOffset]);
@@ -93,18 +119,66 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
   const totalTools = tools.data?.length ?? 0;
 
   const [pickingFolder, setPickingFolder] = useState(false);
-  const [ledgerFilter, setLedgerFilter] = useState('');
   const [feedFilter, setFeedFilter] = useState<FeedFilter>('all');
+
+  useEffect(() => {
+    if (workspaceTotal > 0 && ledgerPage > 1 && (ledgerPage - 1) * LEDGER_PAGE_SIZE >= workspaceTotal) {
+      const maxPage = Math.max(1, Math.ceil(workspaceTotal / LEDGER_PAGE_SIZE));
+      setLedgerPage(maxPage);
+    }
+  }, [ledgerPage, workspaceTotal]);
+
+  useEffect(() => {
+    setLedgerPage(1);
+  }, [debouncedLedgerSearch]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LEDGER_STORAGE_KEY, String(ledgerPage));
+    } catch { /* ignore */ }
+  }, [ledgerPage]);
 
   const setFeedFilterAndReset = (next: FeedFilter) => {
     setFeedFilter(next);
     setFeedOffset(0);
   };
 
-  // First run = nothing added and nothing ever scanned; any saved workspace or
-  // history row means the board has something to show.
-  const firstRun = !workspaces.loading && !workspaces.error && workspaceTotal === 0
+  // First run = stats report zero workspaces and no activity (don't flash empty before stats loads).
+  const firstRun = stats.data?.workspaces === 0
+    && !workspaces.loading
+    && !stats.loading
+    && !workspaces.error
+    && !stats.error
     && !(recent.data?.scans?.length);
+
+  const fleetVerdict = useMemo(() => {
+    const s = stats.data?.findings?.severity;
+    if (!s) return null;
+    const counts: Record<Severity, number> = {
+      critical: s.critical ?? 0,
+      high: s.high ?? 0,
+      medium: s.medium ?? 0,
+      low: s.low ?? 0,
+      info: s.info ?? 0,
+    };
+    const tallied = counts.critical + counts.high + counts.medium + counts.low + counts.info;
+    const total = stats.data?.findings?.total ?? 0;
+    const score = riskScore(counts);
+    const scanned = stats.data?.scanned_workspaces ?? 0;
+    const partialScans = stats.data?.partial_assessments ?? 0;
+    const lastFinished = stats.data?.last_assessment_at ?? null;
+    return {
+      counts,
+      score,
+      grade: riskGrade(score),
+      scanned,
+      totalFindings: tallied > 0 ? tallied : total,
+      partialScans,
+      lastFinished,
+    };
+  }, [stats.data]);
+
+  const verdict = fleetVerdict;
 
   // ── The verdict: one score from the latest completed scan of each workspace ──
   // (When the newest run was cancelled/interrupted, the newest scan that actually
@@ -119,42 +193,15 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
     });
   }, [workspaceItems]);
 
-  const verdict = useMemo(() => {
-    const counts: Record<Severity, number> = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
-    let reported = 0; // total_findings straight from the scans, for rows whose severity counts are missing
-    let partialScans = 0;
-    let lastFinished: string | null = null;
-    for (const row of ledgerBase) {
-      if (!row.current) continue;
-      counts.critical += row.current.critical_count ?? 0;
-      counts.high += row.current.high_count ?? 0;
-      counts.medium += row.current.medium_count ?? 0;
-      counts.low += row.current.low_count ?? 0;
-      counts.info += row.current.info_count ?? 0;
-      reported += row.current.total_findings ?? 0;
-      if (row.partial) partialScans += 1;
-      const finished = row.current.finished_at;
-      if (finished && (!lastFinished || finished > lastFinished)) lastFinished = finished;
-    }
-    const tallied = counts.critical + counts.high + counts.medium + counts.low + counts.info;
-    const score = riskScore(counts);
-    const scanned = ledgerBase.filter((row) => row.current).length;
-    return { counts, score, grade: riskGrade(score), scanned, totalFindings: tallied > 0 ? tallied : reported, partialScans, lastFinished };
-  }, [ledgerBase]);
-
-  // ── The ledger: workspaces ranked by risk, unscanned last ──
+  // ── The ledger: server-ranked page (findings desc); filter is server search + optional client language match ──
   const ledgerRows = useMemo(() => {
     const query = ledgerFilter.trim().toLowerCase();
-    const matching = query
-      ? ledgerBase.filter((row) =>
-          row.workspace.name.toLowerCase().includes(query) ||
-          row.workspace.root_path.toLowerCase().includes(query) ||
-          row.workspace.languages?.some((language) => language.toLowerCase().includes(query)))
-      : ledgerBase;
-    const scored = matching
-      .filter((row) => row.score !== null)
-      .sort((a, b) => (b.score! - a.score!) || (b.total - a.total) || a.workspace.name.localeCompare(b.workspace.name));
-    const unscored = matching
+    const base = !query
+      ? ledgerBase
+      : ledgerBase.filter((row) =>
+          row.workspace.languages?.some((language) => language.toLowerCase().includes(query)));
+    const scored = base.filter((row) => row.score !== null);
+    const unscored = base
       .filter((row) => row.score === null)
       .sort((a, b) => a.workspace.name.localeCompare(b.workspace.name));
     return [...scored, ...unscored];
@@ -178,16 +225,19 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
   // profile picker, and the pentest entries, so the old action wall collapses
   // into one split button plus this page's real secondary, "Add workspace".
   const scanTarget = useMemo(() => {
-    const scored = ledgerBase
-      .filter((row) => row.score !== null)
-      .sort((a, b) => (b.score! - a.score!) || (b.total - a.total) || a.workspace.name.localeCompare(b.workspace.name));
+    const top = riskiestWorkspace.data?.items?.[0];
+    if (top) {
+      const { scan: current } = riskScanOf(top);
+      if (current) return { id: top.id, name: top.name, profile: top.default_profile };
+    }
+    const scored = ledgerBase.filter((row) => row.score !== null);
     if (scored[0]) return { id: scored[0].workspace.id, name: scored[0].workspace.name, profile: scored[0].workspace.default_profile };
     const first = workspaceItems[0];
     if (first) return { id: first.id, name: first.name, profile: first.default_profile };
     const latest = scans[0];
     if (latest) return { id: latest.workspace_id, name: latest.workspace_name || undefined, profile: undefined };
     return null;
-  }, [ledgerBase, workspaceItems, scans]);
+  }, [riskiestWorkspace.data, ledgerBase, workspaceItems, scans]);
 
   async function handlePickFolder() {
     if (pickingFolder) return;
@@ -247,10 +297,15 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
   }
 
   const activeScans = summary?.active_scans ?? 0;
-  const verdictTallied = verdict.scanned > 0;
-  // The workspace list failed to load: nothing on the board can be counted.
+  const verdictTallied = !!verdict && verdict.scanned > 0;
+  const statsFailed = !!stats.error && !stats.data;
+  const verdictUnavailable = statsFailed || (!stats.loading && !verdict);
+  // The workspace list failed to load: ledger rows are unavailable.
   const boardFailed = !!workspaces.error && !workspaces.data;
   const statsWorkspaceTotal = stats.data?.workspaces ?? workspaceTotal;
+  const ledgerMaxPage = workspaceTotal <= 0 ? 1 : Math.max(1, Math.ceil(workspaceTotal / LEDGER_PAGE_SIZE));
+  const ledgerRangeStart = workspaceItems.length === 0 ? 0 : (ledgerPage - 1) * LEDGER_PAGE_SIZE + 1;
+  const ledgerRangeEnd = (ledgerPage - 1) * LEDGER_PAGE_SIZE + workspaceItems.length;
 
   return (
     <div className="page board-page">
@@ -304,7 +359,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
           dashboard that shows four metric cards and a table, which is exactly
           what the rest of this screen already is. So the panel is on the page;
           the tallies stay in their own disclosure inside it. */}
-      {workspaces.loading ? (
+      {stats.loading || workspaces.loading ? (
         <div className="board-verdict-loading"><SkeletonCards count={1} variant="metric" /></div>
       ) : (
         /* data-focus="hero" is the opt-in hook for the ONE raised surface a
@@ -320,34 +375,36 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
           <div className="verdict-head">
             <div
               className="verdict-grade"
-              data-grade={verdictTallied ? verdict.grade : 'none'}
+              data-grade={verdictTallied && verdict ? verdict.grade : 'none'}
               title="Weighted risk score: critical ×10, high ×5, medium ×2, low ×1"
               role="img"
-              aria-label={verdictTallied
+              aria-label={verdictTallied && verdict
                 ? `Grade ${verdict.grade}, ${bandFor(verdict.grade).label.toLowerCase()}, score ${verdict.score}. Grade bands: ${GRADE_BANDS.map((band) => `${band.grade} ${band.range}`).join(', ')}.`
-                : boardFailed ? 'Grade unavailable: your workspaces could not be loaded.' : 'Not graded yet: no completed scans.'}
+                : statsFailed ? 'Grade unavailable: global overview could not be loaded.'
+                  : boardFailed ? 'Grade unavailable: your workspaces could not be loaded.'
+                    : 'Not graded yet: no completed scans.'}
             >
-              {boardFailed
+              {verdictUnavailable
                 ? <GradeTile grade={null} placeholder="!" tone="warning" size="xl" className="verdict-letter" />
-                : <GradeTile grade={verdictTallied ? verdict.grade : null} size="xl" flip className="verdict-letter" />}
+                : <GradeTile grade={verdictTallied && verdict ? verdict.grade : null} size="xl" flip className="verdict-letter" />}
               {/* The grade owns the color; its label and band range stay neutral ink. */}
               <span className="verdict-grade-text" aria-hidden="true">
-                <span className="verdict-bandlabel">{verdictTallied && <>{bandFor(verdict.grade).label}.</>}</span>
+                <span className="verdict-bandlabel">{verdictTallied && verdict && <>{bandFor(verdict.grade).label}.</>}</span>
                 <span className="verdict-score">
-                  {verdictTallied ? (
+                  {verdictTallied && verdict ? (
                     <>score <strong className="tabular-nums">{verdict.score}</strong></>
-                  ) : boardFailed ? 'grade unavailable' : (
+                  ) : statsFailed ? 'grade unavailable' : boardFailed ? 'grade unavailable' : (
                     'not graded yet'
                   )}
                 </span>
-                {verdictTallied && (
+                {verdictTallied && verdict && (
                   <span className="verdict-bandrange">band {verdict.grade} · {bandFor(verdict.grade).range}</span>
                 )}
               </span>
             </div>
 
             <div className="verdict-main">
-                      {verdictTallied ? (
+                      {verdictTallied && verdict ? (
                 // The one hero number on the page.
                 //
                 // This was a single <p> holding the number, the word "findings"
@@ -389,13 +446,20 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
                 </p>
               ) : (
                 <p className="verdict-line">
-                  {workspaces.error ? (
+                  {statsFailed ? (
+                    <>Couldn't load the global overview. Nothing is lost — try again from your browser.</>
+                  ) : workspaces.error ? (
                     <>Couldn't load your workspaces. Nothing is lost. Use "Try again" in the panel below to reload the board.</>
                   ) : workspaceTotal > 0 ? (
                     <>No completed scans yet; run a scan to grade your code.</>
                   ) : (
                     <>Add a workspace to start grading your code.</>
                   )}
+                </p>
+              )}
+              {boardFailed && verdictTallied && verdict && (
+                <p className="verdict-line">
+                  Couldn&apos;t load your workspaces. Nothing is lost. Use &quot;Try again&quot; in the panel below to reload the board.
                 </p>
               )}
             </div>
@@ -407,17 +471,17 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
                 the total, which is the number they could not act on. Falls
                 through the bands in order so the wording always points at the
                 worst thing present. */}
-            {verdictTallied && verdict.totalFindings > 0 && (
+            {verdictTallied && verdict && verdict.totalFindings > 0 && (
               <div className="verdict-donut">
                 <SeverityDonut counts={verdict.counts} size={112} onSelect={(sev) => go({ page: 'search', q: `severity=${sev}` })} />
               </div>
             )}
 
-            {verdictTallied && verdict.totalFindings > 0 && (
+            {verdictTallied && verdict && verdict.totalFindings > 0 && (
               <button
                 type="button"
                 className="verdict-explore"
-                onClick={() => go({ page: 'search', q: nextStepQuery(verdict.counts) })}
+                onClick={() => verdict && go({ page: 'search', q: nextStepQuery(verdict.counts) })}
               >
                 {nextStepLabel(verdict.counts)}
                 <ChevronRight className="h-3 w-3" aria-hidden="true" />
@@ -425,7 +489,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
             )}
           </div>
 
-          {verdictTallied && verdict.partialScans > 0 && (
+          {verdictTallied && verdict && verdict.partialScans > 0 && (
             <p className="verdict-caveat" title="Some analyzers did not finish; those grades reflect only what completed.">
               <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
               <span>Partial coverage</span>
@@ -433,13 +497,13 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
             </p>
           )}
 
-          {verdictTallied && (
+          {verdictTallied && verdict && (
             <SeverityTally counts={verdict.counts} total={verdict.totalFindings} />
           )}
 
           {/* Without the workspace list these would be invented zeros
               ("Workspaces scanned 0 of 0"), so a failed load shows none. */}
-          {!boardFailed && <div className="verdict-tiles stat-tiles" role="group" aria-label="Scan activity at a glance">
+          {!boardFailed && !statsFailed && <div className="verdict-tiles stat-tiles" role="group" aria-label="Scan activity at a glance">
             {/* Active scans deliberately absent: the header's live pill already
                 carries that count, and a count must never appear twice. */}
             <StatTile
@@ -450,12 +514,12 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
             />
             <StatTile
               icon={FolderCheck}
-              value={`${verdict.scanned}/${statsWorkspaceTotal}`}
+              value={verdict ? `${verdict.scanned}/${statsWorkspaceTotal}` : '—'}
               label="Scanned"
-              title={`${verdict.scanned} of ${statsWorkspaceTotal} workspaces have a completed scan`}
-              extra={<Ring value={verdict.scanned} max={statsWorkspaceTotal} size={36} stroke={4} label={`${verdict.scanned} of ${statsWorkspaceTotal} workspaces scanned`}><span /></Ring>}
+              title={verdict ? `${verdict.scanned} of ${statsWorkspaceTotal} workspaces have a completed scan` : 'Overview unavailable'}
+              extra={verdict ? <Ring value={verdict.scanned} max={statsWorkspaceTotal} size={36} stroke={4} label={`${verdict.scanned} of ${statsWorkspaceTotal} workspaces scanned`}><span /></Ring> : undefined}
             />
-            <StatTile icon={Clock3} value={verdict.lastFinished ? relativeTime(verdict.lastFinished) : '—'} label="Last scan" />
+            <StatTile icon={Clock3} value={verdict?.lastFinished ? relativeTime(verdict.lastFinished) : '—'} label="Last scan" />
             <StatTile
               icon={Wrench}
               value={`${readyTools}/${totalTools}`}
@@ -485,12 +549,12 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
             <div>
               <h2 id="ledger-heading" className="board-panel-title">Workspace assessments</h2>
             </div>
-            {ledgerBase.length > 4 && (
+            {(workspaceTotal > 0 || ledgerFilter.trim() !== '') && (
               <label className="board-filter">
-                <span className="sr-only">Filter workspaces by name or language</span>
+                <span className="sr-only">Filter workspaces by name, path, or language</span>
                 <input
-                  type="text"
-                  placeholder="Filter…"
+                  type="search"
+                  placeholder="Filter by name or path…"
                   value={ledgerFilter}
                   onChange={(e) => setLedgerFilter(e.target.value)}
                 />
@@ -502,7 +566,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
             <SkeletonTable rows={5} cols={4} className="board-skeleton" />
           ) : workspaces.error ? (
             <ErrorPanel error={workspaces.error} retry={workspaces.reload} />
-          ) : !ledgerBase.length ? (
+          ) : !ledgerBase.length && workspaceTotal === 0 ? (
             <Empty
               title="No workspaces yet"
               icon={<FolderIcon />}
@@ -533,10 +597,40 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
             </ol>
           )}
 
-          <footer className="board-panel-foot">
-            {workspaceTotal > 12 && (
+          <footer className="board-panel-foot flex-wrap gap-2">
+            {workspaceTotal > 0 && (
               <span className="board-panel-foot-note tabular-nums">
-                Top {Math.min(12, ledgerRows.length)} of {workspaceTotal} workspaces by risk
+                {workspaceItems.length === 0
+                  ? <>No rows on page {ledgerPage} of {ledgerMaxPage} (total {workspaceTotal}).</>
+                  : (
+                    <>
+                      Showing {ledgerRangeStart}–{ledgerRangeEnd} of {workspaceTotal} by risk
+                      {debouncedLedgerSearch ? ` (matching “${debouncedLedgerSearch}”)` : ''}
+                    </>
+                  )}
+              </span>
+            )}
+            {workspaceTotal > 0 && ledgerMaxPage > 1 && (
+              <span className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={!ledgerHasPrev || workspaces.loading}
+                  onClick={() => setLedgerPage((p) => Math.max(1, p - 1))}
+                >
+                  Previous
+                </Button>
+                <span className="tabular-nums text-xs text-[var(--color-ink-soft)]" aria-hidden="true">
+                  {ledgerPage}/{ledgerMaxPage}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={!ledgerHasNext || workspaces.loading}
+                  onClick={() => setLedgerPage((p) => p + 1)}
+                >
+                  Next
+                </Button>
               </span>
             )}
             <Button variant="ghost" size="sm" onClick={() => go({ page: 'workspaces' })}>

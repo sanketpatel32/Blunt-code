@@ -102,7 +102,30 @@ describe('Blunt Code home', () => {
   });
 
   it('shows a useful empty state when no workspaces exist', async () => {
-    const fetchMock = vi.fn((input: string, init?: RequestInit) => Promise.resolve(json(isWorkspacesListGET(input, init) ? workspacesListPage([]) : { items: [] })));
+    const emptyStats = {
+      workspaces: 0,
+      scanned_workspaces: 0,
+      partial_assessments: 0,
+      last_assessment_at: '',
+      scans: { total: 0, completed: 0, running: 0 },
+      findings: { severity: { critical: 0, high: 0, medium: 0, low: 0, info: 0 }, total: 0 },
+      suppressions: 0,
+      scans_by_day: Array.from({ length: 7 }, (_, i) => ({ date: `2026-01-${i + 1}`, total: 0, completed: 0 })),
+      generated_at: '2026-01-07T12:00:00Z',
+    };
+    const fetchMock = vi.fn((input: string, init?: RequestInit) => {
+      if (isWorkspacesListGET(input, init)) return Promise.resolve(json(workspacesListPage([])));
+      if (input === '/api/v1/stats') return Promise.resolve(json(emptyStats));
+      if (input.split('?')[0] === '/api/v1/scans' && (!init?.method || init.method === 'GET')) {
+        return Promise.resolve(json({
+          scans: [],
+          total: 0,
+          has_more: false,
+          summary: { workspaces_total: 0, workspaces_scanned: 0, scans_total: 0, scans_last_7d: 0, active_scans: 0, total_findings: 0, critical_count: 0, high_count: 0, medium_count: 0, low_count: 0, info_count: 0 },
+        }));
+      }
+      return Promise.resolve(json({ items: [] }));
+    });
     const host = await render(fetchMock);
     expect(host.textContent).toContain('Point Blunt Code at a project');
     expect(host.textContent).toContain('Add your first workspace');
