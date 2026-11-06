@@ -10,6 +10,10 @@ import (
 )
 
 func TestSeedDemoDisabledByDefault(t *testing.T) {
+	// Isolate from a parent process that exported BLUNTCODE_DEMO_SEED / TOKEN.
+	t.Setenv("BLUNTCODE_DEMO_SEED", "")
+	t.Setenv("BLUNTCODE_DEMO_TOKEN", "")
+	ResetRateLimiter()
 	s := testServer(t)
 	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/v1/system/seed-demo", bytes.NewReader([]byte(`{"preset":"small"}`)))
 	req.Header.Set("Content-Type", "application/json")

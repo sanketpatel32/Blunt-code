@@ -52,8 +52,13 @@ async function statsTotal(page) {
   return typeof j.workspaces === 'number' ? j.workspaces : 0;
 }
 
+/** Ledger panel only — avoids strict-mode collisions with activity-feed Previous/Next. */
+function ledgerPanel(host) {
+  return host.locator('section.board-ledger');
+}
+
 function rowIds(host) {
-  return host.locator('.ledger-list .ledger-row[data-workspace-id]');
+  return ledgerPanel(host).locator('.ledger-list .ledger-row[data-workspace-id]');
 }
 
 const ND = '\u2013'; // en dash, matches UI "Showing 1–25 of …"
@@ -61,14 +66,14 @@ const ND = '\u2013'; // en dash, matches UI "Showing 1–25 of …"
 async function assertPage(host, { pageNum, total, expectedStart, prevDisabled, nextDisabled }) {
   const rangeEnd = Math.min(expectedStart + PAGE_SIZE - 1, total);
   const rangeRe = new RegExp(`Showing ${expectedStart}${ND}${rangeEnd} of ${total} by risk`);
-  await host.getByText(rangeRe).waitFor({ state: 'visible', timeout: 30_000 });
+  await ledgerPanel(host).getByText(rangeRe).waitFor({ state: 'visible', timeout: 30_000 });
   const count = await rowIds(host).count();
   const wantRows = rangeEnd - expectedStart + 1;
   if (count !== wantRows) {
     throw new Error(`page ${pageNum}: want ${wantRows} ledger rows (${expectedStart}-${rangeEnd}), got ${count}`);
   }
-  const prev = host.getByRole('button', { name: 'Previous' });
-  const next = host.getByRole('button', { name: 'Next' });
+  const prev = ledgerPanel(host).getByRole('button', { name: 'Previous' });
+  const next = ledgerPanel(host).getByRole('button', { name: 'Next' });
   if ((await prev.isDisabled()) !== prevDisabled) {
     throw new Error(`Previous disabled want ${prevDisabled}`);
   }
@@ -120,7 +125,7 @@ async function main() {
     nextDisabled: total <= PAGE_SIZE,
   });
 
-  const next = host.getByRole('button', { name: 'Next' });
+  const next = ledgerPanel(host).getByRole('button', { name: 'Next' });
   await next.click();
   await host.waitForTimeout(300);
 

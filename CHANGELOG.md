@@ -5,6 +5,14 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.49.1] - 2026-11-06
+
+### Fixed
+- **Overview ledger paging.** The board now renders every row in the current server page (25) so footer ranges and Next/Previous stay consistent; IDs are exposed as `data-workspace-id` for verification.
+
+### Changed
+- **Synthetic board harness.** Playwright `synthetic-board-verify.mjs` scopes ledger footer and paging buttons to `section.board-ledger` so strict mode does not collide with the activity feed’s Previous/Next.
+
 ## [0.49.0] - 2026-11-01
 
 ### Added
