@@ -79,6 +79,7 @@ type scanDetail struct {
 // cannot erase a workspace's last good numbers.
 type workspaceView struct {
 	core.Workspace
+	Tags               []string               `json:"tags,omitempty"`
 	Languages          []string               `json:"languages,omitempty"`
 	LatestScan         *scanDetail            `json:"latest_scan,omitempty"`
 	LatestScanCov      *database.ScanCoverage `json:"latest_scan_coverage,omitempty"`
@@ -118,6 +119,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/settings", s.getSettings)
 	s.mux.HandleFunc("PATCH /api/v1/settings", s.updateSettings)
 	s.mux.HandleFunc("GET /api/v1/workspaces", s.listWorkspaces)
+	s.mux.HandleFunc("POST /api/v1/system/seed-demo", s.seedDemo)
 	s.mux.HandleFunc("POST /api/v1/workspaces", s.createWorkspace)
 	s.mux.HandleFunc("POST /api/v1/system/select-folder", s.selectFolder)
 	s.mux.HandleFunc("POST /api/v1/system/open-folder", s.openSystemFolder)
@@ -299,27 +301,66 @@ func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, value)
 }
 func (s *Server) listWorkspaces(w http.ResponseWriter, r *http.Request) {
-	items, err := s.db.Workspaces(r.Context())
+	ctx := r.Context()
+	query := r.URL.Query()
+	paged := strings.TrimSpace(query.Get("page")) != "" || strings.TrimSpace(query.Get("page_size")) != ""
+
+	var items []core.Workspace
+	var total int
+	var err error
+	if paged {
+		page, pageSize, filt, err := workspaceListQuery(r)
+		if err != nil {
+			fail(w, 400, "INVALID_WORKSPACE_QUERY", err.Error())
+			return
+		}
+		items, total, err = s.db.WorkspacesPage(ctx, page, pageSize, filt)
+		if err != nil {
+			if strings.Contains(err.Error(), "out of range") {
+				fail(w, 400, "INVALID_WORKSPACE_QUERY", err.Error())
+				return
+			}
+			fail(w, 500, "DATABASE_ERROR", "Could not list workspaces.")
+			return
+		}
+		views, err := s.buildWorkspaceListViews(ctx, items)
+		if err != nil {
+			fail(w, 500, "DATABASE_ERROR", "Could not load workspace analysis.")
+			return
+		}
+		hasNext := page*pageSize < total
+		writeJSON(w, 200, map[string]any{"items": views, "total": total, "page": page, "page_size": pageSize, "has_next": hasNext})
+		return
+	}
+
+	items, err = s.db.Workspaces(ctx)
 	if err != nil {
 		fail(w, 500, "DATABASE_ERROR", "Could not list workspaces.")
 		return
 	}
-	// One aggregate query for every workspace's latest scan instead of a
-	// full history load per workspace.
-	latestByWorkspace, err := s.db.LatestScans(r.Context())
+	views, err := s.buildWorkspaceListViews(ctx, items)
 	if err != nil {
 		fail(w, 500, "DATABASE_ERROR", "Could not load workspace analysis.")
 		return
 	}
-	// ...and one for how much of each latest scan's analyzer set completed.
-	coverageByWorkspace, err := s.db.LatestScanCoverage(r.Context())
-	if err != nil {
-		fail(w, 500, "DATABASE_ERROR", "Could not load workspace analysis.")
-		return
+	writeJSON(w, 200, map[string]any{"items": views})
+}
+
+// buildWorkspaceListViews turns raw workspace rows into dashboard views with
+// latest scan, coverage, trends, and tags. Shared by the legacy full list and
+// the paged GET /workspaces handler.
+func (s *Server) buildWorkspaceListViews(ctx context.Context, items []core.Workspace) ([]workspaceView, error) {
+	if len(items) == 0 {
+		return []workspaceView{}, nil
 	}
-	// The completed fallback is only queried when some latest scan never
-	// finished (cancelled/interrupted), so the common all-completed list
-	// pays nothing for it.
+	latestByWorkspace, err := s.db.LatestScans(ctx)
+	if err != nil {
+		return nil, err
+	}
+	coverageByWorkspace, err := s.db.LatestScanCoverage(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var completedByWorkspace map[string]core.Scan
 	completedLoaded := false
 	type pair struct{ latest, lastCompleted *core.Scan }
@@ -334,10 +375,9 @@ func (s *Server) listWorkspaces(w http.ResponseWriter, r *http.Request) {
 		var lastCompleted *core.Scan
 		if latest == nil || (latest.State != "completed" && latest.State != "completed_with_warnings") {
 			if !completedLoaded {
-				completedByWorkspace, err = s.db.LatestCompletedScans(r.Context())
+				completedByWorkspace, err = s.db.LatestCompletedScans(ctx)
 				if err != nil {
-					fail(w, 500, "DATABASE_ERROR", "Could not load workspace analysis.")
-					return
+					return nil, err
 				}
 				completedLoaded = true
 			}
@@ -348,33 +388,39 @@ func (s *Server) listWorkspaces(w http.ResponseWriter, r *http.Request) {
 		}
 		pairs[i] = pair{latest, lastCompleted}
 	}
-	// One query for every card's analyzer runs instead of one per scan, and
-	// no directory walk: never-scanned workspaces read cached languages.
-	runsByScan, err := s.db.AnalyzerRunsForScans(r.Context(), scanIDs)
+	runsByScan, err := s.db.AnalyzerRunsForScans(ctx, scanIDs)
 	if err != nil {
-		fail(w, 500, "DATABASE_ERROR", "Could not load workspace analysis.")
-		return
+		return nil, err
 	}
-	trendByWorkspace, err := s.db.RecentCompletedTotals(r.Context(), database.DefaultWorkspaceSparkline)
+	trendByWorkspace, err := s.db.RecentCompletedTotals(ctx, database.DefaultWorkspaceSparkline)
 	if err != nil {
-		fail(w, 500, "DATABASE_ERROR", "Could not load workspace analysis.")
-		return
+		return nil, err
+	}
+	ids := make([]string, len(items))
+	for i, item := range items {
+		ids[i] = item.ID
+	}
+	tagsByWorkspace, err := s.db.WorkspaceTagsMap(ctx, ids)
+	if err != nil {
+		return nil, err
 	}
 	views := make([]workspaceView, 0, len(items))
 	for i, item := range items {
-		view, err := s.buildWorkspaceView(r.Context(), item, pairs[i].latest, pairs[i].lastCompleted, &viewPrefetch{runs: runsByScan, list: true})
+		view, err := s.buildWorkspaceView(ctx, item, pairs[i].latest, pairs[i].lastCompleted, &viewPrefetch{runs: runsByScan, list: true})
 		if err != nil {
-			fail(w, 500, "DATABASE_ERROR", "Could not load workspace analysis.")
-			return
+			return nil, err
 		}
 		if coverage, ok := coverageByWorkspace[item.ID]; ok {
 			cov := coverage
 			view.LatestScanCov = &cov
 		}
 		view.Trend = trendByWorkspace[item.ID]
+		if tags := tagsByWorkspace[item.ID]; len(tags) > 0 {
+			view.Tags = tags
+		}
 		views = append(views, view)
 	}
-	writeJSON(w, 200, map[string]any{"items": views})
+	return views, nil
 }
 func (s *Server) createWorkspace(w http.ResponseWriter, r *http.Request) {
 	var input struct {
@@ -1286,12 +1332,38 @@ func (s *Server) listScans(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "INVALID_SCAN_QUERY", err.Error())
 		return
 	}
-	items, total, err := s.db.ScansPage(r.Context(), work.ID, page, pageSize)
+	dateFrom := strings.TrimSpace(r.URL.Query().Get("date_from"))
+	dateTo := strings.TrimSpace(r.URL.Query().Get("date_to"))
+	filter := database.ScansPageFilter{DateFrom: dateFrom, DateTo: dateTo}
+	if err := database.ValidateScansPageFilter(filter); err != nil {
+		fail(w, 400, "INVALID_SCAN_QUERY", err.Error())
+		return
+	}
+	items, total, err := s.db.ScansPage(r.Context(), work.ID, page, pageSize, filter)
 	if err != nil {
+		if strings.Contains(err.Error(), "out of range") {
+			fail(w, 400, "INVALID_SCAN_QUERY", err.Error())
+			return
+		}
 		fail(w, 500, "DATABASE_ERROR", "Could not list scans.")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"items": items, "total": total, "page": page, "page_size": pageSize, "has_next": (page-1)*pageSize+len(items) < total})
+	payload := map[string]any{"items": items, "total": total, "page": page, "page_size": pageSize, "has_next": (page-1)*pageSize+len(items) < total}
+	if dateFrom != "" {
+		payload["date_from"] = dateFrom
+	}
+	if dateTo != "" {
+		payload["date_to"] = dateTo
+	}
+	if dateFrom != "" || dateTo != "" {
+		unfiltered, err := s.db.CountScansForWorkspace(r.Context(), work.ID)
+		if err != nil {
+			fail(w, 500, "DATABASE_ERROR", "Could not list scans.")
+			return
+		}
+		payload["total_unfiltered"] = unfiltered
+	}
+	writeJSON(w, 200, payload)
 }
 
 // scanPageFilter parses the scan history's paging controls the way
@@ -1339,12 +1411,13 @@ func (s *Server) recentScans(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, "DATABASE_ERROR", "Could not summarize scans.")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"scans": items, "total": total, "summary": summary})
+	hasMore := filter.Offset+len(items) < total
+	writeJSON(w, 200, map[string]any{"scans": items, "total": total, "limit": filter.Limit, "offset": filter.Offset, "has_more": hasMore, "summary": summary})
 }
 
 // recentScanFilter parses the global scan list controls: limit defaults to 10,
-// is rejected below 1, and is clamped to 50; state optionally filters by a
-// single lifecycle state.
+// is rejected below 1, and is clamped to 50; optional offset pages through the
+// filtered result set; state optionally filters by a single lifecycle state.
 func recentScanFilter(r *http.Request) (database.RecentScansFilter, error) {
 	query := r.URL.Query()
 	filter := database.RecentScansFilter{Limit: database.DefaultRecentScansLimit, State: strings.ToLower(strings.TrimSpace(query.Get("state"))), WorkspaceID: strings.TrimSpace(query.Get("workspace_id"))}
@@ -1360,6 +1433,13 @@ func recentScanFilter(r *http.Request) (database.RecentScansFilter, error) {
 			value = database.MaxRecentScansLimit
 		}
 		filter.Limit = value
+	}
+	if raw := strings.TrimSpace(query.Get("offset")); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 0 {
+			return filter, fmt.Errorf("offset must be a non-negative integer")
+		}
+		filter.Offset = value
 	}
 	return filter, nil
 }

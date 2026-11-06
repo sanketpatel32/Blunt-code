@@ -104,7 +104,7 @@ describe('navigation resilience', () => {
 
   it('appends lazily loaded workspace entries (labels starting "Go to ") behind the static commands when the palette opens', async () => {
     const fetchMock = vi.fn((input: string) => {
-      if (input.endsWith('/api/v1/workspaces')) {
+      if (String(input).split('?')[0] === '/api/v1/workspaces') {
         return Promise.resolve(json({ workspaces: [
           { id: 'ws-alpha', name: 'Alpha', root_path: 'C:\\code\\alpha' },
           { id: 'ws-beta', name: 'Beta', root_path: 'C:\\code\\beta' },

@@ -51,7 +51,33 @@ describe('keyboard journey through the core flow', () => {
     const finding = { id: 'finding-1', analyzer_id: 'semgrep', severity: 'high', category: 'security', title: 'Unsafe eval', message: `${EVAL}() of user input`, relative_path: 'src/main.py', start_line: 4 };
     const fetchMock = vi.fn((input: string, init?: RequestInit) => {
       if (input.includes('/scan-plan?')) return Promise.resolve(json({ profile: 'standard', selected_files: 1, candidate_files: 1, dependency_inputs: [], exclusions: [], skip_counts: {}, analyzers: [{ id: 'ruff', display_name: 'Ruff', planned: true, ready: true, registered: true, reason: 'Ready to run', network: 'none' }] }));
-      if (input.endsWith('/api/v1/workspaces') && init?.method !== 'POST') return Promise.resolve(json({ workspaces: [{ id: 'ws-1', name: 'Journey', root_path: 'C:\\journey', default_profile: 'standard' }] }));
+      if (String(input).split('?')[0] === '/api/v1/workspaces' && init?.method !== 'POST') {
+        return Promise.resolve(json({
+          items: [{ id: 'ws-1', name: 'Journey', root_path: 'C:\\journey', default_profile: 'standard' }],
+          total: 1,
+          page: 1,
+          page_size: 25,
+          has_next: false,
+        }));
+      }
+      if (String(input).split('?')[0] === '/api/v1/scans' && (!init?.method || init.method === 'GET')) {
+        return Promise.resolve(json({
+          scans: [],
+          total: 0,
+          has_more: false,
+          summary: { workspaces_total: 1, workspaces_scanned: 0, scans_total: 0, scans_last_7d: 0, active_scans: 0, total_findings: 0, critical_count: 0, high_count: 0, medium_count: 0, low_count: 0, info_count: 0 },
+        }));
+      }
+      if (input === '/api/v1/stats') {
+        return Promise.resolve(json({
+          workspaces: 1,
+          scans: { total: 0, completed: 0, running: 0 },
+          findings: { severity: { critical: 0, high: 0, medium: 0, low: 0, info: 0 }, total: 0 },
+          suppressions: 0,
+          scans_by_day: Array.from({ length: 7 }, (_, i) => ({ date: `2026-01-${i + 1}`, total: 0, completed: 0 })),
+          generated_at: '2026-01-07T12:00:00Z',
+        }));
+      }
       if (input.endsWith('/workspaces/ws-1/scans') && init?.method === 'POST') return Promise.resolve(json({ ...terminalScan, state: 'running', analyzer_runs: [], error_summary: '' }));
       if (input.endsWith('/workspaces/ws-1/scans')) return Promise.resolve(json({ items: [], total: 0, limit: 25, offset: 0, has_more: false }));
       if (input.endsWith('/workspaces/ws-1')) return Promise.resolve(json({ id: 'ws-1', name: 'Journey', root_path: 'C:\\journey', default_profile: 'standard', created_at: '2026-09-01T00:00:00Z' }));

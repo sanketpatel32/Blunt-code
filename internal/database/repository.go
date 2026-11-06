@@ -106,6 +106,141 @@ func (d *DB) Workspaces(ctx context.Context) ([]core.Workspace, error) {
 	}
 	return result, rows.Err()
 }
+
+const (
+	// DefaultWorkspacePageSize and MaxWorkspacePageSize bound GET /workspaces when
+	// the client requests server paging (?page=&page_size=).
+	DefaultWorkspacePageSize = 25
+	MaxWorkspacePageSize     = 100
+)
+
+// WorkspacePageFilter selects sort and optional name/path/tag substring match
+// for WorkspacesPage. Empty Query matches all; Sort must be name, last_opened,
+// last_scan, or findings.
+type WorkspacePageFilter struct {
+	Query string
+	Tag   string
+	Sort  string
+	Order string // asc or desc
+}
+
+// WorkspacesPage returns one slice of workspaces with total matching rows, using
+// SQL paging and sort. Text Query matches LOWER(name) or LOWER(root_path) as a
+// substring; Tag matches workspace_tags.tag as a substring (case-insensitive).
+// Findings sort uses each workspace's newest scan (by started_at)
+// total_findings for ordering; workspaces with no scans sink to the end on desc.
+func (d *DB) WorkspacesPage(ctx context.Context, page, pageSize int, filter WorkspacePageFilter) ([]core.Workspace, int, error) {
+	if page < 1 {
+		return nil, 0, fmt.Errorf("page is out of range")
+	}
+	if pageSize < 1 {
+		pageSize = DefaultWorkspacePageSize
+	}
+	if pageSize > MaxWorkspacePageSize {
+		pageSize = MaxWorkspacePageSize
+	}
+	sortKey := strings.ToLower(strings.TrimSpace(filter.Sort))
+	if sortKey == "" {
+		sortKey = "last_opened"
+	}
+	order := strings.ToLower(strings.TrimSpace(filter.Order))
+	if order != "asc" && order != "desc" {
+		order = "desc"
+	}
+	q := strings.TrimSpace(filter.Query)
+	tagNeedle := strings.TrimSpace(strings.ToLower(filter.Tag))
+	whereParts := []string(nil)
+	whereArgs := []any(nil)
+	if q != "" {
+		like := "%" + strings.ToLower(q) + "%"
+		whereParts = append(whereParts, `(LOWER(w.name) LIKE ? OR LOWER(w.root_path) LIKE ?)`)
+		whereArgs = append(whereArgs, like, like)
+	}
+	if tagNeedle != "" {
+		whereParts = append(whereParts, `EXISTS (SELECT 1 FROM workspace_tags t WHERE t.workspace_id = w.id AND LOWER(t.tag) LIKE ?)`)
+		whereArgs = append(whereArgs, "%"+tagNeedle+"%")
+	}
+	whereSQL := ""
+	if len(whereParts) > 0 {
+		whereSQL = ` WHERE ` + strings.Join(whereParts, ` AND `)
+	}
+	joinLatest := ``
+	if sortKey == "findings" {
+		joinLatest = ` LEFT JOIN (
+			SELECT workspace_id, total_findings,
+				ROW_NUMBER() OVER (PARTITION BY workspace_id ORDER BY started_at DESC, id DESC) AS recency
+			FROM scans
+		) latest ON latest.workspace_id = w.id AND latest.recency = 1`
+	}
+	var orderExpr string
+	switch sortKey {
+	case "name":
+		orderExpr = `w.name COLLATE NOCASE`
+	case "last_scan":
+		orderExpr = `COALESCE(w.last_scan_at, '')`
+	case "findings":
+		orderExpr = `COALESCE(latest.total_findings, -1)`
+	default: // last_opened
+		sortKey = "last_opened"
+		orderExpr = `COALESCE(w.last_opened_at, w.created_at)`
+	}
+	orderDir := "DESC"
+	if order == "asc" {
+		orderDir = "ASC"
+	}
+	tie := `, w.id ASC`
+	if orderDir == "DESC" {
+		tie = `, w.id DESC`
+	}
+	countSQL := `SELECT COUNT(*) FROM workspaces w` + whereSQL
+	var total int
+	if err := d.SQL.QueryRowContext(ctx, countSQL, whereArgs...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	if total == 0 {
+		return []core.Workspace{}, 0, nil
+	}
+	maxPage := (total + pageSize - 1) / pageSize
+	if page > maxPage {
+		return nil, 0, fmt.Errorf("page is out of range")
+	}
+	selectCols := `SELECT ` + workspaceFields + ` FROM workspaces w`
+	if sortKey == "findings" {
+		selectCols = `SELECT ` + workspaceFieldsW() + ` FROM workspaces w` + joinLatest
+	}
+	sqlQuery := selectCols + whereSQL + ` ORDER BY ` + orderExpr + ` ` + orderDir + tie + ` LIMIT ? OFFSET ?`
+	offset := (page - 1) * pageSize
+	args := append(append([]any(nil), whereArgs...), pageSize, offset)
+	rows, err := d.SQL.QueryContext(ctx, sqlQuery, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	var result []core.Workspace
+	for rows.Next() {
+		var w core.Workspace
+		var created, updated string
+		var opened, scanned sql.NullString
+		if err := rows.Scan(&w.ID, &w.Name, &w.RootPath, &created, &updated, &opened, &scanned, &w.DefaultProfile, &w.SettingsJSON); err != nil {
+			return nil, 0, err
+		}
+		w.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
+		w.UpdatedAt, _ = time.Parse(time.RFC3339Nano, updated)
+		w.LastOpenedAt, _ = parseNullableTime(opened)
+		w.LastScanAt, _ = parseNullableTime(scanned)
+		result = append(result, w)
+	}
+	return result, total, rows.Err()
+}
+
+func workspaceFieldsW() string {
+	// workspaceFields lists bare column names; qualify with w. for joined queries.
+	parts := strings.Split(workspaceFields, ",")
+	for i, p := range parts {
+		parts[i] = "w." + strings.TrimSpace(p)
+	}
+	return strings.Join(parts, ",")
+}
 func (d *DB) UpdateWorkspace(ctx context.Context, w core.Workspace) (core.Workspace, error) {
 	w.UpdatedAt = time.Now().UTC()
 	result, err := d.SQL.ExecContext(ctx, `UPDATE workspaces SET name=?, updated_at=?, default_profile=? WHERE id=?`, w.Name, dbTime(w.UpdatedAt), w.DefaultProfile, w.ID)
@@ -452,11 +587,54 @@ const (
 	MaxScanPageSize     = 100
 )
 
+// ScansPageFilter optional bounds for GET /workspaces/{id}/scans. Dates use the
+// local calendar (time.Local), matching HTML date inputs, and compare against
+// COALESCE(finished_at, started_at) like the web's scanMatchesDateRange.
+type ScansPageFilter struct {
+	DateFrom string // YYYY-MM-DD, inclusive start of local day
+	DateTo   string // YYYY-MM-DD, inclusive end of local day
+}
+
+// ValidateScansPageFilter rejects malformed date strings before ScansPage runs SQL.
+func ValidateScansPageFilter(filter ScansPageFilter) error {
+	_, _, err := scansDateWhere(filter)
+	return err
+}
+
+func scansDateWhere(filter ScansPageFilter) (extraWhere string, extraArgs []any, err error) {
+	from := strings.TrimSpace(filter.DateFrom)
+	to := strings.TrimSpace(filter.DateTo)
+	if from == "" && to == "" {
+		return "", nil, nil
+	}
+	loc := time.Local
+	var clauses []string
+	if from != "" {
+		t, perr := time.ParseInLocation("2006-01-02", from, loc)
+		if perr != nil {
+			return "", nil, fmt.Errorf("date_from must be YYYY-MM-DD")
+		}
+		start := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, loc).UTC()
+		clauses = append(clauses, `COALESCE(finished_at, started_at) >= ?`)
+		extraArgs = append(extraArgs, dbTime(start))
+	}
+	if to != "" {
+		t, perr := time.ParseInLocation("2006-01-02", to, loc)
+		if perr != nil {
+			return "", nil, fmt.Errorf("date_to must be YYYY-MM-DD")
+		}
+		end := time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 999999999, loc).UTC()
+		clauses = append(clauses, `COALESCE(finished_at, started_at) <= ?`)
+		extraArgs = append(extraArgs, dbTime(end))
+	}
+	return ` AND ` + strings.Join(clauses, ` AND `), extraArgs, nil
+}
+
 // ScansPage returns one page of the workspace's scan history (newest first,
-// the same order Scans uses) plus the total history size so clients can
-// compute has_next. Page and size are clamped here; an absurd page window
+// the same order Scans uses) plus the total row count under the same filter
+// so clients can compute has_next. Page and size are clamped here; an absurd page window
 // that would overflow the offset is rejected instead of wrapped.
-func (d *DB) ScansPage(ctx context.Context, workspaceID string, page, pageSize int) ([]core.Scan, int, error) {
+func (d *DB) ScansPage(ctx context.Context, workspaceID string, page, pageSize int, filter ScansPageFilter) ([]core.Scan, int, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -469,11 +647,27 @@ func (d *DB) ScansPage(ctx context.Context, workspaceID string, page, pageSize i
 	if page > 1 && page-1 > (math.MaxInt-pageSize)/pageSize {
 		return nil, 0, fmt.Errorf("page is out of range")
 	}
-	var total int
-	if err := d.SQL.QueryRowContext(ctx, `SELECT COUNT(*) FROM scans WHERE workspace_id=?`, workspaceID).Scan(&total); err != nil {
+	dateWhere, dateArgs, err := scansDateWhere(filter)
+	if err != nil {
 		return nil, 0, err
 	}
-	rows, err := d.SQL.QueryContext(ctx, `SELECT `+scanSelectColumns("")+` FROM scans WHERE workspace_id=? ORDER BY started_at DESC, id DESC LIMIT ? OFFSET ?`, workspaceID, pageSize, (page-1)*pageSize)
+	baseWhere := `workspace_id=?` + dateWhere
+	args := append([]any{workspaceID}, dateArgs...)
+	countSQL := `SELECT COUNT(*) FROM scans WHERE ` + baseWhere
+	var total int
+	if err := d.SQL.QueryRowContext(ctx, countSQL, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	if total == 0 {
+		return []core.Scan{}, 0, nil
+	}
+	maxPage := (total + pageSize - 1) / pageSize
+	if page > maxPage {
+		return nil, 0, fmt.Errorf("page is out of range")
+	}
+	selectArgs := append([]any(nil), args...)
+	selectArgs = append(selectArgs, pageSize, (page-1)*pageSize)
+	rows, err := d.SQL.QueryContext(ctx, `SELECT `+scanSelectColumns("")+` FROM scans WHERE `+baseWhere+` ORDER BY started_at DESC, id DESC LIMIT ? OFFSET ?`, selectArgs...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -487,6 +681,15 @@ func (d *DB) ScansPage(ctx context.Context, workspaceID string, page, pageSize i
 		result = append(result, s)
 	}
 	return result, total, rows.Err()
+}
+
+// CountScansForWorkspace returns how many scan rows exist for the workspace (any date).
+func (d *DB) CountScansForWorkspace(ctx context.Context, workspaceID string) (int, error) {
+	var n int
+	if err := d.SQL.QueryRowContext(ctx, `SELECT COUNT(*) FROM scans WHERE workspace_id=?`, workspaceID).Scan(&n); err != nil {
+		return 0, err
+	}
+	return n, nil
 }
 
 // LatestScans resolves each workspace's single most recent scan (same recency
@@ -607,6 +810,7 @@ type RecentScan struct {
 // interpolated.
 type RecentScansFilter struct {
 	Limit       int
+	Offset      int
 	State       string
 	WorkspaceID string
 }
@@ -628,6 +832,9 @@ func (d *DB) RecentScans(ctx context.Context, filter RecentScansFilter) ([]Recen
 	if filter.Limit > MaxRecentScansLimit {
 		filter.Limit = MaxRecentScansLimit
 	}
+	if filter.Offset < 0 {
+		filter.Offset = 0
+	}
 	where, args := "", []any(nil)
 	conditions := []string{}
 	if filter.State != "" {
@@ -646,7 +853,12 @@ func (d *DB) RecentScans(ctx context.Context, filter RecentScansFilter) ([]Recen
 		return nil, 0, err
 	}
 	queryArgs := append(append([]any(nil), args...), filter.Limit)
-	rows, err := d.SQL.QueryContext(ctx, `SELECT `+scanSelectColumns("scans")+`,COALESCE(workspaces.name,'') FROM scans JOIN workspaces ON workspaces.id=scans.workspace_id`+where+` ORDER BY scans.started_at DESC,scans.id DESC LIMIT ?`, queryArgs...)
+	limitClause := ` LIMIT ?`
+	if filter.Offset > 0 {
+		limitClause = ` LIMIT ? OFFSET ?`
+		queryArgs = append(queryArgs, filter.Offset)
+	}
+	rows, err := d.SQL.QueryContext(ctx, `SELECT `+scanSelectColumns("scans")+`,COALESCE(workspaces.name,'') FROM scans JOIN workspaces ON workspaces.id=scans.workspace_id`+where+` ORDER BY scans.started_at DESC,scans.id DESC`+limitClause, queryArgs...)
 	if err != nil {
 		return nil, 0, err
 	}

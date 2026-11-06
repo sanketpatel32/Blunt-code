@@ -16,6 +16,6 @@ export function DesignTopbar({ route, go, workspace }: { workspace?: Workspace; 
       {workspace && <><span aria-hidden="true">/</span><a href={href({ page: 'workspace', id: workspace.id })} onClick={(e) => navigateFromLink(e, () => go({ page: 'workspace', id: workspace.id }))}>{workspace.name}</a></>}
       <span aria-hidden="true">/</span><span aria-current="page">{LABELS[route.page]}</span>
     </nav>
-    <button className="topbar-search" onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }))} aria-label="Open command search"><Search size={14} /><span>Search commands</span><kbd>Ctrl K</kbd></button>
+    <button className="topbar-search" onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }))} aria-label="Command palette (same as rail Search — Ctrl+K)"><Search size={14} /><span>Commands</span></button>
   </header>;
 }

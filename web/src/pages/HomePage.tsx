@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { api } from '../api';
-import type { RecentScanItem, Scan, Severity, Tool, Workspace } from '../types';
+import type { RecentScanItem, Scan, Severity, Workspace } from '../types';
 import type { Route } from '../lib/router';
 import type { Notice } from '../lib/notice';
 import { message } from '../lib/notice';
@@ -27,7 +27,8 @@ import { isActiveScanState } from '../lib/scanEvents';
 import { GRADE_BANDS, bandFor, coverageText, gradeDepth, riskGrade, riskScore, severityCountsOf } from '../lib/risk';
 import { GradeTile } from '../components/GradeTile';
 
-const FEED_LIMIT = 10;
+const FEED_LIMIT = 12;
+const LEDGER_PAGE_SIZE = 100;
 
 /** Short date for the cancelled-scan fallback note ("showing 15 Sep 2026 results"). */
 const shortDateFmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
@@ -72,14 +73,22 @@ function feedFilterLabel(filter: FeedFilter): string {
 }
 
 export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd: () => void; notify: (n: Notice) => void }) {
-  const workspaces = useLoad(api.workspaces, []);
+  const workspaces = useLoad(
+    () => api.workspacesPage({ page: 1, page_size: LEDGER_PAGE_SIZE, sort: 'findings', order: 'desc' }),
+    []
+  );
+  const workspaceItems = workspaces.data?.items ?? [];
+  const workspaceTotal = workspaces.data?.total ?? workspaceItems.length;
   const tools = useLoad(api.tools, []);
-  const recent = useLoad(api.recentScans, []);
+  const [feedOffset, setFeedOffset] = useState(0);
+  const loadRecent = useCallback(() => api.recentScans({ limit: FEED_LIMIT, offset: feedOffset }), [feedOffset]);
+  const recent = useLoad(loadRecent, [loadRecent]);
   const stats = useLoad(api.stats, []);
   const byDay = stats.data?.scans_by_day ?? [];
 
   const scans = recent.data?.scans ?? [];
   const summary = recent.data?.summary;
+  const feedHasMore = recent.data?.has_more === true;
   const readyTools = tools.data?.filter((tool) => tool.ready).length ?? 0;
   const totalTools = tools.data?.length ?? 0;
 
@@ -87,23 +96,28 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
   const [ledgerFilter, setLedgerFilter] = useState('');
   const [feedFilter, setFeedFilter] = useState<FeedFilter>('all');
 
+  const setFeedFilterAndReset = (next: FeedFilter) => {
+    setFeedFilter(next);
+    setFeedOffset(0);
+  };
+
   // First run = nothing added and nothing ever scanned; any saved workspace or
   // history row means the board has something to show.
-  const firstRun = !workspaces.loading && !workspaces.error && !workspaces.data?.length
+  const firstRun = !workspaces.loading && !workspaces.error && workspaceTotal === 0
     && !(recent.data?.scans?.length);
 
   // ── The verdict: one score from the latest completed scan of each workspace ──
   // (When the newest run was cancelled/interrupted, the newest scan that actually
   // completed stands in — see riskScanOf — so a good report still grades the board.)
   const ledgerBase = useMemo(() => {
-    return (workspaces.data ?? []).map((workspace) => {
+    return workspaceItems.map((workspace) => {
       const { scan: current, superseded } = riskScanOf(workspace);
       const score = current ? riskScore(severityCountsOf(current)) : null;
       const coverage = workspace.assessment_coverage ?? (workspace.latest_scan?.id === current?.id ? workspace.latest_scan_coverage : undefined);
       const partial = !!current && !!coverage && (coverage.failed > 0 || coverage.warned > 0);
       return { workspace, current, superseded, score, total: current?.total_findings ?? 0, coverage, partial };
     });
-  }, [workspaces.data]);
+  }, [workspaceItems]);
 
   const verdict = useMemo(() => {
     const counts: Record<Severity, number> = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
@@ -168,12 +182,12 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
       .filter((row) => row.score !== null)
       .sort((a, b) => (b.score! - a.score!) || (b.total - a.total) || a.workspace.name.localeCompare(b.workspace.name));
     if (scored[0]) return { id: scored[0].workspace.id, name: scored[0].workspace.name, profile: scored[0].workspace.default_profile };
-    const first = workspaces.data?.[0];
+    const first = workspaceItems[0];
     if (first) return { id: first.id, name: first.name, profile: first.default_profile };
     const latest = scans[0];
     if (latest) return { id: latest.workspace_id, name: latest.workspace_name || undefined, profile: undefined };
     return null;
-  }, [ledgerBase, workspaces.data, scans]);
+  }, [ledgerBase, workspaceItems, scans]);
 
   async function handlePickFolder() {
     if (pickingFolder) return;
@@ -236,6 +250,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
   const verdictTallied = verdict.scanned > 0;
   // The workspace list failed to load: nothing on the board can be counted.
   const boardFailed = !!workspaces.error && !workspaces.data;
+  const statsWorkspaceTotal = stats.data?.workspaces ?? workspaceTotal;
 
   return (
     <div className="page board-page">
@@ -376,7 +391,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
                 <p className="verdict-line">
                   {workspaces.error ? (
                     <>Couldn't load your workspaces. Nothing is lost. Use "Try again" in the panel below to reload the board.</>
-                  ) : workspaces.data?.length ? (
+                  ) : workspaceTotal > 0 ? (
                     <>No completed scans yet; run a scan to grade your code.</>
                   ) : (
                     <>Add a workspace to start grading your code.</>
@@ -435,10 +450,10 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
             />
             <StatTile
               icon={FolderCheck}
-              value={`${verdict.scanned}/${workspaces.data?.length ?? 0}`}
+              value={`${verdict.scanned}/${statsWorkspaceTotal}`}
               label="Scanned"
-              title={`${verdict.scanned} of ${workspaces.data?.length ?? 0} workspaces have a completed scan`}
-              extra={<Ring value={verdict.scanned} max={workspaces.data?.length ?? 0} size={36} stroke={4} label={`${verdict.scanned} of ${workspaces.data?.length ?? 0} workspaces scanned`}><span /></Ring>}
+              title={`${verdict.scanned} of ${statsWorkspaceTotal} workspaces have a completed scan`}
+              extra={<Ring value={verdict.scanned} max={statsWorkspaceTotal} size={36} stroke={4} label={`${verdict.scanned} of ${statsWorkspaceTotal} workspaces scanned`}><span /></Ring>}
             />
             <StatTile icon={Clock3} value={verdict.lastFinished ? relativeTime(verdict.lastFinished) : '—'} label="Last scan" />
             <StatTile
@@ -519,9 +534,9 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
           )}
 
           <footer className="board-panel-foot">
-            {ledgerRows.length > 12 && (
+            {workspaceTotal > 12 && (
               <span className="board-panel-foot-note tabular-nums">
-                Showing 12 of {ledgerRows.length}
+                Top {Math.min(12, ledgerRows.length)} of {workspaceTotal} workspaces by risk
               </span>
             )}
             <Button variant="ghost" size="sm" onClick={() => go({ page: 'workspaces' })}>
@@ -556,7 +571,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
                       type="button"
                       className={`feed-filter-btn ${feedFilter === filter ? 'active' : ''}`}
                       aria-pressed={feedFilter === filter}
-                      onClick={() => setFeedFilter(filter)}
+                      onClick={() => setFeedFilterAndReset(filter)}
                     >
                       {feedFilterLabel(filter)}
                     </button>
@@ -584,33 +599,39 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
               <>
                 <TrendBars scans={feedRows} />
                 <ol className="feed-list">
-                  {feedRows.slice(0, FEED_LIMIT).map((scan) => (
+                  {feedRows.map((scan) => (
                     <FeedRow key={scan.id} scan={scan} go={go} />
                   ))}
                 </ol>
               </>
             )}
 
-          {/* The ledger panel closes with "All workspaces"; this one closed on a
-              blank stretch of card instead. Same termination, and the note
-              answers the one question the capped list raises (why did my scan
-              disappear?) by naming the window against the real total — the feed
-              API serves a fixed 10 most-recent rows out of however many scans
-              exist, and a reader cannot otherwise tell that 86 scans happened. */}
           {scans.length > 0 && !recent.loading && !recent.error && (
-            <footer className="board-panel-foot">
+            <footer className="board-panel-foot flex-wrap gap-2">
               <span className="board-panel-foot-note tabular-nums">
-                Showing {Math.min(feedRows.length, FEED_LIMIT)} of {summary?.scans_total ?? feedRows.length} {feedFilter === 'all' ? 'scans' : `${feedFilterLabel(feedFilter).toLowerCase()} scans`}
+                {(recent.data?.offset ?? 0) + 1}–{(recent.data?.offset ?? 0) + feedRows.length} of {summary?.scans_total ?? feedRows.length} {feedFilter === 'all' ? 'scans' : `${feedFilterLabel(feedFilter).toLowerCase()} scans`}
               </span>
-              <Button variant="ghost" size="sm" onClick={() => go({ page: 'search' })}>
-                Search all findings <ChevronRight className="ml-0.5 h-3.5 w-3.5" />
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="outline" size="sm" disabled={feedOffset <= 0} onClick={() => setFeedOffset((o) => Math.max(0, o - FEED_LIMIT))}>
+                  Previous
+                </Button>
+                <Button variant="outline" size="sm" disabled={!feedHasMore} onClick={() => setFeedOffset((o) => o + FEED_LIMIT)}>
+                  Next
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => go({ page: 'search' })}>
+                  Search findings <ChevronRight className="ml-0.5 h-3.5 w-3.5" />
+                </Button>
+              </div>
             </footer>
           )}
           </section>
 
-          {/* ── Optional-tools strip: real tool readiness, nothing invented ── */}
-          <ToolsFoot tools={tools.data ?? []} ready={readyTools} total={totalTools} loading={tools.loading} error={tools.error} retry={tools.reload} go={go} />
+          <p className="board-foot-note px-1 text-sm text-[var(--color-ink-muted)]">
+            Tools: <button type="button" className="text-button" onClick={() => go({ page: 'tools' })}>Manage optional analyzers</button>
+            {tools.data && !tools.loading && !tools.error && (
+              <span className="tabular-nums"> · {readyTools}/{totalTools} ready</span>
+            )}
+          </p>
         </div>
       </div>
     </div>
@@ -1054,51 +1075,3 @@ function LedgerRow({
   );
 }
 
-function ToolsFoot({
-  tools,
-  ready,
-  total,
-  loading,
-  error,
-  retry,
-  go
-}: {
-  tools: Tool[];
-  ready: number;
-  total: number;
-  loading: boolean;
-  error?: string;
-  retry: () => void;
-  go: (r: Route) => void;
-}) {
-  const missingTools = tools.filter((tool) => !tool.ready).map((tool) => tool.id);
-  return (
-    <footer className="board-foot" aria-label="Analyzers">
-      {loading ? (
-        <div className="board-skeleton"><SkeletonLines lines={1} /></div>
-      ) : error ? (
-        <p className="board-foot-note">
-          Analyzer status is unavailable right now.{' '}
-          <button type="button" className="text-button" onClick={retry}>Try again</button>
-        </p>
-      ) : (
-        <>
-          <i className="board-foot-dot" data-state={total > 0 && ready === total ? 'ready' : 'partial'} aria-hidden="true" />
-          <p className="board-foot-note">
-            {/* Managed-tool readiness, not the analyzer inventory — the totals must not read as "all N analyzers".
-                A chip wall of tool ids used to follow this sentence; the one fact
-                the footer owes a reader who cannot open the Tools page is WHICH
-                tools are missing, so the sentence names exactly those. */}
-            <strong>{ready} of {total}</strong> optional tools ready
-            {missingTools.length > 0 && (
-              <span className="board-foot-missing" title={`Not installed: ${missingTools.join(', ')}`}> · not installed: {missingTools.slice(0, 3).join(', ')}{missingTools.length > 3 ? ` +${missingTools.length - 3}` : ''}</span>
-            )}
-          </p>
-          <Button variant="ghost" size="sm" onClick={() => go({ page: 'tools' })}>
-            Manage tools
-          </Button>
-        </>
-      )}
-    </footer>
-  );
-}

@@ -1,6 +1,6 @@
 import { Sparkline } from '../components/viz/Sparkline';
-import { useEffect, useState } from 'react';
-import { Bug, FolderCheck, FolderGit2, Plus, ShieldAlert } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Plus } from 'lucide-react';
 import { ApiError, api } from '../api';
 import type { Scan, Workspace } from '../types';
 import type { Route } from '../lib/router';
@@ -21,34 +21,65 @@ import { RowMenu, type RowMenuItem } from '../components/RowMenu';
 import { PageHeader } from '../components/PageHeader';
 import { riskGrade, riskScore, severityCountsOf } from '../lib/risk';
 import { GradeTile } from '../components/GradeTile';
-import { StatTile } from '../components/viz/StatTile';
-import { SeverityBar } from '../components/viz/SeverityBar';
+
+const WS_PAGE_SIZE = 25;
+
+/** Map UI column sort to GET /workspaces `sort` param. */
+function apiSortKey(key: WorkspaceSortKey): 'name' | 'last_opened' | 'last_scan' | 'findings' {
+  if (key === 'last_scan') return 'last_opened';
+  return key;
+}
 
 export function WorkspacesPage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd: () => void; notify: (n: Notice) => void }) {
-  const state = useLoad(api.workspaces, []);
   const [sort, setSort] = useState<WorkspaceSort>(()=>{ const sp=new URLSearchParams(window.location.search); const k=sp.get('sort') as WorkspaceSortKey; const d=sp.get('order'); if(k && ['name','last_scan','findings'].includes(k)) return { key:k, dir: d==='asc'||d==='desc'?d:'desc' }; return { key: 'last_scan', dir: 'desc' }; });
   const [tagQuery, setTagQuery] = useState(()=> new URLSearchParams(window.location.search).get('q') ?? '');
   const [search, setSearch] = useState(()=> new URLSearchParams(window.location.search).get('search') ?? '');
+  const [page, setPage] = useState(() => {
+    const p = Number(new URLSearchParams(window.location.search).get('page'));
+    return Number.isInteger(p) && p > 0 ? p : 1;
+  });
   const debouncedSearch = useDebouncedValue(search, search ? 300 : 0);
   const debouncedTagQuery = useDebouncedValue(tagQuery, tagQuery ? TAG_FILTER_DEBOUNCE_MS : 0);
+
+  const loadWorkspaces = useCallback(
+    () =>
+      api.workspacesPage({
+        page,
+        page_size: WS_PAGE_SIZE,
+        sort: apiSortKey(sort.key),
+        order: sort.dir,
+        search: debouncedSearch || undefined,
+        tag: debouncedTagQuery || undefined,
+      }),
+    [page, sort.key, sort.dir, debouncedSearch, debouncedTagQuery]
+  );
+  const state = useLoad(loadWorkspaces, [loadWorkspaces]);
   // Overflow actions live at page level so at most one confirm dialog exists at a time.
   const [pendingScan, setPendingScan] = useState<{ workspace: Workspace; profile: string } | null>(null);
   const [scanning, setScanning] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<Workspace | null>(null);
   const [removing, setRemoving] = useState(false);
   // URL sync
-  useEffect(()=>{ const sp=new URLSearchParams(); if(debouncedTagQuery) sp.set('q',debouncedTagQuery); if(debouncedSearch) sp.set('search',debouncedSearch); if(sort.key!=='last_scan'||sort.dir!=='desc'){ sp.set('sort',sort.key); sp.set('order',sort.dir); } const qs=sp.toString(); const cur=window.location.search.replace(/^\?/,''); if(qs===cur) return; const nxt=qs? `${window.location.pathname}?${qs}${window.location.hash}` : `${window.location.pathname}${window.location.hash}`; window.history.replaceState(null,'',nxt); },[debouncedTagQuery, debouncedSearch, sort]);
-  useEffect(()=>{ const onPop=()=>{ const sp=new URLSearchParams(window.location.search); setTagQuery(sp.get('q')??''); setSearch(sp.get('search')??''); const k=sp.get('sort') as WorkspaceSortKey; const d=sp.get('order'); if(k && ['name','last_scan','findings'].includes(k)) setSort({ key:k, dir: d==='asc'||d==='desc'?d:'desc' }); }; window.addEventListener('popstate',onPop); return()=>window.removeEventListener('popstate',onPop); },[]);
-  const workspaces = state.data ?? [];
-  const byTag = filterWorkspacesByTag(sortWorkspaces(workspaces, sort.key, sort.dir), debouncedTagQuery);
-  const visibleWorkspaces = debouncedSearch ? byTag.filter(w=> w.name.toLowerCase().includes(debouncedSearch.toLowerCase()) || w.root_path.toLowerCase().includes(debouncedSearch.toLowerCase())) : byTag;
+  useEffect(()=>{ const sp=new URLSearchParams(); if(debouncedTagQuery) sp.set('q',debouncedTagQuery); if(debouncedSearch) sp.set('search',debouncedSearch); if(sort.key!=='last_scan'||sort.dir!=='desc'){ sp.set('sort',sort.key); sp.set('order',sort.dir); } if(page>1) sp.set('page',String(page)); const qs=sp.toString(); const cur=window.location.search.replace(/^\?/,''); if(qs===cur) return; const nxt=qs? `${window.location.pathname}?${qs}${window.location.hash}` : `${window.location.pathname}${window.location.hash}`; window.history.replaceState(null,'',nxt); },[debouncedTagQuery, debouncedSearch, sort, page]);
+  useEffect(()=>{ const onPop=()=>{ const sp=new URLSearchParams(window.location.search); setTagQuery(sp.get('q')??''); setSearch(sp.get('search')??''); const pg = Number(sp.get('page')); setPage(Number.isInteger(pg) && pg >= 1 ? pg : 1); const k=sp.get('sort') as WorkspaceSortKey; const d=sp.get('order'); if(k && ['name','last_scan','findings'].includes(k)) setSort({ key:k, dir: d==='asc'||d==='desc'?d:'desc' }); }; window.addEventListener('popstate',onPop); return()=>window.removeEventListener('popstate',onPop); },[]);
+  useEffect(() => { setPage(1); }, [debouncedSearch, debouncedTagQuery, sort.key, sort.dir]);
+
+  const list = state.data;
+  const workspaces = list?.items ?? [];
+  const total = list?.total ?? 0;
+  const pageSize = list?.page_size ?? WS_PAGE_SIZE;
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  useEffect(() => {
+    if (!list || total === 0) return;
+    if (page > pageCount) setPage(pageCount);
+  }, [list, total, page, pageCount]);
   const tagNeedle = debouncedTagQuery.trim().toLowerCase();
   const hasFilter = !!(debouncedTagQuery || debouncedSearch);
-  const narrowed = hasFilter && visibleWorkspaces.length !== workspaces.length;
-  // The toolbar count is the ONE place this screen reports how many workspaces exist.
-  const countLine = narrowed
-    ? `${visibleWorkspaces.length} of ${workspaces.length} ${workspaces.length === 1 ? 'workspace' : 'workspaces'} shown`
-    : `${workspaces.length} ${workspaces.length === 1 ? 'workspace' : 'workspaces'}`;
+  const rangeStart = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const rangeEnd = Math.min(page * pageSize, total);
+  const countLine = total === 0 ? '0 workspaces' : pageCount > 1
+    ? `${rangeStart}–${rangeEnd} of ${total} workspaces`
+    : `${total} ${total === 1 ? 'workspace' : 'workspaces'}`;
 
   function openScan(workspace: Workspace, profile: string) { setPendingScan({ workspace, profile }); }
 
@@ -92,17 +123,18 @@ export function WorkspacesPage({ go, onAdd, notify }: { go: (r: Route) => void; 
 
   const addPrimary = <Button size="sm" onClick={onAdd}><Plus aria-hidden="true" />Add workspace</Button>;
 
+  const onSortHeader = (key: WorkspaceSortKey) => setSort((current) => (current.key === key ? { key, dir: current.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: firstClickDir[key] }));
+
   return (
     <div className="page page-workspaces">
       <PageHeader
         title="Workspaces"
-        actions={workspaces.length ? addPrimary : undefined}
+        actions={total > 0 ? addPrimary : undefined}
       />
-      {state.loading ? <SkeletonTable rows={8} cols={6} /> : state.error ? <ErrorPanel error={state.error} retry={state.reload} /> : !workspaces.length ? (
-        <><Empty title="No workspaces yet" icon={<FolderIcon />} action={addPrimary}>Add a project folder to scan it for security findings. Scan history stays on this computer. Some analyzers query advisory services or download tools; review network use before starting.</Empty><WorkspaceTemplates onUseTemplate={onAdd} /></>
+      {state.loading ? <SkeletonTable rows={8} cols={6} /> : state.error ? <ErrorPanel error={state.error} retry={state.reload} /> : !total && !hasFilter ? (
+        <><Empty title="No workspaces yet" icon={<FolderIcon />} action={addPrimary}>Add a project folder to scan it for security findings. Scan history stays on this computer.</Empty><WorkspaceTemplates onUseTemplate={onAdd} /></>
       ) : (
         <>
-          <WorkspacesSummary workspaces={workspaces} />
           <div className="toolbar-row ws-toolbar">
             <div className="toolbar-filters">
               <Input type="search" aria-label="Search workspaces" placeholder="Search workspaces…" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setSearch(''); }} className="ws-filter-search w-44 sm:w-56" />
@@ -111,25 +143,36 @@ export function WorkspacesPage({ go, onAdd, notify }: { go: (r: Route) => void; 
             </div>
             <span className="toolbar-meta ws-count tabular-nums" role="status">{countLine}</span>
           </div>
-          {visibleWorkspaces.length ? (
+          {workspaces.length ? (
+            <>
             <div className="table-wrap ws-table-wrap">
               <table className="table-dense ws-table rtable">
                 <caption className="sr-only">Registered workspaces with languages, risk grade, findings, and last scan</caption>
                 <thead>
                   <tr>
-                    <SortHeader label="Workspace" sortKey="name" sort={sort} onSort={(key) => setSort((current) => current.key === key ? { key, dir: current.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: firstClickDir[key] })} />
+                    <SortHeader label="Workspace" sortKey="name" sort={sort} onSort={onSortHeader} />
                     <th scope="col">Languages</th>
                     <th scope="col">Risk</th>
-                    <SortHeader label="Findings" sortKey="findings" sort={sort} onSort={(key) => setSort((current) => current.key === key ? { key, dir: current.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: firstClickDir[key] })} />
-                    <SortHeader label="Last scan" sortKey="last_scan" sort={sort} onSort={(key) => setSort((current) => current.key === key ? { key, dir: current.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: firstClickDir[key] })} />
+                    <SortHeader label="Findings" sortKey="findings" sort={sort} onSort={onSortHeader} />
+                    <SortHeader label="Last scan" sortKey="last_scan" sort={sort} onSort={onSortHeader} />
                     <th scope="col"><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {visibleWorkspaces.map((workspace) => <WorkspaceRow key={workspace.id} workspace={workspace} go={go} onScan={openScan} onRemove={setRemoveTarget} />)}
+                  {workspaces.map((workspace) => <WorkspaceRow key={workspace.id} workspace={workspace} go={go} onScan={openScan} onRemove={setRemoveTarget} />)}
                 </tbody>
               </table>
             </div>
+            {pageCount > 1 && (
+              <footer className="toolbar-row ws-toolbar mt-4 justify-between">
+                <span className="text-sm text-[var(--color-ink-muted)] tabular-nums">Page {page} of {pageCount}</span>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Previous</Button>
+                  <Button variant="outline" size="sm" disabled={page >= pageCount} onClick={() => setPage((p) => Math.min(pageCount, p + 1))}>Next</Button>
+                </div>
+              </footer>
+            )}
+            </>
           ) : debouncedSearch ? <Empty title={`No workspaces match “${debouncedSearch}”`} icon={<FolderIcon />} action={<Button variant="outline" size="sm" onClick={() => setSearch('')}>Clear search</Button>}>No workspace name or path contains “{debouncedSearch}”.</Empty> : <Empty title="No workspaces match this tag" icon={<FolderIcon />}>No workspace tags contain “{tagNeedle}”. Clear the filter to see every project.</Empty>}
         </>
       )}
@@ -316,20 +359,3 @@ function WorkspaceRow({ workspace, go, onScan, onRemove }: { workspace: Workspac
   );
 }
 
-/** Fleet summary above the table: how many folders, how many graded, and the
- *  open findings mix across every workspace's latest finished scan. */
-function WorkspacesSummary({ workspaces }: { workspaces: Workspace[] }) {
-  const graded = workspaces.map(gradedScan).filter((scan): scan is Scan => Boolean(scan));
-  const sum = (key: 'critical_count' | 'high_count' | 'medium_count' | 'low_count' | 'info_count') => graded.reduce((n, scan) => n + (scan[key] ?? 0), 0);
-  const counts = { critical: sum('critical_count'), high: sum('high_count'), medium: sum('medium_count'), low: sum('low_count'), info: sum('info_count') };
-  const total = counts.critical + counts.high + counts.medium + counts.low + counts.info;
-  const severe = counts.critical + counts.high;
-  return (
-    <div className="stat-tiles ws-summary" aria-label="Workspace summary">
-      <StatTile icon={FolderGit2} value={workspaces.length} label="Tracked" />
-      <StatTile icon={FolderCheck} value={`${graded.length}/${workspaces.length}`} label="Graded" tone={graded.length === workspaces.length ? 'ok' : undefined} />
-      <StatTile icon={Bug} value={total} label="Open findings" extra={total ? <SeverityBar counts={counts} chips={false} height={6} /> : undefined} />
-      <StatTile icon={ShieldAlert} value={severe} label="Critical + high" tone={severe ? 'danger' : 'ok'} />
-    </div>
-  );
-}

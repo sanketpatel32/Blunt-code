@@ -87,6 +87,38 @@ func TestScanHistoryServesPagedEnvelope(t *testing.T) {
 	}
 }
 
+func TestScanHistoryDateFilterAddsTotalUnfiltered(t *testing.T) {
+	s := testServer(t)
+	ctx := context.Background()
+	work, err := s.db.CreateWorkspace(ctx, core.Workspace{RootPath: t.TempDir(), Name: "DateFilterTotal"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: "completed"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: "completed"}); err != nil {
+		t.Fatal(err)
+	}
+
+	var noFilter map[string]any
+	if err := json.Unmarshal(get(t, s, http.MethodGet, "/api/v1/workspaces/"+work.ID+"/scans?page=1&page_size=10").Body.Bytes(), &noFilter); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := noFilter["total_unfiltered"]; ok {
+		t.Fatalf("total_unfiltered must be absent without date filter: %v", noFilter)
+	}
+
+	var withFilter map[string]any
+	q := "/api/v1/workspaces/" + work.ID + "/scans?page=1&page_size=10&date_from=2000-01-01"
+	if err := json.Unmarshal(get(t, s, http.MethodGet, q).Body.Bytes(), &withFilter); err != nil {
+		t.Fatal(err)
+	}
+	if withFilter["total_unfiltered"] != float64(2) || withFilter["total"] != float64(2) {
+		t.Fatalf("expected total_unfiltered and total both 2, got %#v", withFilter)
+	}
+}
+
 // TestScanDetailCarriesDurationAndComparisonCounts pins the single-scan
 // additions: duration_ms computed from the stored timestamps, and the
 // new/fixed pair computed like the report comparison (previous finding gone

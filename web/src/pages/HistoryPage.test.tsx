@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import type { Route } from '../lib/router';
 import type { Finding, Scan } from '../types';
-import { HistoryPage, historyDateBands, HistoryTable } from './HistoryPage';
+import { HistoryPage, historyDateBands, HistoryTable, scanMatchesDateRange } from './HistoryPage';
 
 function compareFinding(id: string): Finding {
   return { id, analyzer_id: 'biome', severity: 'medium', category: 'maintainability', title: `Finding ${id}`, message: 'Something to fix.', relative_path: 'src/a.ts', start_line: 3 };
@@ -489,13 +489,35 @@ describe('HistoryPage', () => {
 
   function mockPages(pages: Scan[][], total: number) {
     vi.mocked(api.workspace).mockResolvedValue({ id: 'ws-1', name: 'Example API', root_path: 'C:\\code\\example-api' });
-    vi.mocked(api.scansPage).mockImplementation(async (_id: string, page: number) => ({
-      items: pages[page - 1] ?? [],
-      total,
-      page,
-      page_size: 6,
-      has_next: page < pages.length,
-    }));
+    vi.mocked(api.scansPage).mockImplementation(async (_id: string, page: number, pageSize: number, q?: { date_from?: string; date_to?: string }) => {
+      const hasDate = !!(q?.date_from || q?.date_to);
+      const flat = pages.flat();
+      const workspaceTotal = total;
+      if (!hasDate) {
+        const items = pages[page - 1] ?? [];
+        return {
+          items,
+          total: workspaceTotal,
+          page,
+          page_size: pageSize,
+          has_next: (page - 1) * pageSize + items.length < workspaceTotal,
+        };
+      }
+      const pool = flat.filter((s) => scanMatchesDateRange(s, q?.date_from, q?.date_to));
+      const t = pool.length;
+      const start = (page - 1) * pageSize;
+      const items = pool.slice(start, start + pageSize);
+      return {
+        items,
+        total: t,
+        page,
+        page_size: pageSize,
+        has_next: start + items.length < t,
+        total_unfiltered: flat.length,
+        ...(q?.date_from ? { date_from: q.date_from } : {}),
+        ...(q?.date_to ? { date_to: q.date_to } : {}),
+      };
+    });
   }
 
   async function renderPage() {
@@ -521,7 +543,7 @@ describe('HistoryPage', () => {
     mockPages([Array.from({ length: 6 }, (_, i) => offRange(`a${i}`, 10 + i)), Array.from({ length: 6 }, (_, i) => offRange(`b${i}`, 20 + i)), [offRange('c0', 28)]], 13);
     window.history.replaceState(null, '', '/workspaces/ws-1/scans?page=3&sort=asc');
     const host = await renderPage();
-    expect(api.scansPage).toHaveBeenCalledWith('ws-1', 3, 6);
+    expect(api.scansPage).toHaveBeenCalledWith('ws-1', 3, 6, undefined);
     expect(host.querySelector('output')!.textContent).toBe('Page 3 of 3');
     const [previous] = [...host.querySelectorAll<HTMLButtonElement>('.history-pagination button')];
     await act(async () => { previous!.click(); });
@@ -530,7 +552,7 @@ describe('HistoryPage', () => {
     expect(host.querySelector('output')!.textContent).toBe('Page 2 of 3');
   });
 
-  it('walks every server page while a date filter is active; the toolbar count is the only place totals repeat', async () => {
+  it('uses server-side date bounds and paging; the toolbar count is the only place totals repeat', async () => {
     mockPages([
       [onAug29('a1'), offRange('x1', 10), onAug29('a2'), offRange('x2', 11), offRange('x3', 12), offRange('x4', 13)],
       [offRange('x5', 14), onAug29('a3')],
@@ -546,11 +568,11 @@ describe('HistoryPage', () => {
     });
     await act(async () => {});
 
-    // Match on page 2 was invisible before; the walk must have fetched it.
-    expect(api.scansPage).toHaveBeenCalledWith('ws-1', 2, 6);
+    expect(api.scansPage).toHaveBeenCalledWith('ws-1', 1, 6, { date_from: '2026-08-29' });
     expect(dataRows(host)).toHaveLength(3);
     expect(host.querySelector('.history-count')!.textContent).toBe('3 of 8 scans');
-    expect(host.querySelector('.history-pagination')).toBeNull(); // filtered mode shows every match, no page controls
+    expect(host.querySelector('output')!.textContent).toBe('Page 1 of 1');
+    expect(host.querySelector('.history-pagination')).not.toBeNull();
   });
 
   it('reports the reader\'s position in the history, not just its size', async () => {

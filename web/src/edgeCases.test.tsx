@@ -68,9 +68,9 @@ afterEach(async () => {
 describe('hostile API fixtures', () => {
   it('HomePage survives the backend-empty scans payload (null scans/summary)', async () => {
     const fetchMock = routeMock([
-      ['/api/v1/scans', { scans: null, total: 0, summary: null }],
+      [/^\/api\/v1\/scans/, { scans: null, total: 0, summary: null }],
       ['/api/v1/tools', { tools: null }],
-      ['/api/v1/workspaces', { workspaces: null }],
+      [/^\/api\/v1\/workspaces(?:\?|$)/, { workspaces: null }],
     ]);
     const host = await renderAt('/', fetchMock);
     expectClean(host);
@@ -82,9 +82,10 @@ describe('hostile API fixtures', () => {
 
   it('HomePage renders zeros, never NaN, for a summary with missing fields', async () => {
     const fetchMock = routeMock([
-      ['/api/v1/scans', { scans: [{ id: 'scan-1', workspace_id: 'ws-1', state: 'running' }], total: 1, summary: { active_scans: 1 } }],
+      [/^\/api\/v1\/scans/, { scans: [{ id: 'scan-1', workspace_id: 'ws-1', state: 'running' }], total: 1, summary: { active_scans: 1 } }],
       ['/api/v1/tools', { items: [] }],
-      ['/api/v1/workspaces', { items: [] }],
+      [/^\/api\/v1\/workspaces(?:\?|$)/, { items: [], total: 0, page: 1, page_size: 100, has_next: false }],
+      ['/api/v1/stats', { workspaces: 0, scans: { total: 0, completed: 0, running: 1 }, findings: { severity: { critical: 0, high: 0, medium: 0, low: 0, info: 0 }, total: 0 }, suppressions: 0, scans_by_day: Array.from({ length: 7 }, (_, i) => ({ date: `2026-01-${i + 1}`, total: 0, completed: 0 })), generated_at: '2026-01-07T12:00:00Z' }],
     ]);
     const host = await renderAt('/', fetchMock);
     expectClean(host);
@@ -95,9 +96,10 @@ describe('hostile API fixtures', () => {
 
   it('HomePage survives feed rows with invalid dates, missing counts, unknown states', async () => {
     const fetchMock = routeMock([
-      ['/api/v1/scans', { scans: [{ id: 'scan-x', workspace_id: 'ws-1', workspace_name: '', state: 'archiving_artifacts', started_at: 'not-a-date', finished_at: 'not-a-date' }], total: 1, summary: null }],
-      ['/api/v1/workspaces', { items: [{ id: 'ws-1', name: '', root_path: '', languages: null, latest_scan: null }] }],
+      [/^\/api\/v1\/scans/, { scans: [{ id: 'scan-x', workspace_id: 'ws-1', workspace_name: '', state: 'archiving_artifacts', started_at: 'not-a-date', finished_at: 'not-a-date' }], total: 1, summary: null }],
+      [/^\/api\/v1\/workspaces(?:\?|$)/, { items: [{ id: 'ws-1', name: '', root_path: '', languages: null, latest_scan: null }], total: 1, page: 1, page_size: 100, has_next: false }],
       ['/api/v1/tools', { items: [] }],
+      ['/api/v1/stats', { workspaces: 1, scans: { total: 1, completed: 0, running: 0 }, findings: { severity: { critical: 0, high: 0, medium: 0, low: 0, info: 0 }, total: 0 }, suppressions: 0, scans_by_day: Array.from({ length: 7 }, (_, i) => ({ date: `2026-01-${i + 1}`, total: 0, completed: 0 })), generated_at: '2026-01-07T12:00:00Z' }],
     ]);
     const host = await renderAt('/', fetchMock);
     expectClean(host);
@@ -107,10 +109,10 @@ describe('hostile API fixtures', () => {
 
   it('WorkspacesPage survives null latest_scan/languages and empty name/path', async () => {
     const fetchMock = routeMock([
-      ['/api/v1/workspaces', { items: [
+      [/^\/api\/v1\/workspaces(?:\?|$)/, { items: [
         { id: 'ws-1', name: '', root_path: '', languages: null, latest_scan: null },
         { id: 'ws-2', name: 'Hostile', root_path: 'C:\\hostile', languages: [], latest_scan: { id: 'scan-2', state: 'halfway_done', analyzer_runs: null, duration_ms: null, finished_at: 'not-a-date', started_at: 'not-a-date', error_summary: null } },
-      ] }],
+      ], total: 2, page: 1, page_size: 25, has_next: false }],
     ]);
     const host = await renderAt('/workspaces', fetchMock);
     expectClean(host);
