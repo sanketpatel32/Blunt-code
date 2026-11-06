@@ -15,6 +15,16 @@ function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
+/** `GET /api/v1/workspaces?...` list (Home + Workspaces pages), not `POST` nor `/workspaces/{id}`. */
+function isWorkspacesListGET(input: string, init?: RequestInit): boolean {
+  if (init?.method && init.method !== 'GET') return false;
+  return input.split('?')[0] === '/api/v1/workspaces';
+}
+
+function workspacesListPage(items: unknown[]) {
+  return { items, total: items.length, page: 1, page_size: 100, has_next: false };
+}
+
 async function render(fetchMock: ReturnType<typeof vi.fn>) {
   vi.stubGlobal('fetch', fetchMock);
   const host = document.createElement('div');
@@ -42,8 +52,26 @@ describe('Blunt Code home', () => {
   afterEach(async () => { await act(async () => { root?.unmount(); }); document.body.replaceChildren(); vi.unstubAllGlobals(); });
 
   it('renders local workspaces returned by the API', async () => {
-    const fetchMock = vi.fn((input: string) => {
-      if (input.endsWith('/workspaces')) return Promise.resolve(json({ items: [{ id: 'ws-1', name: 'Example API', root_path: 'C:\\code\\example-api', languages: ['python', 'typescript'], latest_scan: { id: 'scan-1', state: 'completed', finished_at: '2026-08-12T00:00:00Z', total_findings: 8 } }] }));
+    const fetchMock = vi.fn((input: string, init?: RequestInit) => {
+      if (isWorkspacesListGET(input, init)) return Promise.resolve(json(workspacesListPage([{ id: 'ws-1', name: 'Example API', root_path: 'C:\\code\\example-api', languages: ['python', 'typescript'], latest_scan: { id: 'scan-1', state: 'completed', finished_at: '2026-08-12T00:00:00Z', total_findings: 8 } }])));
+      if (input.split('?')[0] === '/api/v1/scans' && (!init?.method || init.method === 'GET')) {
+        return Promise.resolve(json({
+          scans: [{ id: 'scan-1', workspace_id: 'ws-1', workspace_name: 'Example API', state: 'completed', finished_at: '2026-08-12T00:00:00Z', total_findings: 8, critical_count: 0, high_count: 0, medium_count: 0, low_count: 0 }],
+          total: 1,
+          has_more: false,
+          summary: { workspaces_total: 1, workspaces_scanned: 1, scans_total: 1, scans_last_7d: 0, active_scans: 0, total_findings: 8, critical_count: 0, high_count: 0, medium_count: 0, low_count: 0, info_count: 0 },
+        }));
+      }
+      if (input === '/api/v1/stats') {
+        return Promise.resolve(json({
+          workspaces: 1,
+          scans: { total: 1, completed: 1, running: 0 },
+          findings: { severity: { critical: 0, high: 0, medium: 0, low: 0, info: 0 }, total: 8 },
+          suppressions: 0,
+          scans_by_day: Array.from({ length: 7 }, (_, i) => ({ date: `2026-01-${i + 1}`, total: 0, completed: 0 })),
+          generated_at: '2026-01-07T12:00:00Z',
+        }));
+      }
       if (input.endsWith('/tools')) return Promise.resolve(json({ items: [{ id: 'ruff', ready: true, can_install: true }] }));
       return Promise.resolve(json({}));
     });
@@ -55,7 +83,7 @@ describe('Blunt Code home', () => {
     expect(host.textContent).toContain('TypeScript');
     expect(host.textContent).toContain('8 findings');
     expect(host.textContent).not.toContain('No analysis yet');
-    expect(host.textContent).toContain('1 of 1 optional tools ready');
+    expect(host.textContent).toContain('1/1 ready');
     expect(host.querySelector('.ledger-list')).not.toBeNull();
     expect(host.textContent).toContain('Completed');
     // Remove is a destructive action: it lives behind the ledger row's overflow
@@ -74,14 +102,37 @@ describe('Blunt Code home', () => {
   });
 
   it('shows a useful empty state when no workspaces exist', async () => {
-    const fetchMock = vi.fn((input: string) => Promise.resolve(json(input.endsWith('/workspaces') ? { items: [] } : { items: [] })));
+    const emptyStats = {
+      workspaces: 0,
+      scanned_workspaces: 0,
+      partial_assessments: 0,
+      last_assessment_at: '',
+      scans: { total: 0, completed: 0, running: 0 },
+      findings: { severity: { critical: 0, high: 0, medium: 0, low: 0, info: 0 }, total: 0 },
+      suppressions: 0,
+      scans_by_day: Array.from({ length: 7 }, (_, i) => ({ date: `2026-01-${i + 1}`, total: 0, completed: 0 })),
+      generated_at: '2026-01-07T12:00:00Z',
+    };
+    const fetchMock = vi.fn((input: string, init?: RequestInit) => {
+      if (isWorkspacesListGET(input, init)) return Promise.resolve(json(workspacesListPage([])));
+      if (input === '/api/v1/stats') return Promise.resolve(json(emptyStats));
+      if (input.split('?')[0] === '/api/v1/scans' && (!init?.method || init.method === 'GET')) {
+        return Promise.resolve(json({
+          scans: [],
+          total: 0,
+          has_more: false,
+          summary: { workspaces_total: 0, workspaces_scanned: 0, scans_total: 0, scans_last_7d: 0, active_scans: 0, total_findings: 0, critical_count: 0, high_count: 0, medium_count: 0, low_count: 0, info_count: 0 },
+        }));
+      }
+      return Promise.resolve(json({ items: [] }));
+    });
     const host = await render(fetchMock);
     expect(host.textContent).toContain('Point Blunt Code at a project');
     expect(host.textContent).toContain('Add your first workspace');
   });
 
   it('shows the backend error without exposing implementation detail', async () => {
-    const fetchMock = vi.fn((input: string) => Promise.resolve(input.endsWith('/workspaces')
+    const fetchMock = vi.fn((input: string, init?: RequestInit) => Promise.resolve(isWorkspacesListGET(input, init)
       ? json({ error: { code: 'WORKSPACE_PATH_INACCESSIBLE', message: 'Workspace directory is unavailable.' } }, 422)
       : json({ items: [] })));
     const host = await render(fetchMock);

@@ -121,6 +121,9 @@ func TestGlobalStatsRollsUpLatestCompletedScanPerWorkspace(t *testing.T) {
 	if !maps.Equal(stats.RiskGrades, wantGrades) {
 		t.Fatalf("risk grades = %#v, want %#v", stats.RiskGrades, wantGrades)
 	}
+	if stats.ScannedWorkspaces != 1 || stats.PartialAssessments != 0 {
+		t.Fatalf("scanned/partial counts: %#v", stats)
+	}
 
 	// The rollup must stay in lockstep with the dashboard summary's severity
 	// totals; the two endpoints share one notion of "current" findings.
@@ -150,7 +153,7 @@ func TestGlobalStatsOnEmptyDatabaseReturnsZeroValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stats.Workspaces != 0 || stats.Scans != (GlobalScans{}) || stats.Findings != (GlobalFindings{}) || stats.Suppressions != 0 {
+	if stats.Workspaces != 0 || stats.Scans != (GlobalScans{}) || stats.Findings != (GlobalFindings{}) || stats.Suppressions != 0 || stats.ScannedWorkspaces != 0 || stats.PartialAssessments != 0 || stats.LastAssessmentAt != "" {
 		t.Fatalf("empty database counters must be zero, got %#v", stats)
 	}
 	if !maps.Equal(stats.RiskGrades, map[string]int{"A": 0, "B": 0, "C": 0, "D": 0}) {

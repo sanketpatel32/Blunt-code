@@ -171,7 +171,7 @@ describe('SearchPage', () => {
     const calls: string[] = [];
     vi.stubGlobal('fetch', vi.fn((input: string) => {
       calls.push(String(input));
-      if (String(input).endsWith('/workspaces')) return Promise.resolve(json([{ id: 'ws-uuid-77', name: 'Alpha', root_path: 'C:\\alpha' }]));
+      if (String(input).split('?')[0] === '/api/v1/workspaces') return Promise.resolve(json([{ id: 'ws-uuid-77', name: 'Alpha', root_path: 'C:\\alpha' }]));
       return Promise.resolve(json({ items: [], total: 0, page: 1, page_size: 25, has_next: false }));
     }));
     const host = document.createElement('div');

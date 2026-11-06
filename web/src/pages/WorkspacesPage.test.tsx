@@ -26,7 +26,30 @@ function json(body: unknown) {
   return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }
 
-const fetchMock = vi.fn((input: string) => input.endsWith('/workspaces') ? Promise.resolve(json({ workspaces: fixtures })) : Promise.resolve(json([])));
+/** Mirrors GET /workspaces?sort=&order=&tag=&search=&page= so UI tests exercise server-driven list behavior. */
+const fetchMock = vi.fn((input: string) => {
+  if (String(input).split('?')[0] !== '/api/v1/workspaces') return Promise.resolve(json([]));
+  const u = new URL(input, 'http://local.test');
+  let list = [...fixtures];
+  const tagNeedle = u.searchParams.get('tag')?.trim() ?? '';
+  if (tagNeedle) list = filterWorkspacesByTag(list, tagNeedle);
+  const searchNeedle = u.searchParams.get('search')?.trim().toLowerCase() ?? '';
+  if (searchNeedle) {
+    list = list.filter((w) => {
+      if ((w.name ?? '').toLowerCase().includes(searchNeedle)) return true;
+      return (w.tags ?? []).some((t) => t.toLowerCase().includes(searchNeedle));
+    });
+  }
+  const sortRaw = u.searchParams.get('sort') ?? 'last_opened';
+  const order = u.searchParams.get('order') === 'asc' ? 'asc' : 'desc';
+  const sortKey = sortRaw === 'name' ? 'name' : sortRaw === 'findings' ? 'findings' : 'last_scan';
+  list = sortWorkspaces(list, sortKey, order);
+  const page = Math.max(1, Number(u.searchParams.get('page') ?? '1'));
+  const pageSize = Math.max(1, Number(u.searchParams.get('page_size') ?? '25'));
+  const total = list.length;
+  const items = list.slice((page - 1) * pageSize, page * pageSize);
+  return Promise.resolve(json({ items, total, page, page_size: pageSize, has_next: page * pageSize < total }));
+});
 
 async function renderPage() {
   vi.stubGlobal('fetch', fetchMock);
@@ -140,7 +163,8 @@ describe('WorkspacesPage row tags and filter (Loop W2)', () => {
     expect(rowNames(host)).toEqual(['beta', 'Alpha', 'Gamma']); // debounce still pending
     await act(async () => { vi.advanceTimersByTime(100); });
     expect(rowNames(host)).toEqual(['beta', 'Alpha']); // both carry a *windows* tag (case-insensitive)
-    expect(host.querySelector('.ws-count')?.textContent).toBe('2 of 3 workspaces shown');
+    // Server-paged list: toolbar uses the filtered total only (not "N of M" vs full corpus).
+    expect(host.querySelector('.ws-count')?.textContent).toBe('2 workspaces');
 
     await typeTagQuery(host, '');
     expect(rowNames(host)).toEqual(['beta', 'Alpha', 'Gamma']); // clearing bypasses the debounce

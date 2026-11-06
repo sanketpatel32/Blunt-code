@@ -302,6 +302,8 @@ Loopback only (`127.0.0.1`), no account, no telemetry. Open folders from **Setti
 | **Network** | Online only first run (tools download). Offline after |
 | **Deps** | None — no global Python/Java/Node required |
 
+Cross-building or running pieces on Linux/macOS is possible for development, but **full scans, managed analyzers, and the official verify script target Windows** — see [CONTRIBUTING.md](CONTRIBUTING.md#linux-and-non-windows-development) for what to run where and how to interpret Linux `go test` vs. Windows verification.
+
 ---
 
 ## 📚 Documentation

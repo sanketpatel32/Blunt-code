@@ -98,7 +98,20 @@ export interface ScanSummary {
 export interface RecentScansResponse {
   scans: RecentScanItem[];
   total: number;
+  /** Present when the request used limit with offset (paged activity feed). */
+  limit?: number;
+  offset?: number;
+  has_more?: boolean;
   summary?: ScanSummary;
+}
+
+/** Server-paged workspace list (`GET /workspaces?page=…`). */
+export interface WorkspaceListPage {
+  items: Workspace[];
+  total: number;
+  page: number;
+  page_size: number;
+  has_next: boolean;
 }
 
 /** One server-paged slice of a workspace's scan history (`GET /workspaces/{id}/scans?page=…`). */
@@ -108,6 +121,10 @@ export interface ScanPage {
   page: number;
   page_size: number;
   has_next: boolean;
+  /** When date_from/date_to are set, total scans in the workspace ignoring the date filter. */
+  total_unfiltered?: number;
+  date_from?: string;
+  date_to?: string;
 }
 
 /** A finding from the cross-workspace search, enriched with its origin identity so results can link back to their report. */
@@ -160,6 +177,12 @@ export interface StatsTools {
 /** Global overview from GET /api/v1/stats. Findings roll up the latest completed scan per workspace (rescanning one project never double-counts it), `tools` is omitted when unwired, and `generated_at` is the RFC3339 snapshot time. */
 export interface GlobalStats {
   workspaces: number;
+  /** Workspaces with at least one completed or completed_with_warnings scan (fleet-wide; not limited to one UI page). */
+  scanned_workspaces?: number;
+  /** Workspaces whose latest producing scan has incomplete analyzer coverage. */
+  partial_assessments?: number;
+  /** Newest assessment instant among latest producing scans per workspace (RFC3339). */
+  last_assessment_at?: string;
   scans: { total: number; completed: number; running: number };
   findings: { severity: Record<Severity, number>; total: number };
   suppressions: number;

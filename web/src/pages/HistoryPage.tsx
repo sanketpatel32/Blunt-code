@@ -22,9 +22,6 @@ function useDateFilter() {
   return { from, to, setFrom, setTo, hasFilter: !!from || !!to };
 }
 
-/** Upper bound on server pages walked for a date-filtered view (50 × page_size rows); guards the loop if a backend ever keeps serving full pages. */
-const MAX_FILTER_PAGES = 50;
-
 /** Reads the initial page from `?page=N` so a deep link or reload restores the user's place. */
 function initialPageFromUrl(): number {
   const requested = Number(new URLSearchParams(window.location.search).get('page'));
@@ -63,8 +60,6 @@ export function isComparableScan(scan: Scan): boolean {
   return scan.state === 'completed' || scan.state === 'completed_with_warnings' || scan.state === 'cancelled';
 }
 
-interface AllScansPages { items: Scan[]; total: number; }
-
 export function HistoryPage({ workspaceId, go }: { workspaceId: string; go: (r: Route) => void }) {
   const [page, setPage] = useState(initialPageFromUrl);
   const dateFilter = useDateFilter();
@@ -74,33 +69,14 @@ export function HistoryPage({ workspaceId, go }: { workspaceId: string; go: (r: 
   const [pair, setPair] = useState(initialCompareFromUrl);
   const [pendingPartial, setPendingPartial] = useState<Scan>();
   const workspace = useLoad(() => api.workspace(workspaceId), [workspaceId]);
-  const state = useLoad(() => api.scansPage(workspaceId, page, historyPageSize), [workspaceId, page]);
-  // A date filter must see the WHOLE history, not just the six rows of the
-  // current server page — otherwise it silently misses matches living on pages
-  // the user cannot see. While a filter is active, walk every server page
-  // (capped) and filter the complete set client-side; when it clears, the
-  // regular server-paged `state` view takes over again.
-  const allPages = useLoad(async (): Promise<AllScansPages> => {
-    if (!dateFilter.hasFilter) return { items: [], total: 0 };
-    const first = await api.scansPage(workspaceId, 1, historyPageSize);
-    const items = [...first.items];
-    let lastCount = first.items.length;
-    let pagesFetched = 1;
-    while (lastCount === historyPageSize && pagesFetched < MAX_FILTER_PAGES) {
-      pagesFetched += 1;
-      const next = await api.scansPage(workspaceId, pagesFetched, historyPageSize);
-      items.push(...next.items);
-      lastCount = next.items.length;
-    }
-    return { items, total: first.total };
-  }, [workspaceId, dateFilter.from, dateFilter.to]);
+  const dateOpts = dateFilter.hasFilter ? { date_from: dateFilter.from || undefined, date_to: dateFilter.to || undefined } : undefined;
+  const state = useLoad(() => api.scansPage(workspaceId, page, historyPageSize, dateOpts), [workspaceId, page, dateFilter.from, dateFilter.to]);
   const filtering = dateFilter.hasFilter;
-  const view = filtering ? allPages : state;
+  const view = state;
   // The toolbar count is the ONE place this screen reports "how many scans":
-  // with a filter active it reports MATCHES across the whole history ("3 of 8
-  // scans"); without one, the workspace total. No badge, no repeated chips.
-  const fullTotal = state.data?.total ?? state.data?.items?.length ?? 0;
-  const filteredTotal = filtering ? (allPages.data?.items ?? []).filter((s) => scanMatchesDateRange(s, dateFilter.from, dateFilter.to)).length : fullTotal;
+  // with a filter active it reports the filtered total vs workspace scan count ("3 of 8 scans").
+  const fullTotal = filtering ? (state.data?.total_unfiltered ?? state.data?.total ?? 0) : (state.data?.total ?? state.data?.items?.length ?? 0);
+  const filteredTotal = state.data?.total ?? state.data?.items?.length ?? 0;
   /* "17 scans" told the user the size of the history but nothing about where
      they were standing in it — with six rows on screen and "Page 1 of 3" in the
      footer, the two facts never reconciled, and the reader had to do the
@@ -160,11 +136,11 @@ export function HistoryPage({ workspaceId, go }: { workspaceId: string; go: (r: 
   // Scans already in hand (either table source) feed the strip's copy; the strip
   // fetches on its own only when the base scan lives on another server page.
   const knownScans = new Map<string, Scan>();
-  for (const scan of [...(state.data?.items ?? []), ...(allPages.data?.items ?? [])]) knownScans.set(scan.id, scan);
+  for (const scan of state.data?.items ?? []) knownScans.set(scan.id, scan);
   const compareSelecting = !!pair.a && !pair.b;
   // The visible way into compare (it used to live only in each row's overflow
   // menu): the two newest comparable scans on this page.
-  const comparable = (filtering ? allPages.data?.items : state.data?.items)?.filter((scan) => scan.state === 'completed' || scan.state === 'completed_with_warnings') ?? [];
+  const comparable = state.data?.items?.filter((scan) => scan.state === 'completed' || scan.state === 'completed_with_warnings') ?? [];
   const latestPair = comparable.length >= 2 ? { a: comparable[0].id, b: comparable[1].id } : undefined;
   const stripBaseId = pendingPartial?.id ?? pair.a;
   const stripBaseScan = pendingPartial ?? (pair.a ? knownScans.get(pair.a) : undefined);
@@ -178,7 +154,7 @@ export function HistoryPage({ workspaceId, go }: { workspaceId: string; go: (r: 
           you are inside it. */}
       <div className="workspace-page-body">
         <PageHeader title={workspace.data?.name ? `${workspace.data.name} — History` : 'Scan history'} actions={!pair.a && latestPair ? <button type="button" className="button secondary" onClick={() => { setPair(latestPair); syncCompareParams(latestPair.a, latestPair.b); }}>Compare latest two scans</button> : undefined} />
-        <HistoryTiles workspaceId={workspaceId} total={state.data?.total} />
+        <HistoryTiles workspaceId={workspaceId} total={filtering ? (state.data?.total_unfiltered ?? state.data?.total) : state.data?.total} />
         <div className="toolbar-row history-toolbar">
           <div className="toolbar-filters">
             {/* Loop 150 · the hand-drawn calendar SVG is gone.
@@ -203,9 +179,7 @@ export function HistoryPage({ workspaceId, go }: { workspaceId: string; go: (r: 
         </div>
         {(pendingPartial || compareSelecting) && stripBaseId && <CompareStrip baseId={stripBaseId} baseScan={stripBaseScan} pendingScan={pendingPartial} onCancel={cancelCompare} onAccept={acceptPartial} />}
         {pair.a && pair.b && <ComparePanel aId={pair.a} bId={pair.b} onClose={cancelCompare} />}
-        {view.loading ? <SkeletonTable rows={6} cols={5} /> : view.error ? <ErrorPanel error={view.error} retry={view.reload} actions={view.error.includes('NOT_FOUND') && <button type="button" className="button secondary" onClick={() => go({ page: 'workspaces' })}>Back to Workspaces</button>} /> : filtering
-          ? <HistoryTable scans={allPages.data?.items ?? []} go={go} paging={{ page: 1, pageSize: historyPageSize, total: allPages.data?.total ?? 0, hasNext: false, onPage: () => {}, filtered: true }} dateFrom={dateFilter.from} dateTo={dateFilter.to} {...tableCompareProps} />
-          : <HistoryTable scans={state.data?.items ?? []} go={go} paging={{ page, pageSize: historyPageSize, total: state.data?.total ?? 0, hasNext: state.data?.has_next ?? false, onPage: gotoPage }} dateFrom={dateFilter.from} dateTo={dateFilter.to} {...tableCompareProps} />}
+        {view.loading ? <SkeletonTable rows={6} cols={5} /> : view.error ? <ErrorPanel error={view.error} retry={view.reload} actions={view.error.includes('NOT_FOUND') && <button type="button" className="button secondary" onClick={() => go({ page: 'workspaces' })}>Back to Workspaces</button>} /> : <HistoryTable scans={state.data?.items ?? []} go={go} paging={{ page, pageSize: historyPageSize, total: state.data?.total ?? 0, hasNext: state.data?.has_next ?? false, onPage: gotoPage }} serverFiltered={filtering} dateFrom={dateFilter.from} dateTo={dateFilter.to} {...tableCompareProps} />}
       </div>
     </div>
   );
@@ -238,8 +212,6 @@ export interface HistoryPaging {
   total: number;
   hasNext: boolean;
   onPage: (page: number) => void;
-  /** True when `scans` already spans every server page with the date filter applied across all of them: page controls hide and the count line reports the filtered range against the full total. */
-  filtered?: boolean;
 }
 
 const historyPageSize = 6;
@@ -412,7 +384,7 @@ function scanRowMenuItems(scan: Scan, compareBaseId?: string, onComparePick?: (s
   return items;
 }
 
-export function HistoryTable({ scans, go, paging, dateFrom, dateTo, compareBaseId, onComparePick }: { scans: Scan[]; go: (r: Route) => void; paging?: HistoryPaging; dateFrom?: string; dateTo?: string; compareBaseId?: string; onComparePick?: (scan: Scan) => void }) {
+export function HistoryTable({ scans, go, paging, serverFiltered, dateFrom, dateTo, compareBaseId, onComparePick }: { scans: Scan[]; go: (r: Route) => void; paging?: HistoryPaging; /** When true, rows are already date-filtered by the server; skip client re-filtering. */ serverFiltered?: boolean; dateFrom?: string; dateTo?: string; compareBaseId?: string; onComparePick?: (scan: Scan) => void }) {
   const [clientPage, setClientPage] = useState(0);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const toggleExpanded = (id: string) => setExpanded((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
@@ -430,20 +402,16 @@ export function HistoryTable({ scans, go, paging, dateFrom, dateTo, compareBaseI
     window.addEventListener('resize', update);
     return () => { el.removeEventListener('scroll', update); window.removeEventListener('resize', update); };
   }, [scans]);
-  // Filtered mode: `scans` spans every server page and paging.filtered is set —
-  // show every match with no page controls, and let the toolbar count report
-  // the filtered range against the full workspace total.
-  const filteredMode = !!paging?.filtered;
-  const serverMode = !!paging && !filteredMode;
+  const serverMode = !!paging;
   const pageSize = serverMode ? paging!.pageSize : historyPageSize;
-  const pageCount = filteredMode ? 1 : serverMode ? Math.max(1, Math.ceil((paging!.total || scans.length) / paging!.pageSize)) : Math.max(1, Math.ceil(scans.length / historyPageSize));
-  const currentPage = filteredMode ? 0 : serverMode ? Math.min(paging!.page, pageCount) : Math.min(clientPage, pageCount - 1);
-  const first = filteredMode ? 0 : serverMode ? (paging!.page - 1) * paging!.pageSize : currentPage * historyPageSize;
-  const dateFiltered = scans.filter((s) => scanMatchesDateRange(s, dateFrom, dateTo));
-  const visibleScans = filteredMode || serverMode ? dateFiltered : dateFiltered.slice(first, first + historyPageSize);
+  const pageCount = serverMode ? Math.max(1, Math.ceil((paging!.total || scans.length) / paging!.pageSize)) : Math.max(1, Math.ceil(scans.length / historyPageSize));
+  const currentPage = serverMode ? Math.min(paging!.page, pageCount) : Math.min(clientPage, pageCount - 1);
+  const first = serverMode ? (paging!.page - 1) * paging!.pageSize : currentPage * historyPageSize;
+  const dateFiltered = serverFiltered ? scans : scans.filter((s) => scanMatchesDateRange(s, dateFrom, dateTo));
+  const visibleScans = serverMode ? dateFiltered : dateFiltered.slice(first, first + historyPageSize);
   const windowTotal = paging ? paging.total : scans.length;
-  const shownFrom = filteredMode ? (windowTotal ? 1 : 0) : windowTotal ? first + 1 : 0;
-  const shownTo = filteredMode ? dateFiltered.length : Math.min(first + pageSize, windowTotal);
+  const shownFrom = windowTotal ? first + 1 : 0;
+  const shownTo = Math.min(first + pageSize, windowTotal);
 
   const newestScanId = scans[0]?.id;
   useEffect(() => { if (!serverMode && newestScanId !== undefined) setClientPage(0); }, [newestScanId, serverMode]);
@@ -453,7 +421,7 @@ export function HistoryTable({ scans, go, paging, dateFrom, dateTo, compareBaseI
   // table with "Showing 0–0 of 0". (A transient over-range server page — empty
   // slice but total > 0 with no filters — keeps the pagination below; the page
   // resets itself to 1.)
-  if (dateFiltered.length === 0 && (dateFrom || dateTo)) return <Empty title="No scans match these dates" icon={<span style={{ display: 'grid', placeItems: 'center', width: 48, height: 48, color: 'var(--color-ink-faint)' }}><ScanIcon /></span>}>Try widening the range or clearing the date filters.</Empty>;
+  if ((dateFrom || dateTo) && (serverFiltered ? windowTotal === 0 : dateFiltered.length === 0)) return <Empty title="No scans match these dates" icon={<span style={{ display: 'grid', placeItems: 'center', width: 48, height: 48, color: 'var(--color-ink-faint)' }}><ScanIcon /></span>}>Try widening the range or clearing the date filters.</Empty>;
 
   return <><div style={{ position: 'relative' }}><div ref={tableWrapRef} className="table-wrap history-table-wrap history-timeline overflow-x-auto overscroll-x-contain rounded-[var(--radius-card)] border border-[var(--color-rule-faint)] bg-[var(--color-surface)] shadow-[var(--shadow-card)]"><table className="table-dense rtable"><caption className="sr-only">Scan history for this workspace</caption><thead className="sticky top-0 z-[1] bg-[var(--color-surface-muted)]"><tr><th scope="col">Date</th><th scope="col">Status</th><th scope="col">Findings</th><th scope="col">Duration</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead><tbody>{historyDateBands(visibleScans).map(({ band, scans: banded }) => <Fragment key={band}><tr className="history-band-row"><th className="history-band" colSpan={5} scope="colgroup" data-count={String(banded.length)} data-date={band}>{band}</th></tr>{banded.map((scan) => {
     const stateDisplay = scanStateDisplay(scan.state);
@@ -467,7 +435,7 @@ export function HistoryTable({ scans, go, paging, dateFrom, dateTo, compareBaseI
     const when = historyWhenLabel(stampValue, stampTime);
     const menuItems = scanRowMenuItems(scan, compareBaseId, onComparePick);
     return <Fragment key={scan.id}><tr className={[tone, isOpen ? 'is-expanded' : ''].filter(Boolean).join(' ') || undefined}><td title={preciseDate(stampValue)}><span className="history-date"><button type="button" className="history-disclose" aria-expanded={isOpen} aria-controls={`history-detail-${scan.id}`} aria-label={`${isOpen ? 'Hide' : 'Show'} details for the scan from ${relativeTime(stampValue)}`} onClick={() => toggleExpanded(scan.id)}><span className="disclose-arrow" aria-hidden="true">▸</span></button><span className="history-when"><span className="history-relative">{when.relative}</span>{when.absolute && <><span className="history-abs-sep" aria-hidden="true">·</span><span className="history-abs">{when.absolute}</span></>}</span></span></td><td data-label="Status"><div className="history-status"><Badge variant={stateDisplay.variant} className="whitespace-nowrap">{stateDisplay.label}</Badge>{scan.profile && <span className="badge profile-badge">{scan.profile}</span>}</div></td><td data-label="Findings"><FindingsCell scan={scan} /></td><td data-label="Duration">{compactDuration(scan.duration_ms)}</td><td className="rtable-actions"><div className="table-actions history-actions"><button type="button" className="text-button" onClick={() => go({ page: 'scan', id: scan.id })}>Open report</button>{compareBaseId === scan.id && <span className="compare-base-tag">Base scan</span>}<RowMenu label={`Actions for scan ${scan.id}`} items={menuItems} /></div></td></tr>{isOpen && <tr className="history-detail-row rtable-sub"><td colSpan={5}><div className="history-detail" id={`history-detail-${scan.id}`}><dl className="history-detail-meta"><div><dt>Started</dt><dd>{preciseDate(scan.started_at)}</dd></div><div><dt>Finished</dt><dd>{preciseDate(scan.finished_at)}</dd></div>{scan.profile && <div><dt>Profile</dt><dd>{scan.profile}</dd></div>}</dl>{scan.snapshot && <p className="history-coverage">Selected {scan.snapshot.selected_file_count ?? 0} of {scan.snapshot.candidate_file_count ?? 0} candidate files{skipCoverageSummary(scan.snapshot.skip_counts) && <>, skipped {skipCoverageSummary(scan.snapshot.skip_counts)}</>}{(scan.snapshot.exclusions?.length ?? 0) > 0 && <> · {scan.snapshot.exclusions!.length} exclusion{scan.snapshot.exclusions!.length === 1 ? '' : 's'} in effect</>}</p>}{scan.error_summary && <div className="inline-warning">Warning: {scan.error_summary}</div>}{runs.length > 0 && <ul className="history-analyzers">{runs.map((run) => <li key={run.analyzer_id}><span>{analyzerName(run.analyzer_id)}</span><span className={`state ${run.status}`}>{run.status.replaceAll('_', ' ')}</span></li>)}</ul>}</div></td></tr>}</Fragment>;
-  })}</Fragment>)}</tbody></table></div>{scrollCue && <div aria-hidden="true" style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: '2.25rem', pointerEvents: 'none', borderRadius: '0 var(--radius-card) var(--radius-card) 0', background: 'linear-gradient(to right, transparent, var(--color-surface))' }} />}</div>{!filteredMode && <nav className="history-pagination" aria-label="Scan history pagination">{!paging && <span className="history-pagination-count tabular-nums">Showing <strong>{shownFrom} to {shownTo}</strong> of <strong>{windowTotal}</strong> scans</span>}<div><button type="button" className="button secondary" onClick={() => serverMode ? paging!.onPage(paging!.page - 1) : setClientPage(currentPage - 1)} disabled={serverMode ? paging!.page <= 1 : currentPage === 0}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="14" height="14"><path d="M15 18 9 12l6-6" strokeLinecap="round" strokeLinejoin="round"/></svg>Previous</button><output aria-live="polite" className="tabular-nums">Page {serverMode ? paging!.page : currentPage + 1} of {pageCount}</output><button type="button" className="button secondary" onClick={() => serverMode ? paging!.onPage(paging!.page + 1) : setClientPage(currentPage + 1)} disabled={serverMode ? !paging!.hasNext : currentPage >= pageCount - 1}>Next<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="14" height="14"><path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round"/></svg></button></div></nav>}</>;
+  })}</Fragment>)}</tbody></table></div>{scrollCue && <div aria-hidden="true" style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: '2.25rem', pointerEvents: 'none', borderRadius: '0 var(--radius-card) var(--radius-card) 0', background: 'linear-gradient(to right, transparent, var(--color-surface))' }} />}</div><nav className="history-pagination" aria-label="Scan history pagination">{!paging && <span className="history-pagination-count tabular-nums">Showing <strong>{shownFrom} to {shownTo}</strong> of <strong>{windowTotal}</strong> scans</span>}<div><button type="button" className="button secondary" onClick={() => serverMode ? paging!.onPage(paging!.page - 1) : setClientPage(currentPage - 1)} disabled={serverMode ? paging!.page <= 1 : currentPage === 0}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="14" height="14"><path d="M15 18 9 12l6-6" strokeLinecap="round" strokeLinejoin="round"/></svg>Previous</button><output aria-live="polite" className="tabular-nums">Page {serverMode ? paging!.page : currentPage + 1} of {pageCount}</output><button type="button" className="button secondary" onClick={() => serverMode ? paging!.onPage(paging!.page + 1) : setClientPage(currentPage + 1)} disabled={serverMode ? !paging!.hasNext : currentPage >= pageCount - 1}>Next<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="14" height="14"><path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round"/></svg></button></div></nav></>;
 }
 
 /** Score trend at a glance: completed scans only (failed runs are not a score of 0). */

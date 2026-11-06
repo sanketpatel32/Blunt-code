@@ -87,16 +87,145 @@ function workspaceItem(overrides: Partial<Workspace> = {}): Workspace {
   };
 }
 
+/** Envelope for `api.workspacesPage` (Home dashboard ledger). */
+function workspacesPage(items: Workspace[], total?: number, statsFleet?: { scanned_workspaces: number; partial_assessments: number }) {
+  const t = total ?? items.length;
+  const env = { items, total: t, page: 1, page_size: 25, has_next: t > 25 } as {
+    items: Workspace[];
+    total: number;
+    page: number;
+    page_size: number;
+    has_next: boolean;
+    statsFleet?: { scanned_workspaces: number; partial_assessments: number };
+  };
+  if (statsFleet) env.statsFleet = statsFleet;
+  return env;
+}
+
+/** `sort=findings` mirrors the API: `COALESCE(latest.total_findings, -1)` from each workspace's newest scan row. */
+function findingsSortKey(workspace: Workspace): number {
+  const latest = workspace.latest_scan;
+  if (!latest) return -1;
+  return latest.total_findings ?? 0;
+}
+
+/** Resolves GET /workspaces?... the way the API does for Home + riskiest-workspace probe. */
+function workspacesGETResponse(input: string, payload: unknown): unknown {
+  const url = new URL(input, 'http://127.0.0.1');
+  if (url.pathname !== '/api/v1/workspaces') return payload;
+  const page = Math.max(1, parseInt(url.searchParams.get('page') ?? '1', 10) || 1);
+  const pageSize = Math.min(100, Math.max(1, parseInt(url.searchParams.get('page_size') ?? '25', 10) || 25));
+  const sort = url.searchParams.get('sort') ?? '';
+  const order = url.searchParams.get('order') ?? 'desc';
+  let items: Workspace[] = [];
+  let total = 0;
+  if (Array.isArray(payload)) {
+    items = payload as Workspace[];
+    total = items.length;
+  } else if (payload && typeof payload === 'object' && 'items' in (payload as object)) {
+    const env = payload as { items: Workspace[]; total?: number };
+    items = env.items ?? [];
+    total = typeof env.total === 'number' ? env.total : items.length;
+  }
+  if (sort === 'findings') {
+    const dir = order === 'asc' ? 1 : -1;
+    items = [...items].sort((a, b) => {
+      const va = findingsSortKey(a);
+      const vb = findingsSortKey(b);
+      if (va !== vb) return dir * (va - vb);
+      const tie = a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+      return order === 'asc' ? tie : -tie;
+    });
+  }
+  if (pageSize === 1 && sort === 'findings' && order === 'desc') {
+    const row = items[0];
+    return { items: row ? [row] : [], total, page: 1, page_size: 1, has_next: total > 1 };
+  }
+  const start = (page - 1) * pageSize;
+  const slice = items.slice(start, start + pageSize);
+  return { items: slice, total, page, page_size: pageSize, has_next: start + slice.length < total };
+}
+
+/** GET /api/v1/workspaces (paged list), not POST create nor /workspaces/{id}. */
+function isWorkspacesListGET(input: string, init?: RequestInit): boolean {
+  if (init?.method && init.method !== 'GET') return false;
+  return input.split('?')[0] === '/api/v1/workspaces';
+}
+
+/** Recent activity feed: GET /api/v1/scans?limit=…&offset=… */
+function isRecentScansGET(input: string, init?: RequestInit): boolean {
+  if (init?.method && init.method !== 'GET') return false;
+  return input.split('?')[0] === '/api/v1/scans';
+}
+
+/** GET /api/v1/stats — fields HomePage reads for workspace count and 7-day sparkline. */
+function statsEnvelope(summary: ScanSummary, workspaceTotal: number, opts?: { scannedWorkspaces?: number; partial?: number; lastAssessmentAt?: string }) {
+  const scansByDay = Array.from({ length: 7 }, (_, i) => ({
+    date: `2026-01-${String(i + 1).padStart(2, '0')}`,
+    total: i === 6 ? (summary.scans_last_7d ?? 0) : 0,
+    completed: 0,
+  }));
+  const scannedWs = opts?.scannedWorkspaces ?? summary.workspaces_scanned;
+  return {
+    workspaces: workspaceTotal,
+    scanned_workspaces: scannedWs,
+    partial_assessments: opts?.partial ?? 0,
+    last_assessment_at: opts?.lastAssessmentAt ?? '',
+    scans: { total: summary.scans_total, completed: summary.workspaces_scanned, running: summary.active_scans },
+    findings: {
+      severity: {
+        critical: summary.critical_count,
+        high: summary.high_count,
+        medium: summary.medium_count,
+        low: summary.low_count,
+        info: summary.info_count,
+      },
+      total: summary.total_findings,
+    },
+    suppressions: 0,
+    scans_by_day: scansByDay,
+    generated_at: '2026-01-07T12:00:00Z',
+  };
+}
+
 function homeFetchMock(
   scansPayload: unknown,
-  workspacesPayload: unknown = { items: [workspaceItem()] },
+  workspacesPayload: unknown = workspacesPage([workspaceItem()]),
   toolsPayload: unknown = { items: [{ id: 'ruff', ready: true }, { id: 'semgrep', ready: true }] },
 ) {
   return vi.fn((input: string, init?: RequestInit) => {
     if (input.includes('/scan-plan?')) return Promise.resolve(json({ profile: 'standard', selected_files: 1, candidate_files: 1, dependency_inputs: [], exclusions: [], skip_counts: {}, analyzers: [{ id: 'ruff', display_name: 'Ruff', planned: true, ready: true, registered: true, reason: 'Ready to run', network: 'none' }] }));
-    if (input === '/api/v1/scans') return Promise.resolve(json(scansPayload));
-    if (input.endsWith('/workspaces') && init?.method === 'POST') return Promise.resolve(json({ id: 'ws-new', name: 'New', root_path: 'C:\\code\\new' }));
-    if (input.endsWith('/workspaces')) return Promise.resolve(json(workspacesPayload));
+    if (isRecentScansGET(input, init)) return Promise.resolve(json(scansPayload));
+    if (input.split('?')[0] === '/api/v1/workspaces' && init?.method === 'POST') return Promise.resolve(json({ id: 'ws-new', name: 'New', root_path: 'C:\\code\\new' }));
+    if (isWorkspacesListGET(input, init)) return Promise.resolve(json(workspacesGETResponse(input, workspacesPayload)));
+    if (input === '/api/v1/stats') {
+      const s = typeof scansPayload === 'object' && scansPayload && 'summary' in (scansPayload as object)
+        ? (scansPayload as { summary: ScanSummary }).summary
+        : summary;
+      const wt = typeof workspacesPayload === 'object' && workspacesPayload && 'total' in (workspacesPayload as object)
+        ? (workspacesPayload as { total: number }).total
+        : 1;
+      let extra: { scannedWorkspaces?: number; partial?: number } | undefined;
+      if (typeof workspacesPayload === 'object' && workspacesPayload && 'items' in (workspacesPayload as object)) {
+        const wp = workspacesPayload as { items: Workspace[]; statsFleet?: { scanned_workspaces: number; partial_assessments: number } };
+        const items = wp.items;
+        const partial = items.filter((w) => {
+          const cov = w.latest_scan_coverage ?? w.assessment_coverage;
+          return !!cov && (cov.failed > 0 || cov.warned > 0);
+        }).length;
+        const graded = items.filter((w) => {
+          const latest = w.latest_scan;
+          if (latest && (latest.state === 'completed' || latest.state === 'completed_with_warnings')) return true;
+          const c = w.last_completed_scan;
+          return !!(c && (c.state === 'completed' || c.state === 'completed_with_warnings'));
+        }).length;
+        extra = {
+          scannedWorkspaces: wp.statsFleet?.scanned_workspaces ?? graded,
+          partial: wp.statsFleet?.partial_assessments ?? partial,
+        };
+      }
+      return Promise.resolve(json(statsEnvelope(s, wt, extra)));
+    }
     if (input.endsWith('/tools')) return Promise.resolve(json(toolsPayload));
     return Promise.resolve(json({ items: [] }));
   });
@@ -125,14 +254,16 @@ afterEach(async () => {
 });
 
 describe('HomePage risk board — verdict', () => {
-  it('shows no invented zeros when the workspace list fails to load', async () => {
+  it('keeps fleet verdict from global stats when the workspace list fails to load', async () => {
     const base = homeFetchMock({ scans: [], total: 0, summary });
-    const fetchMock = vi.fn((input: string, init?: RequestInit) => input.endsWith('/workspaces') && !init?.method
+    const fetchMock = vi.fn((input: string, init?: RequestInit) => isWorkspacesListGET(input, init)
       ? Promise.resolve(json({ error: { code: 'INTERNAL', message: 'database is locked' } }, 500))
       : base(input, init));
     const host = await render(fetchMock);
-    expect(host.querySelector('.verdict-tiles')).toBeNull(); // no "Scanned 0/0"
-    expect(host.querySelector('.verdict-score')?.textContent).toBe('grade unavailable');
+    expect(host.querySelector('.verdict-letter')?.getAttribute('data-grade')).toBe('D');
+    expect(host.querySelector('.verdict-hero-num')?.textContent).toBe('21');
+    // Activity tiles are hidden when the ledger fails so we do not invent "0/N scanned".
+    expect(host.querySelector('.verdict-tiles')).toBeNull();
     expect(host.textContent).toContain("Couldn't load your workspaces");
   });
 
@@ -175,14 +306,12 @@ describe('HomePage risk board — verdict', () => {
   it('pairs the grade with partial analyzer coverage instead of implying full assurance', async () => {
     const host = await render(homeFetchMock(
       { scans: [scanItem()], total: 1, summary },
-      {
-        items: [
-          workspaceItem({
-            latest_scan: latestScan({ state: 'completed_with_warnings' }),
-            latest_scan_coverage: { total: 5, succeeded: 3, failed: 1, warned: 1 },
-          }),
-        ],
-      },
+      workspacesPage([
+        workspaceItem({
+          latest_scan: latestScan({ state: 'completed_with_warnings' }),
+          latest_scan_coverage: { total: 5, succeeded: 3, failed: 1, warned: 1 },
+        }),
+      ]),
     ));
 
     const caveat = host.querySelector('.verdict-caveat');
@@ -195,10 +324,63 @@ describe('HomePage risk board — verdict', () => {
     expect(badge?.getAttribute('title')).toContain('1 with warnings');
   });
 
+  it('pages the ledger for large fleets and names total count in the footer', async () => {
+    const items = Array.from({ length: 110 }, (_, i) =>
+      workspaceItem({
+        id: `ws-${i}`,
+        name: `Service ${i}`,
+        latest_scan: latestScan({ id: `scan-${i}`, total_findings: 200 - i, critical_count: 1, high_count: 0, medium_count: 0, low_count: 0, info_count: 0 }),
+      }),
+    );
+    const host = await render(homeFetchMock(
+      { scans: [], total: 0, summary },
+      workspacesPage(items, 110, { scanned_workspaces: 90, partial_assessments: 0 }),
+    ));
+    expect(host.textContent).toContain('Showing 1–25 of 110 by risk');
+    const page1Ids = [...host.querySelectorAll('.ledger-row[data-workspace-id]')].map((el) => el.getAttribute('data-workspace-id'));
+    expect(page1Ids).toHaveLength(25);
+    expect(page1Ids[0]).toBe('ws-0');
+    expect(page1Ids[24]).toBe('ws-24');
+    const next = findButton(host, 'Next');
+    expect(next).toBeDefined();
+    expect(next!.disabled).toBe(false);
+    await act(async () => { next!.click(); await Promise.resolve(); await Promise.resolve(); });
+    expect(host.textContent).toContain('Showing 26–50 of 110 by risk');
+    const page2Ids = [...host.querySelectorAll('.ledger-row[data-workspace-id]')].map((el) => el.getAttribute('data-workspace-id'));
+    expect(page2Ids).toHaveLength(25);
+    expect(page2Ids[0]).toBe('ws-25');
+    expect(page2Ids[24]).toBe('ws-49');
+    const union = new Set([...page1Ids, ...page2Ids]);
+    expect(union.size).toBe(50);
+  });
+
+  it('renders the last partial ledger page without skipping rows (26 workspaces → 25 + 1)', async () => {
+    const items = Array.from({ length: 26 }, (_, i) =>
+      workspaceItem({
+        id: `edge-${i}`,
+        name: `Edge ${i}`,
+        latest_scan: latestScan({ id: `scan-${i}`, total_findings: 100 - i, critical_count: 1, high_count: 0, medium_count: 0, low_count: 0, info_count: 0 }),
+      }),
+    );
+    const host = await render(homeFetchMock(
+      { scans: [], total: 0, summary },
+      workspacesPage(items, 26, { scanned_workspaces: 26, partial_assessments: 0 }),
+    ));
+    expect(host.querySelectorAll('.ledger-row[data-workspace-id]')).toHaveLength(25);
+    await act(async () => {
+      findButton(host, 'Next')!.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(host.textContent).toContain('Showing 26–26 of 26 by risk');
+    const lastIds = [...host.querySelectorAll('.ledger-row[data-workspace-id]')].map((el) => el.getAttribute('data-workspace-id'));
+    expect(lastIds).toEqual(['edge-25']);
+  });
+
   it('claims no partial caveat when every analyzer run completed cleanly', async () => {
     const host = await render(homeFetchMock(
       { scans: [scanItem()], total: 1, summary },
-      { items: [workspaceItem({ latest_scan_coverage: { total: 5, succeeded: 5, failed: 0, warned: 0 } })] },
+      workspacesPage([workspaceItem({ latest_scan_coverage: { total: 5, succeeded: 5, failed: 0, warned: 0 } })]),
     ));
 
     expect(host.querySelector('.verdict-caveat')).toBeNull();
@@ -229,7 +411,7 @@ describe('HomePage risk board — verdict', () => {
   it('says not graded yet when workspaces exist but none finished a scan', async () => {
     const host = await render(homeFetchMock(
       { scans: [], total: 0, summary: { ...summary, active_scans: 0 } },
-      { items: [workspaceItem({ latest_scan: undefined })] },
+      workspacesPage([workspaceItem({ latest_scan: undefined })]),
     ));
     expect(host.querySelector('.verdict-grade')?.getAttribute('data-grade')).toBe('none');
     expect(host.textContent).toContain('No completed scans yet');
@@ -257,7 +439,8 @@ describe('HomePage risk board — verdict', () => {
       id: 'ws-low', name: 'Mild',
       latest_scan: latestScan({ critical_count: 0, high_count: 0, medium_count: 0, low_count: 7, total_findings: 7 }),
     });
-    const host = await render(homeFetchMock({ scans: [], total: 0, summary }, { items: [lowOnly] }));
+    const lowOnlySummary = { ...summary, critical_count: 0, high_count: 0, medium_count: 0, low_count: 7, info_count: 0, total_findings: 7 };
+    const host = await render(homeFetchMock({ scans: [], total: 0, summary: lowOnlySummary }, workspacesPage([lowOnly])));
     expect(findButton(host, 'Skim the')).toBeDefined();
     expect(findButton(host, 'Fix the')).toBeUndefined();
   });
@@ -270,7 +453,7 @@ describe('HomePage risk board — ledger', () => {
     const fresh = workspaceItem({ id: 'ws-fresh', name: 'Fresh Add', latest_scan: undefined });
     const host = await render(homeFetchMock(
       { scans: [scanItem()], total: 1, summary },
-      { items: [fresh, mild, risky] }, // shuffled on purpose
+      workspacesPage([fresh, mild, risky]), // shuffled on purpose
     ));
 
     const rows = [...host.querySelectorAll('.ledger-row')];
@@ -286,7 +469,7 @@ describe('HomePage risk board — ledger', () => {
 
   it('ignores non-terminal latest scans for risk and shows their live state instead', async () => {
     const running = workspaceItem({ id: 'ws-live', name: 'Live One', latest_scan: latestScan({ state: 'running', finished_at: null, critical_count: 9 }) });
-    const host = await render(homeFetchMock({ scans: [], total: 0, summary }, { items: [running] }));
+    const host = await render(homeFetchMock({ scans: [], total: 0, summary }, workspacesPage([running])));
 
     expect(host.querySelector('.ledger-grade')?.textContent).toBe('–'); // running counts are not risk
     expect(host.textContent).toContain('Scan running');
@@ -343,7 +526,18 @@ describe('HomePage cancelled-scan fallback and trajectory', () => {
         fixed_count: 4,
       }),
     });
-    const host = await render(homeFetchMock({ scans: [], total: 0, summary }, { items: [fallback] }));
+    const fallbackSummary = {
+      ...summary,
+      critical_count: 1,
+      high_count: 1,
+      medium_count: 2,
+      low_count: 3,
+      info_count: 0,
+      total_findings: 7,
+      workspaces_scanned: 1,
+      workspaces_total: 1,
+    };
+    const host = await render(homeFetchMock({ scans: [], total: 0, summary: fallbackSummary }, workspacesPage([fallback])));
 
     // The row grades the completed report, not the dead run.
     expect(host.querySelector('.ledger-grade')?.textContent).toBe('C');
@@ -379,7 +573,7 @@ describe('HomePage cancelled-scan fallback and trajectory', () => {
         low_count: 0,
       }),
     });
-    const host = await render(homeFetchMock({ scans: [], total: 0, summary }, { items: [dead] }));
+    const host = await render(homeFetchMock({ scans: [], total: 0, summary }, workspacesPage([dead])));
 
     expect(host.querySelector('.ledger-grade')?.textContent).toBe('–');
     expect(host.querySelector('.ledger-score')).toBeNull();
@@ -392,7 +586,7 @@ describe('HomePage cancelled-scan fallback and trajectory', () => {
   it('omits the trajectory chip when the scan reports no fixes or new findings', async () => {
     const host = await render(homeFetchMock(
       { scans: [], total: 0, summary },
-      { items: [workspaceItem({ latest_scan: latestScan({ new_count: 0, fixed_count: 0 }) })] },
+      workspacesPage([workspaceItem({ latest_scan: latestScan({ new_count: 0, fixed_count: 0 }) })]),
     ));
     expect(host.querySelector('.ledger-delta')).toBeNull();
   });
@@ -400,7 +594,7 @@ describe('HomePage cancelled-scan fallback and trajectory', () => {
   it('keeps the trajectory chip neutral ink so the grade owns the color, even when risk rises', async () => {
     const host = await render(homeFetchMock(
       { scans: [], total: 0, summary },
-      { items: [workspaceItem({ latest_scan: latestScan({ new_count: 3, fixed_count: 1 }) })] },
+      workspacesPage([workspaceItem({ latest_scan: latestScan({ new_count: 3, fixed_count: 1 }) })]),
     ));
     const delta = host.querySelector('.ledger-delta');
     expect(delta?.textContent).toBe('↓ 1 fixed, ↑ 3 new');
@@ -415,7 +609,10 @@ describe('HomePage cancelled-scan fallback and trajectory', () => {
       name: 'Second',
       latest_scan: latestScan({ total_findings: 5, critical_count: 0, high_count: 1, medium_count: 2, low_count: 0, info_count: 0 }),
     });
-    const host = await render(homeFetchMock({ scans: [scanItem()], total: 1, summary }, { items: [workspaceItem(), second] }));
+    const host = await render(homeFetchMock(
+      { scans: [scanItem()], total: 1, summary },
+      workspacesPage([workspaceItem(), second]),
+    ));
     expect(host.textContent).toContain('across the latest completed scans of 2 workspaces.');
   });
 
@@ -426,8 +623,9 @@ describe('HomePage cancelled-scan fallback and trajectory', () => {
       { items: [{ id: 'ruff', ready: true }, { id: 'semgrep', ready: false }] },
     ));
     expect(host.querySelector('.verdict-tiles')?.textContent).toContain('Tools ready');
-    expect(host.querySelector('.board-foot')?.getAttribute('aria-label')).toBe('Analyzers');
-    expect(host.querySelector('.board-foot-note')?.textContent).toContain('1 of 2 optional tools ready');
+    const foot = host.querySelector('.board-foot-note')?.textContent ?? '';
+    expect(foot).toContain('Manage optional analyzers');
+    expect(foot).toContain('1/2 ready');
     expect(host.textContent).not.toContain('engine');
   });
 });
@@ -491,7 +689,7 @@ describe('HomePage risk board — activity feed', () => {
   it('shows the empty feed state and keeps the header scan primary available for the unscanned workspace', async () => {
     const host = await render(homeFetchMock(
       { scans: [], total: 0, summary: { ...summary, active_scans: 0 } },
-      { items: [workspaceItem()] },
+      workspacesPage([workspaceItem()]),
     ));
     expect(host.textContent).toContain('No scans yet');
     expect(host.querySelector('.empty .empty-icon svg')).not.toBeNull();
@@ -577,7 +775,7 @@ describe('HomePage quick actions', () => {
   it('targets the header scan primary at the riskiest workspace and confirms by name', async () => {
     const risky = workspaceItem({ id: 'ws-risky', name: 'Risky Core', latest_scan: latestScan({ id: 's-r', workspace_id: 'ws-risky', critical_count: 2, high_count: 0, medium_count: 0, low_count: 0, total_findings: 2 }) }); // 20 → C
     const mild = workspaceItem({ id: 'ws-mild', name: 'Mild Web', latest_scan: latestScan({ id: 's-m', workspace_id: 'ws-mild', critical_count: 0, high_count: 0, medium_count: 0, low_count: 1, total_findings: 1 }) }); // 1 → A
-    const host = await render(homeFetchMock({ scans: [], total: 0, summary }, { items: [mild, risky] }));
+    const host = await render(homeFetchMock({ scans: [], total: 0, summary }, workspacesPage([mild, risky])));
 
     // The page's one primary is the header's Run scan split-button…
     const runScan = findButton(host, 'Run scan');
@@ -593,8 +791,9 @@ describe('HomePage quick actions', () => {
     const fetchMock = vi.fn((input: string, init?: RequestInit) => {
       if (input.includes('/scan-plan?')) return Promise.resolve(json({ profile: 'standard', selected_files: 1, candidate_files: 1, dependency_inputs: [], exclusions: [], skip_counts: {}, analyzers: [{ id: 'ruff', display_name: 'Ruff', planned: true, ready: true, registered: true, reason: 'Ready to run', network: 'none' }] }));
       if (input === '/api/v1/workspaces/ws-2/scans' && init?.method === 'POST') return Promise.resolve(json({ id: 'scan-new', workspace_id: 'ws-2', state: 'queued' }));
-      if (input === '/api/v1/scans') return Promise.resolve(json({ scans: [scanItem({ id: 'scan-9', workspace_id: 'ws-2', workspace_name: 'Second Project' }), scanItem()], total: 2, summary }));
-      if (input.endsWith('/workspaces')) return Promise.resolve(json({ items: [] }));
+      if (isRecentScansGET(input, init)) return Promise.resolve(json({ scans: [scanItem({ id: 'scan-9', workspace_id: 'ws-2', workspace_name: 'Second Project' }), scanItem()], total: 2, summary }));
+      if (isWorkspacesListGET(input, init)) return Promise.resolve(json({ items: [], total: 0, page: 1, page_size: 100, has_next: false }));
+      if (input === '/api/v1/stats') return Promise.resolve(json(statsEnvelope(summary, 0)));
       if (input.endsWith('/tools')) return Promise.resolve(json({ items: [] }));
       return Promise.resolve(json({ items: [] }));
     });
@@ -619,7 +818,7 @@ describe('HomePage quick actions', () => {
   });
 
   it('shows the first-run onboarding when nothing exists yet', async () => {
-    const host = await render(homeFetchMock({ scans: [], total: 0 }, { items: [] }));
+    const host = await render(homeFetchMock({ scans: [], total: 0 }, workspacesPage([])));
     expect(host.textContent).toContain('Point Blunt Code at a project');
     expect(host.textContent).toContain('Add your first workspace');
     expect(host.textContent).toContain('secrets, vulnerable dependencies, and risky code');
@@ -637,8 +836,8 @@ describe('HomePage optional tools foot', () => {
       undefined,
       { items: [{ id: 'ruff', ready: true }, { id: 'semgrep', ready: true }, { id: 'gitleaks', ready: false }] },
     ));
-    expect(host.querySelector('.board-foot-note')?.textContent).toContain('2 of 3 optional tools ready');
-    expect(host.querySelector('.board-foot-note')?.textContent).toContain('not installed: gitleaks');
+    const foot = host.querySelector('.board-foot-note')?.textContent ?? '';
+    expect(foot).toContain('2/3 ready');
     expect(host.querySelector('.board-foot-chip')).toBeNull();
   });
 });
@@ -665,7 +864,7 @@ describe('HomePage workspace paths and languages', () => {
     const writeText = stubClipboard();
     const host = await render(homeFetchMock(
       { scans: [], total: 0, summary },
-      { items: [workspaceItem({ name: 'Deep Project', root_path: DEEP_PATH })] },
+      workspacesPage([workspaceItem({ name: 'Deep Project', root_path: DEEP_PATH })]),
     ));
     const path = host.querySelector('.ledger-identity .path-copy code')!;
     expect(path.textContent).toBe('…\\Suremed_agent\\complete_prod');
@@ -685,7 +884,7 @@ describe('HomePage workspace paths and languages', () => {
     // with the complete set still reachable on hover.
     const host = await render(homeFetchMock(
       { scans: [], total: 0, summary },
-      { items: [workspaceItem({ name: 'Polyglot', root_path: 'C:\\code\\poly', languages: ['python', 'dockerfile', 'exoticlang'] })] },
+      workspacesPage([workspaceItem({ name: 'Polyglot', root_path: 'C:\\code\\poly', languages: ['python', 'dockerfile', 'exoticlang'] })]),
     ));
     const langs = host.querySelector('.ledger-languages')!;
     expect(langs.textContent).toBe('Python, Dockerfile +1');
@@ -698,7 +897,7 @@ describe('HomePage workspace paths and languages', () => {
     const many = ['python', 'typescript', 'go', 'rust', 'ruby', 'haskell', 'lua'];
     const host = await render(homeFetchMock(
       { scans: [], total: 0, summary },
-      { items: [workspaceItem({ name: 'Polyglot', root_path: 'C:\\code\\poly', languages: many })] },
+      workspacesPage([workspaceItem({ name: 'Polyglot', root_path: 'C:\\code\\poly', languages: many })]),
     ));
     const langs = host.querySelector('.ledger-languages')!;
     expect(langs.textContent).toBe('Python, TypeScript +5');
@@ -710,7 +909,7 @@ describe('HomePage workspace paths and languages', () => {
       name: 'Warned',
       latest_scan: latestScan({ state: 'completed_with_warnings', total_findings: 5, critical_count: 0, high_count: 0, medium_count: 2, low_count: 3 }),
     });
-    const host = await render(homeFetchMock({ scans: [], total: 0, summary }, { items: [warned] }));
+    const host = await render(homeFetchMock({ scans: [], total: 0, summary }, workspacesPage([warned])));
     const tag = host.querySelector('.ledger-last .state-tag')!;
     // The long form was the widest string in the ledger and repeated down every
     // row, so the row shows a short word — with the full label in the title.

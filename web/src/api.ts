@@ -1,4 +1,4 @@
-import type { AnalyzerStatus, ScanPlan, CompareResult, FindingPage, FindingsQuery, FixedFindingsResponse, GlobalStats, PathOverride, PentestProbeResult, RecentScansResponse, Report, RiskProfile, Scan, ScanPage, SearchFindingsPage, SeverityTrendPoint, SourcePreview, Suppression, Tool, TreeNode, Workspace } from './types';
+import type { AnalyzerStatus, ScanPlan, CompareResult, FindingPage, FindingsQuery, FixedFindingsResponse, GlobalStats, PathOverride, PentestProbeResult, RecentScansResponse, Report, RiskProfile, Scan, ScanPage, SearchFindingsPage, SeverityTrendPoint, SourcePreview, Suppression, Tool, TreeNode, Workspace, WorkspaceListPage } from './types';
 
 const PREFIX = '/api/v1';
 
@@ -44,10 +44,29 @@ export const api = {
   deleteFindingNote: (id: string, fingerprint: string, note: string) => request<void>(`/workspaces/${id}/notes/${encodeURIComponent(fingerprint)}/${note}`, { method: 'DELETE' }),
   scanPlan: (id: string, profile: string) => request<ScanPlan>(`/workspaces/${id}/scan-plan?profile=${encodeURIComponent(profile)}`),
   health: () => request<{ status?: string }>('/health'),
-  meta: () => request<Record<string, string>>('/meta'),
+  meta: () => request<{
+    version: string;
+    api_version: string;
+    os: string;
+    architecture: string;
+    data_directory: string;
+    demo_seed_env_enabled?: boolean;
+    demo_seed_requires_token?: boolean;
+  }>('/meta'),
   settings: () => request<{ offline: boolean; open_browser: boolean }>('/settings'),
   saveSettings: (input: Partial<{ offline: boolean; open_browser: boolean }>) => request<{ offline: boolean; open_browser: boolean }>('/settings', { method: 'PATCH', body: JSON.stringify(input) }),
   workspaces: async () => list<Workspace>(await request<Workspace[] | { workspaces?: Workspace[] }>('/workspaces')),
+  /** Server-paged workspace list; sort key: name | last_opened | last_scan | findings */
+  workspacesPage: (params: { page: number; page_size?: number; sort?: string; order?: 'asc' | 'desc'; search?: string; tag?: string }) => {
+    const q = new URLSearchParams();
+    q.set('page', String(params.page));
+    if (params.page_size) q.set('page_size', String(params.page_size));
+    if (params.sort) q.set('sort', params.sort);
+    if (params.order) q.set('order', params.order);
+    if (params.search) q.set('search', params.search);
+    if (params.tag) q.set('tag', params.tag);
+    return request<WorkspaceListPage>(`/workspaces?${q}`);
+  },
   workspace: (id: string) => request<Workspace>(`/workspaces/${encodeURIComponent(id)}`),
   selectFolder: () => request<{ cancelled: boolean; path?: string }>('/system/select-folder', { method: 'POST' }),
   createWorkspace: async (input: { root_path: string; name?: string }): Promise<CreatedWorkspace> => {
@@ -76,7 +95,14 @@ export const api = {
   saveRules: (id: string, rules: unknown) => request(`/workspaces/${encodeURIComponent(id)}/rules`, { method: 'PUT', body: JSON.stringify({ rules }) }),
   scans: async (id: string) => list<Scan>(await request<Scan[] | { scans?: Scan[] }>(`/workspaces/${encodeURIComponent(id)}/scans`)),
   /** Server-paged scan history for one workspace; `page` is 1-based and capped at page_size 100 by the API. */
-  scansPage: (id: string, page: number, pageSize: number) => request<ScanPage>(`/workspaces/${encodeURIComponent(id)}/scans?page=${page}&page_size=${pageSize}`),
+  scansPage: (id: string, page: number, pageSize: number, opts?: { date_from?: string; date_to?: string }) => {
+    const q = new URLSearchParams();
+    q.set('page', String(page));
+    q.set('page_size', String(pageSize));
+    if (opts?.date_from) q.set('date_from', opts.date_from);
+    if (opts?.date_to) q.set('date_to', opts.date_to);
+    return request<ScanPage>(`/workspaces/${encodeURIComponent(id)}/scans?${q}`);
+  },
   /** Cross-workspace findings search; empty param values are dropped exactly like the per-scan findings query. */
   searchFindings: (params: FindingsQuery) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, v]) => v));
@@ -91,7 +117,16 @@ export const api = {
     const query = limit ? `?limit=${limit}` : '';
     return list<SeverityTrendPoint>(await request<SeverityTrendPoint[] | { items?: SeverityTrendPoint[] }>(`/workspaces/${encodeURIComponent(id)}/trends${query}`));
   },
-  recentScans: () => request<RecentScansResponse>('/scans'),
+  recentScans: (params?: { limit?: number; offset?: number; state?: string; workspace_id?: string }) => {
+    if (!params) return request<RecentScansResponse>('/scans');
+    const q = new URLSearchParams();
+    if (params.limit != null) q.set('limit', String(params.limit));
+    if (params.offset != null) q.set('offset', String(params.offset));
+    if (params.state) q.set('state', params.state);
+    if (params.workspace_id) q.set('workspace_id', params.workspace_id);
+    const s = q.toString();
+    return request<RecentScansResponse>(`/scans${s ? `?${s}` : ''}`);
+  },
   /** Cross-workspace overview for the dashboard: counters plus the latest-completed-per-workspace severity rollup. */
   stats: () => request<GlobalStats>('/stats'),
   startScan: (id: string, profile?: string) => request<Scan>(`/workspaces/${encodeURIComponent(id)}/scans`, { method: 'POST', body: JSON.stringify(profile ? { profile } : {}) }),
@@ -119,6 +154,16 @@ export const api = {
     request<{ reclaimed_bytes: number; logs_removed: number; cache_cleared: boolean; db_vacuumed: boolean; details?: string[]; errors?: string[] }>(
       '/system/clean',
       { method: 'POST', body: JSON.stringify(options ?? {}) }
+    ),
+  /** Opt-in synthetic demo data for UI / harness testing; server returns 403 unless BLUNTCODE_DEMO_SEED=1 (and optional token header). */
+  seedDemo: (preset: 'small' | 'large' | 'stress', opts?: { demoToken?: string }) =>
+    request<{ preset: string; workspaces?: number; workspace_ids?: string[]; label?: string; approx_findings?: number; findings_cap?: number; data_directory?: string }>(
+      '/system/seed-demo',
+      {
+        method: 'POST',
+        body: JSON.stringify({ preset }),
+        headers: opts?.demoToken ? { 'X-Bluntcode-Demo-Token': opts.demoToken } : undefined,
+      }
     ),
   stopServer: () => request<{ state: string }>('/system/stop', { method: 'POST' }),
   /** In-app updater: check GitHub releases, then hand off to the staged installer. */
