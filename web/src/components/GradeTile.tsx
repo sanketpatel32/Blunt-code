@@ -32,7 +32,16 @@ const FLIPPABLE = /^[A-Z!]$/;
  */
 export function GradeTile({ grade, size = 'md', flip = false, placeholder = '–', tone, className, style, title, announce = false }: GradeTileProps) {
   const letter = grade ?? placeholder;
-  const canFlip = flip && FLIPPABLE.test(letter);
+  const [reduceMotion, setReduceMotion] = useState(false);
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const query = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const apply = () => setReduceMotion(query.matches);
+    apply();
+    query.addEventListener('change', apply);
+    return () => query.removeEventListener('change', apply);
+  }, []);
+  const canFlip = flip && FLIPPABLE.test(letter) && !reduceMotion;
   // Start blank and set the letter after mount so the board visibly turns.
   const [shown, setShown] = useState(canFlip ? ' ' : letter);
   useEffect(() => {

@@ -3,6 +3,7 @@ bluntcode.exe
 *.exe.test
 dist/
 web/dist/
+cmd/loopback-harness/static/
 
 # --- Go ----------------------------------------------------------------------
 # Test binaries, coverage profiles, pprof dumps.

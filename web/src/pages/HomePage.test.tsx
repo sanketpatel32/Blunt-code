@@ -324,6 +324,19 @@ describe('HomePage risk board — verdict', () => {
     expect(badge?.getAttribute('title')).toContain('1 with warnings');
   });
 
+  it('keeps every ledger row in the DOM inside a bounded scroll viewport', async () => {
+    const items = Array.from({ length: 30 }, (_, i) =>
+      workspaceItem({ id: `ws-${i}`, name: `Service ${i}` }),
+    );
+    const host = await render(homeFetchMock(
+      { scans: [], total: 0, summary },
+      workspacesPage(items, 30),
+    ));
+    const scroll = host.querySelector('.board-ledger .ledger-scroll');
+    expect(scroll).not.toBeNull();
+    expect(host.querySelectorAll('.ledger-scroll .ledger-row[data-workspace-id]')).toHaveLength(25);
+  });
+
   it('pages the ledger for large fleets and names total count in the footer', async () => {
     const items = Array.from({ length: 110 }, (_, i) =>
       workspaceItem({
@@ -684,6 +697,32 @@ describe('HomePage risk board — activity feed', () => {
     expect(go).toHaveBeenCalledWith({ page: 'scan', id: 'scan-1' });
     await act(async () => { row.querySelector<HTMLButtonElement>('.feed-workspace')!.click(); });
     expect(go).toHaveBeenCalledWith({ page: 'workspace', id: 'ws-1' });
+  });
+
+  it('reloads the activity feed when Try again is clicked after a transient error', async () => {
+    let scansCalls = 0;
+    const okPayload = { scans: [scanItem()], total: 1, summary };
+    const base = homeFetchMock(okPayload);
+    const fetchMock = vi.fn((input: string, init?: RequestInit) => {
+      if (isRecentScansGET(input, init)) {
+        scansCalls += 1;
+        if (scansCalls === 1) {
+          return Promise.resolve(json({ error: { code: 'INTERNAL', message: 'upstream timeout' } }, 500));
+        }
+        return Promise.resolve(json(okPayload));
+      }
+      return base(input, init);
+    });
+    const host = await render(fetchMock);
+    const activity = host.querySelector('.board-activity')!;
+    expect(activity.querySelector('.error-panel')).not.toBeNull();
+    expect(activity.textContent).toContain('upstream timeout');
+    const tryAgain = [...activity.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === 'Try again');
+    expect(tryAgain).toBeDefined();
+    await act(async () => { tryAgain!.click(); });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(activity.querySelector('.feed-list .feed-row')).not.toBeNull();
+    expect(scansCalls).toBeGreaterThanOrEqual(2);
   });
 
   it('shows the empty feed state and keeps the header scan primary available for the unscanned workspace', async () => {
