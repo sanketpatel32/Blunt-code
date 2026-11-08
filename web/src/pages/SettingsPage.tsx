@@ -9,6 +9,8 @@ import { FolderIcon } from '../components/icons';
 import { LOCALES, useT } from '../lib/i18n';
 import { PageHeader } from '../components/PageHeader';
 import { ErrorPanel } from '../components/ui';
+import { Separator } from '../components/ui/separator';
+import { Button } from '../components/ui/button';
 import { formatBytes } from '../lib/format';
 
 /** Local folders the backend can reveal in the OS file browser, each with the notice for "not created yet". */
@@ -99,7 +101,7 @@ export function SettingsPage({ notify }: { notify: (n: Notice) => void }) {
       {/* A failed GET must not pass hardcoded defaults off as the stored config. */}
       {settings.error && <ErrorPanel error={settings.error} retry={settings.reload} />}
       {meta.error && <ErrorPanel error={meta.error} retry={meta.reload} />}
-      <div className="settings-list">
+      <div className="settings-list space-y-4">
         <section>
           <h2><SlidersHorizontal className="settings-h2-icon" aria-hidden="true" />General</h2>
           <div className="setting">
@@ -153,6 +155,7 @@ export function SettingsPage({ notify }: { notify: (n: Notice) => void }) {
             </fieldset>
           </div>
         </section>
+        <Separator className="bg-[var(--color-rule-faint)]" />
 
         <section>
           <h2><ScanSearch className="settings-h2-icon" aria-hidden="true" />Analysis</h2>
@@ -216,14 +219,9 @@ export function SettingsPage({ notify }: { notify: (n: Notice) => void }) {
               <h3>Clean caches and compact database</h3>
               <p>Clear cached vulnerability databases (Trivy), prune logs older than 7 days, and compact the local SQLite database.</p>
             </div>
-            <button
-              type="button"
-              className="button secondary"
-              disabled={cleaning}
-              onClick={() => setCleanOpen(true)}
-            >
+            <Button type="button" variant="outline" size="sm" disabled={cleaning} onClick={() => setCleanOpen(true)}>
               {cleaning ? 'Cleaning…' : 'Clean & reclaim space'}
-            </button>
+            </Button>
           </div>
         </section>
 
@@ -234,9 +232,9 @@ export function SettingsPage({ notify }: { notify: (n: Notice) => void }) {
               <h3>Stop local server</h3>
               <p>End this Blunt Code session. Any active scan will be cancelled; your saved workspaces and reports stay on this computer.</p>
             </div>
-            <button type="button" className="button danger" onClick={() => setStopOpen(true)}>
+            <Button type="button" variant="destructive" size="sm" onClick={() => setStopOpen(true)}>
               Stop server
-            </button>
+            </Button>
           </div>
         </section>
       </div>
