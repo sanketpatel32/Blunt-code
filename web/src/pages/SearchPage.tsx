@@ -15,6 +15,8 @@ import { QueryBuilder } from '../components/QueryBuilder';
 import { filterToQueryGroup, type QueryGroup } from '../lib/queryBuilder';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '../components/ui/sheet';
 import { PageHeader } from '../components/PageHeader';
+import { ListFooter } from '../components/ListFooter';
+import { DataTableShell } from '../components/DataTableShell';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
@@ -916,7 +918,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
           ) : (
             /* Table View — dense single-line rows; consecutive same rule+file
                results collapse into a group header with deduped occurrence lines. */
-            <div className="table-wrap overflow-x-auto rounded-[var(--radius-md)] border border-[var(--color-rule-faint)] bg-[var(--color-surface)]">
+            <DataTableShell className="overflow-x-auto rounded-[var(--radius-md)]">
               <table className="search-results table-dense rtable w-full text-left">
                 <caption className="sr-only">Global search results</caption>
                 <colgroup>
@@ -1041,37 +1043,26 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                   })}
                 </tbody>
               </table>
-            </div>
+            </DataTableShell>
           )}
 
           {/* Pagination — the window range lives in the toolbar meta; the nav
               carries only movement, so the matched total is never rendered twice. */}
           {total > 0 && (
-            <nav className="findings-pagination flex flex-wrap items-center justify-end gap-3 pt-3 border-t border-[var(--color-rule-faint)]" aria-label="Search result pagination">
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage(page - 1)}
-                  disabled={page <= 1}
-                  className="h-8 text-xs px-3"
-                >
-                  Previous
-                </Button>
-                <output aria-live="polite" className="text-xs font-semibold px-2 tabular-nums">
-                  Page {page}
-                </output>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage(page + 1)}
-                  disabled={!state.data?.has_next}
-                  className="h-8 text-xs px-3"
-                >
-                  Next
-                </Button>
-              </div>
-            </nav>
+            <ListFooter
+              variant="toolbar"
+              className="findings-pagination pt-3 border-t border-[var(--color-rule-faint)] justify-end"
+              liveRange
+              rangeText={<output className="text-xs font-semibold tabular-nums" aria-live="polite">Page {page}</output>}
+              pagination={{
+                'aria-label': 'Search result pagination',
+                hasPrevious: page > 1,
+                hasNext: state.data?.has_next === true,
+                onPrevious: () => setPage(page - 1),
+                onNext: () => setPage(page + 1),
+                variant: 'outline',
+              }}
+            />
           )}
         </div>
       </div>
