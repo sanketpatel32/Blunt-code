@@ -27,6 +27,7 @@ import { SEVERITY_ORDER, trendPointsFromScans } from '../lib/chartData';
 import { isActiveScanState } from '../lib/scanEvents';
 import { GRADE_BANDS, bandFor, coverageText, gradeDepth, riskGrade, riskScore, severityCountsOf } from '../lib/risk';
 import { GradeTile } from '../components/GradeTile';
+import { ListFooter } from '../components/ListFooter';
 
 const FEED_LIMIT = 12;
 const LEDGER_PAGE_SIZE = 25;
@@ -594,46 +595,34 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
             </ol>
           )}
 
-          <footer className="board-panel-foot flex-wrap gap-2">
-            {workspaceTotal > 0 && (
-              <span className="board-panel-foot-note tabular-nums">
-                {workspaceItems.length === 0
-                  ? <>No rows on page {ledgerPage} of {ledgerMaxPage} (total {workspaceTotal}).</>
-                  : (
-                    <>
-                      Showing {ledgerRangeStart}–{ledgerRangeEnd} of {workspaceTotal} by risk
-                      {debouncedLedgerSearch ? ` (matching “${debouncedLedgerSearch}”)` : ''}
-                    </>
-                  )}
-              </span>
+          <ListFooter
+            rangeText={workspaceTotal > 0 ? (
+              workspaceItems.length === 0
+                ? <>No rows on page {ledgerPage} of {ledgerMaxPage} (total {workspaceTotal}).</>
+                : (
+                  <>
+                    Showing {ledgerRangeStart}–{ledgerRangeEnd} of {workspaceTotal} by risk
+                    {debouncedLedgerSearch ? ` (matching “${debouncedLedgerSearch}”)` : ''}
+                  </>
+                )
+            ) : undefined}
+            pagination={workspaceTotal > 0 && ledgerMaxPage > 1 ? {
+              'aria-label': 'Workspace assessments pagination',
+              hasPrevious: ledgerHasPrev,
+              hasNext: ledgerHasNext,
+              busy: workspaces.loading,
+              onPrevious: () => setLedgerPage((p) => Math.max(1, p - 1)),
+              onNext: () => setLedgerPage((p) => p + 1),
+              currentPage: ledgerPage,
+              pageCount: ledgerMaxPage,
+              variant: 'ghost',
+            } : null}
+            actions={(
+              <Button variant="ghost" size="sm" onClick={() => go({ page: 'workspaces' })}>
+                All workspaces <ChevronRight className="ml-0.5 h-3.5 w-3.5" />
+              </Button>
             )}
-            {workspaceTotal > 0 && ledgerMaxPage > 1 && (
-              <span className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={!ledgerHasPrev || workspaces.loading}
-                  onClick={() => setLedgerPage((p) => Math.max(1, p - 1))}
-                >
-                  Previous
-                </Button>
-                <span className="tabular-nums text-xs text-[var(--color-ink-soft)]" aria-hidden="true">
-                  {ledgerPage}/{ledgerMaxPage}
-                </span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={!ledgerHasNext || workspaces.loading}
-                  onClick={() => setLedgerPage((p) => p + 1)}
-                >
-                  Next
-                </Button>
-              </span>
-            )}
-            <Button variant="ghost" size="sm" onClick={() => go({ page: 'workspaces' })}>
-              All workspaces <ChevronRight className="ml-0.5 h-3.5 w-3.5" />
-            </Button>
-          </footer>
+          />
         </section>
 
         {/* The activity column is a stack, not a lone panel. The feed API serves a
@@ -698,22 +687,27 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
             )}
 
           {scans.length > 0 && !recent.loading && !recent.error && (
-            <footer className="board-panel-foot flex-wrap gap-2">
-              <span className="board-panel-foot-note tabular-nums">
-                {(recent.data?.offset ?? 0) + 1}–{(recent.data?.offset ?? 0) + feedRows.length} of {summary?.scans_total ?? feedRows.length} {feedFilter === 'all' ? 'scans' : `${feedFilterLabel(feedFilter).toLowerCase()} scans`}
-              </span>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button variant="outline" size="sm" disabled={feedOffset <= 0} onClick={() => setFeedOffset((o) => Math.max(0, o - FEED_LIMIT))}>
-                  Previous
-                </Button>
-                <Button variant="outline" size="sm" disabled={!feedHasMore} onClick={() => setFeedOffset((o) => o + FEED_LIMIT)}>
-                  Next
-                </Button>
+            <ListFooter
+              rangeText={(
+                <>
+                  {(recent.data?.offset ?? 0) + 1}–{(recent.data?.offset ?? 0) + feedRows.length} of {summary?.scans_total ?? feedRows.length}{' '}
+                  {feedFilter === 'all' ? 'scans' : `${feedFilterLabel(feedFilter).toLowerCase()} scans`}
+                </>
+              )}
+              pagination={{
+                'aria-label': 'Recent activity pagination',
+                hasPrevious: feedOffset > 0,
+                hasNext: feedHasMore,
+                onPrevious: () => setFeedOffset((o) => Math.max(0, o - FEED_LIMIT)),
+                onNext: () => setFeedOffset((o) => o + FEED_LIMIT),
+                variant: 'outline',
+              }}
+              actions={(
                 <Button variant="ghost" size="sm" onClick={() => go({ page: 'search' })}>
                   Search findings <ChevronRight className="ml-0.5 h-3.5 w-3.5" />
                 </Button>
-              </div>
-            </footer>
+              )}
+            />
           )}
           </section>
 
