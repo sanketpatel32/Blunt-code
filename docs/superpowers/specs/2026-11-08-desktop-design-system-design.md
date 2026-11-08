@@ -2,7 +2,7 @@
 
 | Field | Value |
 | ----- | ----- |
-| **Status** | Approved for documentation; **implementation not started** |
+| **Status** | Approved for documentation; **implementation plan written** (see plans doc); code not started |
 | **Author** | Sanket Patel |
 | **Date** | 2026-11-08 |
 | **Base revision** | `main` @ `5f40c333e64699a499dfed9d8c62223a7a23067a` (release **v0.49.1**) |
@@ -412,6 +412,7 @@ Implementation may begin only after this spec is merged or approved via review. 
 
 ## 14. Related documents
 
+- [`docs/superpowers/plans/2026-11-08-desktop-design-system.md`](../plans/2026-11-08-desktop-design-system.md) — implementation plan (tasks, gates, tests)
 - `docs/accessibility.md` — conformance evidence inventory
 - `AGENTS.md` — graphify / release rules (implementation phase)
 - `CONTRIBUTING.md` — demo seed and synthetic harness notes
