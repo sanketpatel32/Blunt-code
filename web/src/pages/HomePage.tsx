@@ -28,6 +28,7 @@ import { isActiveScanState } from '../lib/scanEvents';
 import { GRADE_BANDS, bandFor, coverageText, gradeDepth, riskGrade, riskScore, severityCountsOf } from '../lib/risk';
 import { GradeTile } from '../components/GradeTile';
 import { ListFooter } from '../components/ListFooter';
+import { DataPanel } from '../components/DataPanel';
 
 const FEED_LIMIT = 12;
 const LEDGER_PAGE_SIZE = 25;
@@ -545,24 +546,52 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
 
       {/* ── Two questions side by side: where is the risk · what happened lately ── */}
       <div className="board-columns">
-        <section className="board-panel board-ledger" aria-labelledby="ledger-heading">
-          <header className="board-panel-head">
-            <div>
-              <h2 id="ledger-heading" className="board-panel-title">Workspace assessments</h2>
-            </div>
-            {(workspaceTotal > 0 || ledgerFilter.trim() !== '') && (
-              <label className="board-filter">
-                <span className="sr-only">Filter workspaces by name, path, or language</span>
-                <input
-                  type="search"
-                  placeholder="Filter by name or path…"
-                  value={ledgerFilter}
-                  onChange={(e) => setLedgerFilter(e.target.value)}
-                />
-              </label>
-            )}
-          </header>
-
+        <DataPanel
+          panelClassName="board-panel board-ledger"
+          titleId="ledger-heading"
+          title="Workspace assessments"
+          headerActions={(workspaceTotal > 0 || ledgerFilter.trim() !== '') ? (
+            <label className="board-filter">
+              <span className="sr-only">Filter workspaces by name, path, or language</span>
+              <input
+                type="search"
+                placeholder="Filter by name or path…"
+                value={ledgerFilter}
+                onChange={(e) => setLedgerFilter(e.target.value)}
+              />
+            </label>
+          ) : undefined}
+          footer={(
+            <ListFooter
+              rangeText={workspaceTotal > 0 ? (
+                workspaceItems.length === 0
+                  ? <>No rows on page {ledgerPage} of {ledgerMaxPage} (total {workspaceTotal}).</>
+                  : (
+                    <>
+                      Showing {ledgerRangeStart}–{ledgerRangeEnd} of {workspaceTotal} by risk
+                      {debouncedLedgerSearch ? ` (matching “${debouncedLedgerSearch}”)` : ''}
+                    </>
+                  )
+              ) : undefined}
+              pagination={workspaceTotal > 0 && ledgerMaxPage > 1 ? {
+                'aria-label': 'Workspace assessments pagination',
+                hasPrevious: ledgerHasPrev,
+                hasNext: ledgerHasNext,
+                busy: workspaces.loading,
+                onPrevious: () => setLedgerPage((p) => Math.max(1, p - 1)),
+                onNext: () => setLedgerPage((p) => p + 1),
+                currentPage: ledgerPage,
+                pageCount: ledgerMaxPage,
+                variant: 'ghost',
+              } : null}
+              actions={(
+                <Button variant="ghost" size="sm" onClick={() => go({ page: 'workspaces' })}>
+                  All workspaces <ChevronRight className="ml-0.5 h-3.5 w-3.5" />
+                </Button>
+              )}
+            />
+          )}
+        >
           {workspaces.loading ? (
             <SkeletonTable rows={5} cols={4} className="board-skeleton" />
           ) : workspaces.error ? (
@@ -594,36 +623,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
               ))}
             </ol>
           )}
-
-          <ListFooter
-            rangeText={workspaceTotal > 0 ? (
-              workspaceItems.length === 0
-                ? <>No rows on page {ledgerPage} of {ledgerMaxPage} (total {workspaceTotal}).</>
-                : (
-                  <>
-                    Showing {ledgerRangeStart}–{ledgerRangeEnd} of {workspaceTotal} by risk
-                    {debouncedLedgerSearch ? ` (matching “${debouncedLedgerSearch}”)` : ''}
-                  </>
-                )
-            ) : undefined}
-            pagination={workspaceTotal > 0 && ledgerMaxPage > 1 ? {
-              'aria-label': 'Workspace assessments pagination',
-              hasPrevious: ledgerHasPrev,
-              hasNext: ledgerHasNext,
-              busy: workspaces.loading,
-              onPrevious: () => setLedgerPage((p) => Math.max(1, p - 1)),
-              onNext: () => setLedgerPage((p) => p + 1),
-              currentPage: ledgerPage,
-              pageCount: ledgerMaxPage,
-              variant: 'ghost',
-            } : null}
-            actions={(
-              <Button variant="ghost" size="sm" onClick={() => go({ page: 'workspaces' })}>
-                All workspaces <ChevronRight className="ml-0.5 h-3.5 w-3.5" />
-              </Button>
-            )}
-          />
-        </section>
+        </DataPanel>
 
         {/* The activity column is a stack, not a lone panel. The feed API serves a
             fixed ten most-recent rows while the ledger beside it lists every
@@ -635,37 +635,58 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
             full-width at the very bottom of the page, below the fold on this
             screen, where it was the least connected thing on it. */}
         <div className="board-side">
-          <section className="board-panel board-activity" aria-labelledby="activity-heading">
-            <header className="board-panel-head">
-              <div>
-                <h2 id="activity-heading" className="board-panel-title">
-                  <Activity className="h-4 w-4 text-[var(--color-accent)]" />
-                  What happened lately
-                </h2>
+          <DataPanel
+            panelClassName="board-panel board-activity"
+            titleId="activity-heading"
+            title={(
+              <>
+                <Activity className="h-4 w-4 text-[var(--color-accent)]" />
+                What happened lately
+              </>
+            )}
+            headerActions={scans.length > 0 ? (
+              <div className="feed-filters" role="group" aria-label="Filter recent activity">
+                {(['all', 'running', 'completed', 'warnings'] as FeedFilter[]).map((filter) => (
+                  <button
+                    key={filter}
+                    type="button"
+                    className={`feed-filter-btn ${feedFilter === filter ? 'active' : ''}`}
+                    aria-pressed={feedFilter === filter}
+                    onClick={() => setFeedFilterAndReset(filter)}
+                  >
+                    {feedFilterLabel(filter)}
+                  </button>
+                ))}
               </div>
-              {scans.length > 0 && (
-                <div className="feed-filters" role="group" aria-label="Filter recent activity">
-                  {(['all', 'running', 'completed', 'warnings'] as FeedFilter[]).map((filter) => (
-                    <button
-                      key={filter}
-                      type="button"
-                      className={`feed-filter-btn ${feedFilter === filter ? 'active' : ''}`}
-                      aria-pressed={feedFilter === filter}
-                      onClick={() => setFeedFilterAndReset(filter)}
-                    >
-                      {feedFilterLabel(filter)}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </header>
-
+            ) : undefined}
+            footer={scans.length > 0 && !recent.loading && !recent.error ? (
+              <ListFooter
+                rangeText={(
+                  <>
+                    {(recent.data?.offset ?? 0) + 1}–{(recent.data?.offset ?? 0) + feedRows.length} of {summary?.scans_total ?? feedRows.length}{' '}
+                    {feedFilter === 'all' ? 'scans' : `${feedFilterLabel(feedFilter).toLowerCase()} scans`}
+                  </>
+                )}
+                pagination={{
+                  'aria-label': 'Recent activity pagination',
+                  hasPrevious: feedOffset > 0,
+                  hasNext: feedHasMore,
+                  onPrevious: () => setFeedOffset((o) => Math.max(0, o - FEED_LIMIT)),
+                  onNext: () => setFeedOffset((o) => o + FEED_LIMIT),
+                  variant: 'outline',
+                }}
+                actions={(
+                  <Button variant="ghost" size="sm" onClick={() => go({ page: 'search' })}>
+                    Search findings <ChevronRight className="ml-0.5 h-3.5 w-3.5" />
+                  </Button>
+                )}
+              />
+            ) : undefined}
+          >
             {recent.loading ? (
-              <div className="board-skeleton"><SkeletonLines lines={5} /></div>
+              <div className="board-skeleton" role="status" aria-busy="true"><SkeletonLines lines={5} /></div>
             ) : recent.error ? (
-              <p className="muted board-soft-error">
-                Recent activity is unavailable right now. Your workspaces are unaffected.
-              </p>
+              <ErrorPanel error={recent.error} retry={recent.reload} />
             ) : !scans.length ? (
               <Empty title="No scans yet" icon={<ScanIcon />}>
                 Run a scan to follow what changed across your projects.
@@ -685,31 +706,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
                 </ol>
               </>
             )}
-
-          {scans.length > 0 && !recent.loading && !recent.error && (
-            <ListFooter
-              rangeText={(
-                <>
-                  {(recent.data?.offset ?? 0) + 1}–{(recent.data?.offset ?? 0) + feedRows.length} of {summary?.scans_total ?? feedRows.length}{' '}
-                  {feedFilter === 'all' ? 'scans' : `${feedFilterLabel(feedFilter).toLowerCase()} scans`}
-                </>
-              )}
-              pagination={{
-                'aria-label': 'Recent activity pagination',
-                hasPrevious: feedOffset > 0,
-                hasNext: feedHasMore,
-                onPrevious: () => setFeedOffset((o) => Math.max(0, o - FEED_LIMIT)),
-                onNext: () => setFeedOffset((o) => o + FEED_LIMIT),
-                variant: 'outline',
-              }}
-              actions={(
-                <Button variant="ghost" size="sm" onClick={() => go({ page: 'search' })}>
-                  Search findings <ChevronRight className="ml-0.5 h-3.5 w-3.5" />
-                </Button>
-              )}
-            />
-          )}
-          </section>
+          </DataPanel>
 
           <p className="board-foot-note px-1 text-sm text-[var(--color-ink-muted)]">
             Tools: <button type="button" className="text-button" onClick={() => go({ page: 'tools' })}>Manage optional analyzers</button>

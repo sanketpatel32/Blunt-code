@@ -1,5 +1,5 @@
-// Linux UI harness: serves the built static UI and api.New(..., nil, nil, ...) without
-// Windows managed SonarQube bootstrap. For Playwright evidence only.
+// Loopback UI harness — development / Playwright evidence only. Not shipped in
+// production builds. Serves UI + api.New(..., nil, nil, ...) without Windows Sonar.
 package main
 
 import (
@@ -25,20 +25,31 @@ import (
 var staticFiles embed.FS
 
 func main() {
-	port := flag.Int("port", 9876, "loopback TCP port")
-	data := flag.String("data", "", "isolated data directory (default: temp under os.TempDir)")
+	port := flag.Int("port", 9876, "loopback TCP port (127.0.0.1 only)")
+	data := flag.String("data", "", "required isolated data directory (never use production Blunt Code data)")
+	staticDir := flag.String("static-dir", "", "serve UI from this directory instead of embedded static (for before/after captures)")
+	demoSeed := flag.Bool("demo-seed", false, "set BLUNTCODE_DEMO_SEED=1 so POST /api/v1/system/seed-demo is accepted (opt-in)")
+	devAck := flag.Bool("i-understand-dev-only", false, "required: acknowledge this is dev-only loopback testing")
 	flag.Parse()
 
+	if !*devAck {
+		log.Fatal(`refusing to start: pass -i-understand-dev-only (dev-only loopback harness; see README)`)
+	}
 	dataRoot := strings.TrimSpace(*data)
 	if dataRoot == "" {
-		var err error
-		dataRoot, err = os.MkdirTemp("", "bluntcode-loopback-harness-*")
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer os.RemoveAll(dataRoot)
+		log.Fatal(`refusing to start: pass -data with a fresh empty directory (never your real Blunt Code app data)`)
 	}
-	_ = os.Setenv("BLUNTCODE_DEMO_SEED", "1")
+	dataRoot = filepath.Clean(dataRoot)
+	if err := os.MkdirAll(dataRoot, 0o700); err != nil {
+		log.Fatal(err)
+	}
+	abs, _ := filepath.Abs(dataRoot)
+	fmt.Fprintf(os.Stderr, "harness: isolated data directory %s (SQLite only; no analyzers)\n", abs)
+
+	if *demoSeed {
+		_ = os.Setenv("BLUNTCODE_DEMO_SEED", "1")
+		fmt.Fprintln(os.Stderr, "harness: demo seed API enabled (POST /api/v1/system/seed-demo only)")
+	}
 
 	paths, err := config.NewPaths(dataRoot)
 	if err != nil {
@@ -53,18 +64,38 @@ func main() {
 	server := api.New(db, events.New(), nil, nil, paths, "harness", nil)
 	root := http.NewServeMux()
 	root.Handle("/api/", server.Handler())
-	root.Handle("/", api.StaticGuard(staticHandler()))
+	root.Handle("/", api.StaticGuard(staticHandler(strings.TrimSpace(*staticDir))))
 
-	listener, err := net.Listen("tcp4", fmt.Sprintf("127.0.0.1:%d", *port))
+	addr := fmt.Sprintf("127.0.0.1:%d", *port)
+	listener, err := net.Listen("tcp4", addr)
 	if err != nil {
 		log.Fatal(err)
 	}
-	addr := listener.Addr().String()
-	fmt.Println("loopback harness on http://" + addr + "/ (data:", dataRoot, ")")
+	fmt.Println("loopback harness on http://" + listener.Addr().String() + "/")
 	log.Fatal(http.Serve(listener, root))
 }
 
-func staticHandler() http.Handler {
+func staticHandler(staticDir string) http.Handler {
+	if staticDir != "" {
+		root := http.Dir(filepath.Clean(staticDir))
+		files := http.FileServer(root)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/" {
+				w.Header().Set("Cache-Control", "no-cache")
+			}
+			name := strings.TrimPrefix(filepath.ToSlash(filepath.Clean(r.URL.Path)), "/")
+			if r.URL.Path != "/" {
+				if f, err := root.Open(name); err != nil {
+					if !strings.Contains(name, ".") {
+						r.URL.Path = "/"
+					}
+				} else {
+					_ = f.Close()
+				}
+			}
+			files.ServeHTTP(w, r)
+		})
+	}
 	content, err := fs.Sub(staticFiles, "static")
 	if err != nil {
 		panic(err)
