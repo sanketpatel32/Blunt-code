@@ -21,6 +21,9 @@ import { RowMenu, type RowMenuItem } from '../components/RowMenu';
 import { PageHeader } from '../components/PageHeader';
 import { riskGrade, riskScore, severityCountsOf } from '../lib/risk';
 import { GradeTile } from '../components/GradeTile';
+import { DataTableShell } from '../components/DataTableShell';
+import { FilterBar } from '../components/FilterBar';
+import { ListFooter } from '../components/ListFooter';
 
 const WS_PAGE_SIZE = 25;
 
@@ -135,17 +138,20 @@ export function WorkspacesPage({ go, onAdd, notify }: { go: (r: Route) => void; 
         <><Empty title="No workspaces yet" icon={<FolderIcon />} action={addPrimary}>Add a project folder to scan it for security findings. Scan history stays on this computer.</Empty><WorkspaceTemplates onUseTemplate={onAdd} /></>
       ) : (
         <>
-          <div className="toolbar-row ws-toolbar">
-            <div className="toolbar-filters">
-              <Input type="search" aria-label="Search workspaces" placeholder="Search workspaces…" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setSearch(''); }} className="ws-filter-search w-44 sm:w-56" />
-              <Input type="search" aria-label="Filter by tag" placeholder="Filter by tag…" value={tagQuery} onChange={(event) => setTagQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setTagQuery(''); }} className="ws-filter-tag w-36 sm:w-44" />
-              {hasFilter && <button type="button" className="text-button ws-filter-clear" onClick={()=>{ setTagQuery(''); setSearch(''); }}>Clear</button>}
-            </div>
-            <span className="toolbar-meta ws-count tabular-nums" role="status">{countLine}</span>
-          </div>
+          <FilterBar
+            className="ws-toolbar"
+            meta={<span className="ws-count">{countLine}</span>}
+            onClear={hasFilter ? () => { setTagQuery(''); setSearch(''); } : undefined}
+            filters={(
+              <>
+                <Input type="search" aria-label="Search workspaces" placeholder="Search workspaces…" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setSearch(''); }} className="ws-filter-search w-44 sm:w-56" />
+                <Input type="search" aria-label="Filter by tag" placeholder="Filter by tag…" value={tagQuery} onChange={(event) => setTagQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setTagQuery(''); }} className="ws-filter-tag w-36 sm:w-44" />
+              </>
+            )}
+          />
           {workspaces.length ? (
             <>
-            <div className="table-wrap ws-table-wrap">
+            <DataTableShell className="ws-table-wrap" stickyFirstColumn>
               <table className="table-dense ws-table rtable">
                 <caption className="sr-only">Registered workspaces with languages, risk grade, findings, and last scan</caption>
                 <thead>
@@ -162,15 +168,21 @@ export function WorkspacesPage({ go, onAdd, notify }: { go: (r: Route) => void; 
                   {workspaces.map((workspace) => <WorkspaceRow key={workspace.id} workspace={workspace} go={go} onScan={openScan} onRemove={setRemoveTarget} />)}
                 </tbody>
               </table>
-            </div>
+            </DataTableShell>
             {pageCount > 1 && (
-              <footer className="toolbar-row ws-toolbar mt-4 justify-between">
-                <span className="text-sm text-[var(--color-ink-muted)] tabular-nums">Page {page} of {pageCount}</span>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Previous</Button>
-                  <Button variant="outline" size="sm" disabled={page >= pageCount} onClick={() => setPage((p) => Math.min(pageCount, p + 1))}>Next</Button>
-                </div>
-              </footer>
+              <ListFooter
+                variant="toolbar"
+                className="ws-toolbar"
+                rangeText={<span className="text-sm text-[var(--color-ink-muted)]">Page {page} of {pageCount}</span>}
+                pagination={{
+                  'aria-label': 'Workspaces pagination',
+                  hasPrevious: page > 1,
+                  hasNext: page < pageCount,
+                  onPrevious: () => setPage((p) => Math.max(1, p - 1)),
+                  onNext: () => setPage((p) => Math.min(pageCount, p + 1)),
+                  variant: 'outline',
+                }}
+              />
             )}
             </>
           ) : debouncedSearch ? <Empty title={`No workspaces match “${debouncedSearch}”`} icon={<FolderIcon />} action={<Button variant="outline" size="sm" onClick={() => setSearch('')}>Clear search</Button>}>No workspace name or path contains “{debouncedSearch}”.</Empty> : <Empty title="No workspaces match this tag" icon={<FolderIcon />}>No workspace tags contain “{tagNeedle}”. Clear the filter to see every project.</Empty>}
