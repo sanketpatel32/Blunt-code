@@ -140,6 +140,38 @@ async function typeTagQuery(host: HTMLElement, value: string) {
   });
 }
 
+describe('WorkspacesPage server paging', () => {
+  it('disables Next when the envelope has_next is false even if total implies another page', async () => {
+    const many = Array.from({ length: 30 }, (_, i) =>
+      workspace({ id: `ws-${i}`, name: `Workspace ${i}` }),
+    );
+    const fetch = vi.fn((input: string) => {
+      if (String(input).split('?')[0] !== '/api/v1/workspaces') return Promise.resolve(json([]));
+      return Promise.resolve(json({
+        items: many.slice(0, 25),
+        total: 30,
+        page: 1,
+        page_size: 25,
+        has_next: false,
+      }));
+    });
+    vi.stubGlobal('fetch', fetch);
+    const host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+    await act(async () => { root.render(<WorkspacesPage go={() => {}} onAdd={() => {}} notify={() => {}} />); });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    const nav = host.querySelector('nav[aria-label="Workspaces pagination"]');
+    expect(nav).not.toBeNull();
+    const next = [...nav!.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === 'Next');
+    expect(next).toBeDefined();
+    expect(next!.disabled).toBe(true);
+    await act(async () => { root.unmount(); });
+    document.body.replaceChildren();
+    vi.unstubAllGlobals();
+  });
+});
+
 describe('WorkspacesPage row tags and filter (Loop W2)', () => {
   it('shows up to two tag chips per row and collapses the rest into +N', async () => {
     vi.useFakeTimers();

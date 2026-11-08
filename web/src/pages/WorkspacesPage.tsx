@@ -72,6 +72,7 @@ export function WorkspacesPage({ go, onAdd, notify }: { go: (r: Route) => void; 
   const total = list?.total ?? 0;
   const pageSize = list?.page_size ?? WS_PAGE_SIZE;
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const hasNextPage = list?.has_next === true;
   useEffect(() => {
     if (!list || total === 0) return;
     if (page > pageCount) setPage(pageCount);
@@ -177,9 +178,9 @@ export function WorkspacesPage({ go, onAdd, notify }: { go: (r: Route) => void; 
                 pagination={{
                   'aria-label': 'Workspaces pagination',
                   hasPrevious: page > 1,
-                  hasNext: page < pageCount,
+                  hasNext: hasNextPage,
                   onPrevious: () => setPage((p) => Math.max(1, p - 1)),
-                  onNext: () => setPage((p) => Math.min(pageCount, p + 1)),
+                  onNext: () => setPage((p) => p + 1),
                   variant: 'outline',
                 }}
               />

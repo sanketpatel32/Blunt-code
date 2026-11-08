@@ -592,7 +592,7 @@ describe('HistoryPage', () => {
   it('clears the filter back to normal server paging', async () => {
     mockPages([[onAug29('a1'), offRange('x1', 10)]], 2);
     const host = await renderPage();
-    const clear = host.querySelector<HTMLButtonElement>('.history-filter-clear');
+    const clear = host.querySelector<HTMLButtonElement>('.history-toolbar .ws-filter-clear');
     expect(clear).toBeNull(); // no filter yet, nothing to clear
     expect(host.querySelector('.history-count')!.textContent).toBe('2 scans');
     const from = host.querySelector<HTMLInputElement>('input[aria-label="Filter from date"]')!;
@@ -603,7 +603,7 @@ describe('HistoryPage', () => {
     });
     await act(async () => {});
     expect(host.querySelector('.history-count')!.textContent).toBe('1 of 2 scans');
-    await act(async () => { host.querySelector<HTMLButtonElement>('.history-filter-clear')!.click(); });
+    await act(async () => { host.querySelector<HTMLButtonElement>('.history-toolbar .ws-filter-clear')!.click(); });
     await act(async () => {});
     expect(host.querySelector('.history-pagination button')).not.toBeNull(); // controls return
     expect(host.querySelector('.history-count')!.textContent).toBe('2 scans'); // full total again, once

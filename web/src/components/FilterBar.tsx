@@ -7,9 +7,10 @@ export type FilterBarProps = {
   onClear?: () => void;
   clearLabel?: string;
   className?: string;
+  liveRange?: boolean;
 };
 
-export function FilterBar({ filters, meta, onClear, clearLabel = 'Clear', className }: FilterBarProps) {
+export function FilterBar({ filters, meta, onClear, clearLabel = 'Clear', className, liveRange = false }: FilterBarProps) {
   return (
     <div className={cn('toolbar-row flex flex-wrap items-center gap-3 justify-between', className)}>
       <div className="toolbar-filters flex flex-wrap items-center gap-2 min-w-0">
@@ -21,7 +22,11 @@ export function FilterBar({ filters, meta, onClear, clearLabel = 'Clear', classN
         )}
       </div>
       {meta != null && (
-        <span className="toolbar-meta tabular-nums text-sm text-[var(--color-ink-soft)]" role="status">
+        <span
+          className="toolbar-meta tabular-nums text-sm text-[var(--color-ink-soft)]"
+          role="status"
+          {...(liveRange ? { 'aria-live': 'polite' as const } : {})}
+        >
           {meta}
         </span>
       )}

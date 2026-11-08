@@ -610,18 +610,20 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
               <Button variant="ghost" size="sm" onClick={() => setLedgerFilter('')}>Clear filter</Button>
             </div>
           ) : (
-            <ol className="ledger-list">
-              {ledgerRows.map((row) => (
-                <LedgerRow
-                  key={row.workspace.id}
-                  workspace={row.workspace}
-                  score={row.score}
-                  go={go}
-                  notify={notify}
-                  onRemoved={workspaces.reload}
-                />
-              ))}
-            </ol>
+            <div className="ledger-scroll" tabIndex={-1}>
+              <ol className="ledger-list">
+                {ledgerRows.map((row) => (
+                  <LedgerRow
+                    key={row.workspace.id}
+                    workspace={row.workspace}
+                    score={row.score}
+                    go={go}
+                    notify={notify}
+                    onRemoved={workspaces.reload}
+                  />
+                ))}
+              </ol>
+            </div>
           )}
         </DataPanel>
 

@@ -17,6 +17,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '
 import { PageHeader } from '../components/PageHeader';
 import { ListFooter } from '../components/ListFooter';
 import { DataTableShell } from '../components/DataTableShell';
+import { FilterBar } from '../components/FilterBar';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
@@ -754,86 +755,85 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
         <div className="search-main space-y-4 min-w-0">
           {/* Result toolbar: filters left, the single grounded count right. The
               matched total renders exactly once on this screen — here. */}
-          <div className="toolbar-row">
-            <div className="toolbar-filters">
-              <button
-                type="button"
-                className="chip"
-                aria-pressed={allScans}
-                title={allScans ? 'Showing every stored scan: a finding that persisted across scans appears once per scan' : 'Showing the latest completed scan of each workspace. Turn on to search older scans too'}
-                onClick={() => setAllScans((value) => !value)}
-              >
-                Include older scans
-              </button>
-              {total > 0 && (
+          <FilterBar
+            className="search-results-toolbar"
+            liveRange
+            meta={state.loading ? 'Searching…' : total > 0 ? `Showing ${first + 1}–${Math.min(first + items.length, total)} of ${total.toLocaleString()}` : 'No matches'}
+            filters={(
+              <>
                 <button
                   type="button"
                   className="chip"
-                  aria-pressed={grouped}
-                  title="Collapse consecutive results that share a rule and file"
-                  onClick={() => setGrouping(!grouped)}
+                  aria-pressed={allScans}
+                  title={allScans ? 'Showing every stored scan: a finding that persisted across scans appears once per scan' : 'Showing the latest completed scan of each workspace. Turn on to search older scans too'}
+                  onClick={() => setAllScans((value) => !value)}
                 >
-                  Group by rule + file
+                  Include older scans
                 </button>
-              )}
-              <div className="segmented inline-flex items-center rounded-[var(--radius-button)] border border-[var(--color-rule)] bg-[var(--color-surface-muted)] p-0.5" role="group" aria-label="View mode">
-                <button
-                  type="button"
-                  onClick={() => setViewMode('table')}
-                  aria-pressed={viewMode === 'table'}
-                  className={`min-h-6 p-1.5 rounded-[calc(var(--radius-button)-2px)] transition-colors ${
-                    viewMode === 'table' ? 'bg-[var(--color-surface)] text-[var(--color-ink)] shadow-xs' : 'text-[var(--color-ink-faint)] hover:text-[var(--color-ink)]'
-                  }`}
-                  title="Dense table view"
-                >
-                  <LayoutList className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode('cards')}
-                  aria-pressed={viewMode === 'cards'}
-                  className={`min-h-6 p-1.5 rounded-[calc(var(--radius-button)-2px)] transition-colors ${
-                    viewMode === 'cards' ? 'bg-[var(--color-surface)] text-[var(--color-ink)] shadow-xs' : 'text-[var(--color-ink-faint)] hover:text-[var(--color-ink)]'
-                  }`}
-                  title="Card list view"
-                >
-                  <LayoutGrid className="h-3.5 w-3.5" />
-                </button>
-              </div>
-
-              {/* Column picker */}
-              {viewMode === 'table' && (
-                <details className="search-columns relative inline-block text-xs">
-                  <summary className="search-columns-toggle flex items-center gap-1 px-2.5 py-1 rounded-[var(--radius-button)] border border-[var(--color-rule-faint)] bg-[var(--color-surface)] cursor-pointer text-[var(--color-ink-soft)] hover:text-[var(--color-ink)]">
-                    <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
-                    <span>Columns</span>
-                  </summary>
-                  <div className="search-columns-panel absolute right-0 mt-1.5 w-44 rounded-[var(--radius-md)] border border-[var(--color-rule)] bg-[var(--color-surface)] p-2 shadow-lg z-20 space-y-1">
-                    {SEARCH_COLUMNS.map(([key, label]) => (
-                      <label key={key} className="search-column-toggle flex items-center gap-2 px-1.5 py-1 rounded text-xs text-[var(--color-ink-soft)] hover:bg-[var(--color-surface-muted)] cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={visibleCols[key as keyof typeof visibleCols]}
-                          onChange={() =>
-                            setVisibleCols((v) => ({
-                              ...v,
-                              [key]: !v[key as keyof typeof visibleCols],
-                            }))
-                          }
-                          className="h-5 w-5 rounded border-[var(--color-rule-strong)] text-[var(--color-accent)]"
-                        />
-                        <span>{label}</span>
-                      </label>
-                    ))}
-                  </div>
-                </details>
-              )}
-            </div>
-
-            <span className="toolbar-meta tabular-nums" aria-live="polite">
-              {state.loading ? 'Searching…' : total > 0 ? `Showing ${first + 1}–${Math.min(first + items.length, total)} of ${total.toLocaleString()}` : 'No matches'}
-            </span>
-          </div>
+                {total > 0 && (
+                  <button
+                    type="button"
+                    className="chip"
+                    aria-pressed={grouped}
+                    title="Collapse consecutive results that share a rule and file"
+                    onClick={() => setGrouping(!grouped)}
+                  >
+                    Group by rule + file
+                  </button>
+                )}
+                <div className="segmented inline-flex items-center rounded-[var(--radius-button)] border border-[var(--color-rule)] bg-[var(--color-surface-muted)] p-0.5" role="group" aria-label="View mode">
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('table')}
+                    aria-pressed={viewMode === 'table'}
+                    className={`min-h-6 p-1.5 rounded-[calc(var(--radius-button)-2px)] transition-colors ${
+                      viewMode === 'table' ? 'bg-[var(--color-surface)] text-[var(--color-ink)] shadow-xs' : 'text-[var(--color-ink-faint)] hover:text-[var(--color-ink)]'
+                    }`}
+                    title="Dense table view"
+                  >
+                    <LayoutList className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('cards')}
+                    aria-pressed={viewMode === 'cards'}
+                    className={`min-h-6 p-1.5 rounded-[calc(var(--radius-button)-2px)] transition-colors ${
+                      viewMode === 'cards' ? 'bg-[var(--color-surface)] text-[var(--color-ink)] shadow-xs' : 'text-[var(--color-ink-faint)] hover:text-[var(--color-ink)]'
+                    }`}
+                    title="Card list view"
+                  >
+                    <LayoutGrid className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                {viewMode === 'table' && (
+                  <details className="search-columns relative inline-block text-xs">
+                    <summary className="search-columns-toggle flex items-center gap-1 px-2.5 py-1 rounded-[var(--radius-button)] border border-[var(--color-rule-faint)] bg-[var(--color-surface)] cursor-pointer text-[var(--color-ink-soft)] hover:text-[var(--color-ink)]">
+                      <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span>Columns</span>
+                    </summary>
+                    <div className="search-columns-panel absolute right-0 mt-1.5 w-44 rounded-[var(--radius-md)] border border-[var(--color-rule)] bg-[var(--color-surface)] p-2 shadow-lg z-20 space-y-1">
+                      {SEARCH_COLUMNS.map(([key, label]) => (
+                        <label key={key} className="search-column-toggle flex items-center gap-2 px-1.5 py-1 rounded text-xs text-[var(--color-ink-soft)] hover:bg-[var(--color-surface-muted)] cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={visibleCols[key as keyof typeof visibleCols]}
+                            onChange={() =>
+                              setVisibleCols((v) => ({
+                                ...v,
+                                [key]: !v[key as keyof typeof visibleCols],
+                              }))
+                            }
+                            className="h-5 w-5 rounded border-[var(--color-rule-strong)] text-[var(--color-accent)]"
+                          />
+                          <span>{label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </details>
+                )}
+              </>
+            )}
+          />
 
           {/* Results List / Table */}
           {state.loading ? (

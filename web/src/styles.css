@@ -112,16 +112,6 @@
   border-color: var(--color-accent);
   color: var(--color-ink);
 }
-.history-filter-clear {
-  display: inline-flex; align-items: center; gap: var(--space-2xs);
-  min-height: 2rem; padding: 0 var(--space-sm);
-  border: var(--rule) solid transparent; border-radius: var(--radius-button);
-  background: transparent; color: var(--color-ink-faint);
-  font: 600 var(--text-xs) var(--font-body);
-  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
-}
-.history-filter-clear:hover { background: var(--color-surface-muted); color: var(--color-ink); border-color: var(--color-rule); }
-.history-filter-clear:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
 /* Outer table card — dense rows via .table-dense; only vertical rhythm and
    hover are tuned locally so rows land in the 40-48px band. */
 .history-table-wrap {
@@ -3083,6 +3073,15 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
    (`overscroll-behavior: contain` keeps a wheel at the bottom of the list from
    taking the page with it). The panel's own foot and the "All workspaces" link
    stay pinned outside the scroll. */
+/* Bounded ledger viewport: all 25 API rows stay in the DOM; ~10–12 rows visible at
+   1440×900 with hero/metrics above. Footer pagination stays outside the scroll.
+   Spec intent: desktop density via scroll, not client slice or fewer rows. */
+.board-ledger .ledger-scroll {
+  max-height: min(26rem, calc(100dvh - var(--nav-h, 3.5rem) - 20rem));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
 .ledger-list {
   margin: 0;
   padding: 0;
@@ -3099,8 +3098,9 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
     minmax(5.5rem, auto)         /* score + state */
     auto;                        /* actions  */
   grid-template-areas: "grade identity mid meta actions";
-  gap: var(--space-sm) var(--space-md);
+  gap: var(--space-xs) var(--space-md);
   align-items: center;
+  min-height: 2.35rem;
   border-bottom: var(--rule) solid var(--color-rule-faint);
   transition: background var(--dur-fast) var(--ease-out);
 }

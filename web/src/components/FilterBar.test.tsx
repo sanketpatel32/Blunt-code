@@ -42,6 +42,12 @@ describe('FilterBar', () => {
     expect(host.querySelector('[role="status"]')?.textContent).toBe('2 workspaces');
   });
 
+  it('marks meta as aria-live when liveRange is set', async () => {
+    const host = await render(<FilterBar liveRange meta="4 scans · 1–6" filters={<Input aria-label="Filter from date" />} />);
+    const status = host.querySelector('[role="status"]');
+    expect(status?.getAttribute('aria-live')).toBe('polite');
+  });
+
   it('calls onClear when the clear control is clicked', async () => {
     const onClear = vi.fn();
     const host = await render(
