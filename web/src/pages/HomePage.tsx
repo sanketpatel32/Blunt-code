@@ -285,7 +285,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
         >
           Pick any folder on this computer. Blunt Code looks for secrets, vulnerable dependencies, and risky code — locally, without touching your files.
           <br />
-          <span className="mt-2 inline-flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xs text-[var(--color-ink-faint)]" aria-label="Getting started: add a workspace, run a scan, review findings">
+          <span className="mt-2 inline-flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xs text-[var(--color-ink-faint)]" role="group" aria-label="Getting started: add a workspace, run a scan, review findings">
             <span>1. Add a workspace</span>
             <span aria-hidden="true">→</span>
             <span>2. Run a scan</span>

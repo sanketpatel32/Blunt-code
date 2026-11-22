@@ -28,6 +28,10 @@ records differ for older versions:
 - **Flaky tool installs.** The post-install smoke probe retries once after a short backoff, so a virus scanner or rename-visibility lag no longer fails a freshly installed analyzer mid-scan (#52).
 - **Scan while the app is open.** `bluntcode scan` drives the running app's scan API instead of refusing: same progress output, summary, document formats, gate, and exit codes. Flags the API cannot express (`--watch`, `--incremental`, `--jobs`, `--baseline`, `--format github`) still refuse, naming what cannot be proxied (#53).
 - **`--format` stdout corruption.** `scan --format json|sarif|csv|jsonl|markdown` no longer appends the human summary after the document on stdout; with `--output` the summary still prints (#56).
+- **Windows build.** `web/src/lib/hackingTests.ts` embedded a literal PHP web-shell string that Windows Defender quarantines as `Backdoor:PHP/Perhetshell.B!dha`, deleting the file mid-build and making the repo unbuildable on stock Windows; the pentest card's description no longer carries the live shell source (#60).
+- **Settings two-column bento.** A leftover Tailwind `space-y-4` margin utility fought the grid's own `gap`, so section cards never shared a row at ≥1280px; a stray `<Separator>` between the first two sections also consumed a grid cell.
+- **Accessibility.** The scrollable scan-event list is keyboard-focusable (`scrollable-region-focusable`), and nine `aria-label`s on generic elements (paragraph/div/span) gained the roles (`group`/`img`) those attributes require (`aria-prohibited-attr`).
+- **E2E smoke suite.** Scan polling waits up to 300s (SonarQube alone can exceed 90s even warm) and asserts a terminal state before checking results; cleanup cancels the workspace's in-flight scans so deletion no longer hits `409 SCAN_IN_PROGRESS`.
 
 ### Changed
 - **Install progress names the download.** The "Preparing X" scan stage now reads "Preparing X (downloading ~N MB, first run only)" from per-artifact manifest sizes, so a first pentest/deep run installing ~1.5 GB of tools no longer looks hung (#54).

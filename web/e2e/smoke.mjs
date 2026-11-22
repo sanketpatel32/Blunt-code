@@ -89,11 +89,15 @@ await check('run scan from workspace page → results', async () => {
   await start.click();
   await page.waitForURL(/\/scans\/[0-9a-f-]{36}/, { timeout: 15000 });
   scanId = page.url().match(/scans\/([0-9a-f-]{36})/)[1];
-  for (let i = 0; i < 90; i++) {
-    const scan = await api('GET', `/scans/${scanId}`);
+  // The default dialog profile runs every installed analyzer, SonarQube
+  // included; even warm that can exceed 90s on a tiny project.
+  let scan = null;
+  for (let i = 0; i < 300; i++) {
+    scan = await api('GET', `/scans/${scanId}`);
     if (['completed', 'completed_with_warnings', 'failed', 'cancelled', 'interrupted'].includes(scan.state)) break;
     await page.waitForTimeout(1000);
   }
+  assert(scan && ['completed', 'completed_with_warnings', 'failed', 'cancelled', 'interrupted'].includes(scan.state), `scan still ${scan?.state ?? 'unknown'} after 300s`);
   await page.reload({ waitUntil: 'networkidle' });
   await page.locator('.scan-grade').waitFor({ timeout: 10000 });
   const rows = await page.locator('table tbody tr').count();
@@ -377,8 +381,24 @@ await check('no console errors across the run', async () => {
   assert(!consoleErrors.length, `${consoleErrors.length}: ${consoleErrors.slice(0, 3).join(' || ')}`);
 });
 
-// Cleanup: remove the throwaway workspace (project files are untouched).
-if (wsId && !process.env.SMOKE_KEEP) { try { await api('DELETE', `/workspaces/${wsId}`); } catch (e) { results.push(`WARN  cleanup: ${e.message}`); } }
+// Cleanup: cancel any scans still running on the throwaway workspace (the
+// pentest check above launches one), then remove the workspace. Project
+// files are untouched.
+const TERMINAL = ['completed', 'completed_with_warnings', 'failed', 'cancelled', 'interrupted'];
+if (wsId && !process.env.SMOKE_KEEP) {
+  try {
+    const { items: scans } = await api('GET', `/workspaces/${wsId}/scans?page_size=100`);
+    for (const s of scans ?? []) {
+      if (!TERMINAL.includes(s.state)) { try { await api('POST', `/scans/${s.id}/cancel`); } catch { /* finished meanwhile */ } }
+    }
+    for (let i = 0; i < 60; i++) {
+      const { items } = await api('GET', `/workspaces/${wsId}/scans?page_size=100`);
+      if ((items ?? []).every((s) => TERMINAL.includes(s.state))) break;
+      await page.waitForTimeout(1000);
+    }
+    await api('DELETE', `/workspaces/${wsId}`);
+  } catch (e) { results.push(`WARN  cleanup: ${e.message}`); }
+}
 await browser.close();
 console.log(results.join('\n'));
 console.log(`\n${results.filter((r) => r.startsWith('PASS')).length} passed, ${failed} failed`);

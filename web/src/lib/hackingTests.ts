@@ -200,7 +200,7 @@ export const HACKING_TESTS: HackingTest[] = [
     severity: 'critical',
     owasp: 'A08:2021',
     cwe: 'CWE-434',
-    payload: "shell.php with <?php system($_GET['cmd']); ?> mime: image/jpeg",
+    payload: "shell.php web shell upload disguised as image/jpeg (system exec via ?cmd=)",
     remediation: 'Verify content type and magic bytes; rename and store outside webroot; scan uploaded files.',
     description: 'Uploads executable file that grants remote code execution.',
     tags: ['upload', 'rce'],

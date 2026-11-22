@@ -478,7 +478,7 @@ export function ReportView({ scanId, notify, runs: runsProp, go, onCountsChanged
         {tools.length > 0 && <div className="filter-group filter-group-grow">
           <span className="filter-group-label" aria-hidden="true">Tool</span>
           <fieldset className="chip-group" aria-label="Tool">
-            {visibleTools.map((tool) => { const run = runById.get(tool); const runTitle = run ? `${run.status ?? 'unknown'}${run.duration_ms !== undefined ? ` · ${compactDuration(run.duration_ms)}` : ''}${run.warning_count ? ` · coverage incomplete (${run.warning_count} warning${run.warning_count === 1 ? '' : 's'})` : ''}` : 'Reported findings; no run recorded on this scan'; return <button type="button" key={tool} className={`chip${filters.analyzer === tool ? ' pressed' : ''}`} aria-pressed={filters.analyzer === tool} title={runTitle} onClick={() => toggleAnalyzer(tool)}>{analyzerName(tool)}{run?.warning_count ? <span className="chip-flag" aria-label="coverage incomplete">!</span> : null}<span className="chip-count">{countByAnalyzer.get(tool) ?? 0}</span></button>; })}
+            {visibleTools.map((tool) => { const run = runById.get(tool); const runTitle = run ? `${run.status ?? 'unknown'}${run.duration_ms !== undefined ? ` · ${compactDuration(run.duration_ms)}` : ''}${run.warning_count ? ` · coverage incomplete (${run.warning_count} warning${run.warning_count === 1 ? '' : 's'})` : ''}` : 'Reported findings; no run recorded on this scan'; return <button type="button" key={tool} className={`chip${filters.analyzer === tool ? ' pressed' : ''}`} aria-pressed={filters.analyzer === tool} title={runTitle} onClick={() => toggleAnalyzer(tool)}>{analyzerName(tool)}{run?.warning_count ? <span className="chip-flag" role="img" aria-label="coverage incomplete">!</span> : null}<span className="chip-count">{countByAnalyzer.get(tool) ?? 0}</span></button>; })}
             {toolsOver && <MoreTools open={toolsOpen} onToggle={() => setToolsOpen((open) => !open)} hidden={tools.filter((tool) => !visibleTools.includes(tool))} selected={filters.analyzer} onPick={toggleAnalyzer} countOf={(tool) => countByAnalyzer.get(tool) ?? 0} warnOf={(tool) => !!runById.get(tool)?.warning_count} />}
           </fieldset>
         </div>}
@@ -591,7 +591,7 @@ function MoreTools({ open, onToggle, hidden, selected, onPick, countOf, warnOf }
       </button>
       {open && (
         <span className="chip-scroller" role="group" aria-label="More tools">
-          {hidden.map((tool) => <button type="button" key={tool} className={`chip${selected === tool ? ' pressed' : ''}`} aria-pressed={selected === tool} onClick={() => onPick(tool)}>{analyzerName(tool)}{warnOf(tool) ? <span className="chip-flag" aria-label="coverage incomplete">!</span> : null}<span className="chip-count">{countOf(tool)}</span></button>)}
+          {hidden.map((tool) => <button type="button" key={tool} className={`chip${selected === tool ? ' pressed' : ''}`} aria-pressed={selected === tool} onClick={() => onPick(tool)}>{analyzerName(tool)}{warnOf(tool) ? <span className="chip-flag" role="img" aria-label="coverage incomplete">!</span> : null}<span className="chip-count">{countOf(tool)}</span></button>)}
         </span>
       )}
     </>

@@ -218,7 +218,7 @@ export function QueryBuilder({ group, onChange, onApply, facetCounts, analyzers 
           {preview}
         </p>
         {urlSearch ? (
-          <div className="mt-2 flex flex-wrap gap-1.5" aria-label="URL preview">
+          <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label="URL preview">
             <Badge variant="outline" className="font-mono text-xs max-w-full truncate">
               ?{urlSearch}
             </Badge>
