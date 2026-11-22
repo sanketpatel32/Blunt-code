@@ -4,8 +4,11 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
+	"time"
 
 	"bluntcode/internal/api"
+	"bluntcode/internal/selfupdate"
 )
 
 func printUpdateHelp(w io.Writer) {
@@ -28,6 +31,10 @@ func runUpdate(args []string, stdout, stderr io.Writer) int {
 	switch args[0] {
 	case "check":
 		return runUpdateCheck(args[1:], stdout, stderr)
+	case "apply-staged":
+		// Internal: started by POST /update/apply from a copy of the
+		// installed binary. Not listed in help.
+		return runUpdateApplyStaged(args[1:], stderr)
 	default:
 		fmt.Fprintf(stderr, "bluntcode update: unknown subcommand %q\n", args[0])
 		printUpdateHelp(stderr)
@@ -65,6 +72,42 @@ func runUpdateCheck(args []string, stdout, stderr io.Writer) int {
 		}
 	} else {
 		fmt.Fprintf(stdout, "  Status:           You are up to date.\n")
+	}
+	return 0
+}
+
+func runUpdateApplyStaged(args []string, stderr io.Writer) int {
+	flags := flag.NewFlagSet("update apply-staged", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	payload := flags.String("payload", "", "verified, extracted release folder")
+	installDir := flags.String("install-dir", "", "installation directory to replace")
+	waitPID := flags.Int("wait-pid", 0, "process to wait for before swapping")
+	logPath := flags.String("log", "", "append progress and errors to this file")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if *payload == "" || *installDir == "" {
+		fmt.Fprintln(stderr, "bluntcode update apply-staged: --payload and --install-dir are required")
+		return 2
+	}
+	var log io.Writer = stderr
+	if *logPath != "" {
+		if file, err := os.OpenFile(*logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600); err == nil {
+			defer file.Close()
+			log = file
+		}
+	}
+	err := selfupdate.Apply(selfupdate.ApplyOptions{
+		PayloadDir:  *payload,
+		InstallDir:  *installDir,
+		WaitPID:     *waitPID,
+		WaitTimeout: 60 * time.Second,
+		Relaunch:    true,
+		Log:         log,
+	})
+	if err != nil {
+		fmt.Fprintf(log, "update failed: %v\n", err)
+		return 1
 	}
 	return 0
 }

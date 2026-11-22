@@ -9,11 +9,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
 	"bluntcode/internal/database"
+	"bluntcode/internal/selfupdate"
 )
 
 func TestCompareSemverOrdersTriples(t *testing.T) {
@@ -129,60 +130,96 @@ func TestUpdateCheckSoftFailsWhenUnreachable(t *testing.T) {
 	}
 }
 
-func TestUpdateApplyStagesInstallerAndLaunchesDetached(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skip("apply flow is Windows-specific")
+func stubUpdateApply(t *testing.T) (*exec.Cmd, *string) {
+	t.Helper()
+	originalSupported, originalStage, originalLaunch, originalDir := updateSupported, stageRelease, launchUpdateProcess, defaultInstallDir
+	t.Cleanup(func() {
+		updateSupported, stageRelease, launchUpdateProcess, defaultInstallDir = originalSupported, originalStage, originalLaunch, originalDir
+	})
+	updateSupported = true
+	defaultInstallDir = func() string { return `C:\Users\me\AppData\Local\Programs\BluntCode` }
+	launched := &exec.Cmd{}
+	stagedTag := new(string)
+	stageRelease = func(_ context.Context, tag, dir, _ string) (selfupdate.Staged, error) {
+		*stagedTag = tag
+		payload := filepath.Join(dir, "payload", "app")
+		return selfupdate.Staged{Assets: selfupdate.Assets{Tag: tag, Version: strings.TrimPrefix(tag, "v")}, PayloadDir: payload}, nil
 	}
+	launchUpdateProcess = func(command *exec.Cmd) error { *launched = *command; return nil }
+	return launched, stagedTag
+}
+
+func TestUpdateApplyStagesVerifiedReleaseWithoutScripts(t *testing.T) {
 	s := testServer(t)
 	s.version = "0.5.0"
-	urlsSeen := stubUpdateNetwork(t, "# fake installer script\r\nparam()\r\n")
-	var launched *exec.Cmd
-	originalLaunch := launchUpdateProcess
-	launchUpdateProcess = func(command *exec.Cmd) error { launched = command; return nil }
-	t.Cleanup(func() { launchUpdateProcess = originalLaunch })
+	stubUpdateNetwork(t, `{"tag_name":"v0.6.0","html_url":"u","body":""}`)
+	launched, stagedTag := stubUpdateApply(t)
 
 	recorder := httptest.NewRecorder()
 	s.updateApply(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/update/apply", nil))
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
-	if launched == nil {
-		t.Fatal("updater process was not started")
+	if *stagedTag != "v0.6.0" {
+		t.Fatalf("staged tag = %q, want the exact release tag", *stagedTag)
 	}
-	// The launcher must point at the staged script and run it silently with a
-	// close-wait so the app can shut down first.
 	var payload struct {
 		StagedAt string `json:"staged_at"`
 	}
 	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
 		t.Fatal(err)
 	}
-	script, err := os.ReadFile(filepath.Join(payload.StagedAt, "install-latest.ps1"))
-	if err != nil || !strings.Contains(string(script), "fake installer") {
-		t.Fatalf("staged installer missing or wrong: %v", err)
+	t.Cleanup(func() { _ = os.RemoveAll(payload.StagedAt) })
+	helper := filepath.Join(payload.StagedAt, "bluntcode-updater.exe")
+	if launched.Path != helper {
+		t.Fatalf("launched %q, want the staged copy of this binary %q", launched.Path, helper)
 	}
-	launcher, err := os.ReadFile(filepath.Join(payload.StagedAt, "run-update.cmd"))
-	if err != nil || !strings.Contains(string(launcher), "-Silent -WaitForCloseSeconds 60") {
-		t.Fatalf("staged launcher missing or wrong: %v", err)
+	if _, err := os.Stat(helper); err != nil {
+		t.Fatalf("helper binary not staged: %v", err)
 	}
-	// The launcher owns the relaunch: silent installs never start the app, so
-	// without this chain an in-app update strands the user without a window.
-	if !strings.Contains(string(launcher), `if exist "%LOCALAPPDATA%\Programs\BluntCode\bluntcode.exe" start "" "%LOCALAPPDATA%\Programs\BluntCode\bluntcode.exe"`) {
-		t.Fatalf("staged launcher does not relaunch the installed app:\n%s", string(launcher))
-	}
-	if !strings.Contains(string(launcher), "if errorlevel 1") {
-		t.Fatalf("staged launcher does not guard against failed installs:\n%s", string(launcher))
-	}
-	if len(*urlsSeen) == 0 || !strings.Contains(string(*urlsSeen), "raw.githubusercontent.com") {
-		t.Fatalf("installer script was not fetched from the repo: %s", string(*urlsSeen))
-	}
-	// A window flashing over the dying app reads like a crash; it starts minimized.
-	for _, arg := range launched.Args {
-		if arg == "/min" {
-			return
+	args := strings.Join(launched.Args, " ")
+	for _, want := range []string{"update apply-staged", "--payload " + filepath.Join(payload.StagedAt, "payload", "app"), "--wait-pid " + strconv.Itoa(os.Getpid())} {
+		if !strings.Contains(args, want) {
+			t.Fatalf("updater args %q missing %q", args, want)
 		}
 	}
-	t.Fatalf("updater console was not started minimized: %v", launched.Args)
+	for _, forbidden := range []string{"powershell", "ExecutionPolicy", ".ps1", "cmd"} {
+		if strings.Contains(strings.ToLower(args), strings.ToLower(forbidden)) {
+			t.Fatalf("updater still shells out (%q): %s", forbidden, args)
+		}
+	}
+}
+
+func TestUpdateApplyFailsClosed(t *testing.T) {
+	s := testServer(t)
+	s.version = "0.5.0"
+	launched, _ := stubUpdateApply(t)
+
+	original := fetchURLBytes
+	fetchURLBytes = func(url string) ([]byte, error) { return nil, fmt.Errorf("rate limited") }
+	recorder := httptest.NewRecorder()
+	s.updateApply(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/update/apply", nil))
+	fetchURLBytes = original
+	if recorder.Code != http.StatusBadGateway || launched.Path != "" {
+		t.Fatalf("unreachable releases API must not fall back to another ref: %d %s", recorder.Code, recorder.Body.String())
+	}
+
+	stageRelease = func(context.Context, string, string, string) (selfupdate.Staged, error) {
+		return selfupdate.Staged{}, fmt.Errorf("release archive SHA-256 mismatch")
+	}
+	stubUpdateNetwork(t, `{"tag_name":"v0.6.0"}`)
+	recorder = httptest.NewRecorder()
+	s.updateApply(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/update/apply", nil))
+	if recorder.Code != http.StatusBadGateway || !strings.Contains(recorder.Body.String(), "UPDATE_VERIFY_FAILED") || launched.Path != "" {
+		t.Fatalf("unverified release must not launch the updater: %d %s", recorder.Code, recorder.Body.String())
+	}
+
+	stubUpdateNetwork(t, `{"tag_name":"v0.5.0"}`)
+	recorder = httptest.NewRecorder()
+	s.updateApply(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/update/apply", nil))
+	if recorder.Code != http.StatusConflict || launched.Path != "" {
+		t.Fatalf("same-version apply must be refused: %d %s", recorder.Code, recorder.Body.String())
+	}
 }
 
 func TestUpdateApplyBlockedWhenOffline(t *testing.T) {
