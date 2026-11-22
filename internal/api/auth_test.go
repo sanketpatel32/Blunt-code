@@ -51,7 +51,8 @@ func TestAPIRequiresTokenOnEveryRouteButHealth(t *testing.T) {
 	}
 	// A wrong bearer is not rescued by a valid ticket.
 	ticket := mintTicket(t, s, "/api/v1/workspaces")
-	request := guardRequest(http.MethodGet, "http://127.0.0.1:8787/api/v1/workspaces?ticket="+ticket, "", map[string]string{"Authorization": "Bearer wrong"})
+	request := guardRequest(http.MethodGet, "http://127.0.0.1:8787/api/v1/workspaces", "", map[string]string{"Authorization": "Bearer wrong"})
+	request.AddCookie(&http.Cookie{Name: TicketCookie, Value: ticket})
 	if got := serve(s, request).Code; got != http.StatusUnauthorized {
 		t.Fatalf("wrong bearer with a valid ticket must be refused, got %d", got)
 	}
@@ -96,7 +97,23 @@ func mintTicket(t *testing.T, s *Server, path string) string {
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil || len(body.Ticket) < 43 || body.ExpiresIn <= 0 {
 		t.Fatalf("ticket response %s: %v", response.Body.String(), err)
 	}
+	var cookie *http.Cookie
+	for _, c := range response.Result().Cookies() {
+		if c.Name == TicketCookie {
+			cookie = c
+		}
+	}
+	if cookie == nil || cookie.Value != body.Ticket || cookie.Path != path || !cookie.HttpOnly || cookie.SameSite != http.SameSiteStrictMode || cookie.MaxAge <= 0 {
+		t.Fatalf("mint must set a scoped HttpOnly ticket cookie, got %#v", cookie)
+	}
 	return body.Ticket
+}
+
+// ticketRequest builds a header-less GET carrying a ticket cookie.
+func ticketRequest(path, ticket string, headers map[string]string) *http.Request {
+	request := guardRequest(http.MethodGet, "http://127.0.0.1:8787"+path, "", headers)
+	request.AddCookie(&http.Cookie{Name: TicketCookie, Value: ticket})
+	return request
 }
 
 func TestNoCookieCarriesTheToken(t *testing.T) {
@@ -122,22 +139,35 @@ func TestTicketsAreSingleUsePathBoundGetOnly(t *testing.T) {
 	s := testServer(t)
 	path := "/api/v1/settings"
 	ticket := mintTicket(t, s, path)
-	if got := serve(s, guardRequest(http.MethodGet, "http://127.0.0.1:8787"+path+"?ticket="+ticket, "", map[string]string{"Sec-Fetch-Site": "same-origin"})); got.Code != http.StatusOK {
-		t.Fatalf("ticket GET: %d %s", got.Code, got.Body.String())
+	response := serve(s, ticketRequest(path, ticket, map[string]string{"Sec-Fetch-Site": "same-origin"}))
+	if response.Code != http.StatusOK {
+		t.Fatalf("ticket GET: %d %s", response.Code, response.Body.String())
 	}
-	if got := serve(s, guardRequest(http.MethodGet, "http://127.0.0.1:8787"+path+"?ticket="+ticket, "", nil)).Code; got != http.StatusUnauthorized {
+	// Redemption expires the cookie so the spent ticket stops being replayed.
+	var cleared bool
+	for _, c := range response.Result().Cookies() {
+		if c.Name == TicketCookie && c.MaxAge < 0 {
+			cleared = true
+		}
+	}
+	if !cleared {
+		t.Fatal("a redeemed ticket cookie must be cleared")
+	}
+	if got := serve(s, ticketRequest(path, ticket, nil)).Code; got != http.StatusUnauthorized {
 		t.Fatalf("a used ticket must be refused, got %d", got)
 	}
 	other := mintTicket(t, s, path)
-	if got := serve(s, guardRequest(http.MethodGet, "http://127.0.0.1:8787/api/v1/workspaces?ticket="+other, "", nil)).Code; got != http.StatusUnauthorized {
+	if got := serve(s, ticketRequest("/api/v1/workspaces", other, nil)).Code; got != http.StatusUnauthorized {
 		t.Fatalf("a ticket for another path must be refused, got %d", got)
 	}
 	// A failed redemption still burns the ticket.
-	if got := serve(s, guardRequest(http.MethodGet, "http://127.0.0.1:8787"+path+"?ticket="+other, "", nil)).Code; got != http.StatusUnauthorized {
+	if got := serve(s, ticketRequest(path, other, nil)).Code; got != http.StatusUnauthorized {
 		t.Fatalf("a burned ticket must be refused, got %d", got)
 	}
 	write := mintTicket(t, s, path)
-	if got := serve(s, guardRequest(http.MethodPatch, "http://127.0.0.1:8787"+path+"?ticket="+write, `{"offline":true}`, map[string]string{"Content-Type": "application/json", "Origin": "http://127.0.0.1:8787"})).Code; got != http.StatusUnauthorized {
+	request := guardRequest(http.MethodPatch, "http://127.0.0.1:8787"+path, `{"offline":true}`, map[string]string{"Content-Type": "application/json", "Origin": "http://127.0.0.1:8787"})
+	request.AddCookie(&http.Cookie{Name: TicketCookie, Value: write})
+	if got := serve(s, request).Code; got != http.StatusUnauthorized {
 		t.Fatalf("tickets must not authorize writes, got %d", got)
 	}
 	expired := mintTicket(t, s, path)
@@ -146,7 +176,7 @@ func TestTicketsAreSingleUsePathBoundGetOnly(t *testing.T) {
 	entry.expires = time.Now().Add(-time.Second)
 	s.tickets.tickets[expired] = entry
 	s.tickets.mu.Unlock()
-	if got := serve(s, guardRequest(http.MethodGet, "http://127.0.0.1:8787"+path+"?ticket="+expired, "", nil)).Code; got != http.StatusUnauthorized {
+	if got := serve(s, ticketRequest(path, expired, nil)).Code; got != http.StatusUnauthorized {
 		t.Fatalf("an expired ticket must be refused, got %d", got)
 	}
 }
@@ -155,7 +185,9 @@ func TestTicketMintingRequiresTheTokenAndAnAPIPath(t *testing.T) {
 	s := testServer(t)
 	ticket := mintTicket(t, s, "/api/v1/settings")
 	// A ticket cannot mint another (it is GET-only and never a bearer).
-	if got := serve(s, guardRequest(http.MethodPost, "http://127.0.0.1:8787/api/v1/session/tickets?ticket="+ticket, `{"path":"/api/v1/settings"}`, map[string]string{"Content-Type": "application/json"})).Code; got != http.StatusUnauthorized {
+	request := guardRequest(http.MethodPost, "http://127.0.0.1:8787/api/v1/session/tickets", `{"path":"/api/v1/settings"}`, map[string]string{"Content-Type": "application/json"})
+	request.AddCookie(&http.Cookie{Name: TicketCookie, Value: ticket})
+	if got := serve(s, request).Code; got != http.StatusUnauthorized {
 		t.Fatalf("ticket-authenticated mint must be refused, got %d", got)
 	}
 	headers := map[string]string{"Authorization": "Bearer " + s.Token(), "Content-Type": "application/json"}
@@ -166,15 +198,17 @@ func TestTicketMintingRequiresTheTokenAndAnAPIPath(t *testing.T) {
 	}
 }
 
-func TestTicketQueryIsStrippedBeforeHandlers(t *testing.T) {
+func TestTicketQueryParamNeverAuthenticates(t *testing.T) {
 	s := testServer(t)
 	path := "/api/v1/workspaces"
 	ticket := mintTicket(t, s, path)
-	var seen string
-	handler := s.apiGuard(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { seen = r.URL.RawQuery }))
-	handler.ServeHTTP(httptest.NewRecorder(), guardRequest(http.MethodGet, "http://127.0.0.1:8787"+path+"?limit=5&ticket="+ticket, "", nil))
-	if seen != "limit=5" {
-		t.Fatalf("handler saw query %q", seen)
+	// Credentials do not belong in URLs: a query ticket is ignored even when
+	// valid, keeping it out of history and Referer headers.
+	if got := serve(s, guardRequest(http.MethodGet, "http://127.0.0.1:8787"+path+"?ticket="+ticket, "", nil)).Code; got != http.StatusUnauthorized {
+		t.Fatalf("a query-string ticket must be refused, got %d", got)
+	}
+	if got := serve(s, ticketRequest(path, ticket, nil)).Code; got != http.StatusOK {
+		t.Fatalf("the same ticket as a cookie must pass, got %d", got)
 	}
 }
 

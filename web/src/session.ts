@@ -6,7 +6,9 @@
  * origin including the port, and sent as `Authorization: Bearer`. A cookie
  * would be sent to every port on 127.0.0.1, i.e. to any other local server
  * the browser visits. Navigations that cannot carry a header (EventSource,
- * downloads, new tabs) use a single-use, path-bound ticket from `signedUrl`.
+ * downloads, new tabs) use a single-use, path-bound ticket from `signedUrl`,
+ * delivered as an HttpOnly cookie so the credential never touches a URL,
+ * browser history, or a Referer header.
  */
 export type SessionState = 'signed-in' | 'signed-out' | 'unknown';
 
@@ -61,21 +63,21 @@ export async function establishSession(fetcher: typeof fetch = fetch, loc: Locat
 }
 
 /**
- * Returns `url` (an /api/v1 path, optionally with a query) with a single-use
- * ticket valid for about a minute. If minting fails the bare URL is returned,
- * so the request fails visibly with 401 rather than silently.
+ * Mints a single-use, path-bound ticket cookie for `url` (an /api/v1 path,
+ * optionally with a query) valid for about a minute, then returns the bare
+ * URL — the cookie authenticates the navigation, so the credential never
+ * appears in the URL. If minting fails the URL still comes back unsigned, so
+ * the request fails visibly with 401 rather than silently.
  */
 export async function signedUrl(url: string, fetcher: typeof fetch = fetch): Promise<string> {
   const path = url.split(/[?#]/, 1)[0]!;
   try {
     const response = await fetcher(TICKETS_URL, { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ path }) });
     if (!response.ok) return url;
-    const { ticket } = await response.json() as { ticket?: string };
-    if (!ticket) return url;
-    return `${url}${url.includes('?') ? '&' : '?'}ticket=${encodeURIComponent(ticket)}`;
   } catch {
-    return url;
+    // The URL goes back unsigned and the navigation fails visibly.
   }
+  return url;
 }
 
 /** Follows an API link (download or new tab) with a fresh ticket. */

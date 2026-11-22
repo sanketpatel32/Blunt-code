@@ -86,7 +86,7 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
     const connect = async () => {
       if (disposed) return;
       setStreamState((state) => state === 'live' ? 'reconnecting' : state);
-      // EventSource cannot send Authorization; each (re)connect uses a fresh single-use ticket.
+      // EventSource cannot send Authorization; each (re)connect mints a fresh single-use ticket cookie.
       const url = await signedUrl(`/api/v1/scans/${encodeURIComponent(id)}/events`);
       if (disposed) return;
       source = new EventSource(url);

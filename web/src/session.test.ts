@@ -69,10 +69,10 @@ describe('establishSession', () => {
 });
 
 describe('signedUrl', () => {
-  it('mints a ticket for the path and appends it', async () => {
+  it('mints a ticket cookie for the path and returns the bare URL', async () => {
     window.localStorage.setItem(STORAGE_KEY, 'tok');
     const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ticket: 't/1', expires_in: 60 }), { status: 200 }));
-    expect(await signedUrl('/api/v1/scans/s/findings.csv?severity=high', fetcher)).toBe('/api/v1/scans/s/findings.csv?severity=high&ticket=t%2F1');
+    expect(await signedUrl('/api/v1/scans/s/findings.csv?severity=high', fetcher)).toBe('/api/v1/scans/s/findings.csv?severity=high');
     const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('/api/v1/session/tickets');
     expect(init.method).toBe('POST');
