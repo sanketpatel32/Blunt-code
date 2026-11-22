@@ -119,7 +119,7 @@ export function SuppressFindingDialog({ workspaceId, finding, onClose, onSuppres
 }
 
 export function FindingPreviewDialog({ scanId, finding, onClose }: { scanId: string; finding: Finding; onClose: () => void }) {
-  const preview = useLoad(() => api.findingPreview(scanId, finding.id), [scanId, finding.id]);
+  const preview = useLoad((signal) => api.findingPreview(scanId, finding.id, { signal }), [scanId, finding.id]);
   const closeRef = useRef<HTMLButtonElement>(null);
   const { dialogRef, onBackdropMouseDown } = useDialogA11y({ onClose, autoFocusRef: closeRef });
   const [copied, setCopied] = useState(false);

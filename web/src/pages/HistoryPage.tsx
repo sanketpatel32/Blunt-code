@@ -68,9 +68,9 @@ export function HistoryPage({ workspaceId, go }: { workspaceId: string; go: (r: 
   // cancelled (partial) scan waits in `pendingPartial` for an explicit accept.
   const [pair, setPair] = useState(initialCompareFromUrl);
   const [pendingPartial, setPendingPartial] = useState<Scan>();
-  const workspace = useLoad(() => api.workspace(workspaceId), [workspaceId]);
+  const workspace = useLoad((signal) => api.workspace(workspaceId, { signal }), [workspaceId]);
   const dateOpts = dateFilter.hasFilter ? { date_from: dateFilter.from || undefined, date_to: dateFilter.to || undefined } : undefined;
-  const state = useLoad(() => api.scansPage(workspaceId, page, historyPageSize, dateOpts), [workspaceId, page, dateFilter.from, dateFilter.to]);
+  const state = useLoad((signal) => api.scansPage(workspaceId, page, historyPageSize, { ...dateOpts, signal }), [workspaceId, page, dateFilter.from, dateFilter.to]);
   const filtering = dateFilter.hasFilter;
   const view = state;
   // The toolbar count is the ONE place this screen reports "how many scans":
@@ -187,7 +187,7 @@ export function HistoryPage({ workspaceId, go }: { workspaceId: string; go: (r: 
 
 /** Sticky instruction strip for compare selection mode. Names the base scan and points at the row menus; when a cancelled (partial) scan was picked, it swaps to an explicit "compare anyway" acceptance. The base scan is usually already in the table rows; if the selection came from a deep link pointing at another server page, it is fetched here. */
 function CompareStrip({ baseId, baseScan, pendingScan, onCancel, onAccept }: { baseId: string; baseScan?: Scan; pendingScan?: Scan; onCancel: () => void; onAccept: () => void }) {
-  const loaded = useLoad(async (): Promise<Scan | undefined> => baseScan ?? ((await api.scan(baseId)) ?? undefined), [baseId, baseScan?.id]);
+  const loaded = useLoad(async (signal): Promise<Scan | undefined> => baseScan ?? ((await api.scan(baseId, { signal })) ?? undefined), [baseId, baseScan?.id]);
   const accepting = !!pendingScan;
   const subject = pendingScan ?? loaded.data;
   return (
@@ -440,7 +440,7 @@ export function HistoryTable({ scans, go, paging, serverFiltered, dateFrom, date
 
 /** Score trend at a glance: completed scans only (failed runs are not a score of 0). */
 function HistoryTiles({ workspaceId, total }: { workspaceId: string; total?: number }) {
-  const trends = useLoad(() => api.trends(workspaceId), [workspaceId]);
+  const trends = useLoad((signal) => api.trends(workspaceId, undefined, { signal }), [workspaceId]);
   const points = (trends.data ?? []).filter((point) => typeof point.score === 'number');
   if (points.length === 0) return null;
   const latest = points[points.length - 1]!;

@@ -65,7 +65,7 @@ export function SourcePane({
   /** Absolute workspace folder, when known, for the "Open in editor" link. */
   workspaceRoot?: string;
 }) {
-  const preview = useLoad(() => api.findingPreview(scanId, finding.id), [scanId, finding.id]);
+  const preview = useLoad((signal) => api.findingPreview(scanId, finding.id, { signal }), [scanId, finding.id]);
   const [copied, setCopied] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
   useEffect(() => { setCommentsOpen(false); }, [finding.id]);

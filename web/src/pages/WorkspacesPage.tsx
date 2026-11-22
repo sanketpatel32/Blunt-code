@@ -42,7 +42,7 @@ export function WorkspacesPage({ go, onAdd, notify }: { go: (r: Route) => void; 
   const debouncedTagQuery = useDebouncedValue(tagQuery, tagQuery ? TAG_FILTER_DEBOUNCE_MS : 0);
 
   const loadWorkspaces = useCallback(
-    () =>
+    (signal: AbortSignal) =>
       api.workspacesPage({
         page,
         page_size: WS_PAGE_SIZE,
@@ -50,7 +50,7 @@ export function WorkspacesPage({ go, onAdd, notify }: { go: (r: Route) => void; 
         order: sort.dir,
         search: debouncedSearch || undefined,
         tag: debouncedTagQuery || undefined,
-      }),
+      }, { signal }),
     [page, sort.key, sort.dir, debouncedSearch, debouncedTagQuery]
   );
   const state = useLoad(loadWorkspaces, [loadWorkspaces]);

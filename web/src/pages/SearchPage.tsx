@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
+import { Fragment, useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { api } from '../api';
 import type { SearchedFinding, Severity, Workspace } from '../types';
 import { SEVERITY_COLOR } from '../lib/chartData';
@@ -162,13 +162,22 @@ function buildSearchRows(items: SearchedFinding[], grouped: boolean): SearchRow[
   return rows;
 }
 
+function parseSeverities(value: string | null): ReadonlySet<string> {
+  return new Set(value ? value.split(',').filter(Boolean) : []);
+}
+
+function parsePage(value: string | null): number {
+  const p = Number(value);
+  return Number.isFinite(p) && p >= 1 ? Math.floor(p) : 1;
+}
+
+function sameSet(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+  return a.size === b.size && [...a].every((value) => b.has(value));
+}
 
 export function SearchPage({ go }: { go: (route: Route) => void }) {
   const [query, setQuery] = useState(() => new URLSearchParams(window.location.search).get('q') ?? '');
-  const [severities, setSeverities] = useState<ReadonlySet<string>>(() => {
-    const v = new URLSearchParams(window.location.search).get('severity');
-    return new Set(v ? v.split(',').filter(Boolean) : []);
-  });
+  const [severities, setSeverities] = useState<ReadonlySet<string>>(() => parseSeverities(new URLSearchParams(window.location.search).get('severity')));
   const [analyzer, setAnalyzer] = useState(() => new URLSearchParams(window.location.search).get('analyzer') ?? '');
   const [workspace, setWorkspace] = useState(() => new URLSearchParams(window.location.search).get('workspace') ?? '');
   /** Off by default: search reads each workspace's latest completed scan, so a
@@ -178,28 +187,72 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('table');
   const [selectedFinding, setSelectedFinding] = useState<SearchedFinding | null>(null);
 
-  const [page, setPage] = useState(() => {
-    const p = Number(new URLSearchParams(window.location.search).get('page'));
-    return Number.isFinite(p) && p >= 1 ? Math.floor(p) : 1;
-  });
+  const [page, setPage] = useState(() => parsePage(new URLSearchParams(window.location.search).get('page')));
   const [pageSize] = useState(SEARCH_PAGE_SIZE);
   const [facetsOpen, setFacetsOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   // The "save current" name form, owned by the Saved Searches facet section.
   const [savedOpen, setSavedOpen] = useState(false);
-  const [queryGroup, setQueryGroup] = useState<QueryGroup>(() =>
-    filterToQueryGroup({
-      severity: [...(new URLSearchParams(window.location.search).get('severity')?.split(',').filter(Boolean) ?? [])].join(','),
-      category: '',
-      analyzer: new URLSearchParams(window.location.search).get('analyzer') ?? '',
-      rule: '',
-      path: new URLSearchParams(window.location.search).get('workspace') ?? '',
-      status: '',
-      q: new URLSearchParams(window.location.search).get('q') ?? '',
-    } as FindingFilter)
-  );
+  // True while `query` holds a value restored from history (Back/Forward): it
+  // skips the typing debounce and must not reset the restored page.
+  const [queryFromHistory, setQueryFromHistory] = useState(false);
 
-  const debouncedQuery = useDebouncedValue(query, query ? SEARCH_DEBOUNCE_MS : 0);
+  const debouncedQuery = useDebouncedValue(query, query && !queryFromHistory ? SEARCH_DEBOUNCE_MS : 0);
+  // A newly settled typed query starts from page 1. Adjusted during render (not
+  // in an effect) so neither the mount nor a history restore clobbers the page.
+  const [settledQuery, setSettledQuery] = useState(debouncedQuery);
+  if (settledQuery !== debouncedQuery) {
+    setSettledQuery(debouncedQuery);
+    if (!queryFromHistory) setPage(1);
+  }
+
+  // Filter changes made by the user reset paging here, in the event handlers;
+  // history restores set state directly and keep their page.
+  const changeQuery = (value: string) => {
+    setQueryFromHistory(false);
+    setQuery(value);
+  };
+  const changeSeverities = (update: ReadonlySet<string> | ((current: ReadonlySet<string>) => ReadonlySet<string>)) => {
+    setSeverities(update);
+    setPage(1);
+  };
+  const changeAnalyzer = (value: string) => {
+    setAnalyzer(value);
+    setPage(1);
+  };
+  const changeWorkspace = (value: string) => {
+    setWorkspace(value);
+    setPage(1);
+  };
+  const toggleAllScans = () => {
+    setAllScans((value) => !value);
+    setPage(1);
+  };
+  const applyFilter = (f: FindingFilter) => {
+    changeSeverities(new Set(f.severity ? f.severity.split(',').filter(Boolean) : []));
+    changeAnalyzer(f.analyzer);
+    changeQuery(f.q);
+    changeWorkspace(f.path);
+  };
+
+  // The query builder edits a draft seeded from the live filters; the draft is
+  // dropped as soon as the filters it was built from change.
+  const filterBasis = JSON.stringify([[...severities], analyzer, workspace, query]);
+  const [queryGroupDraft, setQueryGroupDraft] = useState<{ basis: string; group: QueryGroup } | null>(null);
+  const liveQueryGroup = useMemo(
+    () =>
+      filterToQueryGroup({
+        severity: [...severities].join(','),
+        category: '',
+        analyzer,
+        rule: '',
+        path: workspace,
+        status: '',
+        q: query,
+      } as FindingFilter),
+    [severities, analyzer, workspace, query],
+  );
+  const queryGroup = queryGroupDraft?.basis === filterBasis ? queryGroupDraft.group : liveQueryGroup;
   const workspacesList = useLoad(api.workspaces, []);
   const analyzerInventory = useLoad(api.analyzers, []);
   const workspaceOptions = workspacesList.data ?? [];
@@ -214,17 +267,6 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
     if (allScans) value.scope = 'all';
     return value;
   }, [debouncedQuery, severities, analyzer, workspace, page, pageSize, allScans]);
-
-  // Reset to page 1 whenever a filter changes — but skip the very first run so a
-  // deep link like /search?q=error&page=2 keeps its URL-initialized page.
-  const didMount = useRef(false);
-  useEffect(() => {
-    if (!didMount.current) {
-      didMount.current = true;
-      return;
-    }
-    setPage(1);
-  }, [debouncedQuery, severities, analyzer, workspace, allScans]);
 
   // URL sync
   useEffect(() => {
@@ -245,45 +287,20 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
   useEffect(() => {
     const onPop = () => {
       const sp = new URLSearchParams(window.location.search);
+      setQueryFromHistory(true);
       setQuery(sp.get('q') ?? '');
       setAnalyzer(sp.get('analyzer') ?? '');
       setWorkspace(sp.get('workspace') ?? '');
       setAllScans(sp.get('scope') === 'all');
-      const v = sp.get('severity');
-      setSeverities(new Set(v ? v.split(',').filter(Boolean) : []));
-      const p = Number(sp.get('page'));
-      setPage(Number.isFinite(p) && p >= 1 ? Math.floor(p) : 1);
-      setQueryGroup(
-        filterToQueryGroup({
-          severity: v ?? '',
-          category: '',
-          analyzer: sp.get('analyzer') ?? '',
-          rule: '',
-          path: sp.get('workspace') ?? '',
-          status: '',
-          q: sp.get('q') ?? '',
-        } as FindingFilter)
-      );
+      const next = parseSeverities(sp.get('severity'));
+      setSeverities((current) => (sameSet(current, next) ? current : next));
+      setPage(parsePage(sp.get('page')));
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, []);
 
-  useEffect(() => {
-    setQueryGroup(
-      filterToQueryGroup({
-        severity: [...severities].join(','),
-        category: '',
-        analyzer,
-        rule: '',
-        path: workspace,
-        status: '',
-        q: query,
-      } as FindingFilter)
-    );
-  }, [severities, analyzer, workspace, query]);
-
-  const state = useLoad(() => api.searchFindings(params), [params.q, params.severity, params.analyzer, params.page, params.page_size, params.workspace_id, params.scope]);
+  const state = useLoad((signal) => api.searchFindings(params, { signal }), [params.q, params.severity, params.analyzer, params.page, params.page_size, params.workspace_id, params.scope]);
   const items = state.data?.items ?? [];
   const total = state.data?.total ?? 0;
   const actualPageSize = state.data?.page_size ?? pageSize;
@@ -299,7 +316,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
   }, [state.data, page, pageSize]);
 
   const toggleSeverity = (severity: string) =>
-    setSeverities((current) => {
+    changeSeverities((current) => {
       const next = new Set(current);
       if (next.has(severity)) next.delete(severity);
       else next.add(severity);
@@ -376,26 +393,25 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
   }, [query, severities, analyzer, workspace]);
 
   const clearAll = () => {
-    setQuery('');
-    setSeverities(new Set());
-    setAnalyzer('');
-    setWorkspace('');
-    setPage(1);
+    changeQuery('');
+    changeSeverities(new Set());
+    changeAnalyzer('');
+    changeWorkspace('');
   };
 
   const applyPreset = (preset: 'critical_high' | 'security' | 'secrets') => {
     clearAll();
     switch (preset) {
       case 'critical_high':
-        setSeverities(new Set(['critical', 'high']));
+        changeSeverities(new Set(['critical', 'high']));
         break;
       case 'security':
-        setAnalyzer('pentest');
-        setSeverities(new Set(['critical', 'high', 'medium']));
+        changeAnalyzer('pentest');
+        changeSeverities(new Set(['critical', 'high', 'medium']));
         break;
       case 'secrets':
-        setAnalyzer('secrets');
-        setSeverities(new Set(['critical', 'high']));
+        changeAnalyzer('secrets');
+        changeSeverities(new Set(['critical', 'high']));
         break;
     }
   };
@@ -420,7 +436,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
         <div className="flex items-center justify-between">
           <p className="facet-title text-xs font-semibold text-[var(--color-ink-faint)]">Severity</p>
           {severities.size > 0 && (
-            <button type="button" onClick={() => setSeverities(new Set())} className="text-xs text-[var(--color-accent-strong)] hover:underline">
+            <button type="button" onClick={() => changeSeverities(new Set())} className="text-xs text-[var(--color-accent-strong)] hover:underline">
               Reset
             </button>
           )}
@@ -490,7 +506,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
           {/* Names, not raw ids: the URL keeps persisting the workspace id, the
               select displays the human name for it. A deep-linked id stays an
               honest option until (and unless) the list can resolve its name. */}
-          <Select value={workspace || 'all'} onValueChange={(val) => setWorkspace(val === 'all' ? '' : val)}>
+          <Select value={workspace || 'all'} onValueChange={(val) => changeWorkspace(val === 'all' ? '' : val)}>
             <SelectTrigger className="w-full text-xs h-8" aria-label="Filter by workspace">
               <SelectValue placeholder="All workspaces" />
             </SelectTrigger>
@@ -521,13 +537,13 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
             Analyzer <span className="search-facet-hint">· this page</span>
           </p>
           {analyzer && (
-            <button type="button" onClick={() => setAnalyzer('')} className="text-xs text-[var(--color-accent-strong)] hover:underline">
+            <button type="button" onClick={() => changeAnalyzer('')} className="text-xs text-[var(--color-accent-strong)] hover:underline">
               All
             </button>
           )}
         </div>
         <fieldset className="chip-group mt-2" aria-label="Filter by analyzer">
-          <button type="button" className="chip" aria-pressed={analyzer === ''} onClick={() => setAnalyzer('')}>
+          <button type="button" className="chip" aria-pressed={analyzer === ''} onClick={() => changeAnalyzer('')}>
             All analyzers
           </button>
           {/* The active selection stays visible even at zero so the current filter
@@ -541,7 +557,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                 type="button"
                 className="chip search-analyzer-chip"
                 aria-pressed={analyzer === id}
-                onClick={() => setAnalyzer(id)}
+                onClick={() => changeAnalyzer(id)}
               >
                 {meta?.displayName ?? analyzerName(id)}
                 <small className="chip-count">{count}</small>
@@ -592,12 +608,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                 path: workspace,
               } as FindingFilter
             }
-            onLoad={(f) => {
-              setSeverities(new Set(f.severity ? f.severity.split(',') : []));
-              setAnalyzer(f.analyzer);
-              setQuery(f.q);
-              setWorkspace(f.path);
-            }}
+            onLoad={applyFilter}
           />
         </div>
       </div>
@@ -654,12 +665,12 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
             placeholder="Search message text, vulnerability rules (e.g. sqli, xss, cwe), file paths, or CWE IDs…"
             aria-label="Search findings"
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => changeQuery(event.target.value)}
           />
           {query && (
             <button
               type="button"
-              onClick={() => setQuery('')}
+              onClick={() => changeQuery('')}
               className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[var(--color-ink-faint)] hover:text-[var(--color-ink)] p-1 rounded-full"
               aria-label="Clear search input"
             >
@@ -705,12 +716,9 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
           <div className="mt-4">
             <QueryBuilder
               group={queryGroup}
-              onChange={setQueryGroup}
+              onChange={(group) => setQueryGroupDraft({ basis: filterBasis, group })}
               onApply={(f) => {
-                setSeverities(new Set(f.severity ? f.severity.split(',') : []));
-                setAnalyzer(f.analyzer);
-                setQuery(f.q);
-                setWorkspace(f.path);
+                applyFilter(f);
                 setAdvancedOpen(false);
               }}
               facetCounts={severityCounts ? { severity: severityCounts } : undefined}
@@ -759,7 +767,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                 className="chip"
                 aria-pressed={allScans}
                 title={allScans ? 'Showing every stored scan: a finding that persisted across scans appears once per scan' : 'Showing the latest completed scan of each workspace. Turn on to search older scans too'}
-                onClick={() => setAllScans((value) => !value)}
+                onClick={toggleAllScans}
               >
                 Include older scans
               </button>

@@ -48,15 +48,15 @@ function scanTime(scan: Scan): number {
 const RISK_SCORE_EXPLAINER = 'Weighted risk score: critical ×10, high ×5, medium ×2, low · A 0–4, B 5–19, C 20–49, D 50+';
 
 export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) => void; notify: (n: Notice) => void }) {
-  const workspace = useLoad(() => api.workspace(id), [id]);
-  const scans = useLoad(() => api.scans(id), [id]);
-  const risk = useLoad(() => api.risk(id), [id]);
-  const trendSeries = useLoad(() => api.trends(id), [id]);
+  const workspace = useLoad((signal) => api.workspace(id, { signal }), [id]);
+  const scans = useLoad((signal) => api.scans(id, { signal }), [id]);
+  const risk = useLoad((signal) => api.risk(id, { signal }), [id]);
+  const trendSeries = useLoad((signal) => api.trends(id, undefined, { signal }), [id]);
   // Pre-flight data (IMP-14): what the selected profile will run, whether the
   // engines are installed, and which exclusions will shape the selection.
   const analyzers = useLoad(api.analyzers, []);
-  const rules = useLoad(() => api.rules(id), [id]);
-  const overrides = useLoad(() => api.pathOverrides(id), [id]);
+  const rules = useLoad((signal) => api.rules(id, { signal }), [id]);
+  const overrides = useLoad((signal) => api.pathOverrides(id, { signal }), [id]);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [profile, setProfile] = useState('standard');
@@ -318,7 +318,7 @@ function findingBasename(finding: { relative_path?: string; start_line?: number;
  *  is never below the fold. Dense rows, not cards; a row opens the full
  *  report. Renders nothing for a clean (or unscanned) workspace. */
 function TopFindingsStrip({ scanId, go }: { scanId: string; go: (r: Route) => void }) {
-  const report = useLoad(() => api.report(scanId), [scanId]);
+  const report = useLoad((signal) => api.report(scanId, { signal }), [scanId]);
   const findings = report.data?.findings ?? [];
   const severityRank: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
   const top = [...findings].sort((a, b) => (severityRank[a.severity] ?? 9) - (severityRank[b.severity] ?? 9)).slice(0, 3);
@@ -507,7 +507,7 @@ function LanguageDistributionDonut({ names, coverage, workspaceId, go }: { names
 }
 
 function ComplianceSection({ scanId, go }: { scanId: string; go: (r: Route) => void }) {
-  const report = useLoad(() => api.report(scanId), [scanId]);
+  const report = useLoad((signal) => api.report(scanId, { signal }), [scanId]);
   const findings = report.data?.findings ?? [];
   if (report.loading) return <div className="skeleton-chart" aria-busy="true" />;
   if (!findings.length && !report.loading) return null;
@@ -562,7 +562,7 @@ export function RiskCard({ risk, unscanned }: { risk?: RiskProfile | null; /** t
 }
 
 function WorkspacePentestInsight({ workspaceId, scanId, go }: { workspaceId: string; scanId?: string; go: (r: Route) => void }) {
-  const report = useLoad(() => (scanId ? api.report(scanId) : Promise.resolve(null)), [scanId]);
+  const report = useLoad((signal) => (scanId ? api.report(scanId, { signal }) : Promise.resolve(null)), [scanId]);
   const findings = report.data?.findings ?? [];
   const secFindings = findings.filter((f) => {
     const cat = (f.category || '').toLowerCase();

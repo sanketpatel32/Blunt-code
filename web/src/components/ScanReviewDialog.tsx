@@ -9,7 +9,7 @@ export function ScanReviewDialog({ workspaceId, workspaceName, profile, confirmL
   onCancel: () => void; onConfirm: () => void;
 }) {
   const returnFocus = useRef(document.activeElement instanceof HTMLElement ? document.activeElement : null);
-  const review = useLoad(() => api.scanPlan(workspaceId, profile), [workspaceId, profile]);
+  const review = useLoad((signal) => api.scanPlan(workspaceId, profile, { signal }), [workspaceId, profile]);
   const plan = review.data;
   const validPlan = plan && Array.isArray(plan.analyzers) && typeof plan.selected_files === 'number';
   const planned = validPlan ? plan.analyzers.filter((row) => row.planned) : [];

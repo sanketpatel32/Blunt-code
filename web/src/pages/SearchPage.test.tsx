@@ -13,7 +13,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let root: Root;
 
 function json(body: unknown) {
-  return { ok: true, status: 200, json: () => Promise.resolve(body) };
+  return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }
 
 /** Search page fetch mock keyed by URL prefix; the last matching route wins. */
@@ -294,6 +294,60 @@ describe('SearchPage', () => {
     expect(searchCalls().at(-1)).toContain('page=2'); // out-of-range page snapped to the last page
     expect(window.location.search).toContain('page=2');
     expect(host.querySelectorAll('tbody tr')).toHaveLength(1);
+  });
+
+  it('keeps the page restored by browser Back/Forward instead of resetting it and rewriting the URL', async () => {
+    const calls: string[] = [];
+    const fetchMock = vi.fn((input: string) => {
+      calls.push(String(input));
+      const page = Number(new URL(String(input), 'http://x').searchParams.get('page') ?? '1');
+      return Promise.resolve(json({ items: [hit(`f${page}`, 'scan-1', 'high', 'r1')], total: 100, page, page_size: 25, has_next: page < 4 }));
+    });
+    window.history.replaceState(null, '', '/search?q=error&severity=high&page=3');
+    await renderPage(fetchMock);
+    const searchCalls = () => calls.filter((c) => c.includes('/findings/search')).map((c) => new URL(c, 'http://x').searchParams);
+
+    // Forward to another entry, then Back to the paged one.
+    window.history.pushState(null, '', '/search?q=other');
+    await act(async () => { window.dispatchEvent(new PopStateEvent('popstate')); });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(searchCalls().at(-1)!.get('q')).toBe('other');
+    expect(searchCalls().at(-1)!.get('page')).toBe('1');
+
+    window.history.replaceState(null, '', '/search?q=error&severity=high&page=3');
+    await act(async () => { window.dispatchEvent(new PopStateEvent('popstate')); });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    const last = searchCalls().at(-1)!;
+    expect(last.get('q')).toBe('error');
+    expect(last.get('severity')).toBe('high');
+    expect(last.get('page')).toBe('3');
+    // No request after the restore went out for page 1 with the restored filters.
+    expect(searchCalls().filter((p) => p.get('q') === 'error' && p.get('page') === '1')).toHaveLength(0);
+    expect(new URLSearchParams(window.location.search).get('page')).toBe('3');
+  });
+
+  it('still resets to page 1 when the user types a new query after a history restore', async () => {
+    const calls: string[] = [];
+    const fetchMock = vi.fn((input: string) => {
+      calls.push(String(input));
+      const page = Number(new URL(String(input), 'http://x').searchParams.get('page') ?? '1');
+      return Promise.resolve(json({ items: [hit(`f${page}`, 'scan-1', 'high', 'r1')], total: 100, page, page_size: 25, has_next: page < 4 }));
+    });
+    const host = await renderPage(fetchMock);
+    window.history.replaceState(null, '', '/search?q=error&page=3');
+    await act(async () => { window.dispatchEvent(new PopStateEvent('popstate')); });
+    await act(async () => { await Promise.resolve(); });
+    const input = host.querySelector<HTMLInputElement>('input[type="search"]')!;
+    const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    await act(async () => {
+      nativeSetter.call(input, 'errors');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 300)); });
+    const last = new URL(calls.filter((c) => c.includes('/findings/search')).at(-1)!, 'http://x').searchParams;
+    expect(last.get('q')).toBe('errors');
+    expect(last.get('page')).toBe('1');
+    expect(new URLSearchParams(window.location.search).get('page')).toBeNull();
   });
 
   it('renders facet counts from API severity_counts and omits the badges on legacy payloads', async () => {
