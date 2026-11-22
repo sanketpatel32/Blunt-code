@@ -139,6 +139,13 @@ func (s *Service) snapshot(ctx context.Context, work core.Workspace, profile str
 		analyzerVersions[adapter.ID()] = adapter.Check(ctx, analyzers.ToolEnvironment{ToolsDir: s.toolsDir}).Version
 	}
 	sort.Strings(analyzerIDs)
+	// Re-read the trust decision instead of using the caller's copy: a
+	// long-lived caller (scan --watch) must see trust-config off at once.
+	// Fail closed when the workspace cannot be read.
+	work.TrustRepoAnalyzerConfig = false
+	if current, err := s.db.Workspace(ctx, work.ID); err == nil {
+		work.TrustRepoAnalyzerConfig = current.TrustRepoAnalyzerConfig
+	}
 	repoConfigs := repoAnalyzerConfigs(work.RootPath, files)
 	trustDigest := ""
 	if work.TrustRepoAnalyzerConfig {

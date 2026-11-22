@@ -9,6 +9,8 @@ import (
 
 	"bluntcode/internal/analyzers"
 	"bluntcode/internal/core"
+	"bluntcode/internal/database"
+	"bluntcode/internal/events"
 )
 
 // mutatingAnalyzer routes to Python files like the blocking one, but its Run
@@ -159,5 +161,31 @@ func TestRepoAnalyzerConfigsListsDiscoveredConfigFiles(t *testing.T) {
 	want := []string{".gitleaksignore", "svc/.checkov.yaml", "trivy.yaml"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("configs = %v, want %v", got, want)
+	}
+}
+
+func TestSnapshotRereadsWorkspaceTrustDecision(t *testing.T) {
+	ctx := context.Background()
+	db, err := database.Open(ctx, filepath.Join(t.TempDir(), "bluntcode.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	work, err := db.CreateWorkspace(ctx, core.Workspace{Name: "Trust", RootPath: t.TempDir(), TrustRepoAnalyzerConfig: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := New(db, analyzers.NewRegistry(), events.New(), t.TempDir(), t.TempDir(), nil)
+	if snap := service.snapshot(ctx, work, "standard", nil, nil, nil, nil); !snap.TrustRepoAnalyzerConfig {
+		t.Fatal("trusted workspace snapshot must record trust")
+	}
+	revoked := work
+	revoked.TrustRepoAnalyzerConfig = false
+	if _, err := db.UpdateWorkspace(ctx, revoked); err != nil {
+		t.Fatal(err)
+	}
+	// A long-lived caller (scan --watch) still holds the stale trusted copy.
+	if snap := service.snapshot(ctx, work, "standard", nil, nil, nil, nil); snap.TrustRepoAnalyzerConfig {
+		t.Fatal("revoked trust must apply to the next scan even with a stale workspace copy")
 	}
 }
