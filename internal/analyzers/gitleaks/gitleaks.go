@@ -189,7 +189,7 @@ func (a *Adapter) Normalize(_ context.Context, result analyzers.AnalyzerResult) 
 			Category:     analyzers.CategorySecurity,
 			Title:        d.RuleID,
 			Message:      messageFor(d),
-			RelativePath: relative(result.Plan, d.File),
+			RelativePath: analyzers.PlanRelativePath(result.Plan, d.File),
 			StartLine:    d.StartLine,
 			StartColumn:  d.StartColumn,
 			EndLine:      d.EndLine,
@@ -240,14 +240,6 @@ func redactedPreview(secret string) string {
 	return string(runes[:4]) + "…"
 }
 
-func relative(p analyzers.AnalyzerPlan, path string) string {
-	if len(p.Commands) > 0 {
-		if r, err := filepath.Rel(p.Commands[0].Dir, path); err == nil {
-			return filepath.ToSlash(r)
-		}
-	}
-	return filepath.ToSlash(path)
-}
 func statusDetail(err error) string {
 	if err == nil {
 		return ""

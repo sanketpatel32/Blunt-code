@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -141,7 +140,7 @@ func (a *Adapter) Normalize(_ context.Context, result analyzers.AnalyzerResult) 
 	}
 	out := make([]analyzers.Finding, 0, len(raw))
 	for _, d := range raw {
-		path := relative(result.Plan, d.Filename)
+		path := analyzers.PlanRelativePath(result.Plan, d.Filename)
 		f := analyzers.Finding{AnalyzerID: ID, RuleID: d.Code, Severity: severity(d.Code), Category: category(d.Code), Title: d.Code, Message: d.Message, RelativePath: path, StartLine: d.Location.Row, StartColumn: d.Location.Column, EndLine: d.EndLocation.Row, EndColumn: d.EndLocation.Column, DocumentationURL: d.URL, RawSeverity: "warning", Metadata: map[string]any{"fix_available": d.Fix != nil}}
 		f.SetFingerprint()
 		out = append(out, f)
@@ -177,14 +176,6 @@ func category(code string) analyzers.Category {
 		return analyzers.CategoryStyle
 	}
 	return analyzers.CategoryMaintainability
-}
-func relative(p analyzers.AnalyzerPlan, path string) string {
-	if len(p.Commands) > 0 {
-		if r, err := filepath.Rel(p.Commands[0].Dir, path); err == nil {
-			return filepath.ToSlash(r)
-		}
-	}
-	return filepath.ToSlash(path)
 }
 func statusDetail(err error) string {
 	if err == nil {

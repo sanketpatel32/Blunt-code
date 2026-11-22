@@ -181,7 +181,7 @@ func (a *Adapter) Run(ctx context.Context, plan analyzers.AnalyzerPlan, _ analyz
 		if err := ctx.Err(); err != nil {
 			return analyzers.AnalyzerResult{Plan: plan}, err
 		}
-		relPath := relative(root, file)
+		relPath := analyzers.RelativePath(root, file)
 		if probed[relPath] {
 			continue
 		}
@@ -211,7 +211,7 @@ func (a *Adapter) Run(ctx context.Context, plan analyzers.AnalyzerPlan, _ analyz
 		}
 		data, readErr := os.ReadFile(manifest)
 		if readErr != nil {
-			env.Notes = append(env.Notes, fmt.Sprintf("%s unreadable: %v", relative(root, manifest), readErr))
+			env.Notes = append(env.Notes, fmt.Sprintf("%s unreadable: %v", analyzers.RelativePath(root, manifest), readErr))
 			continue
 		}
 		declared := declaredLicense(filepath.Base(filepath.ToSlash(manifest)), data)
@@ -220,7 +220,7 @@ func (a *Adapter) Run(ctx context.Context, plan analyzers.AnalyzerPlan, _ analyz
 		}
 		spdx := normalizeSPDX(declared)
 		if manifestSPDX == "" {
-			manifestSPDX, manifestPath = spdx, relative(root, manifest)
+			manifestSPDX, manifestPath = spdx, analyzers.RelativePath(root, manifest)
 		}
 		// An explicit "no license" marker (UNLICENSED, Proprietary, SEE
 		// LICENSE IN) only matters when no readable license file backs it.
@@ -404,15 +404,6 @@ func planSelection(plan analyzers.AnalyzerPlan) ([]string, []string, string, err
 		return nil, nil, "", fmt.Errorf("license plan is missing its workspace root")
 	}
 	return manifests, licenseFiles, root, nil
-}
-
-func relative(root, path string) string {
-	if root != "" {
-		if rel, err := filepath.Rel(root, path); err == nil {
-			return filepath.ToSlash(rel)
-		}
-	}
-	return filepath.ToSlash(path)
 }
 
 // declaredLicense extracts the license declaration from one manifest type.

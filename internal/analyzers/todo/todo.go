@@ -156,7 +156,7 @@ func (a *Adapter) Run(ctx context.Context, plan analyzers.AnalyzerPlan, _ analyz
 			continue
 		}
 		env.FilesScanned++
-		rel := relativePath(root, file)
+		rel := analyzers.RelativePath(root, file)
 		found, truncated := scanFile(rel, data)
 		if truncated {
 			env.Notes = append(env.Notes, fmt.Sprintf("%s truncated at the %d-finding per-file limit", rel, maxFindingsPerFile))
@@ -296,11 +296,4 @@ func scanFile(rel string, data []byte) (diagnostics []rawDiagnostic, truncated b
 		diagnostics = append(diagnostics, d)
 	}
 	return diagnostics, truncated
-}
-
-func relativePath(root, file string) string {
-	if rel, err := filepath.Rel(root, file); err == nil {
-		return filepath.ToSlash(rel)
-	}
-	return filepath.ToSlash(file)
 }
