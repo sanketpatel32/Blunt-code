@@ -54,6 +54,8 @@ type Server struct {
 	shutdown   func()
 	openFolder func(dir string) error
 	cache      *workspaceCaches
+	token      string
+	tickets    ticketStore
 }
 
 // scanDetail is a scan payload enriched for single-scan views: the analyzer
@@ -92,12 +94,12 @@ func New(db *database.DB, bus *events.Bus, scanService *scans.Service, toolServi
 	if logger == nil {
 		logger = slog.Default()
 	}
-	s := &Server{db: db, bus: bus, scans: scanService, tools: toolService, paths: paths, version: version, log: logger, mux: http.NewServeMux(), openFolder: openFolderInExplorer, cache: newWorkspaceCaches()}
+	s := &Server{db: db, bus: bus, scans: scanService, tools: toolService, paths: paths, version: version, log: logger, mux: http.NewServeMux(), openFolder: openFolderInExplorer, cache: newWorkspaceCaches(), token: NewToken()}
 	s.routes()
 	return s
 }
 func (s *Server) Handler() http.Handler {
-	return securityMiddleware(rateLimitMiddleware(jsonRouteErrors(s.mux)))
+	return securityMiddleware(s.apiGuard(rateLimitMiddleware(jsonRouteErrors(s.mux))))
 }
 
 // StaticGuard applies the API's loopback Host check and baseline security
@@ -112,6 +114,8 @@ func StaticGuard(next http.Handler) http.Handler { return securityMiddleware(nex
 func (s *Server) SetShutdown(fn func()) { s.shutdown = fn }
 func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/health", s.health)
+	s.mux.HandleFunc("GET /api/v1/session", s.session)
+	s.mux.HandleFunc("POST /api/v1/session/tickets", s.sessionTicket)
 	s.mux.HandleFunc("GET /api/v1/meta", s.meta)
 	s.mux.HandleFunc("GET /api/v1/stats", s.globalStats)
 	s.mux.HandleFunc("GET /api/v1/settings", s.getSettings)

@@ -168,21 +168,30 @@ func runServer(args []string) {
 		fatal(fmt.Errorf("listen on loopback: %w", err))
 	}
 	defer listener.Close()
+	server := api.New(app.db, app.bus, app.scans, app.toolService, app.paths, version, app.logger)
+	// The per-launch API token goes to a file only this user can read (the
+	// data directory lives under the user profile), so the CLI, agents, and
+	// a later launch's handoff can authenticate; other local users and
+	// processes that cannot read the profile cannot.
+	if err := writeServerToken(server.Token()); err != nil {
+		fatal(fmt.Errorf("write API token: %w", err))
+	}
+	defer removeServerToken()
 	if bound := boundPort(listener); bound != 0 {
 		// Best-effort hint so a later handoff knows where this instance
 		// serves; stale hints are harmless because handoff probes first.
 		writeServerPort(bound)
 		defer removeServerPort()
 	}
-	server := api.New(app.db, app.bus, app.scans, app.toolService, app.paths, version, app.logger)
 	root := http.NewServeMux()
 	root.Handle("/api/", server.Handler())
 	root.Handle("/", api.StaticGuard(staticHandler()))
 	url := "http://" + listener.Addr().String() + "/"
 	fmt.Println("Blunt Code listening on " + url)
+	fmt.Println("Sign in: " + signInURL(url, server.Token()))
 	app.logger.Info("server started", "url", url)
 	if !noBrowser && app.settings.OpenBrowser {
-		openBrowser(url, app.logger)
+		openBrowser(signInURL(url, server.Token()), app.logger)
 	}
 	httpServer := &http.Server{Handler: root, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second}
 	var shutdownOnce sync.Once
@@ -399,19 +408,75 @@ func removeServerPort() {
 	_ = os.Remove(path)
 }
 
+// serverTokenPath locates the file holding the running server's API token.
+func serverTokenPath() (string, error) {
+	paths, err := config.DefaultPaths()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(paths.DataDir, "server.token"), nil
+}
+
+func writeServerToken(token string) error {
+	path, err := serverTokenPath()
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(token), 0o600)
+}
+
+func readServerToken() string {
+	path, err := serverTokenPath()
+	if err != nil {
+		return ""
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(raw))
+}
+
+func removeServerToken() {
+	path, err := serverTokenPath()
+	if err != nil {
+		return
+	}
+	_ = os.Remove(path)
+}
+
+// signInURL is the UI address carrying the token in the fragment, which the
+// browser keeps out of requests, server logs, and Referer headers; the UI
+// stores it in origin-scoped localStorage and strips it from the URL.
+func signInURL(base, token string) string {
+	if token == "" {
+		return base
+	}
+	return base + "#" + api.TokenFragmentKey + "=" + token
+}
+
 // handoffToPort probes a loopback port for a live Blunt Code server and, when
 // found, opens the browser there instead of starting a second instance. The
-// probe verifies the meta payload's api_version so a foreign 200-on-that-path
-// can never capture the handoff. It reports whether the handoff happened;
-// anything else (foreign owner, dead port, stale hint) leaves the caller to
-// proceed normally.
+// probe authenticates with the token the running server wrote and verifies
+// the meta payload's api_version, so a foreign 200-on-that-path can never
+// capture the handoff. It reports whether the handoff happened; anything
+// else (foreign owner, dead port, stale hint) leaves the caller to proceed
+// normally.
 func handoffToPort(port int, noBrowser bool) bool {
 	if port <= 0 {
 		return false
 	}
 	url := fmt.Sprintf("http://127.0.0.1:%d/", port)
+	token := readServerToken()
+	request, err := http.NewRequest(http.MethodGet, url+"api/v1/meta", nil)
+	if err != nil {
+		return false
+	}
+	if token != "" {
+		request.Header.Set("Authorization", "Bearer "+token)
+	}
 	client := &http.Client{Timeout: 3 * time.Second}
-	response, err := client.Get(url + "api/v1/meta")
+	response, err := client.Do(request)
 	if err != nil {
 		return false
 	}
@@ -430,8 +495,11 @@ func handoffToPort(port int, noBrowser bool) bool {
 		return false
 	}
 	fmt.Println("Blunt Code already running on " + url)
+	if token != "" {
+		fmt.Println("Sign in: " + signInURL(url, token))
+	}
 	if !noBrowser {
-		openBrowser(url, slog.New(slog.NewTextHandler(io.Discard, nil)))
+		openBrowser(signInURL(url, token), slog.New(slog.NewTextHandler(io.Discard, nil)))
 	}
 	return true
 }

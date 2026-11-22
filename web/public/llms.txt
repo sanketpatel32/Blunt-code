@@ -101,7 +101,7 @@ Base: `http://127.0.0.1:8787/api/v1` (default port 8787, printed on stdout; `--p
 - `POST /workspaces/{id}/scans` (start), `DELETE /scans/{id}`, `DELETE /workspaces/{id}/scans?keep=N`
 - `GET /update/check`, `POST /update/apply` (downloads the tag-pinned release zip, verifies signature + SHA-256, swaps it in after the app exits; no script runs)
 
-Auth: none (loopback). Rate limit: token bucket 30/30m on mutations -> `429 RATE_LIMITED` + `Retry-After`.
+Auth: every route except `GET /api/v1/health` needs the per-launch token: `Authorization: Bearer <token>` (token in `%LOCALAPPDATA%\BluntCode\server.token`, rotated every launch). Header-less GETs (downloads, SSE) may instead use `?ticket=` from `POST /api/v1/session/tickets {"path":"/api/v1/..."}` (single use, that path only, 60 s). Browser requests must be same-origin (exact `Origin` incl. port); request bodies on mutations must be `application/json`. Missing/invalid token -> `401 UNAUTHORIZED`; cross-origin -> `403`. Rate limit: token bucket 30/30m on mutations -> `429 RATE_LIMITED` + `Retry-After`.
 
 ## Scan profiles & analyzers
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
+import { signedUrl } from '../session';
 import type { AnalyzerRun, Finding, Scan } from '../types';
 import type { Route } from '../lib/router';
 import type { Notice } from '../lib/notice';
@@ -82,10 +83,13 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
       } catch { /* Invalid optional event payloads do not interrupt the scan. */ }
     };
     let attempt = 0;
-    const connect = () => {
+    const connect = async () => {
       if (disposed) return;
       setStreamState((state) => state === 'live' ? 'reconnecting' : state);
-      source = new EventSource(`/api/v1/scans/${encodeURIComponent(id)}/events`);
+      // EventSource cannot send Authorization; each (re)connect uses a fresh single-use ticket.
+      const url = await signedUrl(`/api/v1/scans/${encodeURIComponent(id)}/events`);
+      if (disposed) return;
+      source = new EventSource(url);
       ['scan.started', 'scan.stage', 'analyzer.started', 'analyzer.completed', 'analyzer.failed', 'analyzer.skipped', 'scan.warning', 'scan.completed', 'scan.cancelled'].forEach((type) => { source?.addEventListener(type, receive); });
       source.addEventListener('connected', () => {
         attempt = 0;
@@ -100,10 +104,10 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
         attempt += 1;
         setStreamAttempts(attempt);
         const delay = Math.min(15_000, Math.round(1000 * Math.pow(1.5, attempt - 1)));
-        retry = window.setTimeout(() => { void scanReload(); connect(); }, delay);
+        retry = window.setTimeout(() => { void scanReload(); void connect(); }, delay);
       };
     };
-    connect();
+    void connect();
     return () => { disposed = true; source?.close(); if (retry) window.clearTimeout(retry); };
   }, [id, scanState, scanReload, scanMissing]);
   const current = scan.data;

@@ -40,7 +40,49 @@ func apiWorkspaceRoot(raw string) (string, error) {
 	if err != nil {
 		return "", friendlyPathError(path, err)
 	}
+	if reason := sensitiveRoot(root); reason != "" {
+		return "", userMessage(reason)
+	}
 	return root, nil
+}
+
+// sensitiveRoot refuses folders that are never a project but would turn the
+// file tree and source previews into a read of the whole machine: a drive
+// or filesystem root, the Windows directory, and the home folder itself
+// (projects inside it are fine).
+func sensitiveRoot(root string) string {
+	clean := filepath.Clean(root)
+	if filepath.Dir(clean) == clean {
+		return "That is the root of a drive. Choose your project folder instead."
+	}
+	for _, name := range []string{"WINDIR", "SystemRoot"} {
+		if dir := os.Getenv(name); dir != "" && within(clean, dir) {
+			return "The Windows folder cannot be a workspace. Choose your project folder instead."
+		}
+	}
+	if home, err := os.UserHomeDir(); err == nil && home != "" && samePath(clean, home) {
+		return "Your whole home folder cannot be a workspace. Choose a project folder inside it."
+	}
+	return ""
+}
+
+func samePath(a, b string) bool {
+	a, b = filepath.Clean(a), filepath.Clean(b)
+	if filepath.Separator == '\\' {
+		return strings.EqualFold(a, b)
+	}
+	return a == b
+}
+
+func within(path, dir string) bool {
+	if samePath(path, dir) {
+		return true
+	}
+	rel, err := filepath.Rel(filepath.Clean(dir), filepath.Clean(path))
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 // userMessage is an error whose text is a complete sentence written for the

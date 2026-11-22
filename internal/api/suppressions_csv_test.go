@@ -21,7 +21,7 @@ func fetchSuppressionsCSV(t *testing.T, s *Server, workspaceID string) [][]strin
 	t.Helper()
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/workspaces/"+workspaceID+"/suppressions.csv", nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
 		t.Fatalf("suppressions.csv: %d %s", response.Code, response.Body.String())
 	}
@@ -54,7 +54,7 @@ func postImportSuppressions(t *testing.T, s *Server, workspaceID, csvText string
 	}
 	request := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/v1/workspaces/"+workspaceID+"/suppressions/import", bytes.NewReader(payload))
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
 		t.Fatalf("import: %d %s", response.Code, response.Body.String())
 	}
@@ -113,7 +113,7 @@ func TestSuppressionsCSVRoundTripsIntoAnotherWorkspace(t *testing.T) {
 	var csvText string
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/workspaces/"+source.ID+"/suppressions.csv", nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	raw, err := io.ReadAll(response.Body)
 	if err != nil {
 		t.Fatal(err)
@@ -191,7 +191,7 @@ func TestSuppressionsCSVAndImportRejectBadInput(t *testing.T) {
 
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/workspaces/"+missing+"/suppressions.csv", nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("unknown workspace export: %d %s", response.Code, response.Body.String())
 	}
@@ -200,7 +200,7 @@ func TestSuppressionsCSVAndImportRejectBadInput(t *testing.T) {
 		t.Helper()
 		request := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/v1/workspaces/"+workspaceID+"/suppressions/import", strings.NewReader(body))
 		response := httptest.NewRecorder()
-		s.Handler().ServeHTTP(response, request)
+		testHandler(s).ServeHTTP(response, request)
 		return response
 	}
 	if response := post(missing, `{"csv":"fingerprint\n"}`); response.Code != http.StatusNotFound {

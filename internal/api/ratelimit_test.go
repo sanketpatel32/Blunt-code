@@ -37,7 +37,7 @@ func TestRateLimitBlocksRapidMutations(t *testing.T) {
 	for attempt := range codes {
 		request := httptest.NewRequest(http.MethodDelete, target, nil)
 		response := httptest.NewRecorder()
-		s.Handler().ServeHTTP(response, request)
+		testHandler(s).ServeHTTP(response, request)
 		codes[attempt] = response.Code
 		if response.Code != http.StatusTooManyRequests {
 			continue
@@ -65,7 +65,7 @@ func TestRateLimitBlocksRapidMutations(t *testing.T) {
 	for attempt := 1; attempt <= 10; attempt++ {
 		request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/health", nil)
 		response := httptest.NewRecorder()
-		s.Handler().ServeHTTP(response, request)
+		testHandler(s).ServeHTTP(response, request)
 		if response.Code != http.StatusOK {
 			t.Fatalf("GET attempt %d was limited (%d), reads are exempt: %s", attempt, response.Code, response.Body.String())
 		}
@@ -82,19 +82,19 @@ func TestRateLimitCoversEveryStateChangingMethod(t *testing.T) {
 	// Drain the whole bucket with DELETE attempts to an unknown scan.
 	for i := 0; i < rateLimitCapacity; i++ {
 		response := httptest.NewRecorder()
-		s.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodDelete, target, nil))
+		testHandler(s).ServeHTTP(response, httptest.NewRequest(http.MethodDelete, target, nil))
 		if response.Code == http.StatusTooManyRequests {
 			t.Fatalf("draw %d was limited although the bucket started full", i+1)
 		}
 	}
 	for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
 		response := httptest.NewRecorder()
-		s.Handler().ServeHTTP(response, httptest.NewRequest(method, target, nil))
+		testHandler(s).ServeHTTP(response, httptest.NewRequest(method, target, nil))
 		if response.Code != http.StatusTooManyRequests {
 			t.Fatalf("%s after exhaustion got %d, want 429", method, response.Code)
 		}
 		responseGet := httptest.NewRecorder()
-		s.Handler().ServeHTTP(responseGet, httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/health", nil))
+		testHandler(s).ServeHTTP(responseGet, httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/health", nil))
 		if responseGet.Code != http.StatusOK {
 			t.Fatalf("GET stayed limited (%d) on an exhausted bucket", responseGet.Code)
 		}

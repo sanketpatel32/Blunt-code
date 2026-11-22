@@ -33,7 +33,7 @@ func TestFindingsJSONLDownloadsAttachment(t *testing.T) {
 
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+scan.ID+"/findings.jsonl", nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
 		t.Fatalf("findings.jsonl: %d %s", response.Code, response.Body.String())
 	}
@@ -93,13 +93,13 @@ func TestFindingsJSONLRejectsUnknownScan(t *testing.T) {
 	unknown := "00000000-0000-4000-8000-000000000000"
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+unknown+"/findings.jsonl", nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusNotFound || !strings.Contains(response.Body.String(), "SCAN_NOT_FOUND") {
 		t.Fatalf("got %d: %s", response.Code, response.Body.String())
 	}
 	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/not-a-uuid/findings.jsonl", nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusNotFound || !strings.Contains(response.Body.String(), "SCAN_NOT_FOUND") {
 		t.Fatalf("malformed id got %d: %s", response.Code, response.Body.String())
 	}

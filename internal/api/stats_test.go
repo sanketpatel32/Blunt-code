@@ -94,7 +94,7 @@ func TestGlobalStatsServesOverview(t *testing.T) {
 
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/stats", nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
 		t.Fatalf("stats: %d %s", response.Code, response.Body.String())
 	}
@@ -177,7 +177,7 @@ func TestGlobalStatsIncludesToolReadiness(t *testing.T) {
 
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/stats", nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
 		t.Fatalf("stats: %d %s", response.Code, response.Body.String())
 	}
@@ -202,10 +202,10 @@ func TestGlobalStatsRejectsNonGET(t *testing.T) {
 	for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodDelete} {
 		request := httptest.NewRequest(method, "http://127.0.0.1/api/v1/stats", nil)
 		response := httptest.NewRecorder()
-		s.Handler().ServeHTTP(response, request)
+		testHandler(s).ServeHTTP(response, request)
 		reference := httptest.NewRequest(method, "http://127.0.0.1/api/v1/health", nil)
 		referenceResponse := httptest.NewRecorder()
-		s.Handler().ServeHTTP(referenceResponse, reference)
+		testHandler(s).ServeHTTP(referenceResponse, reference)
 		if response.Code != http.StatusMethodNotAllowed || response.Code != referenceResponse.Code {
 			t.Fatalf("%s /api/v1/stats = %d (health reference %d)", method, response.Code, referenceResponse.Code)
 		}

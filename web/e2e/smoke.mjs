@@ -3,6 +3,7 @@
 //   node e2e/smoke.mjs                         # BASE defaults to http://127.0.0.1:5173
 //   BASE=http://127.0.0.1:8787 node e2e/smoke.mjs
 //   SMOKE_PROJECT=/path/to/a/project node e2e/smoke.mjs
+//   BLUNTCODE_TOKEN=<token from the server's "Sign in:" line> (required)
 //
 // Needs `playwright` (+ a Chromium) and `@axe-core/playwright` resolvable from
 // here; they are not app dependencies. The run registers a throwaway
@@ -16,6 +17,8 @@ import { chromium } from 'playwright';
 import AxeBuilder from '@axe-core/playwright';
 
 const BASE = process.env.BASE ?? 'http://127.0.0.1:5173';
+const TOKEN = process.env.BLUNTCODE_TOKEN ?? '';
+if (!TOKEN) { console.error('Set BLUNTCODE_TOKEN to the token in the server\'s "Sign in:" line.'); process.exit(2); }
 const results = [];
 let failed = 0;
 async function check(name, fn) {
@@ -49,8 +52,10 @@ async function visit(path) {
   assert(!crashed, `error boundary on ${path}`);
   await page.locator('h1').first().waitFor({ timeout: 8000 });
 }
+// Sign the browser context in once; the UI stores the token.
+await page.goto(`${BASE}/#token=${TOKEN}`, { waitUntil: 'networkidle' });
 const api = async (method, path, body) => {
-  const res = await page.request.fetch(BASE + '/api/v1' + path, { method, data: body });
+  const res = await page.request.fetch(BASE + '/api/v1' + path, { method, data: body, headers: { Authorization: `Bearer ${TOKEN}` } });
   assert(res.ok(), `${method} ${path} -> ${res.status()}`);
   return res.status() === 204 ? null : res.json();
 };

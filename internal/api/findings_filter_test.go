@@ -76,7 +76,7 @@ func fetchFindings(t *testing.T, s *Server, scanID, query string) findingsPayloa
 	t.Helper()
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+scanID+"/findings"+query, nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
 		t.Fatalf("findings%s: %d %s", query, response.Code, response.Body.String())
 	}
@@ -91,7 +91,7 @@ func fetchFindingsStatus(t *testing.T, s *Server, scanID, query string) int {
 	t.Helper()
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+scanID+"/findings"+query, nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	return response.Code
 }
 
@@ -204,7 +204,7 @@ func TestFindingsSortParams(t *testing.T) {
 	if code := func() int {
 		request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+scan.ID+"/findings.csv?sort=-line", nil)
 		response := httptest.NewRecorder()
-		s.Handler().ServeHTTP(response, request)
+		testHandler(s).ServeHTTP(response, request)
 		return response.Code
 	}(); code != http.StatusOK {
 		t.Fatalf("findings.csv must accept the new sort controls: %d", code)
@@ -264,7 +264,7 @@ func TestFindingsLegacyEnvelopeUnchanged(t *testing.T) {
 	get := func(query string) (map[string]json.RawMessage, []byte) {
 		request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+scan.ID+"/findings"+query, nil)
 		response := httptest.NewRecorder()
-		s.Handler().ServeHTTP(response, request)
+		testHandler(s).ServeHTTP(response, request)
 		if response.Code != http.StatusOK {
 			t.Fatalf("findings%s: %d %s", query, response.Code, response.Body.String())
 		}

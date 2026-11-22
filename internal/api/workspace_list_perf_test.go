@@ -41,7 +41,7 @@ func TestWorkspaceListStaysFastWithLargeScans(t *testing.T) {
 		completedScan(t, s, work.ID, "completed", build(0)...)
 		completedScan(t, s, work.ID, "completed", build(perScan/2)...)
 	}
-	handler := s.Handler()
+	handler := testHandler(s)
 	var worst time.Duration
 	for round := 0; round < 3; round++ {
 		started := time.Now()

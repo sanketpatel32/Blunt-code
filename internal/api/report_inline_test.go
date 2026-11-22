@@ -34,7 +34,7 @@ func TestReportsOpenInlineWhenAsked(t *testing.T) {
 	}
 	get := func(path string) *httptest.ResponseRecorder {
 		response := httptest.NewRecorder()
-		s.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+scan.ID+path, nil))
+		testHandler(s).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+scan.ID+path, nil))
 		return response
 	}
 	for _, format := range []string{"report.html", "report.sarif", "report.json"} {

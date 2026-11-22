@@ -121,7 +121,7 @@ Base: `http://127.0.0.1:8787/api/v1` (default port 8787, printed on stdout; `--p
 - `POST /workspaces/{id}/scans` (start), `DELETE /scans/{id}`, `DELETE /workspaces/{id}/scans?keep=N`
 - `GET /update/check`, `POST /update/apply` (downloads the tag-pinned release zip, verifies signature + SHA-256, swaps it in after the app exits; no script runs)
 
-Auth: none (loopback). Rate limit: token bucket 30/30m on mutations -> `429 RATE_LIMITED` + `Retry-After`.
+Auth: every route except `GET /api/v1/health` needs the per-launch token: `Authorization: Bearer <token>` (token in `%LOCALAPPDATA%\BluntCode\server.token`, rotated every launch). Header-less GETs (downloads, SSE) may instead use `?ticket=` from `POST /api/v1/session/tickets {"path":"/api/v1/..."}` (single use, that path only, 60 s). Browser requests must be same-origin (exact `Origin` incl. port); request bodies on mutations must be `application/json`. Missing/invalid token -> `401 UNAUTHORIZED`; cross-origin -> `403`. Rate limit: token bucket 30/30m on mutations -> `429 RATE_LIMITED` + `Retry-After`.
 
 ## File layout & ignores
 
@@ -166,12 +166,13 @@ Languages: 40+ via `internal/discovery` — Py, JS/TS, Go, Java, Kotlin, C#, C/C
 .\bluntcode.exe scan "C:\repo" --fail-on high+ --baseline .\baseline.sarif --json --quiet; if($LASTEXITCODE -eq 1){ throw "gate failed" }
 
 # Agent: global search via API (when server is up)
-$port = (Get-Content "$env:LOCALAPPDATA\BluntCode\port.txt" -ErrorAction SilentlyContinue)
-Invoke-RestMethod "http://127.0.0.1:$port/api/v1/findings/search?q=TODO&severity=low&page_size=5"
+$port = (Get-Content "$env:LOCALAPPDATA\BluntCode\server.port" -ErrorAction SilentlyContinue)
+$auth = @{ Authorization = "Bearer $(Get-Content "$env:LOCALAPPDATA\BluntCode\server.token")" }
+Invoke-RestMethod -Headers $auth "http://127.0.0.1:$port/api/v1/findings/search?q=TODO&severity=low&page_size=5"
 
 # Agent: start scan via API then poll
-$ws = (Invoke-RestMethod "http://127.0.0.1:$port/api/v1/workspaces").items[0]
-$scan = Invoke-RestMethod -Method Post "http://127.0.0.1:$port/api/v1/workspaces/$($ws.id)/scans" -Body '{"profile":"quick"}' -ContentType "application/json"
+$ws = (Invoke-RestMethod -Headers $auth "http://127.0.0.1:$port/api/v1/workspaces").items[0]
+$scan = Invoke-RestMethod -Headers $auth -Method Post "http://127.0.0.1:$port/api/v1/workspaces/$($ws.id)/scans" -Body '{"profile":"quick"}' -ContentType "application/json"
 ```
 
 ## Troubleshooting

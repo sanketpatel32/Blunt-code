@@ -39,7 +39,7 @@ func fetchTrends(t *testing.T, s *Server, target string) trendsResponse {
 	t.Helper()
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1"+target, nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	var body trendsResponse
 	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil {
 		t.Fatalf("trends %s: %d %s", target, response.Code, response.Body.String())
@@ -126,7 +126,7 @@ func TestWorkspaceTrendsReturnsCompletedScansOldestFirst(t *testing.T) {
 	}
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/workspaces/"+empty.ID+"/trends", nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"items":[]`) {
 		t.Fatalf("empty workspace: %d %s", response.Code, response.Body.String())
 	}
@@ -135,7 +135,7 @@ func TestWorkspaceTrendsReturnsCompletedScansOldestFirst(t *testing.T) {
 	for _, id := range []string{"11111111-1111-1111-1111-111111111111", "not-a-uuid"} {
 		request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/workspaces/"+id+"/trends", nil)
 		response := httptest.NewRecorder()
-		s.Handler().ServeHTTP(response, request)
+		testHandler(s).ServeHTTP(response, request)
 		if response.Code != http.StatusNotFound || !strings.Contains(response.Body.String(), "WORKSPACE_NOT_FOUND") {
 			t.Fatalf("workspace %s: got %d %s", id, response.Code, response.Body.String())
 		}
@@ -177,7 +177,7 @@ func TestWorkspaceTrendsLimitDefaultsAndBounds(t *testing.T) {
 	for _, query := range []string{"?limit=101", "?limit=0", "?limit=-3", "?limit=abc", "?limit=1.5"} {
 		request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/workspaces/"+work.ID+"/trends"+query, nil)
 		response := httptest.NewRecorder()
-		s.Handler().ServeHTTP(response, request)
+		testHandler(s).ServeHTTP(response, request)
 		if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "INVALID_TREND_QUERY") {
 			t.Fatalf("trends %s: got %d %s", query, response.Code, response.Body.String())
 		}
@@ -203,7 +203,7 @@ func TestWorkspaceTrendsCarryScoreAndGrade(t *testing.T) {
 		finding("ruff", "G-C5", "src/g5.py", "c5", analyzers.SeverityCritical, analyzers.CategorySecurity))
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/workspaces/"+work.ID+"/trends", nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	var body struct {
 		Items []struct {
 			Score float64 `json:"score"`
@@ -245,7 +245,7 @@ func TestListWorkspacesCarriesSparkline(t *testing.T) {
 		finding("ruff", "S-3", "src/s3.py", "s3", analyzers.SeverityLow, analyzers.CategoryStyle))
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/workspaces", nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	var body struct {
 		Items []struct {
 			ID    string `json:"id"`

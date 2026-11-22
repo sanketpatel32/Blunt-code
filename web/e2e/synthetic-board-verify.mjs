@@ -16,6 +16,7 @@
  * Env:
  *   BASE       — UI + API origin (default http://127.0.0.1:9876)
  *   DEMO_TOKEN — optional, must match server BLUNTCODE_DEMO_TOKEN
+ *   BLUNTCODE_TOKEN — required API token (the server's "Sign in:" line)
  *   OUT        — screenshot directory (default /opt/cursor/artifacts/bluntcode-synthetic-verify)
  *   SKIP_SHOTS — if set to 1, skip PNG writes (assertions only)
  */
@@ -25,6 +26,8 @@ import { chromium } from 'playwright';
 
 const BASE = process.env.BASE ?? 'http://127.0.0.1:9876';
 const TOKEN = process.env.DEMO_TOKEN ?? '';
+const API_TOKEN = process.env.BLUNTCODE_TOKEN ?? '';
+const AUTH = API_TOKEN ? { Authorization: `Bearer ${API_TOKEN}` } : {};
 const OUT = process.env.OUT ?? '/opt/cursor/artifacts/bluntcode-synthetic-verify';
 const SKIP_SHOTS = process.env.SKIP_SHOTS === '1';
 
@@ -32,7 +35,7 @@ const widths = [1280, 1440, 1920];
 const PAGE_SIZE = 25;
 
 async function seed(page) {
-  const headers = { 'Content-Type': 'application/json' };
+  const headers = { 'Content-Type': 'application/json', ...AUTH };
   if (TOKEN) headers['X-Bluntcode-Demo-Token'] = TOKEN;
   const res = await page.request.post(`${BASE}/api/v1/system/seed-demo`, {
     headers,
@@ -46,7 +49,7 @@ async function seed(page) {
 }
 
 async function statsTotal(page) {
-  const res = await page.request.get(`${BASE}/api/v1/stats`);
+  const res = await page.request.get(`${BASE}/api/v1/stats`, { headers: AUTH });
   if (!res.ok()) throw new Error(`stats: ${res.status()}`);
   const j = await res.json();
   return typeof j.workspaces === 'number' ? j.workspaces : 0;
@@ -95,6 +98,8 @@ async function main() {
   const browser = await chromium.launch();
   const context = await browser.newContext();
   const host = await context.newPage();
+  // Sign the context in so the UI stores the API token.
+  if (API_TOKEN) await host.goto(`${BASE}/#token=${API_TOKEN}`, { waitUntil: 'networkidle' });
 
   let seedSummary;
   try {

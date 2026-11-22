@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api';
+import { openSigned } from '../session';
 import type { Scan } from '../types';
 import type { Route } from '../lib/router';
 import { isTerminalScanState } from '../lib/scanEvents';
@@ -313,12 +314,7 @@ function hasMarkdownExport(scan: Scan) {
 
 /** Downloads (or opens) an export by synthesizing the same anchor click the old inline links performed, so Content-Disposition handling stays identical. */
 function triggerDownload(href: string) {
-  const link = document.createElement('a');
-  link.href = href;
-  link.rel = 'noopener';
-  document.body.append(link);
-  link.click();
-  link.remove();
+  void openSigned(href);
 }
 
 const severityOrder = ['critical', 'high', 'medium', 'low'] as const;
