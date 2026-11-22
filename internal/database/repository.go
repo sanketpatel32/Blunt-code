@@ -114,21 +114,36 @@ const (
 	MaxWorkspacePageSize     = 100
 )
 
-// WorkspacePageFilter selects sort and optional name/path/tag substring match
-// for WorkspacesPage. Empty Query matches all; Sort must be name, last_opened,
-// last_scan, or findings.
+// WorkspacePageFilter selects sort and optional name/path/language/tag
+// substring match for WorkspacesPage. Empty Query matches all; Sort must be
+// name, last_opened, last_scan, or findings.
 type WorkspacePageFilter struct {
 	Query string
-	Tag   string
-	Sort  string
-	Order string // asc or desc
+	// QueryLanguageIDs lists workspaces whose discovered (not snapshot)
+	// languages match Query; they match only while they have no snapshot
+	// languages, the same fallback the workspace view applies.
+	QueryLanguageIDs []string
+	Tag              string
+	Sort             string
+	Order            string // asc or desc
 }
 
+// workspaceSnapshotLanguages yields the language counts of the scan snapshot
+// the workspace view reads languages from: the newest finished scan, else the
+// newest scan.
+const workspaceSnapshotLanguages = `json_each(COALESCE((
+	SELECT CASE WHEN json_valid(s.snapshot_json) THEN s.snapshot_json END FROM scans s
+	WHERE s.workspace_id = w.id
+	ORDER BY CASE WHEN s.state IN ('completed','completed_with_warnings') THEN 0 ELSE 1 END, s.started_at DESC, s.id DESC
+	LIMIT 1), '{}'), '$.languages') lang`
+
 // WorkspacesPage returns one slice of workspaces with total matching rows, using
-// SQL paging and sort. Text Query matches LOWER(name) or LOWER(root_path) as a
-// substring; Tag matches workspace_tags.tag as a substring (case-insensitive).
-// Findings sort uses each workspace's newest scan (by started_at)
-// total_findings for ordering; workspaces with no scans sink to the end on desc.
+// SQL paging and sort. Text Query matches LOWER(name), LOWER(root_path), or a
+// detected language id as a substring; Tag matches workspace_tags.tag as a
+// substring (case-insensitive). Findings sort uses each workspace's newest scan
+// (by started_at) total_findings; workspaces with no scans sink to the end on
+// desc. Last-scan sort uses last_scan_at, else the newest scan's finished or
+// started time; never-scanned workspaces sink to the end in both directions.
 func (d *DB) WorkspacesPage(ctx context.Context, page, pageSize int, filter WorkspacePageFilter) ([]core.Workspace, int, error) {
 	if page < 1 {
 		return nil, 0, fmt.Errorf("page is out of range")
@@ -153,8 +168,17 @@ func (d *DB) WorkspacesPage(ctx context.Context, page, pageSize int, filter Work
 	whereArgs := []any(nil)
 	if q != "" {
 		like := "%" + strings.ToLower(q) + "%"
-		whereParts = append(whereParts, `(LOWER(w.name) LIKE ? OR LOWER(w.root_path) LIKE ?)`)
-		whereArgs = append(whereArgs, like, like)
+		hasSnapshotLanguages := `EXISTS (SELECT 1 FROM ` + workspaceSnapshotLanguages + ` WHERE lang.value > 0)`
+		snapshotLanguageMatch := `EXISTS (SELECT 1 FROM ` + workspaceSnapshotLanguages + ` WHERE lang.value > 0 AND LOWER(lang.key) LIKE ?)`
+		textMatch := `LOWER(w.name) LIKE ? OR LOWER(w.root_path) LIKE ? OR ` + snapshotLanguageMatch
+		whereArgs = append(whereArgs, like, like, like)
+		if len(filter.QueryLanguageIDs) > 0 {
+			textMatch += ` OR (w.id IN (?` + strings.Repeat(`,?`, len(filter.QueryLanguageIDs)-1) + `) AND NOT ` + hasSnapshotLanguages + `)`
+			for _, id := range filter.QueryLanguageIDs {
+				whereArgs = append(whereArgs, id)
+			}
+		}
+		whereParts = append(whereParts, `(`+textMatch+`)`)
 	}
 	if tagNeedle != "" {
 		whereParts = append(whereParts, `EXISTS (SELECT 1 FROM workspace_tags t WHERE t.workspace_id = w.id AND LOWER(t.tag) LIKE ?)`)
@@ -165,9 +189,9 @@ func (d *DB) WorkspacesPage(ctx context.Context, page, pageSize int, filter Work
 		whereSQL = ` WHERE ` + strings.Join(whereParts, ` AND `)
 	}
 	joinLatest := ``
-	if sortKey == "findings" {
+	if sortKey == "findings" || sortKey == "last_scan" {
 		joinLatest = ` LEFT JOIN (
-			SELECT workspace_id, total_findings,
+			SELECT workspace_id, total_findings, finished_at, started_at,
 				ROW_NUMBER() OVER (PARTITION BY workspace_id ORDER BY started_at DESC, id DESC) AS recency
 			FROM scans
 		) latest ON latest.workspace_id = w.id AND latest.recency = 1`
@@ -177,7 +201,8 @@ func (d *DB) WorkspacesPage(ctx context.Context, page, pageSize int, filter Work
 	case "name":
 		orderExpr = `w.name COLLATE NOCASE`
 	case "last_scan":
-		orderExpr = `COALESCE(w.last_scan_at, '')`
+		scanned := `COALESCE(w.last_scan_at, latest.finished_at, latest.started_at)`
+		orderExpr = `(` + scanned + ` IS NULL) ASC, ` + scanned
 	case "findings":
 		orderExpr = `COALESCE(latest.total_findings, -1)`
 	default: // last_opened
@@ -205,7 +230,7 @@ func (d *DB) WorkspacesPage(ctx context.Context, page, pageSize int, filter Work
 		return nil, 0, fmt.Errorf("page is out of range")
 	}
 	selectCols := `SELECT ` + workspaceFields + ` FROM workspaces w`
-	if sortKey == "findings" {
+	if joinLatest != "" {
 		selectCols = `SELECT ` + workspaceFieldsW() + ` FROM workspaces w` + joinLatest
 	}
 	sqlQuery := selectCols + whereSQL + ` ORDER BY ` + orderExpr + ` ` + orderDir + tie + ` LIMIT ? OFFSET ?`

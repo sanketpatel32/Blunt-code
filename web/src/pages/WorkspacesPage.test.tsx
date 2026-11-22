@@ -42,8 +42,8 @@ const fetchMock = vi.fn((input: string) => {
   }
   const sortRaw = u.searchParams.get('sort') ?? 'last_opened';
   const order = u.searchParams.get('order') === 'asc' ? 'asc' : 'desc';
-  const sortKey = sortRaw === 'name' ? 'name' : sortRaw === 'findings' ? 'findings' : 'last_scan';
-  list = sortWorkspaces(list, sortKey, order);
+  // last_opened is a different server ordering; the mock leaves fixture order so mapping a column to it shows up.
+  if (sortRaw === 'name' || sortRaw === 'findings' || sortRaw === 'last_scan') list = sortWorkspaces(list, sortRaw, order);
   const page = Math.max(1, Number(u.searchParams.get('page') ?? '1'));
   const pageSize = Math.max(1, Number(u.searchParams.get('page_size') ?? '25'));
   const total = list.length;
@@ -115,6 +115,16 @@ describe('WorkspacesPage sortable columns', () => {
     await click(host, 'Workspace');
     expect(rowNames(host)).toEqual(['Gamma', 'beta', 'Alpha']);
     expect(sortButton(host, 'Workspace').querySelector('.sort-arrow')?.textContent).toBe('▼');
+  });
+
+  it('asks the server for last-scan ordering, not last-opened', async () => {
+    const host = await renderPage();
+    const sorts = () => fetchMock.mock.calls.map(([input]) => new URL(String(input), 'http://local.test')).filter((u) => u.pathname === '/api/v1/workspaces').map((u) => u.searchParams.get('sort'));
+    expect(sorts()).toEqual(['last_scan']);
+    await click(host, 'Workspace');
+    await click(host, 'Last scan');
+    expect(sorts()).toEqual(['last_scan', 'name', 'last_scan']);
+    expect(sorts()).not.toContain('last_opened');
   });
 
   it('switches columns with a fresh descending sort for counts and dates', async () => {

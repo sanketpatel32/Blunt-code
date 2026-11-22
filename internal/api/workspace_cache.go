@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -68,6 +69,31 @@ func (c *workspaceCaches) storeLanguages(id, key string, names []string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.languages[id] = languageEntry{key: key, names: names, at: time.Now()}
+}
+
+// languageMatches lists workspaces whose fresh cached language names contain
+// needle (case-insensitive), so list search covers never-scanned workspaces.
+func (c *workspaceCaches) languageMatches(needle string) []string {
+	needle = strings.ToLower(strings.TrimSpace(needle))
+	if needle == "" {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	var ids []string
+	for id, entry := range c.languages {
+		if time.Since(entry.at) > languageCacheTTL {
+			continue
+		}
+		for _, name := range entry.names {
+			if strings.Contains(strings.ToLower(name), needle) {
+				ids = append(ids, id)
+				break
+			}
+		}
+	}
+	sort.Strings(ids)
+	return ids
 }
 
 func (c *workspaceCaches) comparison(scanID, previousID string) (comparisonEntry, bool) {

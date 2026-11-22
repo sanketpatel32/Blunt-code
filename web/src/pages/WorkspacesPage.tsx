@@ -24,12 +24,6 @@ import { GradeTile } from '../components/GradeTile';
 
 const WS_PAGE_SIZE = 25;
 
-/** Map UI column sort to GET /workspaces `sort` param. */
-function apiSortKey(key: WorkspaceSortKey): 'name' | 'last_opened' | 'last_scan' | 'findings' {
-  if (key === 'last_scan') return 'last_opened';
-  return key;
-}
-
 export function WorkspacesPage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd: () => void; notify: (n: Notice) => void }) {
   const [sort, setSort] = useState<WorkspaceSort>(()=>{ const sp=new URLSearchParams(window.location.search); const k=sp.get('sort') as WorkspaceSortKey; const d=sp.get('order'); if(k && ['name','last_scan','findings'].includes(k)) return { key:k, dir: d==='asc'||d==='desc'?d:'desc' }; return { key: 'last_scan', dir: 'desc' }; });
   const [tagQuery, setTagQuery] = useState(()=> new URLSearchParams(window.location.search).get('q') ?? '');
@@ -46,7 +40,7 @@ export function WorkspacesPage({ go, onAdd, notify }: { go: (r: Route) => void; 
       api.workspacesPage({
         page,
         page_size: WS_PAGE_SIZE,
-        sort: apiSortKey(sort.key),
+        sort: sort.key,
         order: sort.dir,
         search: debouncedSearch || undefined,
         tag: debouncedTagQuery || undefined,

@@ -127,6 +127,11 @@ function workspacesGETResponse(input: string, payload: unknown): unknown {
     items = env.items ?? [];
     total = typeof env.total === 'number' ? env.total : items.length;
   }
+  const search = (url.searchParams.get('search') ?? '').trim().toLowerCase();
+  if (search) {
+    items = items.filter((w) => [w.name, w.root_path, ...(w.languages ?? [])].some((value) => (value ?? '').toLowerCase().includes(search)));
+    total = items.length;
+  }
   if (sort === 'findings') {
     const dir = order === 'asc' ? 1 : -1;
     items = [...items].sort((a, b) => {
@@ -875,6 +880,34 @@ describe('HomePage workspace paths and languages', () => {
     expect(copy.getAttribute('aria-label')).toBe('Copied to clipboard');
     expect(copy.className).toContain('copied');
     Reflect.deleteProperty(window.navigator, 'clipboard');
+  });
+
+  it('shows every server search match, not only rows whose languages contain the query', async () => {
+    const fetchMock = homeFetchMock(
+      { scans: [], total: 0, summary },
+      workspacesPage([
+        workspaceItem({ id: 'ws-api', name: 'Payments API', root_path: 'C:\\code\\payments', languages: ['go'] }),
+        workspaceItem({ id: 'ws-web', name: 'Storefront', root_path: 'C:\\code\\store', languages: ['typescript'] }),
+      ]),
+    );
+    const host = await render(fetchMock);
+    const input = host.querySelector<HTMLInputElement>('input[type="search"]')!;
+    const typeQuery = async (value: string) => {
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 350)); });
+      await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    };
+    const names = () => [...host.querySelectorAll('.ledger-row .ledger-name')].map((el) => el.textContent);
+    await typeQuery('payments');
+    expect(names()).toEqual(['Payments API']);
+    await typeQuery('typescript');
+    expect(names()).toEqual(['Storefront']);
+    const searches = fetchMock.mock.calls.map(([input]) => new URL(String(input), 'http://127.0.0.1')).filter((u) => u.pathname === '/api/v1/workspaces').map((u) => u.searchParams.get('search'));
+    expect(searches).toContain('payments');
+    expect(searches).toContain('typescript');
   });
 
   it('summarises detected languages on the path line and keeps the full list reachable', async () => {
