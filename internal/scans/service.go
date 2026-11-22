@@ -286,8 +286,10 @@ func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, 
 	// incremental scan is indistinguishable from a full one downstream. The
 	// reuse manifest lands on the snapshot: reports and the API can state
 	// what was reused instead of implying full coverage.
+	var reuseManifest *core.IncrementalReuse
 	if incremental != nil {
-		if manifest := s.finishIncremental(scan, incremental, counters); manifest != nil && scan.Snapshot != nil {
+		reuseManifest = s.finishIncremental(scan, incremental, counters)
+		if manifest := reuseManifest; manifest != nil && scan.Snapshot != nil {
 			scan.Snapshot.Incremental = manifest
 			if err := s.db.SaveScanSnapshot(context.Background(), scan.ID, scan.Snapshot); err != nil {
 				log.Printf("incremental: could not record the reuse manifest for scan %s (%v)", scan.ID, err)
@@ -355,6 +357,9 @@ func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, 
 	var incrementalNote string
 	if incremental != nil {
 		incrementalNote = fmt.Sprintf("incremental: reused findings for %d unchanged file(s), ran analyzers on %d file(s)", len(incremental.unchanged), incremental.changedCount)
+		if failure := reuseFailureNote(reuseManifest); failure != "" {
+			incrementalNote += "; " + failure
+		}
 	}
 	zeroCoverageNote := ""
 	if zeroCoverage {

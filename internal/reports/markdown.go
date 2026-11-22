@@ -155,6 +155,9 @@ func scanDetails(b *strings.Builder, m Model) {
 			if len(reuse.ReusedAnalyzers) > 0 {
 				detail += fmt.Sprintf("; copied wholesale: %s", strings.Join(reuse.ReusedAnalyzers, ", "))
 			}
+			if len(reuse.ReuseFailedAnalyzers) > 0 {
+				detail += fmt.Sprintf("; REUSE FAILED (findings missing): %s", strings.Join(reuse.ReuseFailedAnalyzers, ", "))
+			}
 			detailRow(b, "Incremental reuse", detail)
 		}
 	}

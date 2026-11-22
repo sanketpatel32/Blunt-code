@@ -145,6 +145,10 @@ type IncrementalReuse struct {
 	// RanAnalyzers executed fresh this scan (their unchanged-file findings
 	// may still have been appended when reuse scope is per-file).
 	RanAnalyzers []string `json:"ran_analyzers,omitempty"`
+	// ReuseFailedAnalyzers lost results this scan because copying their
+	// previous findings forward failed. Their coverage is incomplete, so the
+	// scan never reports a clean "completed" while this is non-empty.
+	ReuseFailedAnalyzers []string `json:"reuse_failed_analyzers,omitempty"`
 }
 
 type ScanGitSnapshot struct {
