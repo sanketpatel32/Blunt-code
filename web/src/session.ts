@@ -61,6 +61,16 @@ export async function establishSession(fetcher: typeof fetch = fetch, loc: Locat
   }
 }
 
+/** The server's scan-specific filename rides Content-Disposition; the URL tail is the fallback. */
+function downloadName(response: Response, url: string): string {
+  const disposition = response.headers.get('Content-Disposition') ?? '';
+  const extended = /filename\*=UTF-8''([^;]+)/i.exec(disposition);
+  if (extended) return decodeURIComponent(extended[1]);
+  const plain = /filename="([^"]+)"/i.exec(disposition) ?? /filename=([^;\s]+)/i.exec(disposition);
+  if (plain) return plain[1];
+  return url.split('/').pop()?.split('?')[0] || 'download';
+}
+
 /**
  * Fetches `url` with the bearer token and delivers the body as a download or
  * a new tab via an object URL. Unlike an `<a href>` navigation, the request
@@ -68,29 +78,39 @@ export async function establishSession(fetcher: typeof fetch = fetch, loc: Locat
  * Referer.
  */
 export async function openSigned(url: string, mode: 'download' | 'tab' = 'download', fetcher: typeof fetch = fetch): Promise<void> {
+  // The popup must open inside the click's permission window — a window.open
+  // that waits for the fetch is treated as an unrequested pop-up and blocked.
+  const tab = mode === 'tab' ? window.open('', '_blank') : null;
   const response = await fetcher(url, { headers: authHeaders() });
   if (!response.ok) {
     // Fail visibly: an unsigned navigation would 401 anyway, so surface it.
-    window.open(url, '_blank', 'noopener,noreferrer');
+    if (tab) tab.location.href = url;
+    else window.open(url, '_blank', 'noopener,noreferrer');
     return;
   }
   const objectUrl = URL.createObjectURL(await response.blob());
+  if (tab) {
+    // The server sandboxes inline reports (CSP `sandbox allow-scripts`); a
+    // bare blob: navigation would run the report's script under this origin
+    // where it can read the stored token, so the blob is re-wrapped in a
+    // sandboxed iframe that forces an opaque origin again.
+    tab.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Blunt Code report</title><style>html,body{margin:0;height:100%}iframe{border:0;width:100%;height:100%}</style></head><body><iframe sandbox="allow-scripts" src="${objectUrl}"></iframe></body></html>`);
+    tab.document.close();
+    // The new tab owns the blob now; revoking at timeout frees it once the
+    // document has loaded without a dangling per-tab reference.
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    return;
+  }
+  // 'download' mode — or a 'tab' request whose popup was blocked: save the file.
   try {
-    if (mode === 'tab') {
-      window.open(objectUrl, '_blank', 'noopener,noreferrer');
-      // The new tab owns the blob now; revoking at timeout frees it once the
-      // document has loaded without a dangling per-tab reference.
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
-      return;
-    }
     const link = document.createElement('a');
     link.href = objectUrl;
-    link.download = url.split('/').pop()?.split('?')[0] ?? 'download';
+    link.download = downloadName(response, url);
     document.body.append(link);
     link.click();
     link.remove();
   } finally {
-    if (mode === 'download') URL.revokeObjectURL(objectUrl);
+    URL.revokeObjectURL(objectUrl);
   }
 }
 
