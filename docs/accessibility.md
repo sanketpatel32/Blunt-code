@@ -6,7 +6,7 @@ This document is the IMP-16 deliverable: it records what accessibility evidence 
 
 Blunt Code's web UI is **built toward WCAG 2.2 AA** with the following evidence-backed scope:
 
-- **Contrast (automated):** `npm run audit:contrast` (`web/scripts/contrast-audit.mjs`) measures every shipped design-token text/background pairing in both themes and fails below 4.5:1. Run locally; there is no CI in this repository.
+- **Contrast (automated):** `npm run audit:contrast` (`web/scripts/contrast-audit.mjs`) measures every shipped design-token text/background pairing in both themes and fails below 4.5:1. Runs locally and in CI (`.github/workflows/ci.yml`).
 - **Keyboard operation, focus management, dialog behavior, semantic labels, live-region structure (automated, jsdom):** enumerated below — 40+ component and page tests assert these properties directly.
 - **Screen-reader experience (structural evidence only):** roles, names, and live regions are asserted in tests; no real screen-reader pass (NVDA/Narrator) is automated. See the manual checklist.
 - **Zoom/reflow and localized narrow layouts (manual):** not automatable in jsdom; see the manual checklist. No conformance claim is made for reflow until that checklist has been executed and recorded.

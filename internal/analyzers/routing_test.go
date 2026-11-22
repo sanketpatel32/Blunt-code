@@ -19,6 +19,7 @@ import (
 	"bluntcode/internal/analyzers/semgrep"
 	"bluntcode/internal/analyzers/sonarqube"
 	"bluntcode/internal/analyzers/todo"
+	"bluntcode/internal/testutil/testpath"
 )
 
 // routingAdapters collects every registered adapter with a dependency-free
@@ -38,8 +39,8 @@ func routingAdapters(t *testing.T) map[string]analyzers.Analyzer {
 }
 
 func TestRoutingGoFileReachesBuiltInsOnly(t *testing.T) {
-	const goFile = `C:\ws\cmd\main.go`
-	const envFile = `C:\ws\.env`
+	goFile := testpath.Native(`C:\ws\cmd\main.go`)
+	envFile := testpath.Native(`C:\ws\.env`)
 	files := []string{goFile, envFile}
 	for name, adapter := range routingAdapters(t) {
 		got := analyzers.FilesForLanguages(files, adapter.SupportedLanguages()...)
@@ -77,13 +78,13 @@ func TestRoutingPythonFileStillReachesAllItsAnalyzers(t *testing.T) {
 		reaches map[string]bool
 	}{
 		{
-			file: `C:\ws\app.py`,
+			file: testpath.Native(`C:\ws\app.py`),
 			reaches: map[string]bool{
 				"secrets": true, "todo": true, "ruff": true, "semgrep": true, "sonarqube": true,
 			},
 		},
 		{
-			file: `C:\ws\app.ts`,
+			file: testpath.Native(`C:\ws\app.ts`),
 			reaches: map[string]bool{
 				"secrets": true, "todo": true, "biome": true, "semgrep": true, "sonarqube": true,
 			},
@@ -103,11 +104,11 @@ func TestRoutingCredentialAndConfigTypes(t *testing.T) {
 	// One representative per newly classified family beyond Go: credentials,
 	// shell, dockerfile, markdown, and a data format todo skips on purpose.
 	files := []string{
-		`C:\ws\server.pem`,
-		`C:\ws\deploy.sh`,
-		`C:\ws\Dockerfile`,
-		`C:\ws\README.md`,
-		`C:\ws\data.json`,
+		testpath.Native(`C:\ws\server.pem`),
+		testpath.Native(`C:\ws\deploy.sh`),
+		testpath.Native(`C:\ws\Dockerfile`),
+		testpath.Native(`C:\ws\README.md`),
+		testpath.Native(`C:\ws\data.json`),
 	}
 	for name, adapter := range routingAdapters(t) {
 		got := analyzers.FilesForLanguages(files, adapter.SupportedLanguages()...)
@@ -120,7 +121,7 @@ func TestRoutingCredentialAndConfigTypes(t *testing.T) {
 		case "todo":
 			// Markers plausibly live in shell scripts, Dockerfiles, and
 			// markdown — but not in credential blobs or JSON.
-			want := []string{`C:\ws\deploy.sh`, `C:\ws\Dockerfile`, `C:\ws\README.md`}
+			want := []string{testpath.Native(`C:\ws\deploy.sh`), testpath.Native(`C:\ws\Dockerfile`), testpath.Native(`C:\ws\README.md`)}
 			if len(got) != len(want) || !slices.Contains(got, want[0]) || !slices.Contains(got, want[1]) || !slices.Contains(got, want[2]) {
 				t.Fatalf("todo must receive exactly %v, got %v", want, got)
 			}

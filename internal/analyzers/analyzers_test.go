@@ -2,10 +2,12 @@ package analyzers
 
 import (
 	"context"
+	"runtime"
 	"strings"
 	"testing"
 
 	"bluntcode/internal/discovery"
+	"bluntcode/internal/testutil/testpath"
 )
 
 // TestLanguageClassificationMirrorsDiscovery guards the deliberate
@@ -119,7 +121,11 @@ func TestSetFingerprintsStableUnderReorder(t *testing.T) {
 }
 
 func TestRunDirectCapsOutput(t *testing.T) {
-	result, err := RunDirect(context.Background(), AnalyzerPlan{AnalyzerID: "test", Commands: []ProcessSpec{{Executable: "powershell.exe", Args: []string{"-NoProfile", "-Command", "[Console]::Out.Write('x' * (9MB))"}}}}, nil)
+	spec := ProcessSpec{Executable: "sh", Args: []string{"-c", "head -c 9437184 /dev/zero"}}
+	if runtime.GOOS == "windows" {
+		spec = ProcessSpec{Executable: "powershell.exe", Args: []string{"-NoProfile", "-Command", "[Console]::Out.Write('x' * (9MB))"}}
+	}
+	result, err := RunDirect(context.Background(), AnalyzerPlan{AnalyzerID: "test", Commands: []ProcessSpec{spec}}, nil)
 	if err == nil || !result.OutputTruncated || len(result.Stdout) != 8<<20 {
 		t.Fatalf("result=%#v err=%v", result, err)
 	}
@@ -135,7 +141,7 @@ func TestMergedEnvRemovesEmptyOverride(t *testing.T) {
 func TestFileArgumentBatchesStayWithinWindowsCommandLimit(t *testing.T) {
 	files := make([]string, 428)
 	for i := range files {
-		files[i] = `C:\workspace\src\` + strings.Repeat("long-name-", 10) + "file.ts"
+		files[i] = testpath.Native(`C:\workspace\src\` + strings.Repeat("long-name-", 10) + "file.ts")
 	}
 	batches := FileArgumentBatches([]string{"scan", "--json"}, files)
 	if len(batches) < 2 {

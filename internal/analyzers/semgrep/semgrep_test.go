@@ -2,6 +2,7 @@ package semgrep
 
 import (
 	"bluntcode/internal/analyzers"
+	"bluntcode/internal/testutil/testpath"
 	"context"
 	"os"
 	"path/filepath"
@@ -68,20 +69,20 @@ func TestNormalizeSurfacesStdoutConfigError(t *testing.T) {
 
 func TestPlanUsesOnlyLocalRulesAndDisablesSemgrepNetworkSignals(t *testing.T) {
 	rules := filepath.Join(t.TempDir(), "rules")
-	adapter := New(`C:\\BluntCode\\tools\\semgrep\\1.172.0\\semgrep.exe`, "1.172.0", rules)
+	adapter := New(testpath.Native(`C:\\BluntCode\\tools\\semgrep\\1.172.0\\semgrep.exe`), "1.172.0", rules)
 	plan, err := adapter.Plan(context.Background(), analyzers.ScanRequest{
-		WorkspaceRoot: `C:\\source`,
-		Files:         []string{`C:\\source\\app.py`},
+		WorkspaceRoot: testpath.Native(`C:\\source`),
+		Files:         []string{testpath.Native(`C:\\source\\app.py`)},
 		Languages:     []analyzers.Language{analyzers.LanguagePython},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	command := plan.Commands[0]
-	if command.Executable != adapter.Executable || command.Dir != `C:\\source` {
+	if command.Executable != adapter.Executable || command.Dir != testpath.Native(`C:\\source`) {
 		t.Fatalf("unexpected managed process: %#v", command)
 	}
-	wantArgs := []string{"scan", "--json", "--config", rules, "--no-rewrite-rule-ids", "--metrics=off", "--disable-version-check", "--oss-only", `C:\\source\\app.py`}
+	wantArgs := []string{"scan", "--json", "--config", rules, "--no-rewrite-rule-ids", "--metrics=off", "--disable-version-check", "--oss-only", testpath.Native(`C:\\source\\app.py`)}
 	if !reflect.DeepEqual(command.Args, wantArgs) {
 		t.Fatalf("args = %#v, want %#v", command.Args, wantArgs)
 	}
