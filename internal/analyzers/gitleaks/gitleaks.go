@@ -222,7 +222,7 @@ func (a *Adapter) Normalize(_ context.Context, result analyzers.AnalyzerResult) 
 			Category:     analyzers.CategorySecurity,
 			Title:        d.RuleID,
 			Message:      messageFor(d),
-			RelativePath: relative(result.Plan, d.File),
+			RelativePath: analyzers.PlanRelativePath(result.Plan, d.File),
 			StartLine:    d.StartLine,
 			StartColumn:  d.StartColumn,
 			EndLine:      d.EndLine,
@@ -273,18 +273,6 @@ func redactedPreview(secret string) string {
 	return string(runes[:4]) + "…"
 }
 
-func relative(p analyzers.AnalyzerPlan, path string) string {
-	root, _ := p.Metadata[planKeySource].(string)
-	if root == "" && len(p.Commands) > 0 {
-		root = p.Commands[0].Dir
-	}
-	if root != "" {
-		if r, err := filepath.Rel(root, path); err == nil {
-			return filepath.ToSlash(r)
-		}
-	}
-	return filepath.ToSlash(path)
-}
 func statusDetail(err error) string {
 	if err == nil {
 		return ""

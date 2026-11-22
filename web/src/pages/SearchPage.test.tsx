@@ -217,9 +217,8 @@ describe('SearchPage', () => {
   it('debounces typing into one request that carries q and paging params', async () => {
     vi.useFakeTimers();
     let fetchMock: ReturnType<typeof vi.fn>;
-    let host: HTMLElement;
     vi.stubGlobal('fetch', fetchMock = vi.fn(() => Promise.resolve(json({ items: [], total: 0, page: 1, page_size: 25, has_next: false }))));
-    host = document.createElement('div');
+    const host = document.createElement('div');
     document.body.append(host);
     root = createRoot(host);
     await act(async () => { root.render(<SearchPage go={vi.fn()} />); });

@@ -119,7 +119,7 @@ describe('SettingsPage toggles', () => {
 
   it('reflects offline mode as on when the backend reports it', async () => {
     const mock = vi.fn((input: string) => {
-      if (input.endsWith('/meta')) return Promise.resolve(json({ data_directory: 'C:\Users\you\BluntCode' }));
+      if (input.endsWith('/meta')) return Promise.resolve(json({ data_directory: 'C:\\Users\\you\\BluntCode' }));
       if (input.endsWith('/settings')) return Promise.resolve(json({ offline: true, open_browser: false }));
       return Promise.resolve(json({}));
     });

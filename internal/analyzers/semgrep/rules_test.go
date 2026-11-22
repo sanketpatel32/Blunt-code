@@ -1,9 +1,117 @@
 package semgrep
 
 import (
+	"fmt"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
+
+// rule is the subset of the semgrep rule schema the bundled pack relies on.
+// The adapter maps severity ERROR/WARNING/INFO onto Blunt Code
+// high/medium/info findings and metadata.category onto Blunt Code
+// categories, so both fields are validated below.
+type rule struct {
+	ID           string
+	Message      string
+	Severity     string
+	Languages    []string
+	Category     string
+	Pattern      string
+	Patterns     int
+	PatternRegex string
+}
+
+var (
+	rulepackLanguages  = map[string]bool{"python": true, "javascript": true, "typescript": true}
+	rulepackSeverities = map[string]bool{"ERROR": true, "WARNING": true, "INFO": true}
+	rulepackCategories = map[string]bool{"security": true, "vulnerability": true, "correctness": true}
+)
+
+// validateRulepack enforces the invariants every bundled rule must satisfy so
+// a bad edit fails in tests instead of surfacing as semgrep runtime errors.
+func validateRulepack(rules []rule) error {
+	if len(rules) == 0 {
+		return fmt.Errorf("rulepack defines no rules")
+	}
+	seen := make(map[string]struct{}, len(rules))
+	for i, r := range rules {
+		at := fmt.Sprintf("rule %d (%q)", i+1, r.ID)
+		if r.ID == "" {
+			return fmt.Errorf("%s: empty id", at)
+		}
+		if !strings.HasPrefix(r.ID, "blunt-code.") {
+			return fmt.Errorf("%s: id must use the blunt-code.<language>.<rule> prefix", at)
+		}
+		if _, dup := seen[r.ID]; dup {
+			return fmt.Errorf("%s: duplicate id", at)
+		}
+		seen[r.ID] = struct{}{}
+		if r.Message == "" {
+			return fmt.Errorf("%s: empty message", at)
+		}
+		if !rulepackSeverities[r.Severity] {
+			return fmt.Errorf("%s: severity %q must be one of ERROR, WARNING, INFO", at, r.Severity)
+		}
+		if len(r.Languages) == 0 {
+			return fmt.Errorf("%s: no languages", at)
+		}
+		for _, lang := range r.Languages {
+			if !rulepackLanguages[lang] {
+				return fmt.Errorf("%s: unsupported language %q", at, lang)
+			}
+		}
+		if r.Category != "" && !rulepackCategories[r.Category] {
+			return fmt.Errorf("%s: unknown metadata category %q", at, r.Category)
+		}
+		if r.Pattern == "" && r.Patterns == 0 && r.PatternRegex == "" {
+			return fmt.Errorf("%s: needs a pattern, patterns, pattern-either, or pattern-regex body", at)
+		}
+	}
+	return nil
+}
+
+// parseRulepack decodes the rulepack with a real YAML parser (yaml.v3 is a
+// port of libyaml, which semgrep itself uses), so values libyaml rejects —
+// such as plain scalars containing ": " — fail here too.
+func parseRulepack(src string) ([]rule, error) {
+	var pack struct {
+		Rules []struct {
+			ID            string   `yaml:"id"`
+			Message       string   `yaml:"message"`
+			Severity      string   `yaml:"severity"`
+			Languages     []string `yaml:"languages"`
+			Pattern       string   `yaml:"pattern"`
+			PatternRegex  string   `yaml:"pattern-regex"`
+			Patterns      []any    `yaml:"patterns"`
+			PatternEither []any    `yaml:"pattern-either"`
+			Metadata      struct {
+				Category string `yaml:"category"`
+			} `yaml:"metadata"`
+		} `yaml:"rules"`
+	}
+	if err := yaml.Unmarshal([]byte(src), &pack); err != nil {
+		return nil, fmt.Errorf("rulepack: %w", err)
+	}
+	if len(pack.Rules) == 0 {
+		return nil, fmt.Errorf("rulepack: rules must be a non-empty list")
+	}
+	rules := make([]rule, 0, len(pack.Rules))
+	for _, r := range pack.Rules {
+		rules = append(rules, rule{
+			ID:           r.ID,
+			Message:      r.Message,
+			Severity:     r.Severity,
+			Languages:    r.Languages,
+			Category:     r.Metadata.Category,
+			Pattern:      r.Pattern,
+			Patterns:     len(r.Patterns) + len(r.PatternEither),
+			PatternRegex: r.PatternRegex,
+		})
+	}
+	return rules, nil
+}
 
 func TestBundledRulepackParsesAndValidates(t *testing.T) {
 	pack := RulesYAML()
@@ -16,7 +124,7 @@ func TestBundledRulepackParsesAndValidates(t *testing.T) {
 	// The "<... X ... />" idiom is invalid semgrep JavaScript grammar: semgrep
 	// rejects the whole config file for it, silently killing every rule. The
 	// working form is "<$TAG ... X ...>...</$TAG>". This raw check guards the
-	// grammar class the purpose-built YAML parser cannot see.
+	// grammar class a YAML parser cannot see.
 	if strings.Contains(pack, "<... ") || strings.Contains(pack, " ... />") {
 		t.Fatal(`bundled rulepack uses the invalid "<... ... />" pattern idiom`)
 	}
@@ -117,7 +225,7 @@ func TestParseRulepackParsesPackConstructs(t *testing.T) {
 	}
 	// libyaml rejects a plain scalar containing ": " as an ambiguous mapping;
 	// semgrep parses the pack with libyaml, so the pack must quote such values
-	// and this parser must reject them the same way.
+	// and the parser must reject them the same way.
 	const colonPlain = `rules:
   - id: blunt-code.python.x
     languages: [python]

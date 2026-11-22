@@ -131,7 +131,7 @@ const COMMANDS: CLICommand[] = [
       { title: 'Generate SonarQube-style Markdown report', cmd: 'bluntcode report . --format md' },
       { title: 'Generate standalone HTML audit report', cmd: 'bluntcode report . --format html --output audit.html' },
       { title: 'Export OASIS SARIF log', cmd: 'bluntcode report . --format sarif --output audit.sarif' },
-      { title: 'Pipe JSON report into jq', cmd: 'bluntcode report . --format json | jq ".findings[] | select(.severity==\"critical\")"' },
+      { title: 'Pipe JSON report into jq', cmd: 'bluntcode report . --format json | jq ".findings[] | select(.severity==\\"critical\\")"' },
     ],
   },
   {

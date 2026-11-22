@@ -368,6 +368,7 @@ export function LiveAnalyzerStrip({ runs, events }: { runs?: AnalyzerRun[]; even
       return seen && (run.status === 'running' || run.status === 'pending') ? { id: run.analyzer_id, status: seen.status, message: seen.message ?? run.message } : { id: run.analyzer_id, status: run.status, message: run.message };
     })
     : [...live.entries()].map(([id, seen]) => ({ id, status: seen.status, message: seen.message }));
+  const reduced = useReducedMotion();
   if (!pills.length) return null;
   const grouped = new Map<string, typeof pills>();
   for (const p of pills) {
@@ -376,7 +377,6 @@ export function LiveAnalyzerStrip({ runs, events }: { runs?: AnalyzerRun[]; even
     arr.push(p);
     grouped.set(cat, arr);
   }
-  const reduced = useReducedMotion();
   return <div className="live-analyzers-grouped" aria-label="Analyzer progress">
     {[...grouped.entries()].map(([cat, items], gIdx) => (
       <div key={cat} className="live-category" style={{ borderLeftColor: categoryColor(cat as never) } as never}>
