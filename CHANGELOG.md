@@ -37,11 +37,14 @@ records differ for older versions:
 ### Added
 - **Parallel analyzers by default.** Scans now run up to 3 analyzers concurrently instead of strictly one-after-another, roughly halving wall-clock on multi-analyzer profiles while managed-tool installs stay serialized. `scan --jobs N` overrides; `--jobs 1` restores sequential. The API accepts `jobs` and `incremental` on scan start, so `bluntcode scan --jobs/--incremental` now works while the app is open instead of refusing.
 - **Incremental scans from the UI.** The scan review dialog offers "re-scan only files changed since the last completed scan" (silently a full scan on first run) — the biggest re-scan speedup on large workspaces.
+- **`.gitignore` is honored.** Discovery merges the workspace's root `.gitignore` into excludes (same forms as `.bluntcodeignore`; `!` negations are logged and skipped), so tool-output dirs, local env files, and other deliberately-untracked paths no longer produce findings. `.playwright-cli`, `.scannerwork`, `htmlcov`, and `.stryker-tmp` also joined the built-in excluded directories.
 
 ### Changed
+- **SonarQube is deep/pentest-only.** Its ~1.1 GB download, ~1 GB JVM, and minute-plus runs only bought code-smell coverage that overlaps the fast analyzers, and it never produced a verified finding in dogfooding — so `standard` and `quick` no longer pay its cost. It stays on the heaviest profiles where thoroughness beats speed.
 - **Install progress names the download.** The "Preparing X" scan stage now reads "Preparing X (downloading ~N MB, first run only)" from per-artifact manifest sizes, so a first pentest/deep run installing ~1.5 GB of tools no longer looks hung (#54).
 
 ### Fixed
+- **Bare exclude patterns now match at any depth.** `.bluntcodeignore` and workspace exclude rules like `*.tmp` or `coverage` previously only matched at the workspace root despite documented basename semantics; they now match like gitignore everywhere (and `/name` stays root-anchored).
 - **Windows device-name files no longer kill scans.** Discovery skips `nul`/`con`/`aux`/`comN`/`lptN` (with or without extension) — junk files creatable only via `\\?\` tricks or shell redirects that crash analyzers they reach; a stray `nul` in the repo root was failing every sonar-scanner run.
 
 ## [0.50.0] - 2026-11-22

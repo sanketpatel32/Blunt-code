@@ -16,6 +16,13 @@ import (
 // re-entering rules in the UI.
 const IgnoreFileName = ".bluntcodeignore"
 
+// gitIgnoreFileName is the workspace's own declaration of "not source":
+// paths a team deliberately never versions are noise for a source audit
+// (tool output dirs, local env files, vendored caches). Discovery applies
+// the root .gitignore exactly like .bluntcodeignore — nested .gitignore
+// files under subdirectories are not consulted.
+const gitIgnoreFileName = ".gitignore"
+
 // Caps that keep a hostile or accidentally huge ignore file from hurting scan
 // startup: the file is read only up to ignoreFileMaxBytes and at most
 // ignoreFileMaxPatterns patterns are kept.
@@ -68,7 +75,7 @@ func loadIgnorePatterns(path string) (patterns []string, negated int) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if !errors.Is(err, fs.ErrNotExist) {
-			log.Printf("discovery: ignoring unreadable %s: %v", IgnoreFileName, err)
+			log.Printf("discovery: ignoring unreadable %s: %v", filepath.Base(path), err)
 		}
 		return nil, 0
 	}
@@ -82,26 +89,44 @@ func loadIgnorePatterns(path string) (patterns []string, negated int) {
 		} else {
 			truncated = nil
 		}
-		log.Printf("discovery: %s exceeds %d bytes; everything after byte %d was skipped", IgnoreFileName, ignoreFileMaxBytes, len(truncated))
+		log.Printf("discovery: %s exceeds %d bytes; everything after byte %d was skipped", filepath.Base(path), ignoreFileMaxBytes, len(truncated))
 		data = truncated
 	}
 	patterns, negated = parseIgnoreFile(data)
 	if negated > 0 {
-		log.Printf("discovery: %s contained %d '!' pattern(s); negation is not supported and they were skipped", IgnoreFileName, negated)
+		log.Printf("discovery: %s contained %d '!' pattern(s); negation is not supported and they were skipped", filepath.Base(path), negated)
 	}
 	return patterns, negated
 }
 
+// gitIgnorePatterns translates the root .gitignore's entries into exclude
+// patterns. The matcher's forms already carry gitignore semantics — bare
+// names basename-match at any depth, "/x" anchors to the root, "dir/**" and
+// "**/name" prefix/suffix forms behave like git's — so the only translation
+// is dropping the trailing "/" dir marker: a directory and its contents are
+// excluded as one unit anyway.
+func gitIgnorePatterns(root string) []string {
+	raw, _ := loadIgnorePatterns(filepath.Join(root, gitIgnoreFileName))
+	patterns := make([]string, 0, len(raw))
+	for _, pattern := range raw {
+		if pattern = strings.TrimSuffix(pattern, "/"); pattern != "" {
+			patterns = append(patterns, pattern)
+		}
+	}
+	return patterns
+}
+
 // WorkspaceExcludes merges the patterns from the workspace root's
-// .bluntcodeignore into userExcludes and returns the combined list. The
-// file's patterns are purely additive excludes, exactly like DB exclude
-// rules; they never cancel include rules. The result is deduplicated
+// .bluntcodeignore and .gitignore into userExcludes and returns the combined
+// list. The files' patterns are purely additive excludes, exactly like DB
+// exclude rules; they never cancel include rules. The result is deduplicated
 // (case-insensitively, mirroring how the matcher normalizes patterns), so
 // applying WorkspaceExcludes to an already-merged list is a no-op and callers
 // such as the scan service can merge for snapshot purposes even though
 // Discover and Tree merge again internally.
 func WorkspaceExcludes(root string, userExcludes []string) []string {
-	filePatterns, _ := loadIgnorePatterns(filepath.Join(root, IgnoreFileName))
+	bluntPatterns, _ := loadIgnorePatterns(filepath.Join(root, IgnoreFileName))
+	filePatterns := append(bluntPatterns, gitIgnorePatterns(root)...)
 	if len(filePatterns) == 0 {
 		return append([]string(nil), userExcludes...)
 	}

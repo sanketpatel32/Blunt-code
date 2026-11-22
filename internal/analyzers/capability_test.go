@@ -74,7 +74,7 @@ func TestProfileAllowsMatchesHistoricalGating(t *testing.T) {
 		{"container-trivy", false, false, true, true},
 		{"iac-checkov", false, false, true, true},
 		{"semgrep", false, true, true, true},
-		{"sonarqube", false, true, true, true},
+		{"sonarqube", false, false, true, true},
 		{"pentest", false, true, true, true},
 		{"secrets", false, true, true, true},
 		{"todo", false, true, true, true},

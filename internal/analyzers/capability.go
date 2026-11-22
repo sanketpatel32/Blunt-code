@@ -176,7 +176,7 @@ var capabilityTable = map[string]Capability{
 	},
 	"sonarqube": {
 		ID: "sonarqube", DisplayName: "SonarQube", Category: "code-quality",
-		Execution: ExecutionManagedServer, Profiles: []string{ProfileStandard, ProfileDeep, ProfilePentest},
+		Execution: ExecutionManagedServer, Profiles: []string{ProfileDeep, ProfilePentest},
 		InputKinds: []InputKind{InputSource}, ManagedTool: "sonarqube",
 		Network:      NetworkLoopbackOnly,
 		NetworkNote:  "Talks to the locally managed SonarQube server it starts on a dynamic loopback port; never an external host.",

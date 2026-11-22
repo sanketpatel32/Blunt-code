@@ -528,7 +528,12 @@ func TestProfileTiersReachAnalyzersAndQuickSkipsHeavyAnalyzers(t *testing.T) {
 		return nil
 	}
 
-	for _, profile := range []string{analyzers.ProfileStandard, analyzers.ProfileDeep} {
+	// SonarQube is deep-only: standard runs the fast analyzers, deep adds the
+	// managed server on top.
+	if ran := runProfile(analyzers.ProfileStandard); len(ran) != 3 || !ran["ruff"] || !ran["biome"] || !ran["semgrep"] || ran["sonarqube"] {
+		t.Fatalf("standard profile ran %v, want ruff/biome/semgrep without sonarqube", ran)
+	}
+	for _, profile := range []string{analyzers.ProfileDeep} {
 		ran := runProfile(profile)
 		if len(ran) != 4 || !ran["ruff"] || !ran["biome"] || !ran["semgrep"] || !ran["sonarqube"] {
 			t.Fatalf("%s profile ran %v, want all four analyzers", profile, ran)
