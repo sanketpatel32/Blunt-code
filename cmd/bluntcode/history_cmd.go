@@ -80,13 +80,12 @@ func runHistoryList(ctx context.Context, app *cliCore, args []string, stdout, st
 			fmt.Fprintf(stderr, "bluntcode history: %v\n", err)
 			return 1
 		}
-		scansList, err := app.db.Scans(ctx, work.ID)
+		// Fetch only the page that will be printed — history is unbounded and
+		// the truncating load-all pattern was the whole complaint here.
+		scansList, _, err := app.db.ScansPage(ctx, work.ID, 1, limit, database.ScansPageFilter{})
 		if err != nil {
 			fmt.Fprintf(stderr, "bluntcode history: %v\n", err)
 			return 1
-		}
-		if len(scansList) > limit {
-			scansList = scansList[:limit]
 		}
 
 		if *jsonOut {

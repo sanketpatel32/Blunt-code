@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"bluntcode/internal/core"
+	"bluntcode/internal/database"
 	"bluntcode/internal/discovery"
 )
 
@@ -237,7 +238,9 @@ func runWorkspaceShow(ctx context.Context, app *cliCore, args []string, stdout, 
 	}
 
 	tags, _ := app.db.GetWorkspaceTags(ctx, work.ID)
-	scans, _ := app.db.Scans(ctx, work.ID)
+	// One bounded page carries both numbers this view needs: total via the
+	// count column, latest via the single row — no full-history load.
+	scans, total, _ := app.db.ScansPage(ctx, work.ID, 1, 1, database.ScansPageFilter{})
 
 	type workspaceDetail struct {
 		core.Workspace
@@ -249,7 +252,7 @@ func runWorkspaceShow(ctx context.Context, app *cliCore, args []string, stdout, 
 	detail := workspaceDetail{
 		Workspace:  work,
 		Tags:       tags,
-		TotalScans: len(scans),
+		TotalScans: total,
 	}
 	if len(scans) > 0 {
 		detail.LatestScan = &scans[0]

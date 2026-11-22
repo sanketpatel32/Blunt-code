@@ -182,7 +182,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("PUT /api/v1/workspaces/{id}/rules", s.putRules)
 	s.mux.HandleFunc("GET /api/v1/workspaces/{id}/suppressions", s.getSuppressions)
 	s.mux.HandleFunc("POST /api/v1/workspaces/{id}/suppressions", s.addSuppression)
-	s.mux.HandleFunc("GET /api/v1/workspaces/{id}/suppressions.csv", s.suppressionsCSV)
+	s.mux.Handle("GET /api/v1/workspaces/{id}/suppressions.csv", exportDeadline(http.HandlerFunc(s.suppressionsCSV)))
 	s.mux.HandleFunc("POST /api/v1/workspaces/{id}/suppressions/import", s.importSuppressions)
 	s.mux.HandleFunc("DELETE /api/v1/workspaces/{id}/suppressions/{fingerprint}", s.removeSuppression)
 	s.mux.HandleFunc("GET /api/v1/workspaces/{id}/trends", s.workspaceTrends)
@@ -199,19 +199,22 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/v1/scans/{id}/cancel", s.cancelScan)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/events", s.scanEvents)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings", s.findings)
-	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings.csv", s.findingsCSV)
-	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings.json", s.findingsJSON)
+	// Export routes get a per-handler write deadline: a stalled reader holds
+	// the handler goroutine — and, with MaxOpenConns(1), its DB slot — forever
+	// otherwise. SSE and the JSON API stay deadline-free by design.
+	s.mux.Handle("GET /api/v1/scans/{id}/findings.csv", exportDeadline(http.HandlerFunc(s.findingsCSV)))
+	s.mux.Handle("GET /api/v1/scans/{id}/findings.json", exportDeadline(http.HandlerFunc(s.findingsJSON)))
 	// report.json is the same versioned document under the report.* naming
 	// the other full-report exports use.
-	s.mux.HandleFunc("GET /api/v1/scans/{id}/report.json", s.findingsJSON)
-	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings.jsonl", s.findingsJSONL)
+	s.mux.Handle("GET /api/v1/scans/{id}/report.json", exportDeadline(http.HandlerFunc(s.findingsJSON)))
+	s.mux.Handle("GET /api/v1/scans/{id}/findings.jsonl", exportDeadline(http.HandlerFunc(s.findingsJSONL)))
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/fixed", s.fixedFindings)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/compare", s.scanCompare)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/findings/{findingID}/preview", s.findingPreview)
 	s.mux.HandleFunc("GET /api/v1/scans/{id}/report", s.report)
-	s.mux.HandleFunc("GET /api/v1/scans/{id}/report.md", s.reportMarkdown)
-	s.mux.HandleFunc("GET /api/v1/scans/{id}/report.sarif", s.reportSARIF)
-	s.mux.HandleFunc("GET /api/v1/scans/{id}/report.html", s.reportHTML)
+	s.mux.Handle("GET /api/v1/scans/{id}/report.md", exportDeadline(http.HandlerFunc(s.reportMarkdown)))
+	s.mux.Handle("GET /api/v1/scans/{id}/report.sarif", exportDeadline(http.HandlerFunc(s.reportSARIF)))
+	s.mux.Handle("GET /api/v1/scans/{id}/report.html", exportDeadline(http.HandlerFunc(s.reportHTML)))
 	s.mux.HandleFunc("GET /api/v1/analyzers", s.listAnalyzers)
 	s.mux.HandleFunc("GET /api/v1/tools", s.listTools)
 	s.mux.HandleFunc("POST /api/v1/tools/{id}/install", s.installTool)
@@ -220,6 +223,26 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("DELETE /api/v1/tools/{id}", s.uninstallTool)
 	s.mux.HandleFunc("POST /api/v1/tools/{id}/uninstall", s.uninstallTool)
 }
+
+// exportWriteBound caps how long an export handler may write to one client.
+// Generous for a local API: it exists to reap stalled readers, not to time
+// honest downloads.
+const exportWriteBound = 5 * time.Minute
+
+// exportDeadline wraps a heavy, non-streaming handler with an absolute write
+// deadline. ReadTimeout already bounds the body read; this bounds the writes
+// so a stalled reader can't hold the connection — and its DB slot — forever.
+// Not usable for SSE or other long-lived streams.
+func exportDeadline(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(exportWriteBound)); err != nil {
+			http.Error(w, "write deadline unsupported", http.StatusInternalServerError)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")

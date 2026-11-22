@@ -53,7 +53,9 @@ func runStats(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "bluntcode stats: %v\n", err)
 			return 1
 		}
-		scansList, _ := app.db.Scans(ctx, work.ID)
+		// Only the total count is needed; a one-row page returns it without
+		// loading the workspace's full scan history.
+		_, totalScans, _ := app.db.ScansPage(ctx, work.ID, 1, 1, database.ScansPageFilter{})
 		snaps, _ := app.db.RecentCompletedSeverityCounts(ctx, work.ID, 1)
 
 		type wsStats struct {
@@ -65,7 +67,7 @@ func runStats(args []string, stdout, stderr io.Writer) int {
 		res := wsStats{
 			WorkspaceName: work.Name,
 			WorkspacePath: work.RootPath,
-			TotalScans:    len(scansList),
+			TotalScans:    totalScans,
 		}
 		if len(snaps) > 0 {
 			res.LatestCounts = &snaps[0]
@@ -78,7 +80,7 @@ func runStats(args []string, stdout, stderr io.Writer) int {
 
 		fmt.Fprintf(stdout, "Stats for workspace: %s\n", work.Name)
 		fmt.Fprintf(stdout, "  Root Path:    %s\n", work.RootPath)
-		fmt.Fprintf(stdout, "  Total Scans:  %d\n", len(scansList))
+		fmt.Fprintf(stdout, "  Total Scans:  %d\n", totalScans)
 		if len(snaps) > 0 {
 			s := snaps[0]
 			fmt.Fprintf(stdout, "  Latest Scan:  %s (Critical: %d, High: %d, Medium: %d, Low: %d, Info: %d)\n",
