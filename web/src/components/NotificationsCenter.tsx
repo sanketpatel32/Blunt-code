@@ -154,7 +154,7 @@ export function NotificationsCenter({ routeKey = '' }: { routeKey?: string }) {
                         <span className="min-w-0 flex-1">
                           <span className="flex items-start justify-between gap-2">
                             <strong className="text-sm font-semibold leading-5 text-[var(--color-ink)]">{n.title}</strong>
-                            {!n.read && <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-accent)]" aria-label="Unread" />}
+                            {!n.read && <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-accent)]" role="img" aria-label="Unread" />}
                           </span>
                           {n.message && <span className="block text-xs leading-4 text-[var(--color-ink-soft)]">{n.message}</span>}
                           <span className="mt-0.5 block text-xs text-[var(--color-ink-faint)]">{relativeTime(n.createdAt)}</span>

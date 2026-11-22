@@ -1,11 +1,23 @@
 package scans
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"io/fs"
+	"os"
+
 	"bluntcode/internal/analyzers"
 	"bluntcode/internal/core"
 	"bluntcode/internal/discovery"
-	"context"
 )
+
+// ErrWorkspaceRootMissing marks failures caused by the workspace's configured
+// root path no longer being a readable directory — a deleted or moved folder,
+// not a database error. Handlers map it to a 404-style response so a stale
+// workspace fails scans with the real reason instead of "could not create
+// scan".
+var ErrWorkspaceRootMissing = errors.New("workspace root unavailable")
 
 // ScanPlan describes current inputs and routing without starting a scan.
 // Files may change between this review and the subsequent scan's discovery.
@@ -35,8 +47,18 @@ type PlannedAnalyzer struct {
 }
 
 func (s *Service) discoverInputs(ctx context.Context, work core.Workspace, excludes []string) (discovery.Result, []string, error) {
+	var found discovery.Result
+	info, err := os.Stat(work.RootPath)
+	switch {
+	case err == nil && !info.IsDir():
+		return found, excludes, fmt.Errorf("%w: %s is a file, not a directory", ErrWorkspaceRootMissing, work.RootPath)
+	case errors.Is(err, fs.ErrNotExist):
+		return found, excludes, fmt.Errorf("%w: %s no longer exists", ErrWorkspaceRootMissing, work.RootPath)
+	case err != nil:
+		return found, excludes, fmt.Errorf("%w: %s", ErrWorkspaceRootMissing, err)
+	}
 	excludes = discovery.WorkspaceExcludes(work.RootPath, excludes)
-	found, err := discovery.Discover(ctx, work.RootPath, excludes)
+	found, err = discovery.Discover(ctx, work.RootPath, excludes)
 	if err != nil {
 		return found, excludes, err
 	}

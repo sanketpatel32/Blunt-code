@@ -9,7 +9,6 @@ import { FolderIcon } from '../components/icons';
 import { LOCALES, useT } from '../lib/i18n';
 import { PageHeader } from '../components/PageHeader';
 import { ErrorPanel } from '../components/ui';
-import { Separator } from '../components/ui/separator';
 import { Button } from '../components/ui/button';
 import { formatBytes } from '../lib/format';
 
@@ -101,7 +100,7 @@ export function SettingsPage({ notify }: { notify: (n: Notice) => void }) {
       {/* A failed GET must not pass hardcoded defaults off as the stored config. */}
       {settings.error && <ErrorPanel error={settings.error} retry={settings.reload} />}
       {meta.error && <ErrorPanel error={meta.error} retry={meta.reload} />}
-      <div className="settings-list space-y-4">
+      <div className="settings-list">
         <section>
           <h2><SlidersHorizontal className="settings-h2-icon" aria-hidden="true" />General</h2>
           <div className="setting">
@@ -171,7 +170,6 @@ export function SettingsPage({ notify }: { notify: (n: Notice) => void }) {
             </fieldset>
           </div>
         </section>
-        <Separator className="bg-[var(--color-rule-faint)]" />
 
         <section>
           <h2><ScanSearch className="settings-h2-icon" aria-hidden="true" />Analysis</h2>

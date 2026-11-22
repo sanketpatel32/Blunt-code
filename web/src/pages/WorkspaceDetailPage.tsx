@@ -148,7 +148,7 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
       title={item.name}
       badge={
         item.languages?.length ? (
-          <div className="workspace-lang-dots flex items-center gap-1.5 flex-wrap" aria-label="Detected languages">
+          <div className="workspace-lang-dots flex items-center gap-1.5 flex-wrap" role="group" aria-label="Detected languages">
             {/* Color is signal: at most three language dots on the page — the
                 rest fold into one neutral tag (full list on hover, and for
                 screen readers via the sr-only badges). */}

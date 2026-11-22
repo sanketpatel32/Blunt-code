@@ -223,7 +223,7 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
                 zero-finding scan shows "All clear" alone rather than "0 findings
                 · coverage complete". */}
             {(stats.length > 0 || caveat) && (
-              <p className="scan-hero-stats" aria-label={[statsLabel, caveat].filter(Boolean).join(', ')}>
+              <p className="scan-hero-stats" role="group" aria-label={[statsLabel, caveat].filter(Boolean).join(', ')}>
                 {stats.length > 0 && <span aria-hidden="true">{stats.join(' · ')}</span>}
                 {caveat && <span className="scan-hero-caveat">{caveat}</span>}
               </p>
@@ -381,7 +381,7 @@ export function LiveAnalyzerStrip({ runs, events }: { runs?: AnalyzerRun[]; even
     arr.push(p);
     grouped.set(cat, arr);
   }
-  return <div className="live-analyzers-grouped" aria-label="Analyzer progress">
+  return <div className="live-analyzers-grouped" role="group" aria-label="Analyzer progress">
     {[...grouped.entries()].map(([cat, items], gIdx) => (
       <div key={cat} className="live-category" style={{ borderLeftColor: categoryColor(cat as never) } as never}>
         <span className="live-category-label" style={{ borderLeftColor: categoryColor(cat as never) } as never}>{CATEGORY_LABELS[cat as never] ?? cat}</span>
@@ -453,7 +453,7 @@ function ScanStageList({ scan, events }: { scan: Scan; events: ScanEvent[] }) {
   // On completed/failed scans the status line just repeats the page title's
   // outcome; interrupted keeps it — it carries the "partial report saved" note.
   const showStatus = !terminal || scan.state === 'interrupted';
-  return <section className="stage-list"><header><div><h2>{terminal ? 'How the analysis ran' : 'What is happening now'}</h2></div><span>{entries.length} update{entries.length === 1 ? '' : 's'}</span></header>{showStatus && <p className={`flow-now ${active ? 'active' : ''}`} role="status" aria-live="polite"><i aria-hidden="true" />{status}</p>}<ol className="scan-flow">{entries.map((event, index) => { const state = event.type.includes('failed') ? 'failed' : event.type.includes('completed') ? 'done' : event.type.includes('cancelled') ? 'interrupted' : index === entries.length - 1 && !isTerminalScanState(scan.state) ? 'current' : ''; return <li className={`${state} ${reduced ? '' : 'stage-enter'}`} key={event.seq ?? `${event.type}-${event.at}`} style={reduced ? undefined : { animationDelay: `${index * 40}ms`, willChange: 'transform, opacity' } as never}><i className={`flow-marker flow-marker-spring ${state === 'current' ? 'current' : ''}`} aria-hidden="true" style={reduced ? undefined : { willChange: 'transform' } as never} /><div><strong>{eventCopy(event)}</strong><small style={{ fontVariantNumeric: 'tabular-nums' } as never}>{mediumTime.format(event.at)}</small></div></li>; })}</ol></section>;
+  return <section className="stage-list"><header><div><h2>{terminal ? 'How the analysis ran' : 'What is happening now'}</h2></div><span>{entries.length} update{entries.length === 1 ? '' : 's'}</span></header>{showStatus && <p className={`flow-now ${active ? 'active' : ''}`} role="status" aria-live="polite"><i aria-hidden="true" />{status}</p>}<ol className="scan-flow" tabIndex={0} role="region" aria-label="Scan progress events">{entries.map((event, index) => { const state = event.type.includes('failed') ? 'failed' : event.type.includes('completed') ? 'done' : event.type.includes('cancelled') ? 'interrupted' : index === entries.length - 1 && !isTerminalScanState(scan.state) ? 'current' : ''; return <li className={`${state} ${reduced ? '' : 'stage-enter'}`} key={event.seq ?? `${event.type}-${event.at}`} style={reduced ? undefined : { animationDelay: `${index * 40}ms`, willChange: 'transform, opacity' } as never}><i className={`flow-marker flow-marker-spring ${state === 'current' ? 'current' : ''}`} aria-hidden="true" style={reduced ? undefined : { willChange: 'transform' } as never} /><div><strong>{eventCopy(event)}</strong><small style={{ fontVariantNumeric: 'tabular-nums' } as never}>{mediumTime.format(event.at)}</small></div></li>; })}</ol></section>;
 }
 
 /** Where the findings cluster: category and tool bars from the findings

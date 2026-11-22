@@ -2,6 +2,7 @@ package scans
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1209,5 +1210,47 @@ func TestDependencyInputOnlyWorkspaceStillScans(t *testing.T) {
 	}
 	if len(runs) == 0 || runs[0].AnalyzerID != "osv-dependencies" || runs[0].State != "succeeded" {
 		t.Fatalf("analyzer runs = %#v, want the scripted osv run to have succeeded", runs)
+	}
+}
+
+// TestDiscoverAndStartMissingRoot exercises the stale-workspace case: a
+// workspace whose folder was deleted or moved after registration must fail
+// with ErrWorkspaceRootMissing (mapped to a 404 by the API) instead of an
+// opaque "could not create scan" database error.
+func TestDiscoverAndStartMissingRoot(t *testing.T) {
+	paths, err := config.NewPaths(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := database.Open(context.Background(), paths.DBPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	gone := filepath.Join(t.TempDir(), "vanished-workspace")
+	work, err := db.CreateWorkspace(context.Background(), core.Workspace{Name: "Gone", RootPath: gone})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := New(db, analyzers.NewRegistry(), events.New(), filepath.Join(paths.DataDir, "reports"), paths.ToolsDir, nil)
+	if _, err := service.DiscoverAndStart(context.Background(), work, "standard", nil); !errors.Is(err, ErrWorkspaceRootMissing) {
+		t.Fatalf("DiscoverAndStart err = %v, want ErrWorkspaceRootMissing", err)
+	}
+	if _, err := service.Plan(context.Background(), work, "standard", nil); !errors.Is(err, ErrWorkspaceRootMissing) {
+		t.Fatalf("Plan err = %v, want ErrWorkspaceRootMissing", err)
+	}
+
+	// A file where a directory should be is the same class of failure.
+	filePath := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(filePath, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	work2, err := db.CreateWorkspace(context.Background(), core.Workspace{Name: "File", RootPath: filePath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.DiscoverAndStart(context.Background(), work2, "standard", nil); !errors.Is(err, ErrWorkspaceRootMissing) {
+		t.Fatalf("DiscoverAndStart on file root err = %v, want ErrWorkspaceRootMissing", err)
 	}
 }
