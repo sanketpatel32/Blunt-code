@@ -32,7 +32,7 @@ type DB struct{ SQL *sql.DB }
 // "interrupted" (MarkInterruptedScans). Disk-full surfaces as ordinary SQLite
 // write errors: scans fail honestly, never partially.
 func Open(ctx context.Context, path string) (*DB, error) {
-	db, err := sql.Open("sqlite", path+"?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)")
+	db, err := sql.Open("sqlite", path+"?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)")
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}

@@ -2135,7 +2135,13 @@ dialog.modal-dialog.shortcuts-dialog { width: min(44rem, calc(100% - 2 * var(--s
 .modal-dialog .field-error { color: var(--color-danger-text); }
 [aria-invalid="true"] { border-color: var(--color-danger); }
 .modal-dialog footer { justify-content: flex-end; margin-top: var(--space-xl); gap: var(--space-sm); }
-.sr-only { position: absolute; width: .06rem; height: .06rem; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
+/* fixed, not absolute: an absolutely-positioned visually-hidden element inside
+   a scroll container (ledger, table-wrap, rail) escapes the container's clip
+   unless the container is its containing block — its box then lands in document
+   space below the footer and inflates the page's scrollable height with dead
+   area the user can scroll into. Anchored to the viewport it cannot add scroll
+   overflow anywhere. clip:rect still applies to fixed. */
+.sr-only { position: fixed; width: .06rem; height: .06rem; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
 dialog.modal-dialog.code-preview-dialog { width: min(58rem, calc(100% - 2 * var(--space-xl))); }
 .code-preview-location { margin: var(--space-2xs) 0 0; }
 .code-preview { max-height: min(58dvh, 34rem); margin: var(--space-md) 0 0; overflow: auto; border: var(--rule) solid var(--color-rule); border-radius: var(--radius-md); background: var(--color-surface-muted); color: var(--color-ink); font: var(--text-xs)/1.65 var(--font-mono); }
@@ -5495,7 +5501,7 @@ tbody tr:hover > td { background: color-mix(in oklch, var(--color-accent) 5%, tr
     overflow: visible; border: 0; background: transparent; box-shadow: none; border-radius: 0;
   }
   table.rtable { min-width: 0 !important; width: 100%; border-collapse: separate; }
-  .rtable thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .rtable thead { position: fixed; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .rtable, .rtable tbody, .rtable tr, .rtable td, .rtable tbody th { display: block; }
   .rtable tbody tr:not(.history-band-row):not(.rtable-sub) {
     position: relative;
@@ -5624,7 +5630,9 @@ tbody tr:hover > td { background: color-mix(in oklch, var(--color-accent) 5%, tr
   .rail-link-label,
   .rail-search span,
   .rail-search .kbd-hint {
-    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    /* fixed for the same reason as .sr-only: inside the rail's own overflow-y
+       scroll these would escape the clip and stretch document scroll height. */
+    position: fixed; width: 1px; height: 1px; overflow: hidden;
     clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
   }
   .rail-link { justify-content: center; padding: 0; min-height: 40px; min-width: 40px; }
