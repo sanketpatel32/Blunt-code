@@ -23,15 +23,12 @@ function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
-/** Terminal scans never open one; non-terminal scans get an inert stream. */
-class NoopEventSource {
-  addEventListener() {}
-  close() {}
-}
-
 /** String patterns match the exact URL, regexes match anywhere (query strings). */
 function routeMock(routes: Array<[string | RegExp, unknown]>, fallback: unknown = { items: [] }) {
   return vi.fn((input: string) => {
+    // Live scans stream over fetch: hold the connection open so no reconnect
+    // loop fires during a test.
+    if (input.endsWith('/events')) return Promise.resolve(new Response(new ReadableStream({ start() {} }), { status: 200, headers: { 'Content-Type': 'text/event-stream' } }));
     for (const [pattern, body] of routes) {
       if (typeof pattern === 'string' ? input === pattern : pattern.test(input)) return Promise.resolve(json(body));
     }
@@ -42,7 +39,6 @@ function routeMock(routes: Array<[string | RegExp, unknown]>, fallback: unknown 
 async function renderAt(path: string, fetchMock: ReturnType<typeof vi.fn>) {
   window.history.replaceState({}, '', path);
   vi.stubGlobal('fetch', fetchMock);
-  vi.stubGlobal('EventSource', NoopEventSource);
   const host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);

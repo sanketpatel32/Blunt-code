@@ -19,7 +19,9 @@ func securityMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "no-referrer")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'")
+		// frame-src blob: lets the report viewer frame a blob object URL; a blob's
+		// origin is the app itself, so nothing foreign is framed.
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'; frame-src 'self' blob:")
 		next.ServeHTTP(w, r)
 	})
 }

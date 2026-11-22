@@ -30,7 +30,7 @@ func TestStaticGuardBlocksNonLoopbackHosts(t *testing.T) {
 		"X-Content-Type-Options":  "nosniff",
 		"X-Frame-Options":         "DENY",
 		"Referrer-Policy":         "no-referrer",
-		"Content-Security-Policy": "default-src 'self'; frame-ancestors 'none'",
+		"Content-Security-Policy": "default-src 'self'; frame-ancestors 'none'; frame-src 'self' blob:",
 	} {
 		if got := rec.Header().Get(header); got != want {
 			t.Errorf("%s = %q, want %q", header, got, want)

@@ -9,8 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
-	"time"
 )
 
 // TokenFragmentKey is the URL fragment key the launcher passes the token in
@@ -57,58 +55,8 @@ func (s *Server) SetToken(token string) error {
 	return nil
 }
 
-// TicketParam is the query parameter carrying a ticket on GET navigations.
-const TicketParam = "ticket"
-
-const ticketTTL = time.Minute
-
-// ticketStore holds single-use tickets, each valid for one GET of one API
-// path for ticketTTL. A ticket in a URL can end up in history or a Referer,
-// so it must be worthless once used or expired, and useless for any other
-// path.
-type ticketStore struct {
-	mu      sync.Mutex
-	tickets map[string]ticket
-}
-
-type ticket struct {
-	path    string
-	expires time.Time
-}
-
-func (t *ticketStore) mint(path string, now time.Time) (string, error) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if t.tickets == nil {
-		t.tickets = map[string]ticket{}
-	}
-	for id, existing := range t.tickets {
-		if !now.Before(existing.expires) {
-			delete(t.tickets, id)
-		}
-	}
-	id, err := NewToken()
-	if err != nil {
-		return "", err
-	}
-	t.tickets[id] = ticket{path: path, expires: now.Add(ticketTTL)}
-	return id, nil
-}
-
-func (t *ticketStore) redeem(id, path string, now time.Time) bool {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	found, ok := t.tickets[id]
-	if !ok {
-		return false
-	}
-	delete(t.tickets, id)
-	return found.path == path && now.Before(found.expires)
-}
-
 // authenticate reports whether r carries the server token as a bearer
-// header. A present but wrong Authorization header is never rescued by a
-// ticket.
+// header.
 func (s *Server) authenticate(r *http.Request) bool {
 	header := r.Header.Get("Authorization")
 	if header == "" {
@@ -116,24 +64,6 @@ func (s *Server) authenticate(r *http.Request) bool {
 	}
 	scheme, value, ok := strings.Cut(header, " ")
 	return ok && strings.EqualFold(scheme, "Bearer") && s.tokenMatches(strings.TrimSpace(value))
-}
-
-// redeemTicket authenticates a header-less GET by its single-use ticket and
-// returns the request with the ticket stripped from the query.
-func (s *Server) redeemTicket(r *http.Request) (*http.Request, bool) {
-	if r.Method != http.MethodGet || r.Header.Get("Authorization") != "" {
-		return r, false
-	}
-	query := r.URL.Query()
-	id := query.Get(TicketParam)
-	if id == "" || !s.tickets.redeem(id, r.URL.Path, time.Now()) {
-		return r, false
-	}
-	query.Del(TicketParam)
-	stripped := r.Clone(r.Context())
-	stripped.URL.RawQuery = query.Encode()
-	stripped.RequestURI = stripped.URL.RequestURI()
-	return stripped, true
 }
 
 func (s *Server) tokenMatches(candidate string) bool {
@@ -164,13 +94,9 @@ func (s *Server) apiGuard(next http.Handler) http.Handler {
 			return
 		}
 		if !s.authenticate(r) {
-			stripped, ok := s.redeemTicket(r)
-			if !ok {
-				w.Header().Set("WWW-Authenticate", `Bearer realm="bluntcode"`)
-				fail(w, http.StatusUnauthorized, "UNAUTHORIZED", "This Blunt Code session is not signed in. Reopen Blunt Code from its launcher, or open the sign-in URL it printed.")
-				return
-			}
-			r = stripped
+			w.Header().Set("WWW-Authenticate", `Bearer realm="bluntcode"`)
+			fail(w, http.StatusUnauthorized, "UNAUTHORIZED", "This Blunt Code session is not signed in. Reopen Blunt Code from its launcher, or open the sign-in URL it printed.")
+			return
 		}
 		// A text/plain or form body is what a no-preflight cross-origin
 		// write looks like; only JSON is ever a legitimate body here.
@@ -216,34 +142,4 @@ func jsonContentType(r *http.Request) bool {
 // answered 401 otherwise.
 func (s *Server) session(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
-}
-
-// sessionTicket mints a single-use ticket for one GET of one API path, for
-// navigations that cannot send the Authorization header. Only the bearer
-// token can mint; a ticket cannot mint another.
-func (s *Server) sessionTicket(w http.ResponseWriter, r *http.Request) {
-	if !s.authenticate(r) {
-		fail(w, http.StatusUnauthorized, "UNAUTHORIZED", "Tickets require the API token.")
-		return
-	}
-	var input struct {
-		Path string `json:"path"`
-	}
-	// Same strict decode every other endpoint uses: unknown fields are
-	// rejected, not silently ignored.
-	if err := decode(r, &input); err != nil {
-		fail(w, http.StatusBadRequest, "INVALID_REQUEST", "Send {\"path\": \"/api/v1/...\"}.")
-		return
-	}
-	prefix := "/api/" + APIVersion + "/"
-	if !strings.HasPrefix(input.Path, prefix) || strings.ContainsAny(input.Path, "?#") || strings.HasPrefix(input.Path, prefix+"session") {
-		fail(w, http.StatusBadRequest, "INVALID_REQUEST", "Tickets are issued for a single /api/"+APIVersion+"/ path.")
-		return
-	}
-	ticket, err := s.tickets.mint(input.Path, time.Now())
-	if err != nil {
-		fail(w, http.StatusInternalServerError, "TICKET_FAILED", "Could not issue a session ticket.")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"ticket": ticket, "expires_in": int(ticketTTL.Seconds())})
 }

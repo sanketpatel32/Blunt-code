@@ -206,7 +206,7 @@ export const api = {
   pentestProbe: (workspaceId: string, input: { target_url: string; auth_mode?: string; auth_token?: string; scope?: string; insecure_skip_tls_verify?: boolean }) => request<PentestProbeResult>(`/workspaces/${encodeURIComponent(workspaceId)}/pentest/probe`, { method: 'POST', body: JSON.stringify(input) }),
   probeTarget: (input: { target_url: string; auth_mode?: string; auth_token?: string; scope?: string; insecure_skip_tls_verify?: boolean }) => request<PentestProbeResult>('/pentest/probe', { method: 'POST', body: JSON.stringify(input) }),
   markdownUrl: (scanId: string) => `${PREFIX}/scans/${encodeURIComponent(scanId)}/report.md`,
-  /** URL for the attachment exports (plain GET navigations, not JSON requests; follow them with `openSigned`, which adds the ticket that authenticates them). CSV accepts the same filter/sort params as findings — minus limit/offset — so the file matches the on-screen list. findings.json is the versioned full-report document. */
+  /** URL for the attachment exports (plain GET navigations, not JSON requests; follow them with `openSigned`, which fetches them with the bearer header). CSV accepts the same filter/sort params as findings — minus limit/offset — so the file matches the on-screen list. findings.json is the versioned full-report document. */
   exportUrl: (scanId: string, format: 'html' | 'sarif' | 'csv' | 'json', params?: Record<string, string>) => {
     const base = `${PREFIX}/scans/${encodeURIComponent(scanId)}/${format === 'csv' ? 'findings.csv' : format === 'json' ? 'findings.json' : `report.${format}`}`;
     if (!params) return base;

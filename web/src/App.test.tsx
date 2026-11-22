@@ -256,16 +256,19 @@ describe('Blunt Code home', () => {
 
   it('renders scan progress and a combined report from documented endpoints', async () => {
     window.history.replaceState({}, '', '/scans/scan-1');
-    class FakeEventSource {
-      static instances: FakeEventSource[] = [];
-      listeners = new Map<string, (event: MessageEvent) => void>();
-      onerror?: () => void;
-      constructor() { FakeEventSource.instances.push(this); }
-      addEventListener(type: string, listener: (event: MessageEvent) => void) { this.listeners.set(type, listener); }
-      emit(type: string, body: unknown) { this.listeners.get(type)?.({ type, data: JSON.stringify(body) } as MessageEvent); }
-      close() {}
+    // Live scans stream over fetch now, so the fixture is a real
+    // ReadableStream: enqueue frames, then flush a timer tick for the read.
+    class FakeEventStream {
+      static instances: FakeEventStream[] = [];
+      private encoder = new TextEncoder();
+      private controller!: ReadableStreamDefaultController<Uint8Array>;
+      readonly response: Response;
+      constructor() {
+        FakeEventStream.instances.push(this);
+        this.response = new Response(new ReadableStream<Uint8Array>({ start: (c) => { this.controller = c; } }), { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+      }
+      emit(type: string, body: unknown) { this.controller.enqueue(this.encoder.encode(`event: ${type}\ndata: ${JSON.stringify(body)}\n\n`)); }
     }
-    vi.stubGlobal('EventSource', FakeEventSource);
     const scan = { id: 'scan-1', workspace_id: 'ws-1', state: 'completed', started_at: '2026-08-12T00:00:00Z', finished_at: '2026-08-12T00:00:02Z', total_findings: 1, analyzer_runs: [{ analyzer_id: 'biome', status: 'succeeded' }, { analyzer_id: 'semgrep', status: 'succeeded' }, { analyzer_id: 'sonarqube', status: 'succeeded' }] };
     const finding = { id: 'finding-1', analyzer_id: 'biome', severity: 'high', category: 'correctness', title: 'Example finding', message: 'Undefined name', relative_path: 'src/main.py', start_line: 4 };
     const fetchMock = vi.fn((input: string) => {
@@ -273,11 +276,13 @@ describe('Blunt Code home', () => {
       if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan, comparison: { new_count: 1, fixed_count: 0, persistent_count: 0 }, warnings: [], findings: [finding] }));
       if (input.endsWith('/scans/scan-1/findings/finding-1/preview')) return Promise.resolve(json({ path: 'src/main.py', highlight_start_line: 4, highlight_end_line: 4, lines: [{ number: 3, text: 'before()' }, { number: 4, text: 'undefinedName()' }, { number: 5, text: 'after()' }] }));
       if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json(input.includes('analyzer=semgrep') ? { items: [], total: 0, limit: 25, offset: 0, has_more: false } : { items: [finding], total: 1, limit: 25, offset: 0, has_more: false }));
+      if (input.endsWith('/events')) return Promise.resolve(new FakeEventStream().response);
       return Promise.resolve(json({ items: [] }));
     });
     const host = await render(fetchMock);
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
-    await act(async () => { FakeEventSource.instances[0].emit('analyzer.started', { type: 'analyzer.started', data: { analyzer_id: 'ruff', name: 'Ruff' } }); });
+    const stream = FakeEventStream.instances.at(-1)!;
+    await act(async () => { stream.emit('analyzer.started', { type: 'analyzer.started', data: { analyzer_id: 'ruff', name: 'Ruff' } }); await new Promise((resolve) => setTimeout(resolve, 0)); });
     // The h1 is the verdict ALONE; the counts sit in their own line beside it.
     // It used to be one 65-character sentence carrying verdict + counts +
     // caveat, which is why this route's h1 was 28px against 40px elsewhere.
@@ -304,8 +309,6 @@ describe('Blunt Code home', () => {
 
   it('shows an interrupted scan as a saved partial report, not a live scan', async () => {
     window.history.replaceState({}, '', '/scans/scan-interrupted');
-    class FakeEventSource { addEventListener() {} close() {} }
-    vi.stubGlobal('EventSource', FakeEventSource);
     const scan = { id: 'scan-interrupted', workspace_id: 'ws-1', state: 'interrupted', started_at: '2026-08-12T00:00:00Z', finished_at: '2026-08-12T00:00:02Z', total_findings: 3, error_summary: 'Previous application process exited before scan completion.' };
     const fetchMock = vi.fn((input: string) => {
       if (input.endsWith('/scans/scan-interrupted')) return Promise.resolve(json(scan));
@@ -326,8 +329,6 @@ describe('Blunt Code home', () => {
 
   it('celebrates a completed scan with zero findings and no filters', async () => {
     window.history.replaceState({}, '', '/scans/scan-clean');
-    class FakeEventSource { addEventListener() {} close() {} }
-    vi.stubGlobal('EventSource', FakeEventSource);
     const scan = { id: 'scan-clean', workspace_id: 'ws-1', state: 'completed', started_at: '2026-08-12T00:00:00Z', finished_at: '2026-08-12T00:00:02Z', total_findings: 0, analyzer_runs: [{ analyzer_id: 'ruff', status: 'succeeded' }, { analyzer_id: 'semgrep', status: 'succeeded' }] };
     const fetchMock = vi.fn((input: string) => {
       if (input.endsWith('/scans/scan-clean')) return Promise.resolve(json(scan));

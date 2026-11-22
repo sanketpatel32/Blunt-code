@@ -37,7 +37,6 @@ describe('keyboard journey through the core flow', () => {
   afterEach(async () => { await act(async () => { root?.unmount(); }); document.body.replaceChildren(); vi.unstubAllGlobals(); });
 
   it('goes workspace → scan → incomplete result → finding → back out', async () => {
-    vi.stubGlobal('EventSource', class { addEventListener() {} close() {} });
     const terminalScan = {
       id: 'scan-9', workspace_id: 'ws-1', state: 'completed_with_warnings',
       started_at: '2026-09-06T00:00:00Z', finished_at: '2026-09-06T00:00:09Z',
@@ -86,6 +85,8 @@ describe('keyboard journey through the core flow', () => {
       if (input.endsWith('/scans/scan-9/fixed')) return Promise.resolve(json({ fixed: [], total_fixed: 0, comparison_available: false, previous_scan_id: null }));
       if (input.includes('/scans/scan-9/findings/finding-1/preview')) return Promise.resolve(json({ path: 'src/main.py', highlight_start_line: 4, highlight_end_line: 4, lines: [{ number: 3, text: 'before()' }, { number: 4, text: `${EVAL}(userInput)` }, { number: 5, text: 'after()' }] }));
       if (input.includes('/scans/scan-9/findings')) return Promise.resolve(json({ items: [finding], total: 1, limit: 25, offset: 0, has_more: false }));
+      // Live scans stream over fetch: hold the connection open inertly.
+      if (input.endsWith('/events')) return Promise.resolve(new Response(new ReadableStream({ start() {} }), { status: 200, headers: { 'Content-Type': 'text/event-stream' } }));
       return Promise.resolve(json({ items: [] }));
     });
     vi.stubGlobal('fetch', fetchMock);

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
-import { signedUrl } from '../session';
+import { streamEvents } from '../session';
 import type { AnalyzerRun, Finding, Scan } from '../types';
 import type { Route } from '../lib/router';
 import type { Notice } from '../lib/notice';
@@ -61,10 +61,10 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
       setStreamState('live');
       return;
     }
-    let source: EventSource | undefined; let retry: number | undefined;
-    // Set once the effect is torn down: a closed EventSource fires no further
-    // events in a real browser, but the guard makes cleanup authoritative so a
-    // straggler error can never schedule one more reconnect (or reload).
+    let abort: AbortController | undefined; let retry: number | undefined;
+    // Set once the effect is torn down: an aborted stream fires no further
+    // events, but the guard makes cleanup authoritative so a straggler
+    // rejection can never schedule one more reconnect (or reload).
     let disposed = false;
     // Set on `connected`: the very next event starts the server's history
     // replay, so it replaces the list instead of appending to it. Without
@@ -72,43 +72,46 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
     // transition right after first load) appends a second copy of replayed
     // history and double-counts every analyzer's findings.
     let replaceNext = false;
-    const receive = (event: MessageEvent) => {
+    const receive = (type: string, raw: string) => {
       try {
-        const envelope = JSON.parse(event.data) as { type?: string; data?: Record<string, unknown> };
+        const envelope = JSON.parse(raw) as { type?: string; data?: Record<string, unknown> };
         const data = (envelope.data ?? envelope) as Omit<ScanEvent, 'type' | 'at'>;
-        const next: ScanEvent = { ...data, type: envelope.type ?? event.type, at: Date.now(), seq: eventSeq.current++ };
+        const next: ScanEvent = { ...data, type: envelope.type ?? type, at: Date.now(), seq: eventSeq.current++ };
         setEvents((old) => { if (replaceNext) { replaceNext = false; return [next]; } return [...old.slice(-31), next]; });
         setStreamState('live');
         if (next.type === 'scan.completed') { announceCompleted(scanRef.current); void scanReload(); } else if (next.type === 'scan.cancelled') void scanReload();
       } catch { /* Invalid optional event payloads do not interrupt the scan. */ }
     };
     let attempt = 0;
-    const connect = async () => {
+    const connect = () => {
       if (disposed) return;
       setStreamState((state) => state === 'live' ? 'reconnecting' : state);
-      // EventSource cannot send Authorization; each (re)connect uses a fresh single-use ticket.
-      const url = await signedUrl(`/api/v1/scans/${encodeURIComponent(id)}/events`);
-      if (disposed) return;
-      source = new EventSource(url);
-      ['scan.started', 'scan.stage', 'analyzer.started', 'analyzer.completed', 'analyzer.failed', 'analyzer.skipped', 'scan.warning', 'scan.completed', 'scan.cancelled'].forEach((type) => { source?.addEventListener(type, receive); });
-      source.addEventListener('connected', () => {
-        attempt = 0;
-        setStreamAttempts(0);
-        setStreamState('live');
-        replaceNext = true;
-      });
-      source.onerror = () => {
+      // fetch carries the bearer header where EventSource cannot, so live
+      // progress needs no ticket at all.
+      abort = new AbortController();
+      const signal = abort.signal;
+      void streamEvents(`/api/v1/scans/${encodeURIComponent(id)}/events`, (type, raw) => {
         if (disposed) return;
-        source?.close();
-        setStreamState('reconnecting');
-        attempt += 1;
-        setStreamAttempts(attempt);
-        const delay = Math.min(15_000, Math.round(1000 * Math.pow(1.5, attempt - 1)));
-        retry = window.setTimeout(() => { void scanReload(); void connect(); }, delay);
-      };
+        if (type === 'connected') {
+          attempt = 0;
+          setStreamAttempts(0);
+          setStreamState('live');
+          replaceNext = true;
+          return;
+        }
+        receive(type, raw);
+      }, signal).then(() => { if (!disposed) onDrop(); }, () => { if (!disposed) onDrop(); });
     };
-    void connect();
-    return () => { disposed = true; source?.close(); if (retry) window.clearTimeout(retry); };
+    const onDrop = () => {
+      if (disposed) return;
+      setStreamState('reconnecting');
+      attempt += 1;
+      setStreamAttempts(attempt);
+      const delay = Math.min(15_000, Math.round(1000 * Math.pow(1.5, attempt - 1)));
+      retry = window.setTimeout(() => { void scanReload(); connect(); }, delay);
+    };
+    connect();
+    return () => { disposed = true; abort?.abort(); if (retry) window.clearTimeout(retry); };
   }, [id, scanState, scanReload, scanMissing]);
   const current = scan.data;
   const terminal = current && isTerminalScanState(current.state);

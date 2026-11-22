@@ -12,26 +12,33 @@ declare global {
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-/** ScanPage opens an event stream while the scan payload is still loading, even for terminal scans. */
-class FakeEventSource {
-  addEventListener() {}
-  close() {}
+/** ScanPage streams events over fetch (Authorization-capable), so tests feed
+ *  it a real ReadableStream instead of a stubbed EventSource. A stream that
+ *  never closes matches an idle SSE connection. */
+function pendingStream(): Response {
+  return new Response(new ReadableStream({ start() {} }), { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
 }
 
-/** Records every listener so tests can push server events (history replays
+/** Records every stream so tests can push server events (history replays
  *  and live updates) into the page exactly as the SSE endpoint would. */
 class DispatchingEventSource {
   static instances: DispatchingEventSource[] = [];
-  private listeners = new Map<string, Array<(event: { data: string }) => void>>();
-  onerror: ((event: Event) => void) | null = null;
-  constructor(public url: string) { DispatchingEventSource.instances.push(this); }
-  addEventListener(type: string, handler: (event: { data: string }) => void) {
-    this.listeners.set(type, [...(this.listeners.get(type) ?? []), handler]);
+  private encoder = new TextEncoder();
+  private controller!: ReadableStreamDefaultController<Uint8Array>;
+  readonly response: Response;
+  constructor(public url: string) {
+    DispatchingEventSource.instances.push(this);
+    this.response = new Response(
+      new ReadableStream<Uint8Array>({ start: (controller) => { this.controller = controller; } }),
+      { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+    );
   }
-  close() {}
   dispatch(type: string, data: unknown) {
-    for (const handler of this.listeners.get(type) ?? []) handler({ data: JSON.stringify(data) });
+    this.controller.enqueue(this.encoder.encode(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`));
   }
+  /** Simulates a dropped connection: the fetch read rejects like a network cut. */
+  drop() { this.controller.error(new Error('stream dropped')); }
+  close() {}
 }
 
 let root: Root;
@@ -50,10 +57,10 @@ async function renderScanPage(scan: Scan, fixed: unknown = { fixed: [], total_fi
     if (input.endsWith(`/scans/${scan.id}/fixed`)) return Promise.resolve(json(fixed));
     if (input.endsWith(`/scans/${scan.id}/report`)) return Promise.resolve(json({ scan, comparison: {}, warnings: [], findings: [] }));
     if (input.includes(`/scans/${scan.id}/findings`)) return Promise.resolve(json({ items: [], total: 0, limit: 25, offset: 0, has_more: false }));
+    if (input.endsWith('/events')) return Promise.resolve(pendingStream());
     return Promise.resolve(json({}));
   });
   vi.stubGlobal('fetch', fetchMock);
-  vi.stubGlobal('EventSource', FakeEventSource);
   const host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);
@@ -139,10 +146,10 @@ describe('ScanPage what-changed panel', () => {
       if (input.endsWith('/scans/scan-1/fixed')) return Promise.resolve(json({ error: { code: 'COMPARISON_UNAVAILABLE', message: 'No baseline.' } }, 503));
       if (input.endsWith('/scans/scan-1/report')) return Promise.resolve(json({ scan: scanFixture({ fixed_count: 4 }), comparison: {}, warnings: [], findings: [] }));
       if (input.includes('/scans/scan-1/findings')) return Promise.resolve(json({ items: [], total: 0, limit: 25, offset: 0, has_more: false }));
+      if (input.endsWith('/events')) return Promise.resolve(pendingStream());
       return Promise.resolve(json({}));
     });
     vi.stubGlobal('fetch', fetchMock);
-    vi.stubGlobal('EventSource', FakeEventSource);
     const host = document.createElement('div');
     document.body.append(host);
     root = createRoot(host);
@@ -220,10 +227,10 @@ describe('ScanPage what-changed panel', () => {
 async function renderLiveScanPage(scan: Scan) {
   const fetchMock = vi.fn((input: string) => {
     if (input.endsWith(`/scans/${scan.id}`)) return Promise.resolve(json(scan));
+    if (input.endsWith('/events')) return Promise.resolve(new DispatchingEventSource(input).response);
     return Promise.resolve(json({}));
   });
   vi.stubGlobal('fetch', fetchMock);
-  vi.stubGlobal('EventSource', DispatchingEventSource);
   DispatchingEventSource.instances = [];
   const host = document.createElement('div');
   document.body.append(host);
@@ -233,11 +240,14 @@ async function renderLiveScanPage(scan: Scan) {
   return { host, fetchMock };
 }
 
-function replayHistory(source: DispatchingEventSource) {
+async function replayHistory(source: DispatchingEventSource) {
   source.dispatch('connected', {});
   source.dispatch('scan.stage', { type: 'scan.stage', data: { stage: 'Preparing workspace' } });
   source.dispatch('analyzer.completed', { type: 'analyzer.completed', data: { analyzer_id: 'biome', findings: 3, severities: { low: 3 } } });
   source.dispatch('analyzer.completed', { type: 'analyzer.completed', data: { analyzer_id: 'gitleaks-secrets', findings: 10768, severities: { critical: 9460, high: 1308 } } });
+  // Frames ride a real ReadableStream: reads land on a later macrotask, so
+  // flushed calls need a timer tick, not just promise resolution.
+  await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 const liveFixture = (): Scan => ({
@@ -257,10 +267,10 @@ describe('ScanPage live results panel', () => {
     const fetchMock = vi.fn((input: string) => {
       if (input.endsWith('/scans/scan-1')) return Promise.resolve(json(liveFixture()));
       if (input.endsWith('/scans/scan-2')) return Promise.resolve(json({ ...liveFixture(), id: 'scan-2' }));
+      if (input.endsWith('/events')) return Promise.resolve(new DispatchingEventSource(input).response);
       return Promise.resolve(json({}));
     });
     vi.stubGlobal('fetch', fetchMock);
-    vi.stubGlobal('EventSource', DispatchingEventSource);
     DispatchingEventSource.instances = [];
     const host = document.createElement('div');
     document.body.append(host);
@@ -268,7 +278,9 @@ describe('ScanPage live results panel', () => {
     const notify = vi.fn<(notice: Notice) => void>();
     await act(async () => { root.render(<ScanPage key="scan-1" id="scan-1" go={vi.fn<(route: Route) => void>()} notify={notify} />); });
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
-    await act(async () => { replayHistory(DispatchingEventSource.instances[0]!); });
+    // The live connection is the latest one: the mount-time stream is torn
+    // down (and its events dropped) once the scan payload lands.
+    await act(async () => { await replayHistory(DispatchingEventSource.instances.at(-1)!); });
     expect(digits(host.querySelector('.scan-metric-value')?.textContent)).toBe('10771'); // scan-1's replayed totals are live
     // App keys ScanPage by id, so the in-app jump between two running scans
     // (a "View scan" toast, a workspace link) remounts it with fresh state.
@@ -279,7 +291,7 @@ describe('ScanPage live results panel', () => {
     // The new scan's own stream still lands once it replays.
     const sourceB = DispatchingEventSource.instances.at(-1)!;
     expect(sourceB.url).toContain('/scans/scan-2/events');
-    await act(async () => { replayHistory(sourceB); });
+    await act(async () => { await replayHistory(sourceB); });
     expect(digits(host.querySelector('.scan-metric-value')?.textContent)).toBe('10771');
   });
 
@@ -287,8 +299,8 @@ describe('ScanPage live results panel', () => {
     const { host } = await renderLiveScanPage(liveFixture());
     const [first, second] = DispatchingEventSource.instances;
     expect(second).toBeDefined();
-    await act(async () => { replayHistory(first); });
-    await act(async () => { replayHistory(second); });
+    await act(async () => { await replayHistory(first); });
+    await act(async () => { await replayHistory(second); });
     const metric = digits(host.querySelector('.scan-metric-value')?.textContent);
     expect(metric).toBe('10771');
     expect(metric).not.toBe('21542');
@@ -300,8 +312,8 @@ describe('ScanPage live results panel', () => {
   it('shows live severity totals and per-analyzer findings from completion events', async () => {
     const { host } = await renderLiveScanPage(liveFixture());
     expect(host.querySelector('.severity-counts')?.getAttribute('data-pending')).toBe('true');
-    const [first] = DispatchingEventSource.instances;
-    await act(async () => { replayHistory(first); });
+    const live = DispatchingEventSource.instances.at(-1)!;
+    await act(async () => { await replayHistory(live); });
     expect(host.querySelector('.severity-counts')?.getAttribute('data-pending')).toBeNull();
     expect(digits(host.querySelector('.severity-counts .critical')?.textContent)).toBe('9460');
     expect(digits(host.querySelector('.severity-counts .high')?.textContent)).toBe('1308');
@@ -318,9 +330,9 @@ describe('ScanPage live results panel', () => {
   it('recovers live totals after a reconnect re-replays history', async () => {
     const { host } = await renderLiveScanPage(liveFixture());
     const [first, second] = DispatchingEventSource.instances;
-    await act(async () => { replayHistory(first); });
-    await act(async () => { replayHistory(second); });
-    await act(async () => { second.dispatch('analyzer.completed', { type: 'analyzer.completed', data: { analyzer_id: 'semgrep', findings: 5, severities: { medium: 5 } } }); });
+    await act(async () => { await replayHistory(first); });
+    await act(async () => { await replayHistory(second); });
+    await act(async () => { second.dispatch('analyzer.completed', { type: 'analyzer.completed', data: { analyzer_id: 'semgrep', findings: 5, severities: { medium: 5 } } }); await new Promise((resolve) => setTimeout(resolve, 0)); });
     expect(digits(host.querySelector('.scan-metric-value')?.textContent)).toBe('10776');
     expect(digits(host.querySelector('.severity-counts .medium')?.textContent)).toBe('5');
   });
@@ -331,10 +343,10 @@ describe('ScanPage terminal and action states (IMP-14)', () => {
     vi.useFakeTimers();
     const fetchMock = vi.fn((input: string) => {
       if (input.endsWith('/scans/scan-gone')) return Promise.resolve(json({ error: { code: 'SCAN_NOT_FOUND', message: 'Scan was not found.' } }, 404));
+      if (input.endsWith('/events')) return Promise.resolve(new DispatchingEventSource(input).response);
       return Promise.resolve(json({}));
     });
     vi.stubGlobal('fetch', fetchMock);
-    vi.stubGlobal('EventSource', DispatchingEventSource);
     DispatchingEventSource.instances = [];
     const host = document.createElement('div');
     document.body.append(host);
@@ -349,7 +361,7 @@ describe('ScanPage terminal and action states (IMP-14)', () => {
     const buttons = [...host.querySelectorAll('.error-panel button')].map((button) => button.textContent);
     expect(buttons).toEqual(['Back to overview', 'Workspaces']);
     const source = DispatchingEventSource.instances[0]!;
-    await act(async () => { source.onerror?.(new Event('error')); });
+    await act(async () => { source.drop(); });
     await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
     expect(DispatchingEventSource.instances).toHaveLength(1); // no reconnect loop
   });
@@ -371,10 +383,10 @@ describe('ScanPage terminal and action states (IMP-14)', () => {
     const fetchMock = vi.fn((input: string) => {
       if (input.endsWith('/scans/scan-1')) return Promise.resolve(json(liveFixture()));
       if (input.endsWith('/scans/scan-1/cancel')) return new Promise<Response>((resolve) => { releaseCancel = () => resolve(json({})); });
+      if (input.endsWith('/events')) return Promise.resolve(pendingStream());
       return Promise.resolve(json({}));
     });
     vi.stubGlobal('fetch', fetchMock);
-    vi.stubGlobal('EventSource', FakeEventSource);
     const host = document.createElement('div');
     document.body.append(host);
     root = createRoot(host);
