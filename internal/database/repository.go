@@ -918,6 +918,11 @@ func stampWorkspaceLastScan(ctx context.Context, tx *sql.Tx, scanID, finishedAt 
 	return err
 }
 
+func recomputeWorkspaceLastScan(ctx context.Context, tx *sql.Tx, workspaceID string) error {
+	_, err := tx.ExecContext(ctx, `UPDATE workspaces SET last_scan_at=(SELECT MAX(COALESCE(finished_at, started_at)) FROM scans WHERE workspace_id=? AND state IN `+terminalScanStates+`) WHERE id=?`, workspaceID, workspaceID)
+	return err
+}
+
 func (d *DB) UpdateScanState(ctx context.Context, id, state, errorSummary string) error {
 	now := time.Now()
 	finishedAt := dbTime(now)
@@ -2474,6 +2479,9 @@ func (d *DB) PruneOldScans(ctx context.Context, workspaceID string, keep int) (i
 	if _, err = tx.ExecContext(ctx, `DELETE FROM scans WHERE id IN (`+strings.Join(placeholders, ",")+`)`, args...); err != nil {
 		return nil, nil, err
 	}
+	if err = recomputeWorkspaceLastScan(ctx, tx, workspaceID); err != nil {
+		return nil, nil, err
+	}
 	if orphanedReports, err = unreferencedReports(ctx, tx, reportPaths); err != nil {
 		return nil, nil, err
 	}
@@ -2499,8 +2507,8 @@ func (d *DB) DeleteScan(ctx context.Context, id string) (deleted bool, orphanedR
 			_ = tx.Rollback()
 		}
 	}()
-	var reportPath string
-	err = tx.QueryRowContext(ctx, `SELECT COALESCE(report_markdown_path,'') FROM scans WHERE id=? AND state IN `+terminalScanStates, id).Scan(&reportPath)
+	var workspaceID, reportPath string
+	err = tx.QueryRowContext(ctx, `SELECT workspace_id,COALESCE(report_markdown_path,'') FROM scans WHERE id=? AND state IN `+terminalScanStates, id).Scan(&workspaceID, &reportPath)
 	if errors.Is(err, sql.ErrNoRows) {
 		err = nil
 		return false, "", tx.Rollback()
@@ -2509,6 +2517,9 @@ func (d *DB) DeleteScan(ctx context.Context, id string) (deleted bool, orphanedR
 		return false, "", err
 	}
 	if _, err = tx.ExecContext(ctx, `DELETE FROM scans WHERE id=?`, id); err != nil {
+		return false, "", err
+	}
+	if err = recomputeWorkspaceLastScan(ctx, tx, workspaceID); err != nil {
 		return false, "", err
 	}
 	orphaned, err := unreferencedReports(ctx, tx, []string{reportPath})

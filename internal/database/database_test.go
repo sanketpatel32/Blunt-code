@@ -221,6 +221,55 @@ func TestWorkspaceLastScanAtMigrationBackfillsTerminalScans(t *testing.T) {
 	}
 }
 
+func TestDeletingLatestScanRecomputesWorkspaceLastScanAt(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "bluntcode.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	work, err := db.CreateWorkspace(ctx, core.Workspace{Name: "Retention", RootPath: "C:/retention"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := time.Date(2026, 2, 3, 4, 5, 6, 0, time.UTC)
+	olderStart := base
+	olderFinish := base.Add(time.Minute)
+	newerStart := base.Add(10 * time.Minute)
+	newerFinish := base.Add(11 * time.Minute)
+	if _, err := db.SQL.ExecContext(ctx, `INSERT INTO scans(id,workspace_id,state,profile,started_at,finished_at) VALUES(?,?,?,?,?,?)`, "older-scan", work.ID, "completed", "standard", dbTime(olderStart), dbTime(olderFinish)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.SQL.ExecContext(ctx, `INSERT INTO scans(id,workspace_id,state,profile,started_at,finished_at) VALUES(?,?,?,?,?,?)`, "newer-scan", work.ID, "completed", "standard", dbTime(newerStart), dbTime(newerFinish)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.SQL.ExecContext(ctx, `UPDATE workspaces SET last_scan_at=? WHERE id=?`, dbTime(newerFinish), work.ID); err != nil {
+		t.Fatal(err)
+	}
+	ok, _, err := db.DeleteScan(ctx, "newer-scan")
+	if err != nil || !ok {
+		t.Fatalf("DeleteScan = %v %v, want deleted", ok, err)
+	}
+	got, err := db.Workspace(ctx, work.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.LastScanAt == nil || !got.LastScanAt.Equal(olderFinish) {
+		t.Fatalf("last_scan_at=%v after deleting newest scan, want %v", got.LastScanAt, olderFinish)
+	}
+	ok, _, err = db.DeleteScan(ctx, "older-scan")
+	if err != nil || !ok {
+		t.Fatalf("DeleteScan = %v %v, want deleted", ok, err)
+	}
+	got, err = db.Workspace(ctx, work.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.LastScanAt != nil {
+		t.Fatalf("last_scan_at=%v after deleting every scan, want nil", got.LastScanAt)
+	}
+}
+
 func TestReplacePathOverrides(t *testing.T) {
 	db, err := Open(context.Background(), filepath.Join(t.TempDir(), "bluntcode.db"))
 	if err != nil {
