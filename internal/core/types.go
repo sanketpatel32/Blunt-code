@@ -18,6 +18,13 @@ type Workspace struct {
 	SettingsJSON      string         `json:"-"`
 	DetectedLanguages map[string]int `json:"detected_languages,omitempty"`
 	GitRepository     bool           `json:"git_repository"`
+	// TrustRepoAnalyzerConfig is an explicit trust decision: when true,
+	// external analyzers load the config files the scanned repository ships
+	// (.gitleaks.toml, .gitleaksignore, trivy.yaml, .trivyignore,
+	// .checkov.yaml, osv-scanner.toml, ruff/pyproject.toml, biome.json),
+	// which can disable rules or exclude paths. False — the default — runs
+	// every analyzer with Blunt Code-owned config. Stored in settings_json.
+	TrustRepoAnalyzerConfig bool `json:"trust_repo_analyzer_config"`
 }
 
 type WorkspaceRule struct {
@@ -107,8 +114,16 @@ type ScanSnapshot struct {
 	InputDigest string `json:"input_digest,omitempty"`
 	// ConfigDigest digests the rules, exclusions, and path overrides that
 	// shaped the scan, so two scans are comparable only under the same
-	// configuration.
+	// configuration. Trusted in-repo analyzer config (and its contents) is
+	// folded in too.
 	ConfigDigest string `json:"config_digest,omitempty"`
+	// TrustRepoAnalyzerConfig records whether this scan let analyzers load
+	// the scanned repository's own analyzer config files.
+	TrustRepoAnalyzerConfig bool `json:"trust_repo_analyzer_config"`
+	// RepoAnalyzerConfigs lists the in-repo analyzer config files discovery
+	// saw (workspace-relative, capped). They were ignored unless
+	// TrustRepoAnalyzerConfig is true.
+	RepoAnalyzerConfigs []string `json:"repo_analyzer_configs,omitempty"`
 	// DependencyDigest digests DependencyInputs; dependency-analysis results
 	// are only comparable when this matches.
 	DependencyDigest string `json:"dependency_digest,omitempty"`

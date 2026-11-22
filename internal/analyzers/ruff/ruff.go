@@ -69,6 +69,12 @@ func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.
 		return analyzers.AnalyzerPlan{}, fmt.Errorf("ruff does not apply")
 	}
 	args := []string{"check", "--output-format", "json", "--no-fix"}
+	if !req.TrustRepoConfig {
+		// --isolated ignores ruff.toml, .ruff.toml and pyproject.toml, whose
+		// ignore/exclude/per-file-ignores settings would otherwise let the
+		// scanned repository switch rules off.
+		args = append(args, "--isolated")
+	}
 	if req.Profile == analyzers.ProfileDeep || req.Profile == analyzers.ProfilePentest {
 		args = append(args, "--select="+deepSelect)
 	}
@@ -79,7 +85,7 @@ func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.
 	for _, batch := range analyzers.FileArgumentBatches(args, pyFiles) {
 		commands = append(commands, analyzers.ProcessSpec{Executable: a.Executable, Args: batch, Dir: req.WorkspaceRoot})
 	}
-	return analyzers.AnalyzerPlan{AnalyzerID: ID, Version: a.Version, Commands: commands}, nil
+	return analyzers.AnalyzerPlan{AnalyzerID: ID, Version: a.Version, Commands: commands, Metadata: map[string]any{"trust_repo_config": req.TrustRepoConfig}}, nil
 }
 func (a *Adapter) Run(ctx context.Context, p analyzers.AnalyzerPlan, emit analyzers.EventEmitter) (analyzers.AnalyzerResult, error) {
 	if len(p.Commands) <= 1 {

@@ -45,6 +45,8 @@ const (
 	// outputDirPrefix namespaces the per-scan report directory checkov writes
 	// to; the scan ID keeps concurrent scans from colliding.
 	outputDirPrefix = "bluntcode-checkov-"
+	planKeyRoot     = "workspace_root"
+	planKeyWorkDir  = "work_dir"
 	// resultFileName is the file checkov creates inside --output-file-path
 	// for the json output format.
 	resultFileName = "results_json.json"
@@ -122,8 +124,27 @@ func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.
 	}
 	outputDir := filepath.Join(os.TempDir(), outputDirPrefix+req.ScanID)
 	args := append([]string(nil), moduleArgs...)
+	dir := req.WorkspaceRoot
+	metadata := map[string]any{"output_dir": outputDir, "frameworks": frameworks, planKeyRoot: req.WorkspaceRoot, "trust_repo_config": req.TrustRepoConfig}
+	if req.TrustRepoConfig {
+		args = append(args, "-d", req.WorkspaceRoot)
+	} else {
+		// checkov auto-loads .checkov.yaml/.checkov.yml from the directory
+		// after every separate "-d"/"--directory" argv token and from the
+		// working directory (verified against 3.3.16's
+		// get_default_config_paths); those files can skip checks and paths.
+		// The joined --directory=<root> form is parsed identically by
+		// argparse but is not matched by that lookup, and the process runs
+		// from an empty Blunt Code-owned directory.
+		workDir, err := analyzers.IsolatedWorkDir("checkov")
+		if err != nil {
+			return analyzers.AnalyzerPlan{}, err
+		}
+		args = append(args, "--directory="+req.WorkspaceRoot)
+		dir = workDir
+		metadata[planKeyWorkDir] = workDir
+	}
 	args = append(args,
-		"-d", req.WorkspaceRoot,
 		"-o", "json",
 		"--output-file-path", outputDir,
 		"--framework", frameworks,
@@ -137,7 +158,7 @@ func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.
 		Commands: []analyzers.ProcessSpec{{
 			Executable: a.Executable,
 			Args:       args,
-			Dir:        req.WorkspaceRoot,
+			Dir:        dir,
 			Env: map[string]string{
 				// RunDirect deletes environment keys whose override is empty:
 				// neutralize ambient Python configuration and any Prisma
@@ -149,13 +170,16 @@ func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.
 				"BC_API_KEY":    "",
 			},
 		}},
-		Metadata: map[string]any{"output_dir": outputDir, "frameworks": frameworks},
+		Metadata: metadata,
 	}, nil
 }
 
 func (a *Adapter) Run(ctx context.Context, p analyzers.AnalyzerPlan, emit analyzers.EventEmitter) (analyzers.AnalyzerResult, error) {
 	if len(p.Commands) != 1 {
 		return analyzers.AnalyzerResult{Plan: p}, fmt.Errorf("checkov plan must provide exactly one command")
+	}
+	if workDir, _ := p.Metadata[planKeyWorkDir].(string); workDir != "" {
+		defer os.RemoveAll(workDir)
 	}
 	outputDir, _ := p.Metadata["output_dir"].(string)
 	if outputDir == "" {
@@ -218,8 +242,8 @@ func (a *Adapter) Normalize(_ context.Context, r analyzers.AnalyzerResult) ([]an
 	if err != nil {
 		return nil, nil, fmt.Errorf("parse checkov JSON: %w", err)
 	}
-	scanDir := ""
-	if len(r.Plan.Commands) > 0 {
+	scanDir, _ := r.Plan.Metadata[planKeyRoot].(string)
+	if scanDir == "" && len(r.Plan.Commands) > 0 {
 		scanDir = r.Plan.Commands[0].Dir
 	}
 	findings := make([]analyzers.Finding, 0)

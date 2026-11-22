@@ -11,18 +11,26 @@ import (
 	"bluntcode/internal/discovery"
 )
 
-const workspaceUsage = "usage: bluntcode workspace <list|add|show|delete|tree|tags> [arguments]"
+const workspaceUsage = "usage: bluntcode workspace <list|add|show|delete|tree|tags|trust-config> [arguments]"
 
 func printWorkspaceHelp(w io.Writer) {
 	fmt.Fprintln(w, "Blunt Code workspace management")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Usage:")
 	fmt.Fprintln(w, "  bluntcode workspace list [--json]")
-	fmt.Fprintln(w, "  bluntcode workspace add <path> [--name <name>] [--profile quick|standard|deep|pentest] [--json]")
+	fmt.Fprintln(w, "  bluntcode workspace add <path> [--name <name>] [--profile quick|standard|deep|pentest] [--trust-repo-config] [--json]")
 	fmt.Fprintln(w, "  bluntcode workspace show <id|path> [--json]")
 	fmt.Fprintln(w, "  bluntcode workspace delete <id|path> [--json]")
 	fmt.Fprintln(w, "  bluntcode workspace tree <id|path> [--path <subpath>] [--json]")
 	fmt.Fprintln(w, "  bluntcode workspace tags <id|path> [--set \"tag1,tag2\"] [--json]")
+	fmt.Fprintln(w, "  bluntcode workspace trust-config <id|path> on|off [--json]")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Analyzer config trust:")
+	fmt.Fprintln(w, "  By default analyzers run with Blunt Code-owned config and ignore config files")
+	fmt.Fprintln(w, "  the scanned repository ships (.gitleaks.toml, .gitleaksignore, trivy.yaml,")
+	fmt.Fprintln(w, "  .trivyignore, .checkov.yaml, osv-scanner.toml, ruff.toml/pyproject.toml,")
+	fmt.Fprintln(w, "  biome.json). Trusting them is a security decision: those files can disable")
+	fmt.Fprintln(w, "  rules or exclude paths, so only trust repositories whose config you control.")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Examples:")
 	fmt.Fprintln(w, "  bluntcode workspace list")
@@ -30,6 +38,7 @@ func printWorkspaceHelp(w io.Writer) {
 	fmt.Fprintln(w, "  bluntcode workspace show my-app")
 	fmt.Fprintln(w, "  bluntcode workspace tree my-app --path src")
 	fmt.Fprintln(w, "  bluntcode workspace tags my-app --set \"frontend,react\"")
+	fmt.Fprintln(w, "  bluntcode workspace trust-config my-app off")
 	fmt.Fprintln(w, "  bluntcode workspace delete my-app")
 }
 
@@ -60,6 +69,8 @@ func runWorkspace(args []string, stdout, stderr io.Writer) int {
 		return runWorkspaceTree(ctx, app, args[1:], stdout, stderr)
 	case "tags", "tag":
 		return runWorkspaceTags(ctx, app, args[1:], stdout, stderr)
+	case "trust-config":
+		return runWorkspaceTrustConfig(ctx, app, args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "bluntcode workspace: unknown subcommand %q\n", args[0])
 		printWorkspaceHelp(stderr)
@@ -109,6 +120,7 @@ func runWorkspaceAdd(ctx context.Context, app *cliCore, args []string, stdout, s
 	flags.SetOutput(stderr)
 	nameFlag := flags.String("name", "", "workspace display name")
 	profileFlag := flags.String("profile", "standard", "default scan profile: quick, standard, deep, or pentest")
+	trustFlag := flags.Bool("trust-repo-config", false, "TRUST DECISION: let analyzers load the repository's own analyzer config files, which can disable rules or exclude paths")
 	jsonOut := flags.Bool("json", false, "output JSON")
 	positional, err := parseFlagsInterspersed(flags, args)
 	if err != nil {
@@ -117,7 +129,7 @@ func runWorkspaceAdd(ctx context.Context, app *cliCore, args []string, stdout, s
 
 	if len(positional) == 0 {
 		fmt.Fprintln(stderr, "bluntcode workspace add: missing workspace path")
-		fmt.Fprintln(stderr, "usage: bluntcode workspace add <path> [--name <name>] [--profile quick|standard|deep|pentest] [--json]")
+		fmt.Fprintln(stderr, "usage: bluntcode workspace add <path> [--name <name>] [--profile quick|standard|deep|pentest] [--trust-repo-config] [--json]")
 		return 2
 	}
 	pathArg := positional[0]
@@ -138,6 +150,10 @@ func runWorkspaceAdd(ctx context.Context, app *cliCore, args []string, stdout, s
 		work.DefaultProfile = *profileFlag
 		needUpdate = true
 	}
+	if *trustFlag && !work.TrustRepoAnalyzerConfig {
+		work.TrustRepoAnalyzerConfig = true
+		needUpdate = true
+	}
 	if needUpdate {
 		if updated, upErr := app.db.UpdateWorkspace(ctx, work); upErr == nil {
 			work = updated
@@ -153,6 +169,50 @@ func runWorkspaceAdd(ctx context.Context, app *cliCore, args []string, stdout, s
 	fmt.Fprintf(stdout, "  ID:       %s\n", work.ID)
 	fmt.Fprintf(stdout, "  Root:     %s\n", work.RootPath)
 	fmt.Fprintf(stdout, "  Profile:  %s\n", work.DefaultProfile)
+	fmt.Fprintf(stdout, "  Analyzer config: %s\n", repoConfigTrustLabel(work.TrustRepoAnalyzerConfig))
+	return 0
+}
+
+// repoConfigTrustLabel spells out the analyzer-config trust decision so it is
+// never mistaken for a cosmetic preference.
+func repoConfigTrustLabel(trusted bool) string {
+	if trusted {
+		return "TRUSTED in-repo config (repository files can disable rules or exclude paths)"
+	}
+	return "Blunt Code-owned (in-repo analyzer config ignored)"
+}
+
+func runWorkspaceTrustConfig(ctx context.Context, app *cliCore, args []string, stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet("workspace trust-config", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	jsonOut := flags.Bool("json", false, "output JSON")
+	positional, err := parseFlagsInterspersed(flags, args)
+	if err != nil {
+		return 2
+	}
+	if len(positional) != 2 || (positional[1] != "on" && positional[1] != "off") {
+		fmt.Fprintln(stderr, "usage: bluntcode workspace trust-config <id|path> on|off [--json]")
+		return 2
+	}
+	work, err := resolveWorkspace(ctx, app.db, positional[0])
+	if err != nil {
+		fmt.Fprintf(stderr, "bluntcode workspace trust-config: %v\n", err)
+		return 1
+	}
+	work.TrustRepoAnalyzerConfig = positional[1] == "on"
+	updated, err := app.db.UpdateWorkspace(ctx, work)
+	if err != nil {
+		fmt.Fprintf(stderr, "bluntcode workspace trust-config: %v\n", err)
+		return 1
+	}
+	if *jsonOut {
+		_ = writeJSONOutput(stdout, updated)
+		return 0
+	}
+	fmt.Fprintf(stdout, "Workspace %s analyzer config: %s\n", updated.Name, repoConfigTrustLabel(updated.TrustRepoAnalyzerConfig))
+	if updated.TrustRepoAnalyzerConfig {
+		fmt.Fprintln(stdout, "Warning: the repository under audit can now configure its own audit. Turn this off for code you do not control.")
+	}
 	return 0
 }
 
@@ -204,6 +264,7 @@ func runWorkspaceShow(ctx context.Context, app *cliCore, args []string, stdout, 
 	fmt.Fprintf(stdout, "  ID:              %s\n", work.ID)
 	fmt.Fprintf(stdout, "  Root Path:       %s\n", work.RootPath)
 	fmt.Fprintf(stdout, "  Default Profile: %s\n", work.DefaultProfile)
+	fmt.Fprintf(stdout, "  Analyzer Config: %s\n", repoConfigTrustLabel(work.TrustRepoAnalyzerConfig))
 	fmt.Fprintf(stdout, "  Created At:      %s\n", formatTime(work.CreatedAt))
 	if work.LastScanAt != nil {
 		fmt.Fprintf(stdout, "  Last Scanned:    %s\n", formatTime(*work.LastScanAt))

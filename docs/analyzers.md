@@ -106,3 +106,27 @@ contract, not an OS-enforced sandbox — Blunt Code does not restrict analyzer
 filesystem access at the operating-system level, and repository
 configuration an analyzer honors (for example a `.editorconfig`) is read, not
 executed. Repository hooks and build scripts are never run by a scan.
+
+## In-repo analyzer configuration (trust boundary)
+
+A repository under audit must not configure its own audit. By default every external
+analyzer runs with Blunt Code-owned configuration, and config files inside the scanned
+tree are ignored:
+
+| Analyzer | In-repo files ignored | How |
+| --- | --- | --- |
+| Gitleaks | `.gitleaks.toml`, `.gitleaksignore` | pinned `--config`, isolated working directory; files named by the root `.gitleaksignore` are re-scanned from a Blunt Code staging copy |
+| Trivy | `trivy.yaml`, `.trivyignore`, `trivy-secret.yaml` | explicit `--config` / `--ignorefile` / `--secret-config`, isolated working directory |
+| Checkov | `.checkov.yaml`, `.checkov.yml` | `--directory=<root>` form (skips checkov's per-directory config lookup), isolated working directory |
+| OSV-Scanner | `osv-scanner.toml` | pinned `--config` |
+| Ruff | `ruff.toml`, `.ruff.toml`, `pyproject.toml` | `--isolated` |
+| Biome | `biome.json`, `biome.jsonc` (root and nested) | pinned `--config-path` |
+| Semgrep, SonarQube | — | already pinned (`--config <bundled rules>`, `-Dproject.settings=<app-data file>`) |
+
+Trusting in-repo config is an explicit, per-workspace trust decision
+(`bluntcode workspace trust-config <id|path> on`, the workspace settings checkbox, or
+`PATCH /api/v1/workspaces/{id}` with `"trust_repo_analyzer_config": true`). Each scan
+snapshot records `trust_repo_analyzer_config` and the in-repo config files discovery saw
+(`repo_analyzer_configs`); trusting config, or editing a trusted config file, changes the
+scan's `config_digest`. Inline suppressions in source (`gitleaks:allow`, `# noqa`,
+`#checkov:skip`, `nosemgrep`) are outside this boundary.

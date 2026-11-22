@@ -63,9 +63,10 @@ func TestPlanRequiresDeepProfile(t *testing.T) {
 func TestPlanScansWorkspaceDirectoryOnce(t *testing.T) {
 	adapter := New(testpath.Native(`C:\BluntCode\tools\checkov\3.3.16\env\tools\checkov\Scripts\python.exe`), "3.3.16")
 	req := analyzers.ScanRequest{
-		WorkspaceRoot: testpath.Native(`C:\source`),
-		WorkspaceID:   "w1",
-		ScanID:        "scan-1",
+		TrustRepoConfig: true, // legacy native-discovery command line
+		WorkspaceRoot:   testpath.Native(`C:\source`),
+		WorkspaceID:     "w1",
+		ScanID:          "scan-1",
 		// main.tf and app.py are not routable languages; Dockerfile and the
 		// kubernetes manifest keep the analyzer selected.
 		Files:     []string{testpath.Native(`C:\source\main.tf`), testpath.Native(`C:\source\Dockerfile`), testpath.Native(`C:\source\app.py`), testpath.Native(`C:\source\deploy\k8s.yaml`)},

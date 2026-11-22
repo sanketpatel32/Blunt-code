@@ -257,7 +257,7 @@ bluntcode agent scan "C:\my-app" --profile quick --fail-on high+  # forces --jso
 | **Ruff** | Python | Lint, style, bugbear, `SIM/C4/RET/ARG/PLR` in Deep |
 | **Biome** 2.5.6 | JS/TS, React auto-domain | Format, correctness, React hooks |
 | **Semgrep** | Python, JS/TS | 25-rule security pack (injection, deserialization, secrets, `postMessage`) |
-| **Gitleaks** 8.30.1 | All file types, directory-wide | External secrets scan; honors workspace `.gitleaks.toml` / `.gitleaksignore` |
+| **Gitleaks** 8.30.1 | All file types, directory-wide | External secrets scan; Blunt Code-owned config — in-repo `.gitleaks.toml` / `.gitleaksignore` ignored unless the workspace trusts repo config ([docs/analyzers.md](docs/analyzers.md)) |
 | **OSV Scanner** 2.5.1 | npm/PyPI/Go/Maven/NuGet/Composer/RubyGems/cargo lockfiles | Known CVEs per pinned dependency (deep profile) |
 | **Trivy** 0.74.0 | Dockerfile, YAML, JSON, TOML | Dependency CVEs + secrets + misconfigurations (deep; first run downloads its vuln DB) |
 | **Checkov** 3.3.16 | Terraform, Dockerfile, K8s, CloudFormation | IaC misconfigurations against 1000+ built-in policies (deep) |

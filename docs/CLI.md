@@ -88,12 +88,20 @@ Manage registered projects, metadata, directories, and tags.
 
 ```bash
 bluntcode workspace list [--json]
-bluntcode workspace add <path> [--name <name>] [--profile quick|standard|deep|pentest] [--json]
+bluntcode workspace add <path> [--name <name>] [--profile quick|standard|deep|pentest] [--trust-repo-config] [--json]
 bluntcode workspace show <id|path> [--json]
 bluntcode workspace tree <id|path> [--path <subpath>] [--json]
 bluntcode workspace tags <id|path> [--set "tag1,tag2"] [--json]
 bluntcode workspace delete <id|path> [--json]
+bluntcode workspace trust-config <id|path> on|off [--json]
 ```
+
+`trust-config` (and `add --trust-repo-config`) is a **trust decision**, off by default.
+Off, every external analyzer runs with Blunt Code-owned configuration and ignores the
+config files the scanned repository ships (`.gitleaks.toml`, `.gitleaksignore`, `trivy.yaml`,
+`.trivyignore`, `trivy-secret.yaml`, `.checkov.yaml`, `osv-scanner.toml`, `ruff.toml` /
+`pyproject.toml`, `biome.json`). On, those files are honored and can disable rules or exclude
+paths from the audit, so only enable it for repositories whose config you control.
 
 ### Examples
 ```bash

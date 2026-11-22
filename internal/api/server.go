@@ -640,10 +640,17 @@ func (s *Server) updateWorkspace(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Name           *string `json:"name"`
 		DefaultProfile *string `json:"default_profile"`
+		// TrustRepoAnalyzerConfig is a trust decision, not a preference:
+		// true lets the scanned repository's own analyzer config files
+		// disable rules or exclude paths from its audit.
+		TrustRepoAnalyzerConfig *bool `json:"trust_repo_analyzer_config"`
 	}
 	if err := decode(r, &input); err != nil {
 		fail(w, 400, "INVALID_JSON", "Invalid workspace update.")
 		return
+	}
+	if input.TrustRepoAnalyzerConfig != nil {
+		current.TrustRepoAnalyzerConfig = *input.TrustRepoAnalyzerConfig
 	}
 	if input.Name != nil {
 		current.Name = strings.TrimSpace(*input.Name)

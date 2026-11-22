@@ -223,7 +223,7 @@ func (s *Service) executeAnalyzer(ctx context.Context, scan core.Scan, work core
 		s.emit(scan.ID, "analyzer.failed", map[string]any{"analyzer_id": adapter.ID(), "error": errorText})
 		return analyzerFailed
 	}
-	plan, err := adapter.Plan(ctx, analyzers.ScanRequest{WorkspaceID: work.ID, ScanID: scan.ID, WorkspaceRoot: work.RootPath, Files: adapterFiles, Languages: languages, Profile: scan.Profile, DependencyInputs: scanDependencyInputs(scan)})
+	plan, err := adapter.Plan(ctx, analyzers.ScanRequest{WorkspaceID: work.ID, ScanID: scan.ID, WorkspaceRoot: work.RootPath, Files: adapterFiles, Languages: languages, Profile: scan.Profile, DependencyInputs: scanDependencyInputs(scan), TrustRepoConfig: scan.Snapshot != nil && scan.Snapshot.TrustRepoAnalyzerConfig})
 	if err != nil {
 		s.recordFailedRun(scan.ID, database.AnalyzerRunInput{AnalyzerID: adapter.ID(), Version: status.Version, State: "failed", StartedAt: started, FinishedAt: time.Now(), Error: err.Error()})
 		counters.markFailed()

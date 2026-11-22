@@ -10,6 +10,8 @@ export interface Workspace {
   /** Weighted risk rollup mirroring RiskProfile's grade bands; optional because no endpoint populates it yet — render defensively. */
   risk?: { grade: 'A' | 'B' | 'C' | 'D'; score: number };
   default_profile?: string;
+  /** Trust decision: true lets analyzers load the scanned repo's own config files (.gitleaks.toml, trivy.yaml, .checkov.yaml, …), which can disable rules or exclude paths. */
+  trust_repo_analyzer_config?: boolean;
   last_scan_at?: string | null;
   last_opened_at?: string | null;
   latest_scan?: Scan;

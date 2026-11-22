@@ -161,29 +161,43 @@ func (s *Service) snapshot(ctx context.Context, work core.Workspace, profile str
 		analyzerVersions[adapter.ID()] = adapter.Check(ctx, analyzers.ToolEnvironment{ToolsDir: s.toolsDir}).Version
 	}
 	sort.Strings(analyzerIDs)
+	// Re-read the trust decision instead of using the caller's copy: a
+	// long-lived caller (scan --watch) must see trust-config off at once.
+	// Fail closed when the workspace cannot be read.
+	work.TrustRepoAnalyzerConfig = false
+	if current, err := s.db.Workspace(ctx, work.ID); err == nil {
+		work.TrustRepoAnalyzerConfig = current.TrustRepoAnalyzerConfig
+	}
+	repoConfigs := repoAnalyzerConfigs(work.RootPath, files)
+	trustDigest := ""
+	if work.TrustRepoAnalyzerConfig {
+		trustDigest = repoAnalyzerConfigDigest(work.RootPath, repoConfigs)
+	}
 	return &core.ScanSnapshot{
-		WorkspaceID:            work.ID,
-		WorkspaceRoot:          work.RootPath,
-		WorkspaceName:          work.Name,
-		BluntCodeVersion:       bluntCodeVersion,
-		Profile:                profile,
-		CandidateFileCount:     len(files),
-		SelectedFileCount:      len(selectedFiles),
-		SelectedFiles:          selectedFiles,
-		Languages:              languages,
-		Rules:                  rules,
-		Exclusions:             append([]string(nil), excludes...),
-		PathOverrides:          overrides,
-		EnabledAnalyzers:       analyzerIDs,
-		AnalyzerVersions:       analyzerVersions,
-		SkipCounts:             skipCounts,
-		DependencyInputs:       dependencyInputs,
-		DependencyDigest:       dependencyDigest(dependencyInputs),
-		ConfigDigest:           configDigest(rules, excludes, overrides),
-		DiscoveryPolicyVersion: discovery.PolicyVersion,
-		FingerprintVersion:     analyzers.FingerprintVersion,
-		Platform:               platformSnapshot(),
-		Git:                    gitSnapshot(ctx, work.RootPath),
+		WorkspaceID:             work.ID,
+		WorkspaceRoot:           work.RootPath,
+		WorkspaceName:           work.Name,
+		BluntCodeVersion:        bluntCodeVersion,
+		Profile:                 profile,
+		CandidateFileCount:      len(files),
+		SelectedFileCount:       len(selectedFiles),
+		SelectedFiles:           selectedFiles,
+		Languages:               languages,
+		Rules:                   rules,
+		Exclusions:              append([]string(nil), excludes...),
+		PathOverrides:           overrides,
+		EnabledAnalyzers:        analyzerIDs,
+		AnalyzerVersions:        analyzerVersions,
+		SkipCounts:              skipCounts,
+		DependencyInputs:        dependencyInputs,
+		DependencyDigest:        dependencyDigest(dependencyInputs),
+		ConfigDigest:            configDigest(rules, excludes, overrides, work.TrustRepoAnalyzerConfig, trustDigest),
+		TrustRepoAnalyzerConfig: work.TrustRepoAnalyzerConfig,
+		RepoAnalyzerConfigs:     repoConfigs,
+		DiscoveryPolicyVersion:  discovery.PolicyVersion,
+		FingerprintVersion:      analyzers.FingerprintVersion,
+		Platform:                platformSnapshot(),
+		Git:                     gitSnapshot(ctx, work.RootPath),
 	}
 }
 

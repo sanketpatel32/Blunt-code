@@ -92,9 +92,10 @@ func TestPlanFiltersToJavaScriptAndTypeScriptFiles(t *testing.T) {
 	}
 	adapter := New("biome.exe", "test")
 	req := analyzers.ScanRequest{
-		WorkspaceRoot: root,
-		Languages:     []analyzers.Language{analyzers.LanguagePython, analyzers.LanguageTypeScript},
-		Files:         []string{app, filepath.Join(root, "script.py"), filepath.Join(root, "main.py")},
+		TrustRepoConfig: true, // legacy native-discovery command line
+		WorkspaceRoot:   root,
+		Languages:       []analyzers.Language{analyzers.LanguagePython, analyzers.LanguageTypeScript},
+		Files:           []string{app, filepath.Join(root, "script.py"), filepath.Join(root, "main.py")},
 	}
 	plan, err := adapter.Plan(context.Background(), req)
 	if err != nil {
