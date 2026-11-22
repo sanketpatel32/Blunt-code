@@ -245,3 +245,25 @@ describe('WorkspacesPage risk chips (Loop W3)', () => {
     expect(rows[2]!.querySelector('.ws-cell-risk')?.textContent).toBe('Never scanned');
   });
 });
+
+describe('WorkspacesPage missing workspace folder (#62)', () => {
+  it('badges a workspace whose folder is gone and disables its scan and file actions', async () => {
+    const missing = workspace({ id: 'ws-gone', name: 'Gone', root_path: 'C:\\temp\\gone', root_missing: true, root_problem: 'missing' });
+    const healthy = workspace({ id: 'ws-ok', name: 'Healthy', root_missing: false });
+    fetchMock.mockImplementationOnce(() => Promise.resolve(json({ items: [missing, healthy], total: 2, page: 1, page_size: 25, has_next: false })));
+    const host = await renderPage();
+    const rows = [...host.querySelectorAll<HTMLTableRowElement>('tbody tr')];
+    const gone = rows.find((row) => row.textContent?.includes('Gone'))!;
+    const ok = rows.find((row) => row.textContent?.includes('Healthy'))!;
+    const badge = gone.querySelector('.root-missing-badge');
+    expect(badge?.textContent).toBe('Folder missing');
+    expect(badge?.getAttribute('title')).toContain('C:\\temp\\gone no longer exists');
+    expect(gone.className).toContain('ws-row-missing');
+    expect(gone.getAttribute('aria-label')).toContain('folder missing');
+    const scan = [...gone.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === 'Scan')!;
+    expect(scan.disabled).toBe(true);
+    expect(scan.title).toContain('Restore the folder or remove this workspace');
+    expect(ok.querySelector('.root-missing-badge')).toBeNull();
+    expect([...ok.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === 'Scan')!.disabled).toBe(false);
+  });
+});

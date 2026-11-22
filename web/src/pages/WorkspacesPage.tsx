@@ -24,6 +24,7 @@ import { GradeTile } from '../components/GradeTile';
 import { DataTableShell } from '../components/DataTableShell';
 import { FilterBar } from '../components/FilterBar';
 import { ListFooter } from '../components/ListFooter';
+import { RootMissingBadge, rootProblemDescription } from '../components/RootMissingBadge';
 
 const WS_PAGE_SIZE = 25;
 
@@ -319,12 +320,14 @@ function LastScanCell({ workspace }: { workspace: Workspace }) {
  *  button — everything else, including Remove (danger, last), lives in the RowMenu. */
 function WorkspaceRow({ workspace, go, onScan, onRemove }: { workspace: Workspace; go: (r: Route) => void; onScan: (workspace: Workspace, profile: string) => void; onRemove: (workspace: Workspace) => void }) {
   const open = () => go({ page: 'workspace', id: workspace.id });
+  // A missing folder has no files to browse or scan; history and Remove stay reachable.
+  const missing = workspace.root_missing === true;
   const menuItems: RowMenuItem[] = [
     { label: 'Open details', onSelect: open },
-    { label: 'View files', onSelect: () => go({ page: 'files', id: workspace.id }) },
+    { label: 'View files', disabled: missing, onSelect: () => go({ page: 'files', id: workspace.id }) },
     { label: 'Scan history', onSelect: () => go({ page: 'history', id: workspace.id }) },
-    { label: 'Quick scan', onSelect: () => onScan(workspace, 'quick') },
-    { label: 'Deep scan', onSelect: () => onScan(workspace, 'deep') },
+    { label: 'Quick scan', disabled: missing, onSelect: () => onScan(workspace, 'quick') },
+    { label: 'Deep scan', disabled: missing, onSelect: () => onScan(workspace, 'deep') },
     // Destructive action last, in the danger tone, behind its own confirmation dialog.
     { label: 'Remove workspace…', tone: 'danger', onSelect: () => onRemove(workspace) },
   ];
@@ -338,10 +341,11 @@ function WorkspaceRow({ workspace, go, onScan, onRemove }: { workspace: Workspac
   const score = graded ? riskScore(severityCountsOf(graded)) : null;
   const grade = score == null ? null : riskGrade(score);
   return (
-    <tr tabIndex={0} role="link" aria-label={`Open ${workspace.name || workspace.root_path || 'workspace'}`} onClick={open} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); open(); } }}>
+    <tr tabIndex={0} role="link" className={missing ? 'ws-row-missing' : undefined} aria-label={`Open ${workspace.name || workspace.root_path || 'workspace'}${missing ? ' (folder missing)' : ''}`} onClick={open} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); open(); } }}>
       <td className="ws-cell-name">
         <span className="ws-name">{workspace.name || 'Untitled workspace'}</span>
         <span className="ws-sub">
+          <RootMissingBadge workspace={workspace} className="ws-missing" />
           {workspace.root_path && <span className="ws-path" title={workspace.root_path}>{workspace.root_path}</span>}
           {visibleTags.length > 0 && (
             <span className="ws-tags">
@@ -358,7 +362,7 @@ function WorkspaceRow({ workspace, go, onScan, onRemove }: { workspace: Workspac
       {/* Buttons inside must not double-fire the row's open-on-click. */}
       <td className="ws-cell-actions" onClick={(event) => event.stopPropagation()}>
         <div className="table-actions ws-actions">
-          <Button className="row-action" variant="secondary" size="sm" title={`Run ${workspace.default_profile ?? 'standard'} scan`} onClick={(event) => { event.stopPropagation(); onScan(workspace, workspace.default_profile ?? 'standard'); }}>Scan</Button>
+          <Button className="row-action" variant="secondary" size="sm" disabled={missing} title={missing ? rootProblemDescription(workspace) : `Run ${workspace.default_profile ?? 'standard'} scan`} onClick={(event) => { event.stopPropagation(); onScan(workspace, workspace.default_profile ?? 'standard'); }}>Scan</Button>
           <RowMenu items={menuItems} label={`Actions for ${workspace.name || 'workspace'}`} />
         </div>
       </td>
