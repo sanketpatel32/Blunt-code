@@ -1,0 +1,878 @@
+// Package scans orchestrates analyzer-independent scan lifecycle work.
+package scans
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	"bluntcode/internal/analyzers"
+	"bluntcode/internal/config"
+	"bluntcode/internal/core"
+	"bluntcode/internal/database"
+	"bluntcode/internal/discovery"
+	"bluntcode/internal/events"
+	"bluntcode/internal/reports"
+	"bluntcode/internal/tools"
+)
+
+type Service struct {
+	db         *database.DB
+	registry   *analyzers.Registry
+	bus        *events.Bus
+	reportsDir string
+	toolsDir   string
+	tools      *tools.Service
+	mu         sync.Mutex
+	cancels    map[string]context.CancelFunc
+	// runs tracks every scan goroutine so Shutdown can wait for them before
+	// the database closes underneath late writes. closing refuses new scans
+	// once Shutdown began, keeping runs.Add from racing runs.Wait.
+	runs    sync.WaitGroup
+	closing bool
+	// active counts started-but-not-finished scans (a reserved slot counts
+	// from start until run's cleanup), bounding total load on the machine.
+	active int
+	// statusCache memoizes AnalyzerStatuses for analyzerStatusCacheTTL: the
+	// snapshot probes every tool binary (seconds of wall time) and the Tools
+	// page polls it, so requests within the window reuse the last result.
+	statusMu       sync.Mutex
+	statusCache    []AnalyzerStatus
+	statusCachedAt time.Time
+}
+
+// MaxConcurrentScans bounds how many scans may run at once. Per-scan worker
+// pools already parallelize analyzers inside a scan; without this cap,
+// stacked CLI/UI starts would multiply whole analyzer trees on one machine.
+const MaxConcurrentScans = 3
+
+// ErrTooManyScans reports that MaxConcurrentScans scans are already running;
+// the API surfaces it as 503 and the CLI as an operational failure (exit 3).
+var ErrTooManyScans = errors.New("scan capacity reached: too many concurrent scans")
+
+// ErrShuttingDown reports that the service is shutting down and accepts no
+// new scans.
+var ErrShuttingDown = errors.New("scan service is shutting down")
+
+const diagnosticLogCap = int64(500 << 20)
+
+// Per-run analyzer deadlines. Variables only so tests can shrink them.
+var (
+	fastAnalyzerTimeout  = 10 * time.Minute
+	sonarAnalyzerTimeout = 30 * time.Minute
+)
+
+func New(db *database.DB, registry *analyzers.Registry, bus *events.Bus, reportsDir, toolsDir string, toolService *tools.Service) *Service {
+	return &Service{db: db, registry: registry, bus: bus, reportsDir: reportsDir, toolsDir: toolsDir, tools: toolService, cancels: map[string]context.CancelFunc{}}
+}
+
+func (s *Service) Start(ctx context.Context, work core.Workspace, profile string, files []core.FileEntry) (core.Scan, error) {
+	return s.start(ctx, work, profile, files, nil, ScanOptions{}, discoveryExtras{})
+}
+
+// discoveryExtras carries discovery-walk context (skip reasons, dependency
+// inputs) into the scan snapshot; the zero value means no discovery result.
+type discoveryExtras struct {
+	skipCounts       map[string]int
+	dependencyInputs []string
+}
+
+func (s *Service) start(ctx context.Context, work core.Workspace, profile string, files []core.FileEntry, excludes []string, opts ScanOptions, extras discoveryExtras) (core.Scan, error) {
+	if profile == "" {
+		profile = "standard"
+	}
+	s.mu.Lock()
+	if s.closing {
+		s.mu.Unlock()
+		return core.Scan{}, ErrShuttingDown
+	}
+	if s.active >= MaxConcurrentScans {
+		s.mu.Unlock()
+		return core.Scan{}, ErrTooManyScans
+	}
+	s.active++
+	s.runs.Add(1)
+	s.mu.Unlock()
+	snapshot := s.snapshot(ctx, work, profile, files, excludes, extras.skipCounts, extras.dependencyInputs)
+	if profile == analyzers.ProfilePentest && opts.TargetURL != "" {
+		snapshot.TargetURL = opts.TargetURL
+		// The DAST probe is expected coverage only when a target was named;
+		// snapshot() leaves target-driven analyzers out by default.
+		for _, adapter := range s.registry.All() {
+			if analyzers.RequiresTarget(adapter.ID()) && analyzers.ProfileAllows(profile, adapter.ID()) {
+				snapshot.EnabledAnalyzers = append(snapshot.EnabledAnalyzers, adapter.ID())
+			}
+		}
+		sort.Strings(snapshot.EnabledAnalyzers)
+	}
+	scan, err := s.db.CreateScanWithFiles(ctx, core.Scan{WorkspaceID: work.ID, Profile: profile, State: "queued", CandidateFileCount: len(files), SelectedFileCount: snapshot.SelectedFileCount, Snapshot: snapshot}, files)
+	if err != nil {
+		s.mu.Lock()
+		s.active--
+		s.mu.Unlock()
+		s.runs.Done()
+		return core.Scan{}, err
+	}
+	runCtx, cancel := context.WithCancel(context.Background())
+	s.mu.Lock()
+	s.cancels[scan.ID] = cancel
+	closing := s.closing
+	s.mu.Unlock()
+	// Shutdown may have begun while the scan row was being created; it could
+	// not see this cancel func, so cancel here and let run finish the scan as
+	// cancelled instead of starting analyzers on a closing service.
+	if closing {
+		cancel()
+	}
+	go s.run(runCtx, scan, work, files, opts, s.selectionDeselected(ctx, work.ID))
+	return scan, nil
+}
+
+// snapshot captures the scan's input context once. skipCounts and
+// dependencyInputs come from the discovery walk (start's caller passes them;
+// direct start callers without a discovery result keep them nil).
+func (s *Service) snapshot(ctx context.Context, work core.Workspace, profile string, files []core.FileEntry, excludes []string, skipCounts map[string]int, dependencyInputs []string) *core.ScanSnapshot {
+	languages := map[string]int{}
+	selectedFiles := make([]string, 0, len(files))
+	for _, file := range files {
+		if file.Language != "" {
+			languages[file.Language]++
+		}
+		if file.Selected {
+			selectedFiles = append(selectedFiles, file.RelativePath)
+		}
+	}
+	sort.Strings(selectedFiles)
+	rules, err := s.db.Rules(ctx, work.ID)
+	if err != nil {
+		rules = nil
+	}
+	overrides, err := s.db.PathOverrides(ctx, work.ID)
+	if err != nil {
+		overrides = nil
+	}
+	analyzerIDs := make([]string, 0)
+	analyzerVersions := map[string]string{}
+	for _, adapter := range s.registry.All() {
+		// The snapshot's enabled set is the expected coverage for THIS scan:
+		// profile-gated analyzers are recorded as expected only when the tier
+		// includes them, so a later audit can compare expected against
+		// succeeded analyzers instead of against the whole registry.
+		if analyzers.ProfileAllows(profile, adapter.ID()) && !analyzers.RequiresTarget(adapter.ID()) {
+			analyzerIDs = append(analyzerIDs, adapter.ID())
+		}
+		analyzerVersions[adapter.ID()] = adapter.Check(ctx, analyzers.ToolEnvironment{ToolsDir: s.toolsDir}).Version
+	}
+	sort.Strings(analyzerIDs)
+	// Re-read the trust decision instead of using the caller's copy: a
+	// long-lived caller (scan --watch) must see trust-config off at once.
+	// Fail closed when the workspace cannot be read.
+	work.TrustRepoAnalyzerConfig = false
+	if current, err := s.db.Workspace(ctx, work.ID); err == nil {
+		work.TrustRepoAnalyzerConfig = current.TrustRepoAnalyzerConfig
+	}
+	repoConfigs := repoAnalyzerConfigs(work.RootPath, files)
+	trustDigest := ""
+	if work.TrustRepoAnalyzerConfig {
+		trustDigest = repoAnalyzerConfigDigest(work.RootPath, repoConfigs)
+	}
+	return &core.ScanSnapshot{
+		WorkspaceID:             work.ID,
+		WorkspaceRoot:           work.RootPath,
+		WorkspaceName:           work.Name,
+		BluntCodeVersion:        bluntCodeVersion,
+		Profile:                 profile,
+		CandidateFileCount:      len(files),
+		SelectedFileCount:       len(selectedFiles),
+		SelectedFiles:           selectedFiles,
+		Languages:               languages,
+		Rules:                   rules,
+		Exclusions:              append([]string(nil), excludes...),
+		PathOverrides:           overrides,
+		EnabledAnalyzers:        analyzerIDs,
+		AnalyzerVersions:        analyzerVersions,
+		SkipCounts:              skipCounts,
+		DependencyInputs:        dependencyInputs,
+		DependencyDigest:        dependencyDigest(dependencyInputs),
+		ConfigDigest:            configDigest(rules, excludes, overrides, work.TrustRepoAnalyzerConfig, trustDigest),
+		TrustRepoAnalyzerConfig: work.TrustRepoAnalyzerConfig,
+		RepoAnalyzerConfigs:     repoConfigs,
+		DiscoveryPolicyVersion:  discovery.PolicyVersion,
+		FingerprintVersion:      analyzers.FingerprintVersion,
+		Platform:                platformSnapshot(),
+		Git:                     gitSnapshot(ctx, work.RootPath),
+	}
+}
+
+func gitSnapshot(ctx context.Context, root string) core.ScanGitSnapshot {
+	checkCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	inside, err := gitOutput(checkCtx, root, "rev-parse", "--is-inside-work-tree")
+	if err != nil || inside != "true" {
+		return core.ScanGitSnapshot{}
+	}
+	branch, _ := gitOutput(checkCtx, root, "branch", "--show-current")
+	commit, _ := gitOutput(checkCtx, root, "rev-parse", "HEAD")
+	status, _ := gitOutput(checkCtx, root, "status", "--porcelain")
+	return core.ScanGitSnapshot{Repository: true, Branch: branch, Commit: commit, Dirty: status != ""}
+}
+
+func gitOutput(ctx context.Context, root string, args ...string) (string, error) {
+	command := exec.CommandContext(ctx, "git", append([]string{"-C", root}, args...)...)
+	output, err := command.Output()
+	return strings.TrimSpace(string(output)), err
+}
+func (s *Service) Cancel(ctx context.Context, scanID string) error {
+	s.mu.Lock()
+	cancel := s.cancels[scanID]
+	s.mu.Unlock()
+	if cancel == nil {
+		return fmt.Errorf("scan is not active")
+	}
+	cancel()
+	return nil
+}
+
+// Shutdown refuses new scans, cancels every running scan, and waits until
+// their goroutines have recorded a terminal state, so callers can stop
+// managed analyzers and close the database afterwards without late writes
+// hitting a closed store. It returns an error when ctx ends first; the scans
+// still running then are reconciled to "interrupted" on the next start
+// (database.MarkInterruptedScans). Shutdown is safe to call more than once.
+func (s *Service) Shutdown(ctx context.Context) error {
+	s.mu.Lock()
+	s.closing = true
+	cancels := make([]context.CancelFunc, 0, len(s.cancels))
+	for _, cancel := range s.cancels {
+		cancels = append(cancels, cancel)
+	}
+	s.mu.Unlock()
+	for _, cancel := range cancels {
+		cancel()
+	}
+	done := make(chan struct{})
+	go func() {
+		s.runs.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		s.mu.Lock()
+		pending := len(s.cancels)
+		s.mu.Unlock()
+		return fmt.Errorf("%d scan(s) still running at shutdown: %w", pending, ctx.Err())
+	}
+}
+func (s *Service) emit(scanID, event string, data map[string]any) {
+	s.bus.Publish(events.Event{Type: event, ScanID: scanID, Data: data})
+}
+func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, files []core.FileEntry, opts ScanOptions, deselect func(string) bool) {
+	defer s.runs.Done()
+	defer func() {
+		s.mu.Lock()
+		delete(s.cancels, scan.ID)
+		s.active--
+		s.mu.Unlock()
+	}()
+	// A panic inside an adapter must not take the whole application down with
+	// it or leave the scan row non-terminal: contain it, fail the scan, and
+	// still publish a terminal event so streams and the UI resolve.
+	defer func() {
+		if r := recover(); r != nil {
+			s.failScan(scan.ID, fmt.Sprintf("Internal scan error: %v", r))
+		}
+	}()
+	s.emit(scan.ID, "scan.started", map[string]any{"state": "queued"})
+	// A scan whose progress cannot be recorded must not run analyzers whose
+	// results could not be recorded either: fail it now (best effort) and let
+	// startup reconciliation catch the row if even that write is lost.
+	if err := s.transition(scan.ID, "preparing", map[string]any{"stage": "Preparing workspace"}); err != nil {
+		s.failScan(scan.ID, fmt.Sprintf("Could not record scan progress: %v", err))
+		return
+	}
+	languages, absoluteFiles, filesByLanguage := scanInputs(work.RootPath, files)
+	// A workspace with no routable source files still has scan signal when
+	// discovery tracked dependency manifests: osv, trivy, and the license
+	// scanner all analyze inputs the per-file selection does not carry
+	// (lockfiles are smart-skipped as artifacts). Only a workspace with
+	// neither source files nor dependency inputs is truly unscannable -
+	// unless the scan names a DAST target, which needs no files at all.
+	if len(absoluteFiles) == 0 && len(scanDependencyInputs(scan)) == 0 && scanTargetURL(scan) == "" {
+		s.failScan(scan.ID, "No supported source files were selected.")
+		return
+	}
+	// Content hashes are computed once per scan (the scan already touches
+	// every selected file here). Every completed scan persists them so a
+	// later incremental scan has a base to compare against, regardless of
+	// how the base scan itself was run.
+	fileHashes := hashSelectedFiles(work.RootPath, files)
+	// Record the input digest before analyzers start: it names the bytes this
+	// scan describes, and surviving a mid-scan crash is exactly when that
+	// matters most. Drift is checked against it at completion.
+	if scan.Snapshot != nil && scan.Snapshot.InputDigest == "" {
+		scan.Snapshot.InputDigest = inputDigest(fileHashes)
+		if err := s.db.SaveScanSnapshot(context.Background(), scan.ID, scan.Snapshot); err != nil {
+			log.Printf("provenance: could not record the input digest for scan %s (%v)", scan.ID, err)
+		}
+	}
+	// An incremental scan reuses the previous completed scan's findings for
+	// unchanged files; prepareIncremental degrades to nil (a full scan) on
+	// every refusal path, logging why. File-scope analyzers re-run on the
+	// changed subset only; workspace-scope walkers re-run on the full
+	// selection whenever anything changed (see scanRouting).
+	var incremental *incrementalState
+	routing := fullRouting(filesByLanguage)
+	if opts.Incremental {
+		incremental = s.prepareIncremental(ctx, scan, work, files, fileHashes, filesByLanguage)
+		if incremental != nil {
+			routing = scanRouting{files: incremental.changedByLanguage, full: filesByLanguage, incremental: true, anyChange: incremental.changedCount > 0}
+		}
+	}
+	// Analyzers run either sequentially (the historical default, jobs < 1) or
+	// with at most jobs runs in flight (jobs >= 1). Both drivers share the
+	// same per-analyzer pipeline in executeAnalyzer, so events, persistence,
+	// and error summaries are identical either way.
+	counters := newScanCounters()
+	if jobs := opts.Jobs; jobs >= 1 {
+		// A recovered worker panic fails the scan exactly like the run-level
+		// recover below does for sequential scans.
+		if panicValue := s.runAnalyzersBounded(ctx, scan, work, languages, routing, counters, jobs, deselect); panicValue != "" {
+			s.failScan(scan.ID, fmt.Sprintf("Internal scan error: %v", panicValue))
+			return
+		}
+	} else if !s.runAnalyzersSequential(ctx, scan, work, languages, routing, counters, deselect) {
+		return
+	}
+	// Copy the previous scan's findings for unchanged files into this scan
+	// before totals, the report, and the comparison are computed, so an
+	// incremental scan is indistinguishable from a full one downstream. The
+	// reuse manifest lands on the snapshot: reports and the API can state
+	// what was reused instead of implying full coverage.
+	var reuseManifest *core.IncrementalReuse
+	if incremental != nil {
+		reuseManifest = s.finishIncremental(scan, incremental, counters)
+		if manifest := reuseManifest; manifest != nil && scan.Snapshot != nil {
+			scan.Snapshot.Incremental = manifest
+			if err := s.db.SaveScanSnapshot(context.Background(), scan.ID, scan.Snapshot); err != nil {
+				log.Printf("incremental: could not record the reuse manifest for scan %s (%v)", scan.ID, err)
+			}
+		}
+	}
+	successful, failed, warned := counters.snapshot()
+	state := "completed"
+	// Nothing ran. That is a failure only when something tried and could not:
+	// "every analyzer that applied crashed" must stay failed (zero findings
+	// from crashed coverage is not a pass). But "no analyzer applies here" —
+	// a quick profile over a Go or Terraform workspace, where the tier's two
+	// language linters have nothing to lint — is the honest outcome of the
+	// requested scan, not an error: it completes with a note instead of
+	// failing every such repo's CI.
+	zeroCoverage := false
+	if successful == 0 {
+		if failed > 0 {
+			state = "failed"
+		} else {
+			zeroCoverage = true
+		}
+	}
+	// Drift detection: if the workspace content changed between the input
+	// digest recorded at start and now, the scan's results may mix two
+	// versions of the tree. That is never a clean completed — relabel and
+	// flag the snapshot so comparisons and reports can see it.
+	var driftNote string
+	if scan.Snapshot != nil && scan.Snapshot.InputDigest != "" && state != "failed" {
+		if current := inputDigest(hashSelectedFiles(work.RootPath, files)); current != scan.Snapshot.InputDigest {
+			scan.Snapshot.DriftDetected = true
+			warned++
+			driftNote = "workspace content changed during the scan; results may mix two versions of the tree"
+			if err := s.db.SaveScanSnapshot(context.Background(), scan.ID, scan.Snapshot); err != nil {
+				log.Printf("provenance: could not record drift for scan %s (%v)", scan.ID, err)
+			}
+			s.emit(scan.ID, "scan.warning", map[string]any{"message": "Workspace content changed during the scan; results may be mixed."})
+		}
+	}
+	// A scan that lost analyzer coverage — a failed run, or a run that
+	// completed with degraded output — is never a clean "completed": zero
+	// findings from incomplete coverage must not read as a clean bill of
+	// health (the CLI maps this state to exit 3, and gates do not pass).
+	if successful > 0 && (failed > 0 || warned > 0) {
+		state = "completed_with_warnings"
+	}
+	// Cancellation that lands while the final analyzer normalizes or persists
+	// its results (after the post-Run context check) must still cancel the
+	// scan rather than completing it.
+	if ctx.Err() != nil {
+		s.finishCancelled(scan.ID)
+		return
+	}
+	// Only scans that produced a result record hashes: failed, cancelled, and
+	// interrupted scans never become a reuse base.
+	if state == "completed" || state == "completed_with_warnings" {
+		if identity, ok := s.analyzerIdentityJSON(scan, filesByLanguage); ok {
+			if err := s.db.SaveScanFileHashes(context.Background(), scan.ID, fileHashes, identity); err != nil {
+				log.Printf("incremental: could not record file hashes for scan %s (%v)", scan.ID, err)
+			}
+		}
+	}
+	// The incremental note is written before the terminal state lands so no
+	// observer can ever see a completed incremental scan without its note.
+	var incrementalNote string
+	if incremental != nil {
+		incrementalNote = fmt.Sprintf("incremental: reused findings for %d unchanged file(s), ran analyzers on %d file(s)", len(incremental.unchanged), incremental.changedCount)
+		if failure := reuseFailureNote(reuseManifest); failure != "" {
+			incrementalNote += "; " + failure
+		}
+	}
+	zeroCoverageNote := ""
+	if zeroCoverage {
+		profile := scan.Profile
+		if profile == "" {
+			profile = analyzers.ProfileStandard
+		}
+		zeroCoverageNote = fmt.Sprintf("no analyzer in the %s profile covers this workspace's file types, so nothing was analyzed; try the standard or deep profile for broader language and dependency coverage", profile)
+	}
+	if driftNote != "" || incrementalNote != "" || zeroCoverageNote != "" {
+		note := driftNote
+		if incrementalNote != "" {
+			if note != "" {
+				note += "; "
+			}
+			note += incrementalNote
+		}
+		if zeroCoverageNote != "" {
+			if note != "" {
+				note += "; "
+			}
+			note += zeroCoverageNote
+		}
+		if err := s.db.SetScanNote(context.Background(), scan.ID, note); err != nil {
+			log.Printf("scan %s: could not record the scan note (%v)", scan.ID, err)
+			s.emit(scan.ID, "scan.warning", map[string]any{"message": "Could not record the scan note: " + err.Error()})
+		}
+	}
+	s.emit(scan.ID, "scan.stage", map[string]any{"stage": "Generating report"})
+	reportPath, err := s.writeReport(scan, work, files)
+	if err != nil {
+		// A missing report downgrades an otherwise successful scan, but it
+		// must never mask an all-analyzers-failed scan as merely warned.
+		if state == "completed" {
+			state = "completed_with_warnings"
+		}
+		s.emit(scan.ID, "scan.warning", map[string]any{"message": "Could not write Markdown report."})
+	}
+	completed := map[string]any{"state": state}
+	if err := s.db.CompleteScan(context.Background(), scan.ID, state, reportPath); err != nil {
+		// CompleteScan also finalizes counts; fall back to a plain state write
+		// so the scan still reaches a terminal state when only the summary
+		// write fails. The incremental note rides along so the scan stays
+		// explainable either way.
+		log.Printf("scan %s: could not persist the final summary (%v)", scan.ID, err)
+		fallback := "Scan finished, but persisting its final summary failed."
+		if incrementalNote != "" {
+			fallback += " " + incrementalNote
+		}
+		if err := s.setState(scan.ID, state, fallback); err != nil {
+			completed["error"] = err.Error()
+		}
+	}
+	// Automated scan history retention: keep most recent scans per workspace to prevent database bloat.
+	// Pruning before emitting scan.completed ensures subscribers refreshing history immediately see the pruned state.
+	if keep := config.MaxScansPerWorkspace(); keep > 0 {
+		if err := s.pruneOldScans(work.ID, keep); err != nil {
+			log.Printf("retention: %v", err)
+			s.emit(scan.ID, "scan.warning", map[string]any{"message": "Scan history retention failed: " + err.Error()})
+		}
+	}
+	s.emit(scan.ID, "scan.completed", completed)
+}
+
+// pruneOldScans applies the scan retention limit and deletes the Markdown
+// reports of the pruned scans with them, so retention bounds disk usage and
+// not just database rows.
+func (s *Service) pruneOldScans(workspaceID string, keep int) error {
+	_, orphanedReports, err := s.db.PruneOldScans(context.Background(), workspaceID, keep)
+	if err != nil {
+		return fmt.Errorf("could not prune old scans of workspace %s: %w", workspaceID, err)
+	}
+	if err := reports.RemoveFiles(s.reportsDir, orphanedReports); err != nil {
+		return fmt.Errorf("pruned old scans of workspace %s, but could not remove their reports: %w", workspaceID, err)
+	}
+	return nil
+}
+
+func analyzerTimeout(id string) time.Duration {
+	if analyzers.TimeoutClassFor(id) == analyzers.TimeoutSonar {
+		return sonarAnalyzerTimeout
+	}
+	return fastAnalyzerTimeout
+}
+
+func (s *Service) writeDiagnosticLog(scanID, analyzerID string, result analyzers.AnalyzerResult) {
+	if len(result.Stdout) == 0 && len(result.Stderr) == 0 {
+		return
+	}
+	dir := filepath.Join(filepath.Dir(s.reportsDir), "logs")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return
+	}
+	content := ""
+	if command := planCommandLine(result.Plan); command != "" {
+		content += "command:\n" + command + "\n\n"
+	}
+	content += "stdout:\n" + redactDiagnosticOutput(string(result.Stdout)) + "\n\nstderr:\n" + redactDiagnosticOutput(string(result.Stderr)) + "\n"
+	if result.OutputTruncated {
+		content += "\n[output truncated at the managed safety limit]\n"
+	}
+	_ = os.WriteFile(filepath.Join(dir, scanID+"-"+analyzerID+".log"), []byte(content), 0o600)
+	pruneDiagnosticLogs(dir)
+}
+
+// planCommandLine renders the first planned command so each diagnostic log is
+// self-describing: for deep scans it shows the extended ruff --select set, and
+// for every other scan it shows exactly what was executed. Multi-command plans
+// share the same flags, so the first command is representative.
+func planCommandLine(p analyzers.AnalyzerPlan) string {
+	if len(p.Commands) == 0 || p.Commands[0].Executable == "" {
+		return ""
+	}
+	return redactDiagnosticOutput(strings.Join(append([]string{p.Commands[0].Executable}, p.Commands[0].Args...), " "))
+}
+
+func redactDiagnosticOutput(output string) string {
+	lines := strings.Split(output, "\n")
+	for i, line := range lines {
+		lower := strings.ToLower(line)
+		if strings.Contains(lower, "token") || strings.Contains(lower, "password") || strings.Contains(lower, "secret") || strings.Contains(lower, "authorization") {
+			if index := strings.IndexAny(line, "=:"); index >= 0 {
+				lines[i] = line[:index+1] + " ***"
+			}
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+func pruneDiagnosticLogs(dir string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	type file struct {
+		path string
+		info os.FileInfo
+	}
+	files := make([]file, 0, len(entries))
+	var total int64
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".log" {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		total += info.Size()
+		files = append(files, file{path: filepath.Join(dir, entry.Name()), info: info})
+	}
+	sort.Slice(files, func(i, j int) bool { return files[i].info.ModTime().Before(files[j].info.ModTime()) })
+	for _, item := range files {
+		if total <= diagnosticLogCap {
+			return
+		}
+		if err := os.Remove(item.path); err == nil {
+			total -= item.info.Size()
+		}
+	}
+}
+
+// setState persists a scan state change. The write uses a fresh context on
+// purpose: a cancelled scan must still be able to record that it ended. A
+// failed write is logged and returned, never swallowed.
+func (s *Service) setState(scanID, state, summary string) error {
+	if err := s.db.UpdateScanState(context.Background(), scanID, state, summary); err != nil {
+		log.Printf("scan %s: could not record state %q (%v)", scanID, state, err)
+		return fmt.Errorf("record scan state %q: %w", state, err)
+	}
+	return nil
+}
+
+func (s *Service) transition(scanID, state string, data map[string]any) error {
+	if err := s.setState(scanID, state, ""); err != nil {
+		return err
+	}
+	s.emit(scanID, "scan.stage", data)
+	return nil
+}
+
+// failScan ends a scan as failed and always publishes the terminal event so
+// streams resolve. When the failed state itself cannot be persisted, the
+// event carries the error: the row is still non-terminal and is reconciled to
+// "interrupted" on the next start (database.MarkInterruptedScans).
+func (s *Service) failScan(scanID, summary string) {
+	data := map[string]any{"state": "failed"}
+	if err := s.setState(scanID, "failed", summary); err != nil {
+		data["error"] = err.Error()
+	}
+	s.emit(scanID, "scan.completed", data)
+}
+
+func (s *Service) finishCancelled(scanID string) {
+	var data map[string]any
+	if err := s.setState(scanID, "cancelled", "Cancelled by user."); err != nil {
+		data = map[string]any{"error": err.Error()}
+	}
+	s.emit(scanID, "scan.cancelled", data)
+}
+
+// scanInputs derives the scan's language list, the flat absolute file list,
+// and the same files grouped by language. The per-language map lets the run
+// loop hand every adapter only the files it can actually lint, so a Python
+// linter never receives JavaScript sources (and vice versa).
+func scanInputs(root string, files []core.FileEntry) ([]analyzers.Language, []string, map[analyzers.Language][]string) {
+	languageSet := map[analyzers.Language]bool{}
+	absolute := make([]string, 0, len(files))
+	byLanguage := map[analyzers.Language][]string{}
+	for _, file := range files {
+		if !file.Selected || file.Language == "" {
+			continue
+		}
+		lang := analyzers.Language(file.Language)
+		path := filepath.Join(root, file.RelativePath)
+		languageSet[lang] = true
+		absolute = append(absolute, path)
+		byLanguage[lang] = append(byLanguage[lang], path)
+	}
+	var languages []analyzers.Language
+	for lang := range languageSet {
+		languages = append(languages, lang)
+	}
+	sort.Slice(languages, func(i, j int) bool { return languages[i] < languages[j] })
+	return languages, absolute, byLanguage
+}
+
+// filesForLanguages flattens the per-language map into the file list one
+// adapter should receive, preserving discovery order within each language.
+func filesForLanguages(byLanguage map[analyzers.Language][]string, langs ...analyzers.Language) []string {
+	out := make([]string, 0)
+	for _, lang := range langs {
+		out = append(out, byLanguage[lang]...)
+	}
+	return out
+}
+
+type eventEmitter struct {
+	service *Service
+	scanID  string
+}
+
+func (e eventEmitter) Emit(_ context.Context, event string, data map[string]any) {
+	e.service.emit(e.scanID, event, data)
+}
+func (s *Service) writeReport(scan core.Scan, work core.Workspace, files []core.FileEntry) (string, error) {
+	findings, err := s.db.Findings(context.Background(), scan.ID)
+	if err != nil {
+		return "", err
+	}
+	metrics, err := s.db.Metrics(context.Background(), scan.ID)
+	if err != nil {
+		return "", err
+	}
+	runs, err := s.db.AnalyzerRuns(context.Background(), scan.ID)
+	if err != nil {
+		return "", err
+	}
+	// Suppressed findings stay stored, but reports never carry them: filter
+	// them from both sides of the comparison so a dismissed fingerprint is
+	// neither new/persistent nor falsely reported as fixed.
+	suppressed, err := s.db.SuppressedFingerprints(context.Background(), work.ID)
+	if err != nil {
+		return "", err
+	}
+	findings = FilterSuppressed(findings, suppressed)
+	var selected, skipped []string
+	for _, file := range files {
+		if file.Selected {
+			selected = append(selected, file.RelativePath)
+		} else {
+			skipped = append(skipped, file.RelativePath)
+		}
+	}
+	comparison := reports.Comparison{}
+	if previousID, previousErr := s.db.PreviousCompletedScanID(context.Background(), work.ID, scan.ID); previousErr == nil {
+		previousFindings, findErr := s.db.Findings(context.Background(), previousID)
+		coverage, coverageErr := s.db.SuccessfulAnalyzerIDs(context.Background(), scan.ID)
+		if findErr == nil && coverageErr == nil {
+			diff := Compare(findings, FilterSuppressed(previousFindings, suppressed), NewComparisonCoverage(coverage, selected))
+			comparison = reports.Comparison{New: diff.New, Fixed: diff.Fixed, Persistent: diff.Persistent, NotEvaluatedAnalyzerIDs: diff.NotEvaluatedAnalyzerIDs}
+		}
+	}
+	startedAt := time.Now()
+	if scan.StartedAt != nil {
+		startedAt = *scan.StartedAt
+	}
+	var provenance *reports.Provenance
+	if snapshot := scan.Snapshot; snapshot != nil {
+		provenance = &reports.Provenance{
+			InputDigest:            snapshot.InputDigest,
+			ConfigDigest:           snapshot.ConfigDigest,
+			GitCommit:              snapshot.Git.Commit,
+			GitDirty:               snapshot.Git.Dirty,
+			DiscoveryPolicyVersion: snapshot.DiscoveryPolicyVersion,
+			FingerprintVersion:     snapshot.FingerprintVersion,
+			Platform:               snapshot.Platform,
+			DriftDetected:          snapshot.DriftDetected,
+			Incremental:            snapshot.Incremental,
+		}
+	}
+	markdown := reports.Markdown(reports.Build(reports.Input{WorkspaceName: work.Name, WorkspacePath: work.RootPath, ScanID: scan.ID, Profile: scan.Profile, StartedAt: startedAt, Files: selected, SkippedFiles: skipped, Findings: findings, Metrics: metrics, Runs: runs, Comparison: comparison, Provenance: provenance}))
+	if err := os.MkdirAll(s.reportsDir, 0o700); err != nil {
+		return "", err
+	}
+	path := filepath.Join(s.reportsDir, reports.Filename(work.Name, time.Now()))
+	return path, reports.WriteBytesAtomic(path, []byte(markdown), 0o600)
+}
+
+// DiscoverAndStart is the API-friendly entry that keeps discovery out of HTTP handlers.
+func (s *Service) DiscoverAndStart(ctx context.Context, work core.Workspace, profile string, excludes []string) (core.Scan, error) {
+	return s.DiscoverAndStartWithOptions(ctx, work, profile, excludes, ScanOptions{})
+}
+
+// DiscoverAndStartWithOptions is DiscoverAndStart with per-scan execution
+// options (see ScanOptions). The web API keeps the defaults through
+// DiscoverAndStart; the CLI uses this to pass its --jobs bound through.
+func (s *Service) DiscoverAndStartWithOptions(ctx context.Context, work core.Workspace, profile string, excludes []string, opts ScanOptions) (core.Scan, error) {
+	found, excludes, err := s.discoverInputs(ctx, work, excludes)
+	if err != nil {
+		return core.Scan{}, err
+	}
+	return s.start(ctx, work, profile, found.Files, excludes, opts, discoveryExtras{skipCounts: found.SkipCounts, dependencyInputs: found.DependencyInputs})
+}
+
+func applyPathOverrides(files []core.FileEntry, overrides []core.PathOverride) {
+	for index := range files {
+		bestLength := -1
+		bestMode := ""
+		path := filepath.ToSlash(files[index].RelativePath)
+		for _, override := range overrides {
+			overridePath := strings.Trim(filepath.ToSlash(override.RelativePath), "/")
+			if !overrideCovers(overridePath, path) {
+				continue
+			}
+			if len(overridePath) > bestLength {
+				bestLength, bestMode = len(overridePath), override.Mode
+			}
+		}
+		if bestMode != "" {
+			files[index].Selected = bestMode == "include"
+		}
+	}
+}
+
+// overrideCovers reports whether an override path selects a file path: an
+// exact match or a strict parent directory. Both sides arrive slash-separated
+// with slashes trimmed by the caller.
+func overrideCovers(overridePath, path string) bool {
+	return overridePath != "" && (path == overridePath || strings.HasPrefix(path, overridePath+"/"))
+}
+
+// deselectMatcher enforces the workspace file configuration at the finding
+// level. Directory-walking analyzers (gitleaks, checkov, sonarqube, trivy,
+// osv) traverse the whole workspace root no matter which files they were
+// handed, so their reports can name files the user configured out; anything
+// matching an exclude override (longest match wins, exactly like
+// applyPathOverrides) or an enabled user exclude rule is dropped. Paths
+// without a file attribution are always kept.
+func deselectMatcher(overrides []core.PathOverride, excludePatterns []string) func(string) bool {
+	return func(rel string) bool {
+		rel = normalizeReusePath(rel)
+		if rel == "" {
+			return false
+		}
+		bestLength := -1
+		bestMode := ""
+		for _, override := range overrides {
+			overridePath := strings.Trim(filepath.ToSlash(override.RelativePath), "/")
+			if !overrideCovers(overridePath, rel) {
+				continue
+			}
+			if len(overridePath) > bestLength {
+				bestLength, bestMode = len(overridePath), override.Mode
+			}
+		}
+		if bestMode != "" {
+			return bestMode == "exclude"
+		}
+		return discovery.ExcludedByUser(rel, excludePatterns)
+	}
+}
+
+// selectionDeselected loads the workspace file configuration for finding
+// enforcement. A lookup failure degrades to the historical behavior
+// (deselect nothing) rather than failing the scan.
+func (s *Service) selectionDeselected(ctx context.Context, workspaceID string) func(string) bool {
+	overrides, err := s.db.PathOverrides(ctx, workspaceID)
+	if err != nil {
+		overrides = nil
+	}
+	rules, err := s.db.Rules(ctx, workspaceID)
+	var patterns []string
+	if err == nil {
+		for _, rule := range rules {
+			if rule.RuleType == "exclude" && rule.Enabled {
+				patterns = append(patterns, rule.Pattern)
+			}
+		}
+	}
+	return deselectMatcher(overrides, patterns)
+}
+
+// dropDeselectedFindings removes findings reported inside configured-out
+// paths, keeping the returned slice's order.
+func dropDeselectedFindings(findings []analyzers.Finding, deselect func(string) bool) []analyzers.Finding {
+	if deselect == nil {
+		return findings
+	}
+	kept := make([]analyzers.Finding, 0, len(findings))
+	for _, finding := range findings {
+		if deselect(finding.RelativePath) {
+			continue
+		}
+		kept = append(kept, finding)
+	}
+	return kept
+}
+
+// keepsArtifactFindings reports whether an adapter's findings inside
+// generated artifacts stay visible. Only the secret detectors qualify: a
+// credential baked into a shipped bundle, a lockfile, or a vendored
+// dependency is a real leak, and hiding it would be the one way artifact
+// filtering could make a scan less honest. The policy lives in the capability
+// inventory (analyzers.KeepsArtifactFindings).
+func keepsArtifactFindings(analyzerID string) bool {
+	return analyzers.KeepsArtifactFindings(analyzerID)
+}
+
+// dropArtifactFindings removes findings whose path discovery classifies as
+// generated output (build directories, minified bundles, vendored deps; see
+// discovery.IsArtifactPath), keeping order. Lockfile paths are not artifacts
+// by that definition, so dependency analyzers (osv, trivy) keep reporting
+// vulnerabilities at package-lock.json and friends.
+func dropArtifactFindings(findings []analyzers.Finding) []analyzers.Finding {
+	kept := make([]analyzers.Finding, 0, len(findings))
+	for _, finding := range findings {
+		if discovery.IsArtifactPath(finding.RelativePath) {
+			continue
+		}
+		kept = append(kept, finding)
+	}
+	return kept
+}
