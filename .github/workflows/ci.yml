@@ -22,6 +22,20 @@ jobs:
         os: [windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
+      # Match the maintainer checkout: CRLF conversion changes hashed assets
+      # (cmd/bluntcode/static/index.html CSP hashes) and byte-compared fixtures.
+      - name: Disable autocrlf
+        if: runner.os == 'Windows'
+        run: git config --global core.autocrlf false
+      # The runner's default TEMP is the 8.3 short form (C:\Users\RUNNER~1\...),
+      # which never equals its symlink/junction-resolved long form, so every
+      # t.TempDir()-rooted containment check fails. Use a long-form temp dir.
+      - name: Use long-form TEMP
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          echo "TEMP=${{ runner.temp }}" >> "$GITHUB_ENV"
+          echo "TMP=${{ runner.temp }}" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
