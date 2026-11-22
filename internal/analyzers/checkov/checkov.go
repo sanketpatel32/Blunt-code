@@ -130,6 +130,10 @@ func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.
 		// --quiet keeps passed checks out of the report file and disables
 		// progress bars; only failed_checks are normalized anyway.
 		"--quiet",
+		// --skip-download stops the Prisma Cloud guidelines/severity
+		// metadata request; findings fall back to the adapter's default
+		// severities and carry no guideline link.
+		"--skip-download",
 	)
 	return analyzers.AnalyzerPlan{
 		AnalyzerID: ID,
@@ -147,6 +151,10 @@ func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.
 				"PYTHONHOME":    "",
 				"CKV_API_TOKEN": "",
 				"BC_API_KEY":    "",
+				// No PyPI version check and no Prisma Cloud mapping
+				// download, even if a future checkov ignores the flag.
+				"CKV_SKIP_PACKAGE_UPDATE_CHECK": "true",
+				"BC_SKIP_MAPPING":               "TRUE",
 			},
 		}},
 		Metadata: map[string]any{"output_dir": outputDir, "frameworks": frameworks},
@@ -170,8 +178,7 @@ func (a *Adapter) Run(ctx context.Context, p analyzers.AnalyzerPlan, emit analyz
 		return result, err
 	}
 	// The report file is authoritative; the console stdout echoes the same
-	// JSON but can interleave with first-run diagnostics from checkov's
-	// policy metadata download.
+	// JSON but can interleave with checkov's own diagnostics.
 	if report, readErr := os.ReadFile(filepath.Join(outputDir, resultFileName)); readErr == nil && json.Valid(report) {
 		result.Stdout = report
 	}
@@ -280,8 +287,8 @@ func decodeReports(data []byte) ([]report, error) {
 }
 
 // severity prefers checkov's per-check severity, which only exists when the
-// Prisma Cloud policy metadata download succeeded. The default offline
-// install reports no severity at all, so unmatched checks default to
+// Prisma Cloud policy metadata download succeeded. Scans pass --skip-download,
+// so checkov reports no severity at all, so unmatched checks default to
 // medium and the informational operational-hygiene checks opt down to low.
 // The bool reports a mapping problem the caller marks on the finding: a
 // non-empty severity the table does not recognize. An empty report is the

@@ -127,9 +127,10 @@ func CheckUpdateDirect(currentVersion string) (UpdateCheckResult, error) {
 	}, nil
 }
 
-// updateCheck tells the UI whether a newer release exists. Respects offline
-// mode: the promise is local-first, so no network traffic happens when the
-// user turned it off.
+// updateCheck tells the UI whether a newer release exists. It is only ever
+// called on an explicit user action (About page, CLI) or, when the user opted
+// in with the update_check setting, once per UI session. Respects offline
+// mode: no network traffic happens when the user turned it off.
 func (s *Server) updateCheck(w http.ResponseWriter, r *http.Request) {
 	if s.offlineEnabled(r) {
 		fail(w, http.StatusConflict, "UPDATE_OFFLINE", "Offline mode is enabled; turn it off in Settings to check for updates.")

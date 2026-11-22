@@ -198,7 +198,7 @@ func TestConfigReportAppSettingsFromDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.SaveAppSettings(context.Background(), database.AppSettings{Offline: true, OpenBrowser: false}); err != nil {
+	if err := db.SaveAppSettings(context.Background(), database.AppSettings{Offline: true, OpenBrowser: false, UpdateCheck: true}); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Close(); err != nil {
@@ -215,12 +215,12 @@ func TestConfigReportAppSettingsFromDatabase(t *testing.T) {
 		OpenDB:  database.Open,
 	})
 	settings := report.AppSettings
-	if !settings.Available || settings.Source != "database" || !settings.Offline || settings.OpenBrowser {
+	if !settings.Available || settings.Source != "database" || !settings.Offline || settings.OpenBrowser || !settings.UpdateCheck {
 		t.Fatalf("app settings = %#v", settings)
 	}
 	var out bytes.Buffer
 	report.WriteHuman(&out)
-	for _, want := range []string{"offline mode: on", "open browser on start: off"} {
+	for _, want := range []string{"offline mode: on", "open browser on start: off", "automatic update check: on"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("human report missing %q:\n%s", want, out.String())
 		}
@@ -238,7 +238,7 @@ func TestConfigReportAppSettingsDefaultsWithoutDatabase(t *testing.T) {
 		Getenv:  fakeEnv(nil),
 	})
 	settings := report.AppSettings
-	if settings.Available || settings.Source != "defaults" || settings.Offline || !settings.OpenBrowser {
+	if settings.Available || settings.Source != "defaults" || settings.Offline || !settings.OpenBrowser || settings.UpdateCheck {
 		t.Fatalf("app settings = %#v", settings)
 	}
 	var out bytes.Buffer
@@ -423,7 +423,7 @@ func TestConfigReportJSONShapeIsStable(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertKeys(t, objectKeys(t, environment["sonar_startup_timeout"]), []string{"name", "raw_value", "set", "valid", "value_seconds"})
-	assertKeys(t, objectKeys(t, top["app_settings"]), []string{"available", "note", "offline", "open_browser", "source"})
+	assertKeys(t, objectKeys(t, top["app_settings"]), []string{"available", "note", "offline", "open_browser", "source", "update_check"})
 	assertKeys(t, objectKeys(t, top["managed_tools"]), []string{"available", "tools"})
 	var toolsSection struct {
 		Tools []map[string]json.RawMessage `json:"tools"`

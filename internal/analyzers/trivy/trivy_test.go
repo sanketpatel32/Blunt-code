@@ -286,6 +286,9 @@ func TestPlanOfflineRefusesColdCache(t *testing.T) {
 	if !skip {
 		t.Fatalf("warm offline args must include --skip-db-update: %#v", plan.Commands[0].Args)
 	}
+	if !reflect.DeepEqual(plan.Commands[0].Args[7:11], noPhoneHomeArgs) {
+		t.Fatalf("offline args must disable telemetry, version and checks-bundle fetches: %#v", plan.Commands[0].Args)
+	}
 }
 
 func TestPlanArgumentsColdAndWarmCache(t *testing.T) {
@@ -306,7 +309,8 @@ func TestPlanArgumentsColdAndWarmCache(t *testing.T) {
 	}
 	outputPath := plan.Metadata[planKeyOutput].(string)
 	defer os.Remove(outputPath)
-	wantCold := []string{"fs", "--format", "json", "--output", outputPath, "--scanners", "vuln,secret,misconfig", "."}
+	noPhoneHome := []string{"--disable-telemetry", "--skip-version-check", "--skip-check-update", "--offline-scan"}
+	wantCold := append(append([]string{"fs", "--format", "json", "--output", outputPath, "--scanners", "vuln,secret,misconfig"}, noPhoneHome...), ".")
 	if !reflect.DeepEqual(plan.Commands[0].Args, wantCold) {
 		t.Fatalf("cold args = %#v, want %#v", plan.Commands[0].Args, wantCold)
 	}
@@ -337,7 +341,7 @@ func TestPlanArgumentsColdAndWarmCache(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.Remove(plan.Metadata[planKeyOutput].(string))
-	wantWarm := []string{"fs", "--format", "json", "--output", plan.Metadata[planKeyOutput].(string), "--scanners", "vuln,secret,misconfig", "--skip-db-update", "."}
+	wantWarm := append(append([]string{"fs", "--format", "json", "--output", plan.Metadata[planKeyOutput].(string), "--scanners", "vuln,secret,misconfig"}, noPhoneHome...), "--skip-db-update", ".")
 	if !reflect.DeepEqual(plan.Commands[0].Args, wantWarm) {
 		t.Fatalf("warm args = %#v, want %#v", plan.Commands[0].Args, wantWarm)
 	}

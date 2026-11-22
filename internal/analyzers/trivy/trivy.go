@@ -48,6 +48,13 @@ type Adapter struct {
 	Offline bool
 }
 
+// noPhoneHomeArgs keep every scan off the network except the cold-cache
+// vulnerability DB download: no usage telemetry to Aqua, no version or
+// announcement check, no rego checks-bundle fetch (trivy falls back to the
+// checks embedded in the pinned binary), and no package-registry lookups
+// to identify dependencies (e.g. Maven Central for jars).
+var noPhoneHomeArgs = []string{"--disable-telemetry", "--skip-version-check", "--skip-check-update", "--offline-scan"}
+
 func New(executable, version string) *Adapter {
 	return &Adapter{Executable: executable, Version: version}
 }
@@ -113,6 +120,7 @@ func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.
 		return analyzers.AnalyzerPlan{}, fmt.Errorf("offline mode: trivy vulnerability DB is not downloaded yet; run one online deep scan to populate the cache")
 	}
 	args := []string{"fs", "--format", "json", "--output", outputPath, "--scanners", "vuln,secret,misconfig"}
+	args = append(args, noPhoneHomeArgs...)
 	if warm {
 		// Verified against trivy 0.74.0: with a populated cache the flag is
 		// 3-4x faster and produces identical findings, while on a cold cache

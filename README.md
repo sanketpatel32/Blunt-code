@@ -130,7 +130,7 @@ Keyboard: `g h/w/t/s/a` navigate · `n` add workspace · `/` search · `?` help 
 
 | | |
 |---|---|
-| **Private by design** | Loopback server, zero telemetry, SQLite at `%LOCALAPPDATA%\BluntCode\bluntcode.db` |
+| **Private by design** | Loopback server, zero telemetry (bundled analyzers' telemetry off too), update check opt-in, SQLite at `%LOCALAPPDATA%\BluntCode\bluntcode.db` |
 | **Batteries included** | Ruff (Python), Biome (JS/TS + React auto-domain), Gitleaks (directory-wide secrets), Semgrep (25-rule security pack), SonarQube (polyglot), OSV Scanner (dependency CVEs, deep), Trivy (CVEs + secrets + Dockerfile/IaC misconfigs, deep), Checkov (Terraform/K8s/CloudFormation policies, deep), in-binary **secrets** (AWS, GitHub, Slack, JWT, Stripe, OpenAI, Anthropic, Azure) + **TODO/FIXME** trackers across 40+ file types + **license** detector (copyleft, conflicts, undeclared) |
 | **Dashboard that helps** | Overview cards, activity feed with severity dots, risk grades `A–D` (critical×10/high×5/med×2/low×1) with trend, severity bars, stacked history, suppressions panel |
 | **Workspaces that scale** | Tag chips with `+N` overflow, debounced tag filter, sort by Name / Last scan / Findings, 51→2 queries at 50 workspaces |
@@ -289,7 +289,7 @@ Ignore at source: `// bluntcode:ignore` or `// bluntcode:ignore secrets.aws-acce
 └── tools\            # ruff, biome, semgrep, sonarqube (manifest-hashed)
 ```
 
-Loopback only (`127.0.0.1`), no account, no telemetry. Open folders from **Settings → Data folders**. Full layout: [docs/configuration.md](docs/configuration.md) · policy: [docs/privacy.md](docs/privacy.md).
+Loopback only (`127.0.0.1`), no account, no telemetry. The only outbound requests are tool installs, the Trivy/OSV vulnerability-database downloads on deep scans, and update checks you ask for (automatic checks are opt-in) — every one is listed in [docs/privacy.md](docs/privacy.md), and **Settings → Offline mode** blocks them all. Open folders from **Settings → Data folders**. Full layout: [docs/configuration.md](docs/configuration.md) · policy: [docs/privacy.md](docs/privacy.md).
 
 ---
 

@@ -112,14 +112,14 @@ func TestAppSettingsDefaultBrowserAndLegacyCompatibility(t *testing.T) {
 	}
 	defer db.Close()
 	settings, err := db.AppSettings(context.Background())
-	if err != nil || !settings.OpenBrowser {
+	if err != nil || !settings.OpenBrowser || settings.UpdateCheck {
 		t.Fatalf("new settings=%#v err=%v", settings, err)
 	}
 	if _, err := db.SQL.ExecContext(context.Background(), `INSERT INTO settings(key,value_json,updated_at) VALUES('app','{"offline":true}',?)`, "2026-01-01T00:00:00Z"); err != nil {
 		t.Fatal(err)
 	}
 	settings, err = db.AppSettings(context.Background())
-	if err != nil || !settings.Offline || !settings.OpenBrowser {
+	if err != nil || !settings.Offline || !settings.OpenBrowser || settings.UpdateCheck {
 		t.Fatalf("legacy settings=%#v err=%v", settings, err)
 	}
 }

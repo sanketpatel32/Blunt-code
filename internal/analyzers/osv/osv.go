@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -24,11 +25,12 @@ const ID = "osv-dependencies"
 type Adapter struct {
 	Executable string
 	Version    string
-	// Offline switches the scan from the default OSV API queries to the
-	// pre-downloaded local vulnerability databases (one zip per ecosystem,
-	// fetched once with `scan source --offline-vulnerabilities
-	// --download-offline-databases`). Without the databases the offline run
-	// exits 127, so this mode is only useful alongside a prepared cache.
+	// Every scan matches against local vulnerability databases (one zip per
+	// ecosystem) and never sends the dependency inventory to the OSV.dev
+	// query API. Online scans refresh those public databases with
+	// --download-offline-databases; Offline drops the download, so the run
+	// uses only what is already cached (without the databases it exits 127,
+	// which Check reports up front).
 	Offline bool
 	// DBCacheDir points OSV_SCANNER_LOCAL_DB_CACHE_DIRECTORY at a managed
 	// cache directory so the offline databases travel with Blunt Code's tool
@@ -77,22 +79,25 @@ func (a *Adapter) Check(_ context.Context, _ analyzers.ToolEnvironment) analyzer
 }
 
 // offlineDatabasesPresent reports whether the local DB cache directory holds
-// at least one downloaded ecosystem database (osv-scanner stores one zip per
-// ecosystem there). An empty or missing cache means offline scans cannot run.
+// at least one downloaded ecosystem database. osv-scanner 2.x nests them
+// (osv-scalibr/<ecosystem>/all.zip), so the cache is walked rather than
+// listed. An empty or missing cache means offline scans cannot run.
 func (a *Adapter) offlineDatabasesPresent() bool {
 	if a.DBCacheDir == "" {
 		return false
 	}
-	entries, err := os.ReadDir(a.DBCacheDir)
-	if err != nil {
-		return false
-	}
-	for _, entry := range entries {
-		if !entry.IsDir() && strings.HasSuffix(strings.ToLower(entry.Name()), ".zip") {
-			return true
+	found := false
+	_ = filepath.WalkDir(a.DBCacheDir, func(_ string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
 		}
-	}
-	return false
+		if !entry.IsDir() && strings.HasSuffix(strings.ToLower(entry.Name()), ".zip") {
+			found = true
+			return fs.SkipAll
+		}
+		return nil
+	})
+	return found
 }
 func (a *Adapter) EnsureInstalled(context.Context, analyzers.ToolEnvironment) error {
 	if a.Executable == "" {
@@ -106,7 +111,7 @@ func (a *Adapter) EnsureInstalled(context.Context, analyzers.ToolEnvironment) er
 // walk exists to find), so there is nothing to batch and one command covers
 // the whole workspace.
 func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.AnalyzerPlan, error) {
-	// Dependency analysis is deep-only: it queries external advisory
+	// Dependency analysis is deep-only: it downloads external advisory
 	// databases, so quick and standard tiers deliberately exclude it. A
 	// command-less plan is returned instead of an error so the executor
 	// records a clean no-op run (succeeded, zero findings) rather than a
@@ -136,8 +141,14 @@ func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.
 		// exit 128 as errors. With it they exit 0 and report "results": null.
 		"--allow-no-lockfiles",
 	}
-	if a.Offline {
-		args = append(args, "--offline", "--offline-vulnerabilities")
+	// --offline disables every network feature (OSV.dev batch queries,
+	// deps.dev / registry transitive resolution); --offline-vulnerabilities
+	// matches against the local databases instead. Online runs add only the
+	// whole-ecosystem database download, which names the ecosystems present
+	// but never individual packages or versions.
+	args = append(args, "--offline", "--offline-vulnerabilities")
+	if !a.Offline {
+		args = append(args, "--download-offline-databases")
 	}
 	args = append(args, ".")
 	env := map[string]string(nil)
