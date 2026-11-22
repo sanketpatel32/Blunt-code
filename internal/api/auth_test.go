@@ -1,11 +1,13 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 func guardRequest(method, target, body string, headers map[string]string) *http.Request {
@@ -47,11 +49,11 @@ func TestAPIRequiresTokenOnEveryRouteButHealth(t *testing.T) {
 			t.Errorf("Authorization %q must be refused, got %d", header, response.Code)
 		}
 	}
-	// A wrong bearer is not rescued by a valid cookie.
-	request := guardRequest(http.MethodGet, "http://127.0.0.1:8787/api/v1/workspaces", "", map[string]string{"Authorization": "Bearer wrong"})
-	request.AddCookie(&http.Cookie{Name: SessionCookie, Value: s.Token()})
+	// A wrong bearer is not rescued by a valid ticket.
+	ticket := mintTicket(t, s, "/api/v1/workspaces")
+	request := guardRequest(http.MethodGet, "http://127.0.0.1:8787/api/v1/workspaces?ticket="+ticket, "", map[string]string{"Authorization": "Bearer wrong"})
 	if got := serve(s, request).Code; got != http.StatusUnauthorized {
-		t.Fatalf("wrong bearer with a valid cookie must be refused, got %d", got)
+		t.Fatalf("wrong bearer with a valid ticket must be refused, got %d", got)
 	}
 	ok := serve(s, guardRequest(http.MethodGet, "http://127.0.0.1:8787/api/v1/workspaces", "", map[string]string{"Authorization": "Bearer " + s.Token()}))
 	if ok.Code != http.StatusOK {
@@ -80,47 +82,99 @@ func TestTokensAreRandomPerServer(t *testing.T) {
 	}
 }
 
-func TestSessionExchangeSetsStrictHttpOnlyCookie(t *testing.T) {
+func mintTicket(t *testing.T, s *Server, path string) string {
+	t.Helper()
+	headers := map[string]string{"Authorization": "Bearer " + s.Token(), "Content-Type": "application/json", "Sec-Fetch-Site": "same-origin"}
+	response := serve(s, guardRequest(http.MethodPost, "http://127.0.0.1:8787/api/v1/session/tickets", `{"path":"`+path+`"}`, headers))
+	if response.Code != http.StatusOK {
+		t.Fatalf("mint ticket for %s: %d %s", path, response.Code, response.Body.String())
+	}
+	var body struct {
+		Ticket    string `json:"ticket"`
+		ExpiresIn int    `json:"expires_in"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil || len(body.Ticket) < 43 || body.ExpiresIn <= 0 {
+		t.Fatalf("ticket response %s: %v", response.Body.String(), err)
+	}
+	return body.Ticket
+}
+
+func TestNoCookieCarriesTheToken(t *testing.T) {
 	s := testServer(t)
-	headers := map[string]string{"Authorization": "Bearer " + s.Token(), "Sec-Fetch-Site": "same-origin", "Origin": "http://127.0.0.1:8787"}
-	response := serve(s, guardRequest(http.MethodPost, "http://127.0.0.1:8787/api/v1/session", "", headers))
+	headers := map[string]string{"Authorization": "Bearer " + s.Token(), "Sec-Fetch-Site": "same-origin"}
+	response := serve(s, guardRequest(http.MethodGet, "http://127.0.0.1:8787/api/v1/session", "", headers))
 	if response.Code != http.StatusNoContent {
-		t.Fatalf("session exchange: %d %s", response.Code, response.Body.String())
+		t.Fatalf("session check: %d %s", response.Code, response.Body.String())
 	}
-	cookies := response.Result().Cookies()
-	if len(cookies) != 1 {
-		t.Fatalf("want one cookie, got %#v", cookies)
+	// Cookies are shared by every port on a host, so any localhost server the
+	// browser visits would receive one; the token must never ride in one.
+	if cookies := response.Result().Cookies(); len(cookies) != 0 {
+		t.Fatalf("no cookie may be set, got %#v", cookies)
 	}
-	cookie := cookies[0]
-	if cookie.Name != SessionCookie || cookie.Value != s.Token() || !cookie.HttpOnly || cookie.SameSite != http.SameSiteStrictMode || cookie.Path != "/api/" {
-		t.Fatalf("cookie must be HttpOnly, SameSite=Strict, Path=/api/: %#v", cookie)
+	request := guardRequest(http.MethodGet, "http://127.0.0.1:8787/api/v1/settings", "", nil)
+	request.AddCookie(&http.Cookie{Name: "bluntcode_session", Value: s.Token()})
+	if got := serve(s, request).Code; got != http.StatusUnauthorized {
+		t.Fatalf("a cookie must not authenticate, got %d", got)
 	}
+}
 
-	// The cookie alone authenticates the browser's reads (EventSource,
-	// download links) and same-origin writes.
-	read := guardRequest(http.MethodGet, "http://127.0.0.1:8787/api/v1/session", "", nil)
-	read.AddCookie(cookie)
-	if got := serve(s, read).Code; got != http.StatusNoContent {
-		t.Fatalf("cookie session check: %d", got)
+func TestTicketsAreSingleUsePathBoundGetOnly(t *testing.T) {
+	s := testServer(t)
+	path := "/api/v1/settings"
+	ticket := mintTicket(t, s, path)
+	if got := serve(s, guardRequest(http.MethodGet, "http://127.0.0.1:8787"+path+"?ticket="+ticket, "", map[string]string{"Sec-Fetch-Site": "same-origin"})); got.Code != http.StatusOK {
+		t.Fatalf("ticket GET: %d %s", got.Code, got.Body.String())
 	}
-	write := guardRequest(http.MethodPatch, "http://127.0.0.1:8787/api/v1/settings", `{"offline":true}`, map[string]string{"Content-Type": "application/json", "Origin": "http://127.0.0.1:8787"})
-	write.AddCookie(cookie)
-	if got := serve(s, write); got.Code != http.StatusOK {
-		t.Fatalf("same-origin cookie write must pass: %d %s", got.Code, got.Body.String())
+	if got := serve(s, guardRequest(http.MethodGet, "http://127.0.0.1:8787"+path+"?ticket="+ticket, "", nil)).Code; got != http.StatusUnauthorized {
+		t.Fatalf("a used ticket must be refused, got %d", got)
 	}
-	// Without Origin or Sec-Fetch-Site a cookie write cannot be attributed to
-	// our page and is refused; bearer clients do not need them.
-	write = guardRequest(http.MethodPatch, "http://127.0.0.1:8787/api/v1/settings", `{"offline":true}`, map[string]string{"Content-Type": "application/json"})
-	write.AddCookie(cookie)
-	if got := serve(s, write).Code; got != http.StatusForbidden {
-		t.Fatalf("cookie write without origin metadata must be refused, got %d", got)
+	other := mintTicket(t, s, path)
+	if got := serve(s, guardRequest(http.MethodGet, "http://127.0.0.1:8787/api/v1/workspaces?ticket="+other, "", nil)).Code; got != http.StatusUnauthorized {
+		t.Fatalf("a ticket for another path must be refused, got %d", got)
 	}
+	// A failed redemption still burns the ticket.
+	if got := serve(s, guardRequest(http.MethodGet, "http://127.0.0.1:8787"+path+"?ticket="+other, "", nil)).Code; got != http.StatusUnauthorized {
+		t.Fatalf("a burned ticket must be refused, got %d", got)
+	}
+	write := mintTicket(t, s, path)
+	if got := serve(s, guardRequest(http.MethodPatch, "http://127.0.0.1:8787"+path+"?ticket="+write, `{"offline":true}`, map[string]string{"Content-Type": "application/json", "Origin": "http://127.0.0.1:8787"})).Code; got != http.StatusUnauthorized {
+		t.Fatalf("tickets must not authorize writes, got %d", got)
+	}
+	expired := mintTicket(t, s, path)
+	s.tickets.mu.Lock()
+	entry := s.tickets.tickets[expired]
+	entry.expires = time.Now().Add(-time.Second)
+	s.tickets.tickets[expired] = entry
+	s.tickets.mu.Unlock()
+	if got := serve(s, guardRequest(http.MethodGet, "http://127.0.0.1:8787"+path+"?ticket="+expired, "", nil)).Code; got != http.StatusUnauthorized {
+		t.Fatalf("an expired ticket must be refused, got %d", got)
+	}
+}
 
-	// A cookie cannot mint another cookie; only the launcher token can.
-	again := guardRequest(http.MethodPost, "http://127.0.0.1:8787/api/v1/session", "", map[string]string{"Origin": "http://127.0.0.1:8787"})
-	again.AddCookie(cookie)
-	if got := serve(s, again).Code; got != http.StatusUnauthorized {
-		t.Fatalf("cookie-only session exchange must be refused, got %d", got)
+func TestTicketMintingRequiresTheTokenAndAnAPIPath(t *testing.T) {
+	s := testServer(t)
+	ticket := mintTicket(t, s, "/api/v1/settings")
+	// A ticket cannot mint another (it is GET-only and never a bearer).
+	if got := serve(s, guardRequest(http.MethodPost, "http://127.0.0.1:8787/api/v1/session/tickets?ticket="+ticket, `{"path":"/api/v1/settings"}`, map[string]string{"Content-Type": "application/json"})).Code; got != http.StatusUnauthorized {
+		t.Fatalf("ticket-authenticated mint must be refused, got %d", got)
+	}
+	headers := map[string]string{"Authorization": "Bearer " + s.Token(), "Content-Type": "application/json"}
+	for _, path := range []string{"/", "/index.html", "/api/v2/settings", "/api/v1/session", "/api/v1/session/tickets", "/api/v1/settings?x=1"} {
+		if got := serve(s, guardRequest(http.MethodPost, "http://127.0.0.1:8787/api/v1/session/tickets", `{"path":"`+path+`"}`, headers)).Code; got != http.StatusBadRequest {
+			t.Errorf("ticket for %q: want 400, got %d", path, got)
+		}
+	}
+}
+
+func TestTicketQueryIsStrippedBeforeHandlers(t *testing.T) {
+	s := testServer(t)
+	path := "/api/v1/workspaces"
+	ticket := mintTicket(t, s, path)
+	var seen string
+	handler := s.apiGuard(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { seen = r.URL.RawQuery }))
+	handler.ServeHTTP(httptest.NewRecorder(), guardRequest(http.MethodGet, "http://127.0.0.1:8787"+path+"?limit=5&ticket="+ticket, "", nil))
+	if seen != "limit=5" {
+		t.Fatalf("handler saw query %q", seen)
 	}
 }
 
@@ -144,24 +198,16 @@ func TestRejectsOtherLocalOriginsEvenWithCredentials(t *testing.T) {
 		{"cross-origin CORS read", http.MethodGet, map[string]string{"Origin": "http://localhost:5500"}},
 	}
 	for _, tc := range cases {
-		for _, withCookie := range []bool{false, true} {
-			headers := map[string]string{"Content-Type": "application/json"}
-			for key, value := range tc.headers {
-				headers[key] = value
-			}
-			if !withCookie {
-				headers["Authorization"] = bearer
-			}
-			request := guardRequest(tc.method, "http://127.0.0.1:8787/api/v1/settings", "", headers)
-			if tc.method == http.MethodPost {
-				request = guardRequest(http.MethodPatch, "http://127.0.0.1:8787/api/v1/settings", `{"offline":false}`, headers)
-			}
-			if withCookie {
-				request.AddCookie(&http.Cookie{Name: SessionCookie, Value: s.Token()})
-			}
-			if got := serve(s, request); got.Code != http.StatusForbidden || !strings.Contains(got.Body.String(), "CROSS_ORIGIN_FORBIDDEN") {
-				t.Errorf("%s (cookie=%v): got %d %s", tc.name, withCookie, got.Code, got.Body.String())
-			}
+		headers := map[string]string{"Content-Type": "application/json", "Authorization": bearer}
+		for key, value := range tc.headers {
+			headers[key] = value
+		}
+		request := guardRequest(tc.method, "http://127.0.0.1:8787/api/v1/settings", "", headers)
+		if tc.method == http.MethodPost {
+			request = guardRequest(http.MethodPatch, "http://127.0.0.1:8787/api/v1/settings", `{"offline":false}`, headers)
+		}
+		if got := serve(s, request); got.Code != http.StatusForbidden || !strings.Contains(got.Body.String(), "CROSS_ORIGIN_FORBIDDEN") {
+			t.Errorf("%s: got %d %s", tc.name, got.Code, got.Body.String())
 		}
 	}
 	// Our own origin passes, by Sec-Fetch-Site or by exact Origin match.

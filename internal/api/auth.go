@@ -4,23 +4,21 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
+	"encoding/json"
+	"io"
 	"mime"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
+	"time"
 )
-
-// SessionCookie carries the per-launch API token for the embedded UI. It is
-// HttpOnly so page scripts never hold the token, SameSite=Strict so no
-// cross-site navigation carries it, and scoped to /api/ so static assets
-// never see it. SameSite alone does not stop other localhost ports (ports
-// are the same site), which is why every API request is also checked for a
-// same-origin Sec-Fetch-Site / Origin.
-const SessionCookie = "bluntcode_session"
 
 // TokenFragmentKey is the URL fragment key the launcher passes the token in
 // (http://127.0.0.1:8787/#token=...). Fragments never reach the server, logs,
-// or Referer headers; the UI trades it for the session cookie on load.
+// or Referer headers. The UI keeps it in localStorage, which, unlike cookies,
+// is isolated per origin including the port, so no other localhost server the
+// browser visits is ever sent it.
 const TokenFragmentKey = "token"
 
 // NewToken returns a fresh 256-bit API token.
@@ -33,7 +31,8 @@ func NewToken() string {
 }
 
 // Token is the credential every /api/ request except GET /health must carry,
-// as `Authorization: Bearer <token>` or the session cookie.
+// as `Authorization: Bearer <token>`. Plain navigations that cannot set a
+// header (EventSource, downloads) use a short-lived ticket instead.
 func (s *Server) Token() string { return s.token }
 
 // SetToken replaces the generated token, e.g. so the host process can share
@@ -45,29 +44,80 @@ func (s *Server) SetToken(token string) {
 	s.token = token
 }
 
-type credential int
+// TicketParam is the query parameter carrying a ticket on GET navigations.
+const TicketParam = "ticket"
 
-const (
-	credentialNone credential = iota
-	credentialBearer
-	credentialCookie
-)
+const ticketTTL = time.Minute
 
-// authenticate reports which credential, if any, matches the server token.
-// A bearer header is checked first; a wrong bearer is never rescued by a
-// cookie.
-func (s *Server) authenticate(r *http.Request) credential {
-	if header := r.Header.Get("Authorization"); header != "" {
-		scheme, value, ok := strings.Cut(header, " ")
-		if ok && strings.EqualFold(scheme, "Bearer") && s.tokenMatches(strings.TrimSpace(value)) {
-			return credentialBearer
+// ticketStore holds single-use tickets, each valid for one GET of one API
+// path for ticketTTL. A ticket in a URL can end up in history or a Referer,
+// so it must be worthless once used or expired, and useless for any other
+// path.
+type ticketStore struct {
+	mu      sync.Mutex
+	tickets map[string]ticket
+}
+
+type ticket struct {
+	path    string
+	expires time.Time
+}
+
+func (t *ticketStore) mint(path string, now time.Time) string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.tickets == nil {
+		t.tickets = map[string]ticket{}
+	}
+	for id, existing := range t.tickets {
+		if !now.Before(existing.expires) {
+			delete(t.tickets, id)
 		}
-		return credentialNone
 	}
-	if cookie, err := r.Cookie(SessionCookie); err == nil && s.tokenMatches(cookie.Value) {
-		return credentialCookie
+	id := NewToken()
+	t.tickets[id] = ticket{path: path, expires: now.Add(ticketTTL)}
+	return id
+}
+
+func (t *ticketStore) redeem(id, path string, now time.Time) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	found, ok := t.tickets[id]
+	if !ok {
+		return false
 	}
-	return credentialNone
+	delete(t.tickets, id)
+	return found.path == path && now.Before(found.expires)
+}
+
+// authenticate reports whether r carries the server token as a bearer
+// header. A present but wrong Authorization header is never rescued by a
+// ticket.
+func (s *Server) authenticate(r *http.Request) bool {
+	header := r.Header.Get("Authorization")
+	if header == "" {
+		return false
+	}
+	scheme, value, ok := strings.Cut(header, " ")
+	return ok && strings.EqualFold(scheme, "Bearer") && s.tokenMatches(strings.TrimSpace(value))
+}
+
+// redeemTicket authenticates a header-less GET by its single-use ticket and
+// returns the request with the ticket stripped from the query.
+func (s *Server) redeemTicket(r *http.Request) (*http.Request, bool) {
+	if r.Method != http.MethodGet || r.Header.Get("Authorization") != "" {
+		return r, false
+	}
+	query := r.URL.Query()
+	id := query.Get(TicketParam)
+	if id == "" || !s.tickets.redeem(id, r.URL.Path, time.Now()) {
+		return r, false
+	}
+	query.Del(TicketParam)
+	stripped := r.Clone(r.Context())
+	stripped.URL.RawQuery = query.Encode()
+	stripped.RequestURI = stripped.URL.RequestURI()
+	return stripped, true
 }
 
 func (s *Server) tokenMatches(candidate string) bool {
@@ -97,19 +147,14 @@ func (s *Server) apiGuard(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		cred := s.authenticate(r)
-		if cred == credentialNone {
-			w.Header().Set("WWW-Authenticate", `Bearer realm="bluntcode"`)
-			fail(w, http.StatusUnauthorized, "UNAUTHORIZED", "This Blunt Code session is not signed in. Reopen Blunt Code from its launcher, or open the sign-in URL it printed.")
-			return
-		}
-		// Cookies ride along automatically, so a cookie-authenticated write
-		// must prove it came from our own page. Browsers always attach
-		// Origin or Sec-Fetch-Site to such writes; their absence means a
-		// client we cannot attribute.
-		if cred == credentialCookie && isStateChanging(r.Method) && !browser {
-			fail(w, http.StatusForbidden, "CROSS_ORIGIN_FORBIDDEN", "State-changing requests must come from the local Blunt Code origin.")
-			return
+		if !s.authenticate(r) {
+			stripped, ok := s.redeemTicket(r)
+			if !ok {
+				w.Header().Set("WWW-Authenticate", `Bearer realm="bluntcode"`)
+				fail(w, http.StatusUnauthorized, "UNAUTHORIZED", "This Blunt Code session is not signed in. Reopen Blunt Code from its launcher, or open the sign-in URL it printed.")
+				return
+			}
+			r = stripped
 		}
 		// A text/plain or form body is what a no-preflight cross-origin
 		// write looks like; only JSON is ever a legitimate body here.
@@ -151,16 +196,31 @@ func jsonContentType(r *http.Request) bool {
 	return err == nil && mediaType == "application/json"
 }
 
-// session trades a bearer token for the HttpOnly session cookie (POST), or
-// reports whether the caller is signed in (GET; the guard already answered
-// 401 otherwise).
+// session reports whether the caller is signed in; the guard has already
+// answered 401 otherwise.
 func (s *Server) session(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodPost {
-		if s.authenticate(r) != credentialBearer {
-			fail(w, http.StatusUnauthorized, "UNAUTHORIZED", "Sign in with the token from the Blunt Code launcher.")
-			return
-		}
-		http.SetCookie(w, &http.Cookie{Name: SessionCookie, Value: s.token, Path: "/api/", HttpOnly: true, SameSite: http.SameSiteStrictMode})
-	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// sessionTicket mints a single-use ticket for one GET of one API path, for
+// navigations that cannot send the Authorization header. Only the bearer
+// token can mint; a ticket cannot mint another.
+func (s *Server) sessionTicket(w http.ResponseWriter, r *http.Request) {
+	if !s.authenticate(r) {
+		fail(w, http.StatusUnauthorized, "UNAUTHORIZED", "Tickets require the API token.")
+		return
+	}
+	var input struct {
+		Path string `json:"path"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&input); err != nil {
+		fail(w, http.StatusBadRequest, "INVALID_REQUEST", "Send {\"path\": \"/api/v1/...\"}.")
+		return
+	}
+	prefix := "/api/" + APIVersion + "/"
+	if !strings.HasPrefix(input.Path, prefix) || strings.ContainsAny(input.Path, "?#") || strings.HasPrefix(input.Path, prefix+"session") {
+		fail(w, http.StatusBadRequest, "INVALID_REQUEST", "Tickets are issued for a single /api/"+APIVersion+"/ path.")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ticket": s.tickets.mint(input.Path, time.Now()), "expires_in": int(ticketTTL.Seconds())})
 }

@@ -52,7 +52,7 @@ async function visit(path) {
   assert(!crashed, `error boundary on ${path}`);
   await page.locator('h1').first().waitFor({ timeout: 8000 });
 }
-// Sign the browser context in once; UI navigations then carry the cookie.
+// Sign the browser context in once; the UI stores the token.
 await page.goto(`${BASE}/#token=${TOKEN}`, { waitUntil: 'networkidle' });
 const api = async (method, path, body) => {
   const res = await page.request.fetch(BASE + '/api/v1' + path, { method, data: body, headers: { Authorization: `Bearer ${TOKEN}` } });

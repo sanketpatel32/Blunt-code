@@ -3,6 +3,7 @@ import { coverageFromRuns, coverageText } from '../../lib/risk';
 import * as React from 'react';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { api } from '../../api';
+import { openSigned } from '../../session';
 import type { AnalyzerRun, Finding, FindingPage, Report, Scan, Severity } from '../../types';
 import type { Route } from '../../lib/router';
 import type { Notice } from '../../lib/notice';
@@ -528,10 +529,10 @@ function ExportMenu({ scanId, csvParams, findings }: { scanId: string; csvParams
     <Dialog open={open} onOpenChange={setOpen}><DialogContent onCloseAutoFocus={(event) => { event.preventDefault(); returnFocus.current?.focus(); }}>
       <DialogHeader><DialogTitle>Export report</DialogTitle><DialogDescription>Choose the scope to include. Exports describe this scan, not the current source files.</DialogDescription></DialogHeader>
       <section><h3>Full scan report</h3><p className="muted">Includes the whole report regardless of visible filters.</p>
-        <div className="export-inline">{items.map((item) => <a key={item.label} className="export-item" href={item.href} download>{item.label}<small>{item.ext}</small></a>)}</div>
-        <a className="export-open" href={api.exportUrl(scanId, 'html', { inline: '1' })} target="_blank" rel="noopener noreferrer">Open HTML report in a new tab<span aria-hidden="true"> ↗</span></a>
+        <div className="export-inline">{items.map((item) => <a key={item.label} className="export-item" href={item.href} download onClick={(event) => { event.preventDefault(); void openSigned(item.href); }}>{item.label}<small>{item.ext}</small></a>)}</div>
+        <a className="export-open" href={api.exportUrl(scanId, 'html', { inline: '1' })} target="_blank" rel="noopener noreferrer" onClick={(event) => { event.preventDefault(); void openSigned(api.exportUrl(scanId, 'html', { inline: '1' }), 'tab'); }}>Open HTML report in a new tab<span aria-hidden="true"> ↗</span></a>
       </section>
-      <section><h3>All findings matching current filters</h3><p className="muted">Includes matching rows beyond the loaded page.</p><a className="export-item" href={api.exportUrl(scanId, 'csv', csvParams)} download>CSV (current filters)<small>.csv</small></a></section>
+      <section><h3>All findings matching current filters</h3><p className="muted">Includes matching rows beyond the loaded page.</p><a className="export-item" href={api.exportUrl(scanId, 'csv', csvParams)} download onClick={(event) => { event.preventDefault(); void openSigned(api.exportUrl(scanId, 'csv', csvParams)); }}>CSV (current filters)<small>.csv</small></a></section>
       <section><h3>Loaded findings only</h3><p className="muted">{findings?.length ?? 0} rows currently loaded. Load more findings first to include more rows.</p><button className="export-item whitespace-nowrap" disabled={!findings?.length} onClick={() => downloadJiraCsv(findings ?? [], `jira-${scanId}.csv`)}>Jira CSV<small className="whitespace-nowrap">.csv · loaded rows</small></button></section>
     </DialogContent></Dialog>
   </>;

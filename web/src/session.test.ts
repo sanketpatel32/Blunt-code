@@ -1,45 +1,87 @@
-import { describe, expect, it, vi } from 'vitest';
-import { establishSession, takeFragmentToken } from './session';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { authHeaders, establishSession, signedUrl, STORAGE_KEY, takeFragmentToken } from './session';
 
-function response(status: number) {
-  return { ok: status >= 200 && status < 300, status } as Response;
+function fakeLocation(hash: string): Location {
+  return { hash, pathname: '/', search: '' } as Location;
 }
 
-describe('session bootstrap', () => {
-  it('strips the token from the address bar and keeps other state', () => {
-    window.history.replaceState(null, '', '/scans/abc?finding=1#token=secret-value&tab=files');
-    expect(takeFragmentToken()).toBe('secret-value');
-    expect(window.location.pathname + window.location.search + window.location.hash).toBe('/scans/abc?finding=1#tab=files');
-    expect(window.location.href).not.toContain('secret-value');
+function fakeHistory() {
+  return { state: null, replaceState: vi.fn() } as unknown as History & { replaceState: ReturnType<typeof vi.fn> };
+}
+
+afterEach(() => { window.localStorage.clear(); });
+
+describe('takeFragmentToken', () => {
+  it('returns the token and strips it from the address bar', () => {
+    const history = fakeHistory();
+    expect(takeFragmentToken(fakeLocation('#token=abc'), history)).toBe('abc');
+    expect(history.replaceState).toHaveBeenCalledWith(null, '', '/');
   });
 
-  it('leaves unrelated fragments alone', () => {
-    window.history.replaceState(null, '', '/cli#main-content');
-    expect(takeFragmentToken()).toBeNull();
-    expect(window.location.hash).toBe('#main-content');
+  it('keeps unrelated fragment parameters', () => {
+    const history = fakeHistory();
+    expect(takeFragmentToken(fakeLocation('#token=abc&tab=x'), history)).toBe('abc');
+    expect(history.replaceState).toHaveBeenCalledWith(null, '', '/#tab=x');
   });
 
-  it('trades a launcher token for the session cookie', async () => {
-    window.history.replaceState(null, '', '/#token=abc123');
-    const fetcher = vi.fn(async () => response(204));
-    await expect(establishSession(fetcher as unknown as typeof fetch)).resolves.toBe('signed-in');
-    expect(fetcher).toHaveBeenCalledTimes(1);
-    expect(fetcher).toHaveBeenCalledWith('/api/v1/session', expect.objectContaining({ method: 'POST', headers: { Authorization: 'Bearer abc123' } }));
-    expect(window.location.hash).toBe('');
+  it('leaves fragments without a token alone', () => {
+    const history = fakeHistory();
+    expect(takeFragmentToken(fakeLocation('#tab=x'), history)).toBeNull();
+    expect(history.replaceState).not.toHaveBeenCalled();
+  });
+});
+
+describe('establishSession', () => {
+  it('stores the launcher token and verifies it as a bearer', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    expect(await establishSession(fetcher, fakeLocation('#token=abc'), fakeHistory())).toBe('signed-in');
+    expect(fetcher).toHaveBeenCalledWith('/api/v1/session', { headers: { Authorization: 'Bearer abc' } });
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe('abc');
+    expect(authHeaders()).toEqual({ Authorization: 'Bearer abc' });
   });
 
-  it('falls back to an existing cookie, and reports signed-out on 401', async () => {
-    window.history.replaceState(null, '', '/');
-    await expect(establishSession(vi.fn(async () => response(204)) as unknown as typeof fetch)).resolves.toBe('signed-in');
-    await expect(establishSession(vi.fn(async () => response(401)) as unknown as typeof fetch)).resolves.toBe('signed-out');
-    window.history.replaceState(null, '', '/#token=stale');
-    const stale = vi.fn(async () => response(401));
-    await expect(establishSession(stale as unknown as typeof fetch)).resolves.toBe('signed-out');
-    expect(stale).toHaveBeenCalledTimes(2);
+  it('reuses a stored token when the URL has none', async () => {
+    window.localStorage.setItem(STORAGE_KEY, 'kept');
+    const fetcher = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    expect(await establishSession(fetcher, fakeLocation(''), fakeHistory())).toBe('signed-in');
+    expect(fetcher).toHaveBeenCalledWith('/api/v1/session', { headers: { Authorization: 'Bearer kept' } });
+  });
+
+  it('is signed out without any token, without calling the API', async () => {
+    const fetcher = vi.fn();
+    expect(await establishSession(fetcher, fakeLocation(''), fakeHistory())).toBe('signed-out');
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('forgets a token the server refuses', async () => {
+    window.localStorage.setItem(STORAGE_KEY, 'stale');
+    const fetcher = vi.fn().mockResolvedValue(new Response(null, { status: 401 }));
+    expect(await establishSession(fetcher, fakeLocation(''), fakeHistory())).toBe('signed-out');
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
   it('reports unknown when the server is unreachable', async () => {
-    window.history.replaceState(null, '', '/');
-    await expect(establishSession(vi.fn(async () => { throw new TypeError('offline'); }) as unknown as typeof fetch)).resolves.toBe('unknown');
+    window.localStorage.setItem(STORAGE_KEY, 'kept');
+    const fetcher = vi.fn().mockRejectedValue(new TypeError('offline'));
+    expect(await establishSession(fetcher, fakeLocation(''), fakeHistory())).toBe('unknown');
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe('kept');
+  });
+});
+
+describe('signedUrl', () => {
+  it('mints a ticket for the path and appends it', async () => {
+    window.localStorage.setItem(STORAGE_KEY, 'tok');
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ticket: 't/1', expires_in: 60 }), { status: 200 }));
+    expect(await signedUrl('/api/v1/scans/s/findings.csv?severity=high', fetcher)).toBe('/api/v1/scans/s/findings.csv?severity=high&ticket=t%2F1');
+    const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/v1/session/tickets');
+    expect(init.method).toBe('POST');
+    expect(init.headers).toEqual({ 'Content-Type': 'application/json', Authorization: 'Bearer tok' });
+    expect(JSON.parse(init.body as string)).toEqual({ path: '/api/v1/scans/s/findings.csv' });
+  });
+
+  it('falls back to the bare URL when minting fails', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(null, { status: 401 }));
+    expect(await signedUrl('/api/v1/scans/s/events', fetcher)).toBe('/api/v1/scans/s/events');
   });
 });

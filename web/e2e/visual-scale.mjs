@@ -52,7 +52,7 @@ async function main() {
   const browser = await chromium.launch();
   const context = await browser.newContext();
   const page = await context.newPage();
-  // Sign the context in so UI navigations carry the session cookie.
+  // Sign the context in so the UI stores the API token.
   if (API_TOKEN) await page.goto(`${BASE}/#token=${API_TOKEN}`, { waitUntil: 'networkidle' });
 
   try {

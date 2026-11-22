@@ -1,3 +1,4 @@
+import { authHeaders } from './session';
 import type { AnalyzerStatus, ScanPlan, CompareResult, FindingPage, FindingsQuery, FixedFindingsResponse, GlobalStats, PathOverride, PentestProbeResult, RecentScansResponse, Report, RiskProfile, Scan, ScanPage, SearchFindingsPage, SeverityTrendPoint, SourcePreview, Suppression, Tool, TreeNode, Workspace, WorkspaceListPage } from './types';
 
 const PREFIX = '/api/v1';
@@ -11,7 +12,7 @@ export class ApiError extends Error {
 async function requestWithStatus<T>(path: string, init?: RequestInit): Promise<{ data: T; status: number }> {
   const response = await fetch(`${PREFIX}${path}`, {
     ...init,
-    headers: { Accept: 'application/json', ...(init?.body ? { 'Content-Type': 'application/json' } : {}), ...init?.headers },
+    headers: { Accept: 'application/json', ...authHeaders(), ...(init?.body ? { 'Content-Type': 'application/json' } : {}), ...init?.headers },
   });
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { error?: { code?: string; message?: string; details?: Record<string, unknown> } } | null;
@@ -173,7 +174,7 @@ export const api = {
   pentestProbe: (workspaceId: string, input: { target_url: string; auth_mode?: string; auth_token?: string; scope?: string }) => request<PentestProbeResult>(`/workspaces/${encodeURIComponent(workspaceId)}/pentest/probe`, { method: 'POST', body: JSON.stringify(input) }),
   probeTarget: (input: { target_url: string; auth_mode?: string; auth_token?: string; scope?: string }) => request<PentestProbeResult>('/pentest/probe', { method: 'POST', body: JSON.stringify(input) }),
   markdownUrl: (scanId: string) => `${PREFIX}/scans/${encodeURIComponent(scanId)}/report.md`,
-  /** URL for the attachment exports (plain GET navigations, not JSON requests). CSV accepts the same filter/sort params as findings — minus limit/offset — so the file matches the on-screen list. findings.json is the versioned full-report document. */
+  /** URL for the attachment exports (plain GET navigations, not JSON requests; follow them with `openSigned`, which adds the ticket that authenticates them). CSV accepts the same filter/sort params as findings — minus limit/offset — so the file matches the on-screen list. findings.json is the versioned full-report document. */
   exportUrl: (scanId: string, format: 'html' | 'sarif' | 'csv' | 'json', params?: Record<string, string>) => {
     const base = `${PREFIX}/scans/${encodeURIComponent(scanId)}/${format === 'csv' ? 'findings.csv' : format === 'json' ? 'findings.json' : `report.${format}`}`;
     if (!params) return base;

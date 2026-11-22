@@ -1,14 +1,33 @@
 /**
  * Signs the UI into the local API. The launcher opens `/#token=<per-launch
- * token>`; the fragment never reaches the server or any log. The token is
- * traded once for an HttpOnly, SameSite=Strict session cookie (so EventSource
- * streams and download links authenticate too), and removed from the address
- * bar so it is not left in history, bookmarks, or screenshots.
+ * token>`; the fragment never reaches the server or any log, and is removed
+ * from the address bar so it is not left in history, bookmarks, or
+ * screenshots. The token is kept in localStorage, which is isolated per
+ * origin including the port, and sent as `Authorization: Bearer`. A cookie
+ * would be sent to every port on 127.0.0.1, i.e. to any other local server
+ * the browser visits. Navigations that cannot carry a header (EventSource,
+ * downloads, new tabs) use a single-use, path-bound ticket from `signedUrl`.
  */
 export type SessionState = 'signed-in' | 'signed-out' | 'unknown';
 
 const SESSION_URL = '/api/v1/session';
+const TICKETS_URL = '/api/v1/session/tickets';
 const TOKEN_KEY = 'token';
+export const STORAGE_KEY = 'bluntcode.apiToken';
+
+function storage(): Storage | null {
+  try { return window.localStorage; } catch { return null; }
+}
+
+export function storedToken(): string | null {
+  return storage()?.getItem(STORAGE_KEY) ?? null;
+}
+
+/** Headers that authenticate an API request (empty when not signed in). */
+export function authHeaders(): Record<string, string> {
+  const token = storedToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 /** Removes the token from the fragment, returning it (or null). */
 export function takeFragmentToken(loc: Location = window.location, history: History = window.history): string | null {
@@ -24,17 +43,49 @@ export function takeFragmentToken(loc: Location = window.location, history: Hist
 }
 
 export async function establishSession(fetcher: typeof fetch = fetch, loc: Location = window.location, history: History = window.history): Promise<SessionState> {
-  const token = takeFragmentToken(loc, history);
+  const fresh = takeFragmentToken(loc, history);
+  if (fresh) storage()?.setItem(STORAGE_KEY, fresh);
+  const token = storedToken();
+  if (!token) return 'signed-out';
   try {
-    if (token) {
-      const exchanged = await fetcher(SESSION_URL, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, credentials: 'same-origin' });
-      if (exchanged.ok) return 'signed-in';
-    }
-    const check = await fetcher(SESSION_URL, { credentials: 'same-origin' });
+    const check = await fetcher(SESSION_URL, { headers: { Authorization: `Bearer ${token}` } });
     if (check.ok) return 'signed-in';
-    return check.status === 401 ? 'signed-out' : 'unknown';
+    if (check.status !== 401) return 'unknown';
+    // A token from an earlier launch; every launch mints a new one.
+    storage()?.removeItem(STORAGE_KEY);
+    return 'signed-out';
   } catch {
     // The server is unreachable; the app's own error states explain that.
     return 'unknown';
   }
+}
+
+/**
+ * Returns `url` (an /api/v1 path, optionally with a query) with a single-use
+ * ticket valid for about a minute. If minting fails the bare URL is returned,
+ * so the request fails visibly with 401 rather than silently.
+ */
+export async function signedUrl(url: string, fetcher: typeof fetch = fetch): Promise<string> {
+  const path = url.split(/[?#]/, 1)[0]!;
+  try {
+    const response = await fetcher(TICKETS_URL, { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ path }) });
+    if (!response.ok) return url;
+    const { ticket } = await response.json() as { ticket?: string };
+    if (!ticket) return url;
+    return `${url}${url.includes('?') ? '&' : '?'}ticket=${encodeURIComponent(ticket)}`;
+  } catch {
+    return url;
+  }
+}
+
+/** Follows an API link (download or new tab) with a fresh ticket. */
+export async function openSigned(url: string, mode: 'download' | 'tab' = 'download'): Promise<void> {
+  const link = document.createElement('a');
+  link.href = await signedUrl(url);
+  link.rel = 'noopener noreferrer';
+  if (mode === 'download') link.download = '';
+  else link.target = '_blank';
+  document.body.append(link);
+  link.click();
+  link.remove();
 }
