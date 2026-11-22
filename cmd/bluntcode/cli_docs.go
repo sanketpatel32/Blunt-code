@@ -144,7 +144,7 @@ func printScanDoc(w io.Writer) {
 	fmt.Fprintln(w, "  --output <file>                Write report to file instead of stdout")
 	fmt.Fprintln(w, "  --save-baseline <file>         Write the scan's SARIF document after a completed scan (same bytes as --format sarif)")
 	fmt.Fprintln(w, "  --incremental                  Only scan files modified since previous completed scan")
-	fmt.Fprintln(w, "  --jobs N                       Run up to N analyzers concurrently")
+	fmt.Fprintln(w, "  --jobs N                       Run up to N analyzers concurrently (default 3; 1 = sequential)")
 	fmt.Fprintln(w, "  --github-cap N                 Max GitHub annotations per severity before truncation (1-50, default 10)")
 	fmt.Fprintln(w, "  --timeout <duration>           Abort the scan when it exceeds this duration (default 30m)")
 	fmt.Fprintln(w, "  --watch                        Watch directory and automatically rescan on change")

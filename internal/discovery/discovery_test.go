@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"testing"
 	"time"
@@ -31,6 +32,45 @@ func TestDiscoverSkipsDefaultsAndDetectsLanguages(t *testing.T) {
 		t.Fatalf("unexpected discovery: %+v", got)
 	}
 }
+
+// TestDiscoverSkipsWindowsReservedNames reproduces the sonar-scanner crash:
+// a file literally named "nul" (creatable via \\?\ paths or shell redirect
+// quirks) breaks every analyzer that tries to open it — discovery must skip
+// it instead of handing it downstream.
+func TestDiscoverSkipsWindowsReservedNames(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("reserved device names are only unusable on Windows")
+	}
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "ok.go"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	nulPath := `\\?\` + filepath.Join(root, "nul")
+	if err := os.WriteFile(nulPath, []byte("x"), 0o644); err != nil {
+		t.Skipf("cannot create reserved-name file: %v", err)
+	}
+	got, err := Discover(context.Background(), root, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Files) != 1 || got.SkipCounts[SkipReservedName] != 1 {
+		t.Fatalf("unexpected discovery: files=%v skips=%v", got.Files, got.SkipCounts)
+	}
+}
+
+func TestIsReservedDeviceName(t *testing.T) {
+	for _, yes := range []string{"nul", "NUL", "con", "aux", "COM1", "lpt9", "nul.txt", "con.log"} {
+		if !isReservedDeviceName(yes) {
+			t.Errorf("expected reserved: %q", yes)
+		}
+	}
+	for _, no := range []string{"null", "console", "com10", "auxiliary", "nular"} {
+		if isReservedDeviceName(no) {
+			t.Errorf("unexpected reserved: %q", no)
+		}
+	}
+}
+
 func TestLanguage(t *testing.T) {
 	if Language("A.TS") != "typescript" || Language("a.bin") != "" {
 		t.Fatal("language detection wrong")

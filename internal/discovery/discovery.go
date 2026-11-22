@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"bluntcode/internal/core"
@@ -163,6 +164,7 @@ const (
 	SkipUserExcluded    = "excluded_user"
 	SkipOutsideRoot     = "outside_root"
 	SkipGenerated       = "generated_content"
+	SkipReservedName    = "reserved_name"
 )
 
 const maxDependencyInputs = 500
@@ -191,6 +193,19 @@ func Discover(ctx context.Context, root string, userExcludes []string) (Result, 
 		rel = filepath.Clean(rel)
 		if entry.Type()&fs.ModeSymlink != 0 {
 			skip(SkipSymlink)
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		// Windows device names (nul, con, aux, com1, ...) cannot be opened
+		// through normal path APIs — files with these names are only
+		// creatable via \\?\ tricks or shell redirection quirks, and every
+		// downstream analyzer that tries to read or preprocess them fails
+		// (sonar-scanner aborts its whole run on one). Skipping them keeps a
+		// single junk file from taking out an analyzer.
+		if runtime.GOOS == "windows" && isReservedDeviceName(filepath.Base(rel)) {
+			skip(SkipReservedName)
 			if entry.IsDir() {
 				return filepath.SkipDir
 			}
@@ -262,6 +277,24 @@ var manifestFileNames = map[string]struct{}{
 // isDependencyInput reports whether a basename is a dependency manifest or
 // lockfile. It reuses the artifact tables (lockFileNames) so "lockfile as a
 // dependency input" and "lockfile as an artifact" can never drift apart.
+// isReservedDeviceName reports whether base is a Windows reserved device
+// name — with or without an extension ("nul", "NUL.txt", "com1.log" all map
+// to the device). Only meaningful on Windows; elsewhere these are ordinary
+// filenames.
+func isReservedDeviceName(base string) bool {
+	name := strings.ToUpper(base)
+	if i := strings.IndexByte(name, '.'); i >= 0 {
+		name = name[:i]
+	}
+	switch name {
+	case "CON", "PRN", "AUX", "NUL",
+		"COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+		"LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9":
+		return true
+	}
+	return false
+}
+
 func isDependencyInput(base string) bool {
 	lower := strings.ToLower(base)
 	if _, ok := lockFileNames[lower]; ok {
