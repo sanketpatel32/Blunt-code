@@ -458,3 +458,31 @@ func TestInstallEstimatesSumsMissingPinnedDownloadsOnce(t *testing.T) {
 		t.Fatalf("sonarqube estimate = %+v, want 6000 bytes exact", got)
 	}
 }
+
+func TestInstallEstimatesSkipsCachedUvWheel(t *testing.T) {
+	wheel := []byte("wheel bytes")
+	sum := sha256.Sum256(wheel)
+	uv := pinnedArtifact("uv", "zip", "uv.exe", 50)
+	semgrep := Artifact{
+		ToolID: "semgrep", Version: "1", Platform: platform(),
+		SourceURL: "https://example.test/semgrep-1-py3-none-any.whl",
+		SHA256:    hex.EncodeToString(sum[:]), ArchiveType: "wheel", Executable: "semgrep.exe",
+		DownloadBytes: int64(len(wheel)), InstallKind: "uv_tool", Package: "semgrep==1",
+	}
+	service := NewService(t.TempDir(), Manifest{Artifacts: []Artifact{uv, semgrep}}, false)
+	paths := service.Manager.UvToolPaths(semgrep)
+	wheelPath := filepath.Join(paths.Root, "downloads", "semgrep-1-py3-none-any.whl")
+	if err := os.MkdirAll(filepath.Dir(wheelPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(wheelPath, wheel, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := service.InstallEstimates([]string{"semgrep"})
+	if got.Bytes != 50 {
+		t.Fatalf("cached-wheel estimate bytes = %d, want only missing uv (50)", got.Bytes)
+	}
+	if !got.Estimated {
+		t.Fatal("uv tool installs must stay marked as estimates")
+	}
+}

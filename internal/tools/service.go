@@ -95,7 +95,9 @@ func (s *Service) InstallEstimates(ids []string) InstallEstimate {
 			if _, err := os.Stat(paths.Executable); err == nil {
 				continue
 			}
-			add(artifact)
+			if !uvWheelCached(artifact, paths) {
+				add(artifact)
+			}
 			// uv resolves the managed Python and wheel dependencies beyond the
 			// pinned wheel, so its total download is not pinned in the manifest.
 			complete = false
@@ -110,6 +112,17 @@ func (s *Service) InstallEstimates(ids []string) InstallEstimate {
 	}
 	estimate.Estimated = !complete
 	return estimate
+}
+
+// uvWheelCached reports whether the verified wheel is already on disk, in which
+// case InstallUvTool reuses it instead of downloading it again.
+func uvWheelCached(artifact Artifact, paths UvToolPaths) bool {
+	filename, err := wheelFilename(artifact.SourceURL)
+	if err != nil {
+		return false
+	}
+	wheel := filepath.Join(paths.Root, "downloads", filename)
+	return VerifySHA256(wheel, artifact.SHA256) == nil
 }
 
 // SweepStaging recovers the tools directory from interrupted updates (see
