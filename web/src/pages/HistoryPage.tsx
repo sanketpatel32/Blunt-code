@@ -10,7 +10,7 @@ import { Empty, ErrorPanel } from '../components/ui';
 import { ScanIcon } from '../components/icons';
 import { SkeletonTable } from '../components/skeletons';
 import { ComparePanel } from '../components/ComparePanel';
-import { PageHeader } from '../components/PageHeader';
+import { PageHeader, TitleName } from '../components/PageHeader';
 import { RowMenu, type RowMenuItem } from '../components/RowMenu';
 import { Badge } from '../components/ui/badge';
 import { Activity, Gauge, History as HistoryIcon } from 'lucide-react';
@@ -157,7 +157,7 @@ export function HistoryPage({ workspaceId, go }: { workspaceId: string; go: (r: 
       {/* No workspace sub-nav: the app rail lists this workspace's pages while
           you are inside it. */}
       <div className="workspace-page-body">
-        <PageHeader title={workspace.data?.name ? `${workspace.data.name} — History` : 'Scan history'} actions={!pair.a && latestPair ? <button type="button" className="button secondary" onClick={() => { setPair(latestPair); syncCompareParams(latestPair.a, latestPair.b); }}>Compare latest two scans</button> : undefined} />
+        <PageHeader title={workspace.data?.name ? <><TitleName>{workspace.data.name}</TitleName> — History</> : 'Scan history'} actions={!pair.a && latestPair ? <button type="button" className="button secondary" onClick={() => { setPair(latestPair); syncCompareParams(latestPair.a, latestPair.b); }}>Compare latest two scans</button> : undefined} />
         <HistoryTiles workspaceId={workspaceId} total={filtering ? (state.data?.total_unfiltered ?? state.data?.total) : state.data?.total} />
         <FilterBar
           className="history-toolbar"

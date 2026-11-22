@@ -522,14 +522,14 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
               value={verdict ? `${verdict.scanned}/${statsWorkspaceTotal}` : '—'}
               label="Scanned"
               title={verdict ? `${verdict.scanned} of ${statsWorkspaceTotal} workspaces have a completed scan` : 'Overview unavailable'}
-              extra={verdict ? <Ring value={verdict.scanned} max={statsWorkspaceTotal} size={36} stroke={4} label={`${verdict.scanned} of ${statsWorkspaceTotal} workspaces scanned`}><span /></Ring> : undefined}
+              extra={verdict && verdict.scanned > 0 ? <Ring value={verdict.scanned} max={statsWorkspaceTotal} size={36} stroke={4} label={`${verdict.scanned} of ${statsWorkspaceTotal} workspaces scanned`}><span /></Ring> : undefined}
             />
             <StatTile icon={Clock3} value={verdict?.lastFinished ? relativeTime(verdict.lastFinished) : '—'} label="Last scan" />
             <StatTile
               icon={Wrench}
               value={`${readyTools}/${totalTools}`}
               label="Tools ready"
-              tone={totalTools && readyTools === totalTools ? 'ok' : undefined}
+              tone={totalTools ? (readyTools === totalTools ? 'ok' : readyTools === 0 ? 'warn' : undefined) : undefined}
               extra={readyTools > 0 ? <Ring value={readyTools} max={totalTools} size={36} stroke={4} tone="var(--color-success)" label={`${readyTools} of ${totalTools} optional tools ready`}><span /></Ring> : undefined}
             />
           </div>}

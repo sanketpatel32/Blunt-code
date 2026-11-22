@@ -10,7 +10,7 @@ import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { Empty, ErrorPanel } from '../components/ui';
 import { MagnifierIcon } from '../components/icons';
 import { SkeletonLines } from '../components/skeletons';
-import { PageHeader } from '../components/PageHeader';
+import { PageHeader, TitleName } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { PathCopy } from '../components/PathCopy';
 import { languageColor } from '../lib/format';
@@ -213,7 +213,7 @@ export function FilesPage({ id, go, notify }: { id: string; go?: (r: Route) => v
           you are inside it. */}
       <div className="workspace-page-body">
         <PageHeader
-          title={workspace.data?.name ? `${workspace.data.name} — Files` : 'Workspace files'}
+          title={workspace.data?.name ? <><TitleName>{workspace.data.name}</TitleName> — Files</> : 'Workspace files'}
           meta={workspace.data?.root_path ? <span className="workspace-root"><PathCopy path={workspace.data.root_path} /></span> : undefined}
           actions={
             <div className="files-toolbar flex items-center gap-2">

@@ -217,9 +217,11 @@ export function AppShell({ workspace, route, onNavigate, onClose, theme, onToggl
               title={theme === 'dark' ? t('common.switchToLight') : t('common.switchToDark')}
             />
             {/* The rail's utility row sits at the viewport bottom edge — a
-                bottom-anchored menu pops up over the page or clips. Opening
-                to the right keeps the whole panel beside the rail. */}
-            <NotificationsCenter routeKey={href(route)} side="right" />
+                bottom-anchored menu pops up over the page or clips, and a
+                right-anchored one detaches into the page's bottom-left
+                corner. Opening straight up keeps the panel planted on the
+                bell it belongs to. */}
+            <NotificationsCenter routeKey={href(route)} side="top" align="start" />
             {seqArmed && <span className="seq-hint" aria-hidden="true">g…</span>}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

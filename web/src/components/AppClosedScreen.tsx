@@ -34,9 +34,9 @@ export function AppClosedScreen({ mode, version }: { mode: 'stopped' | 'updating
           <>
             <p>{version ? `Version ${version} is installing. ` : 'The update is installing. '}Blunt Code closed itself and the new version opens in a new browser tab when it is ready; this tab can be closed.</p>
             <ol className="farewell-steps">
-              <li className="farewell-step is-done"><span className="farewell-step-dot" aria-hidden="true" />Close the running app</li>
-              <li className="farewell-step is-active"><span className="farewell-step-dot" aria-hidden="true" />Download and install the new version</li>
-              <li className="farewell-step"><span className="farewell-step-dot" aria-hidden="true" />Reopen Blunt Code automatically</li>
+              <li className="farewell-step is-done"><span className="farewell-step-dot" aria-hidden="true" /><span>Close the running app</span></li>
+              <li className="farewell-step is-active"><span className="farewell-step-dot" aria-hidden="true" /><span>Download and install the new version</span></li>
+              <li className="farewell-step"><span className="farewell-step-dot" aria-hidden="true" /><span>Reopen Blunt Code automatically</span></li>
             </ol>
           </>
         ) : (

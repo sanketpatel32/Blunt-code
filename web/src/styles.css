@@ -425,10 +425,12 @@ tr.is-expanded .history-date::before { border-color: var(--color-accent); backgr
 .page-search .search-location-dir {
   flex: 1 1 auto;
   min-width: 0;
-  /* The directory wraps rather than ellipsising: a clipped text node still
-     lays out at full width and paints under the next cell (73). */
-  overflow-wrap: anywhere;
-  white-space: normal;
+  /* Ellipsis, not wrapping: wrapping an anywhere-breakable path let one
+     directory fragment drop to its own line, stacking into a vertical
+     ladder of one-word rows. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--color-ink-faint);
 }
 /* Cards have no narrow column to fight, so the same parts read inline there. */
@@ -1560,9 +1562,21 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   line-height: 1.08;
   color: var(--color-ink);
   overflow-wrap: break-word;
+  text-wrap: pretty;
   min-width: 0;
 }
 .page-heading h1, .page-header h1 { font-size: var(--text-page-title); }
+/* A workspace name in a title is one inline block: it truncates with an
+   ellipsis inside the title's width rather than wrapping mid-token so the
+   last line is a bare hyphenated stub. */
+.page-title-name {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
 .page-eyebrow {
   margin: var(--space-2xs) 0 0;
   font-size: var(--text-xs);
@@ -2123,7 +2137,7 @@ dialog.modal-dialog.code-preview-dialog { width: min(58rem, calc(100% - 2 * var(
 .command-palette input:focus { outline: 2px solid var(--color-focus); outline-offset: -2px; background: var(--color-surface); }
 /* scroll-padding keeps the last option from landing half-clipped under the
    listbox edge when the results exactly fill the 50dvh cap. */
-.command-palette [role='listbox'] { max-height: min(50dvh, 22rem); margin: var(--space-sm) 0 0; padding: 0 0 var(--space-3xs); overflow-y: auto; overscroll-behavior: contain; scroll-padding-block: var(--space-sm); }
+.command-palette [role='listbox'] { max-height: min(60dvh, 27rem); margin: var(--space-sm) 0 0; padding: 0 0 var(--space-3xs); overflow-y: auto; overscroll-behavior: contain; scroll-padding-block: var(--space-sm); }
 .command-palette .palette-option { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); width: 100%; padding: var(--space-sm) var(--space-md); border: 0; border-radius: var(--radius-md); background: transparent; color: var(--color-ink-soft); font-size: var(--text-sm); text-align: left; transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out); }
 .command-palette .palette-option + .palette-option { margin-top: var(--space-3xs); }
 :root[data-theme='dark'] .command-palette .palette-option[data-active='true'] { color: var(--color-ink); }
@@ -2374,7 +2388,7 @@ dialog.modal-dialog.code-preview-dialog { width: min(58rem, calc(100% - 2 * var(
 /* Replaces the whole frame once the backend is gone, so the tab never shows a
    dead, clickable app. Rides the .about-card chrome for surface and shadow. */
 .farewell { min-height: 100dvh; display: grid; place-items: center; padding: var(--space-xl) var(--page-gutter); animation: page-enter var(--dur-slow) var(--ease-out-quart); }
-.farewell-card { max-width: 30rem; display: grid; justify-items: center; gap: var(--space-md); text-align: center; }
+.farewell-card { max-width: 36rem; display: grid; justify-items: center; gap: var(--space-md); text-align: center; }
 .farewell-mark { width: 3.5rem; height: 3.5rem; border-radius: var(--radius-lg); }
 .farewell-card h1 { margin: 0; font-family: var(--font-display); font-size: 1.25rem; font-weight: 600; letter-spacing: -.025em; color: var(--color-ink); }
 .farewell-card p { margin: 0; }
@@ -3343,8 +3357,8 @@ dialog.modal-dialog, .code-preview { scrollbar-width: thin; scrollbar-color: var
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.feed-findings { display: inline-flex; align-items: center; gap: var(--space-xs); font-size: var(--text-xs); color: var(--color-ink-soft); min-width: 8rem; }
-.feed-findings-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.feed-findings { display: inline-flex; align-items: center; gap: var(--space-xs); font-size: var(--text-xs); color: var(--color-ink-soft); flex: none; }
+.feed-findings-text { min-width: 0; white-space: nowrap; }
 .feed-time { font-size: var(--text-2xs); color: var(--color-ink-faint); white-space: nowrap; }
 
 /* ── Engines foot ────────────────────────────────────────────────── */
@@ -5444,10 +5458,10 @@ tbody tr:hover > td { background: color-mix(in oklch, var(--color-accent) 5%, tr
 }
 .grade-tile-sm, .ledger-grade.grade-tile { --tile: 1.875rem; border-width: 1.5px; }
 .grade-tile-md { --tile: 2.75rem; }
-.grade-tile-lg, .scan-grade.grade-tile, .risk-hero .risk-grade.grade-tile { --tile: 4rem; }
-/* 6.5rem turned the verdict letter into a billboard that dwarfed the numbers
-   it was grading. 4.75rem keeps it a clear hero without owning the board. */
-.grade-tile-xl, .verdict-letter.grade-tile { --tile: 4.75rem; }
+.grade-tile-lg, .scan-grade.grade-tile, .risk-hero .risk-grade.grade-tile { --tile: 3rem; }
+/* A billboard-sized letter read like a broken app icon; 3.5rem keeps the
+   verdict legible as a grade, not a launcher icon. */
+.grade-tile-xl, .verdict-letter.grade-tile { --tile: 3.5rem; }
 .grade-tile .grade-flap { font-size: inherit; gap: 0; }
 .grade-tile .grade-flap-tile { width: 0.8em; height: 1.1em; background: transparent; color: inherit; }
 .ledger-grade.grade-tile::after { background: var(--grade-ink); height: 3px; opacity: .55; }
@@ -5460,8 +5474,8 @@ tbody tr:hover > td { background: color-mix(in oklch, var(--color-accent) 5%, tr
 .state.success, .state.succeeded, .state.completed, .state-tag.state-success { color: var(--color-success-text); }
 @media (max-width: 700px) {
   .page-header .page-title { font-size: 1.625rem; }
-  .grade-tile-xl, .verdict-letter.grade-tile { --tile: 3.75rem; }
-  .grade-tile-lg, .scan-grade.grade-tile { --tile: 3rem; }
+  .grade-tile-xl, .verdict-letter.grade-tile { --tile: 2.75rem; }
+  .grade-tile-lg, .scan-grade.grade-tile { --tile: 2.5rem; }
 }
 /* Grade letter never inherits a host card's span sizing (risk-hero styles
    every span as a caption). */
@@ -5514,12 +5528,21 @@ tbody tr:hover > td { background: color-mix(in oklch, var(--color-accent) 5%, tr
   /* Severity chips in a right-aligned data-label row must wrap under each
      other — nowrap pushes the whole summary out of the card and clips it. */
   .rtable td[data-label] .ws-findings { flex-wrap: wrap; justify-content: flex-end; row-gap: 2px; white-space: normal; }
-  /* A flex location line right-aligned in the card row read as a detached bar;
-     let it wrap to full width under its label instead. */
-  .rtable td[data-label] .search-location { flex-wrap: wrap; justify-content: flex-end; white-space: normal; overflow-wrap: anywhere; }
+  /* A wrapping location right-justified in the card row puts each line flush
+     against the right border while short locations sit against the label —
+     two alignments for the same value. Paths always read from the left. */
+  .rtable td[data-label] .search-location { flex-wrap: wrap; justify-content: flex-start; text-align: left; white-space: normal; overflow-wrap: anywhere; }
   .rtable td.rtable-actions .table-actions, .rtable td.ws-cell-actions .table-actions { justify-content: flex-start; flex-wrap: wrap; }
   .rtable .history-band-row th { padding: var(--space-md) 2px var(--space-xs); background: transparent; border: 0; }
-  .rtable .rtable-sub { margin: -6px 0 var(--space-sm); }
+  /* An occurrence sub-row must read as the footer of the card above it, not
+     a floating path bar between cards: pull the parent's bottom radius off
+     and butt the two borders together. */
+  .rtable tbody tr:not(.history-band-row):not(.rtable-sub):has(+ .rtable-sub) {
+    margin-bottom: -1px;
+    border-bottom: 0;
+    border-radius: var(--radius-card) var(--radius-card) 0 0;
+  }
+  .rtable .rtable-sub { margin: 0 0 var(--space-sm); }
   .rtable .rtable-sub > td { padding: 10px 14px !important; border: 1px solid var(--color-rule-faint) !important; border-radius: 0 0 var(--radius-card) var(--radius-card); }
   .rtable .ws-cell-name .ws-path { max-width: 100%; }
   /* Search: the title line wraps instead of truncating; group lines stack. */
@@ -5779,8 +5802,10 @@ a.stat-tile:hover { border-color: var(--color-rule-strong); }
 .owasp-tile[data-hit] { border-color: color-mix(in oklab, var(--sev-fill-critical) 45%, var(--color-rule)); background: color-mix(in oklab, var(--sev-fill-critical) 7%, var(--color-surface)); }
 /* A category with zero checks is informational only — mute it so it stops
    looking like a live control begging for a click. */
-.owasp-tile[data-empty] { border-style: dashed; opacity: .55; }
+.owasp-tile[data-empty] { border-style: dashed; opacity: .45; background: var(--color-surface-muted); }
 .owasp-tile[data-empty] .owasp-tile-count { font-size: var(--text-sm); }
+.owasp-tile[data-empty] .owasp-tile-id,
+.owasp-tile[data-empty] .owasp-tile-title { color: var(--color-ink-faint); }
 .owasp-tile-id { grid-area: id; font: 700 var(--text-xs) var(--font-mono, monospace); color: var(--color-ink-soft); }
 .owasp-tile-count { grid-area: count; font: 700 1.25rem/1 var(--font-display); color: var(--color-ink-faint); }
 .owasp-tile[data-hit] .owasp-tile-count { color: var(--color-sev-critical); }
@@ -5854,6 +5879,11 @@ a.stat-tile:hover { border-color: var(--color-rule-strong); }
 .cov-empty { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--color-rule); vertical-align: middle; }
 .coverage-table tbody tr:hover > td { background: color-mix(in oklch, var(--color-accent) 4%, var(--color-surface)); }
 .coverage-table th:first-child, .coverage-table td:first-child { position: sticky; left: 0; z-index: 1; background: var(--color-surface); }
+/* The matrix is wider than the card: compact cells and an always-visible
+   scrollbar keep clipped columns readable as a scrollable table, not a
+   cut-off header. */
+.language-coverage .table-wrap { scrollbar-width: thin; scrollbar-color: var(--color-scrollbar-thumb) var(--color-scrollbar-track); }
+.coverage-table th, .coverage-table td { padding: var(--space-2xs) var(--space-xs); font-size: var(--text-2xs); white-space: nowrap; }
 
 /* Workspaces: fleet summary strip above the table. */
 .ws-summary { margin-bottom: var(--space-md); }

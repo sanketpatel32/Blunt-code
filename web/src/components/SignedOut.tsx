@@ -16,9 +16,9 @@ export function SignedOut() {
         <h1 id="signed-out-title">This tab signed out</h1>
         <p>Every launch of Blunt Code uses a new private sign-in link, so tabs from an earlier launch stop working. Getting back in takes one step:</p>
         <ol className="farewell-steps">
-          <li className="farewell-step"><span className="farewell-step-dot" aria-hidden="true" />Start Blunt Code from the Start menu, or run <code>bluntcode</code></li>
-          <li className="farewell-step"><span className="farewell-step-dot" aria-hidden="true" />A signed-in tab opens automatically — close this one</li>
-          <li className="farewell-step"><span className="farewell-step-dot" aria-hidden="true" />Running with <code>--no-browser</code>? Open the <strong>Sign in:</strong> link it prints</li>
+          <li className="farewell-step"><span className="farewell-step-dot" aria-hidden="true" /><span>Start Blunt Code from the Start menu, or run <code>bluntcode</code></span></li>
+          <li className="farewell-step"><span className="farewell-step-dot" aria-hidden="true" /><span>A signed-in tab opens automatically — close this one</span></li>
+          <li className="farewell-step"><span className="farewell-step-dot" aria-hidden="true" /><span>Running with <code>--no-browser</code>? Open the <strong>Sign in:</strong> link it prints</span></li>
         </ol>
       </section>
     </div>
