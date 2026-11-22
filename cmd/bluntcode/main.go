@@ -115,30 +115,47 @@ func main() {
 	runServer(os.Args[1:])
 }
 
-func runServer(args []string) {
-	var noBrowser, showVersion bool
-	var port int
+// serverConfig is the validated command line of the default web-app command.
+type serverConfig struct {
+	path        string
+	noBrowser   bool
+	showVersion bool
+	port        int
+}
+
+// parseServerFlags accepts the documented `bluntcode [path] [--flags]` order:
+// Go's flag package stops at the first positional, so parsing restarts after
+// each collected path until flags and positionals are separated.
+func parseServerFlags(args []string, errOut io.Writer) (serverConfig, error) {
+	var cfg serverConfig
 	flags := flag.NewFlagSet("bluntcode", flag.ContinueOnError)
-	flags.SetOutput(os.Stderr)
-	flags.BoolVar(&noBrowser, "no-browser", false, "do not open a browser")
-	flags.BoolVar(&showVersion, "version", false, "print version")
-	flags.IntVar(&port, "port", defaultPort, "loopback port (0 selects a free port)")
-	if err := flags.Parse(args); err != nil {
+	flags.SetOutput(errOut)
+	flags.BoolVar(&cfg.noBrowser, "no-browser", false, "do not open a browser")
+	flags.BoolVar(&cfg.showVersion, "version", false, "print version")
+	flags.IntVar(&cfg.port, "port", defaultPort, "loopback port (0 selects a free port)")
+	positional, err := parseFlagsInterspersed(flags, args)
+	if err != nil {
+		return serverConfig{}, err
+	}
+	if len(positional) > 1 {
+		fmt.Fprintf(errOut, "bluntcode: unexpected arguments %q\n", strings.Join(positional[1:], " "))
+		fmt.Fprintln(errOut, "run 'bluntcode help' for usage")
+		return serverConfig{}, errors.New("unexpected arguments")
+	}
+	if len(positional) == 1 {
+		cfg.path = positional[0]
+	}
+	return cfg, nil
+}
+
+func runServer(args []string) {
+	cfg, err := parseServerFlags(args, os.Stderr)
+	if err != nil {
 		os.Exit(2)
 	}
-	if showVersion {
+	if cfg.showVersion {
 		fmt.Println(version)
 		return
-	}
-	if flags.NArg() > 1 {
-		fmt.Fprintln(os.Stderr, "usage: bluntcode [--no-browser] [--port N] [path]")
-		fmt.Fprintln(os.Stderr, "       bluntcode doctor [--json] [--fix]")
-		fmt.Fprintln(os.Stderr, "       bluntcode config [--json]")
-		fmt.Fprintln(os.Stderr, "       bluntcode scan <path> [--profile quick|standard|deep] [--json] [--timeout 30m] [--quiet] [--fail-on high+] [--max-findings N]")
-		fmt.Fprintln(os.Stderr, "       bluntcode prune <path> [--keep N]")
-		fmt.Fprintln(os.Stderr, "       bluntcode agent [--help] | bluntcode agent docs | bluntcode agent scan <path> [scan flags]")
-		fmt.Fprintln(os.Stderr, "       bluntcode llm | bluntcode llms")
-		os.Exit(2)
 	}
 	// Shared bootstrap (single-instance lock, database, tool service, analyzer
 	// registry, scan service) lives in bootstrap.go and is reused by `scan`.
@@ -146,23 +163,23 @@ func runServer(args []string) {
 	if err != nil {
 		// A second launch while the app is already running just reveals the
 		// running instance instead of stacking another server on a new port.
-		if errors.Is(err, instance.ErrAlreadyRunning) && handoffToRunning(noBrowser) {
+		if errors.Is(err, instance.ErrAlreadyRunning) && handoffToRunning(cfg.noBrowser) {
 			return
 		}
 		fatal(err)
 	}
 	defer release()
-	if flags.NArg() == 1 {
-		if _, err := ensureWorkspace(context.Background(), app.db, flags.Arg(0)); err != nil {
+	if cfg.path != "" {
+		if _, err := ensureWorkspace(context.Background(), app.db, cfg.path); err != nil {
 			fatal(err)
 		}
 	}
-	listener, err := net.Listen("tcp4", fmt.Sprintf("127.0.0.1:%d", port))
+	listener, err := net.Listen("tcp4", fmt.Sprintf("127.0.0.1:%d", cfg.port))
 	if err != nil {
 		// The default port is taken: when its owner is a live Blunt Code
 		// server (a previous launch, or one raced here), hand off to it
 		// rather than failing or wandering to a random port.
-		if port != 0 && handoffToPort(port, noBrowser) {
+		if cfg.port != 0 && handoffToPort(cfg.port, cfg.noBrowser) {
 			return
 		}
 		fatal(fmt.Errorf("listen on loopback: %w", err))
@@ -190,7 +207,7 @@ func runServer(args []string) {
 	fmt.Println("Blunt Code listening on " + url)
 	fmt.Println("Sign in: " + signInURL(url, server.Token()))
 	app.logger.Info("server started", "url", url)
-	if !noBrowser && app.settings.OpenBrowser {
+	if !cfg.noBrowser && app.settings.OpenBrowser {
 		openBrowser(signInURL(url, server.Token()), app.logger)
 	}
 	httpServer := &http.Server{Handler: root, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second}

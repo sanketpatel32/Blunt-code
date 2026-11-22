@@ -1713,6 +1713,20 @@ func TestRejectsUnknownScanProfile(t *testing.T) {
 	}
 }
 
+func TestRejectsNegativeScanJobs(t *testing.T) {
+	s := testServer(t)
+	work, err := s.db.CreateWorkspace(context.Background(), core.Workspace{RootPath: t.TempDir(), Name: "Example"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/v1/workspaces/"+work.ID+"/scans", strings.NewReader(`{"profile":"quick","jobs":-1}`))
+	response := httptest.NewRecorder()
+	testHandler(s).ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "INVALID_JOBS") {
+		t.Fatalf("got %d: %s", response.Code, response.Body.String())
+	}
+}
+
 func TestPathOverridesDriveTreeSelection(t *testing.T) {
 	s := testServer(t)
 	root := t.TempDir()

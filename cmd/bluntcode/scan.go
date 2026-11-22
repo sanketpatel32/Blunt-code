@@ -438,6 +438,9 @@ func runScanCommand(args []string, stdout, stderr io.Writer) int {
 	app, release, err := openCore()
 	if err != nil {
 		if errors.Is(err, instance.ErrAlreadyRunning) {
+			if code, proxied := runScanThroughServer(cfg, stdout, stderr); proxied {
+				return code
+			}
 			fmt.Fprintln(stderr, "bluntcode scan: another Blunt Code process (app or scan) is already using the data directory; close it and retry")
 			return 3
 		}
