@@ -395,4 +395,5 @@ export type ScanPlan = {
   profile: string; candidate_files: number; selected_files: number;
   dependency_inputs: string[]; exclusions: string[]; skip_counts: Record<string, number>;
   analyzers: Array<AnalyzerStatus & { planned: boolean; reason: string }>;
+  setup?: { tools: number; download_bytes: number; estimated: boolean };
 };

@@ -6,7 +6,7 @@ import { ScanReviewDialog } from './ScanReviewDialog';
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let root: Root;
 afterEach(async () => { await act(async () => root?.unmount()); document.body.replaceChildren(); vi.unstubAllGlobals(); });
-const planned = { selected_files: 3, candidate_files: 5, dependency_inputs: ['go.mod'], exclusions: ['vendor/**'], skip_counts: { excluded_user: 2 }, analyzers: [{ id: 'osv-dependencies', display_name: 'OSV Scanner', planned: true, ready: false, registered: true, reason: 'Setup required', network: 'outbound', network_note: 'Queries advisory services.' }] };
+const planned = { selected_files: 3, candidate_files: 5, dependency_inputs: ['go.mod'], exclusions: ['vendor/**'], skip_counts: { excluded_user: 2 }, analyzers: [{ id: 'osv-dependencies', display_name: 'OSV Scanner', managed_tool: 'osv-dependencies', planned: true, ready: false, registered: true, reason: 'Setup required', network: 'outbound', network_note: 'Queries advisory services.' }], setup: { tools: 1, download_bytes: 58970112, estimated: false } };
 async function render(body: unknown, status = 200) {
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })));
   const host = document.createElement('div'); document.body.append(host); root = createRoot(host);
@@ -23,6 +23,8 @@ describe('authoritative scan review', () => {
     expect(dialog.textContent).toContain('3 selected source files');
     expect(dialog.textContent).toContain('May contact external services');
     expect(dialog.textContent).toContain('Setup required');
+    expect(dialog.textContent).toContain('First run setup');
+    expect(dialog.textContent).toContain('56.2 MB of downloads');
     expect(confirm).not.toHaveBeenCalled();
     expect(button.disabled).toBe(false);
     await act(async () => button.click());

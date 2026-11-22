@@ -374,3 +374,77 @@ func TestDiskUsageAndCanonicalToolID(t *testing.T) {
 		t.Fatalf("expected 0 disk usage for unconfigured manager, got %d", usage)
 	}
 }
+
+func pinnedArtifact(toolID string, archiveType, executable string, downloadBytes int64) Artifact {
+	sum := sha256.Sum256([]byte(toolID))
+	return Artifact{ToolID: toolID, Version: "1", Platform: platform(), SourceURL: "https://example.test/" + toolID, SHA256: hex.EncodeToString(sum[:]), ArchiveType: archiveType, Executable: executable, DownloadBytes: downloadBytes}
+}
+
+func TestInstallEstimatesSumsMissingPinnedDownloadsOnce(t *testing.T) {
+	root := t.TempDir()
+	ruff := pinnedArtifact("ruff", "exe", "ruff.exe", 100)
+	biome := pinnedArtifact("biome", "exe", "biome.exe", 200)
+	uv := pinnedArtifact("uv", "zip", "uv.exe", 50)
+	semgrep := pinnedArtifact("semgrep", "wheel", "semgrep.exe", 300)
+	semgrep.InstallKind = "uv_tool"
+	semgrep.Package = "semgrep==1"
+	checkov := pinnedArtifact("iac-checkov", "wheel", "env/checkov/Scripts/python.exe", 400)
+	checkov.InstallKind = "uv_tool"
+	checkov.Package = "checkov==1"
+	server := pinnedArtifact("sonarqube-server", "zip", "bin/Run.bat", 1000)
+	scanner := pinnedArtifact("sonar-scanner", "zip", "bin/sonar-scanner.bat", 2000)
+	java := pinnedArtifact("java", "zip", "bin/java.exe", 3000)
+	service := NewService(root, Manifest{Artifacts: []Artifact{ruff, biome, uv, semgrep, checkov, server, scanner, java}}, false)
+
+	// Biome is already installed, so only ruff plus the uv-managed Semgrep and
+	// Checkov wheels count; shared uv is counted once.
+	biomePath := service.Manager.Executable(biome)
+	if err := os.MkdirAll(filepath.Dir(biomePath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(biomePath, []byte("biome"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := service.InstallEstimates([]string{"ruff", "biome", "semgrep", "iac-checkov"})
+	if got.Bytes != 850 {
+		t.Fatalf("uv estimate bytes = %d, want 850", got.Bytes)
+	}
+	if !got.Estimated {
+		t.Fatal("uv tool installs must stay marked as estimates")
+	}
+
+	// The SonarQube bundle sums its three pinned archives and is exact when all
+	// sizes are known.
+	got = service.InstallEstimates([]string{"sonarqube"})
+	if got.Bytes != 6000 || got.Estimated {
+		t.Fatalf("sonarqube estimate = %+v, want 6000 bytes exact", got)
+	}
+}
+
+func TestInstallEstimatesSkipsCachedUvWheel(t *testing.T) {
+	wheel := []byte("wheel bytes")
+	sum := sha256.Sum256(wheel)
+	uv := pinnedArtifact("uv", "zip", "uv.exe", 50)
+	semgrep := Artifact{
+		ToolID: "semgrep", Version: "1", Platform: platform(),
+		SourceURL: "https://example.test/semgrep-1-py3-none-any.whl",
+		SHA256:    hex.EncodeToString(sum[:]), ArchiveType: "wheel", Executable: "semgrep.exe",
+		DownloadBytes: int64(len(wheel)), InstallKind: "uv_tool", Package: "semgrep==1",
+	}
+	service := NewService(t.TempDir(), Manifest{Artifacts: []Artifact{uv, semgrep}}, false)
+	paths := service.Manager.UvToolPaths(semgrep)
+	wheelPath := filepath.Join(paths.Root, "downloads", "semgrep-1-py3-none-any.whl")
+	if err := os.MkdirAll(filepath.Dir(wheelPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(wheelPath, wheel, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := service.InstallEstimates([]string{"semgrep"})
+	if got.Bytes != 50 {
+		t.Fatalf("cached-wheel estimate bytes = %d, want only missing uv (50)", got.Bytes)
+	}
+	if !got.Estimated {
+		t.Fatal("uv tool installs must stay marked as estimates")
+	}
+}

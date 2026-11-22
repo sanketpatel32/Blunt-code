@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { api } from '../api';
 import { useLoad } from '../hooks/useLoad';
+import { formatBytes } from '../lib/format';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from './ui/dialog';
 
@@ -13,6 +14,13 @@ export function ScanReviewDialog({ workspaceId, workspaceName, profile, confirmL
   const plan = review.data;
   const validPlan = plan && Array.isArray(plan.analyzers) && typeof plan.selected_files === 'number';
   const planned = validPlan ? plan.analyzers.filter((row) => row.planned) : [];
+  const setupRows = planned.filter((row) => !row.ready && Boolean(row.managed_tool));
+  const setup = validPlan ? plan.setup : undefined;
+  const setupBytes = setup?.download_bytes ?? 0;
+  const setupSize = setupBytes > 0
+    ? `${setup?.estimated ? 'about ' : ''}${formatBytes(setupBytes)} of downloads${setup?.estimated ? ' (estimate; some tools fetch extra dependencies)' : ''}`
+    : 'an unknown amount of downloads';
+  const setupNames = setupRows.map((row) => row.display_name).join(', ');
   return <Dialog open onOpenChange={(open) => { if (!open && !busy) onCancel(); }}>
     <DialogContent className="max-w-2xl" onCloseAutoFocus={(event) => { event.preventDefault(); returnFocus.current?.focus(); }}>
       <DialogHeader>
@@ -32,6 +40,7 @@ export function ScanReviewDialog({ workspaceId, workspaceName, profile, confirmL
             {row.planned && <p>Network: {row.network === 'none' ? 'No outbound requests during analysis' : row.network === 'loopback-only' ? 'Local server on this computer' : 'May contact external services'}{row.network_note ? ` · ${row.network_note}` : ''}</p>}
           </section>)}
         </div>
+        {setup && setup.tools > 0 && setupRows.length > 0 && <p className="availability-note"><strong>First run setup:</strong> {setupNames} {setupRows.length === 1 ? 'needs' : 'need'} managed tools; expect {setupSize}. This can take several minutes.</p>}
         <p className="availability-note">Managed tool setup can download software. Missing or failed analyzers reduce coverage. You can cancel a running scan from its scan page.</p>
         {planned.length === 0 && <p role="alert">No analyzers have applicable inputs for this profile. Choose another profile or update file selection.</p>}
       </>}
