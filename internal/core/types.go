@@ -17,7 +17,6 @@ type Workspace struct {
 	DefaultProfile    string         `json:"default_profile"`
 	SettingsJSON      string         `json:"-"`
 	DetectedLanguages map[string]int `json:"detected_languages,omitempty"`
-	GitRepository     bool           `json:"git_repository"`
 	// TrustRepoAnalyzerConfig is an explicit trust decision: when true,
 	// external analyzers load the config files the scanned repository ships
 	// (.gitleaks.toml, .gitleaksignore, trivy.yaml, .trivyignore,
