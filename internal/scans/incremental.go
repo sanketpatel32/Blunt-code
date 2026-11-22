@@ -25,6 +25,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"bluntcode/internal/analyzers"
@@ -299,11 +300,13 @@ func (s *Service) prepareIncremental(ctx context.Context, scan core.Scan, work c
 	}
 	previousMetrics, err := s.db.Metrics(ctx, previousID)
 	if err != nil {
-		log.Printf("incremental: could not load the previous scan's metrics (%v); metrics will not be reused", err)
-	} else {
-		for _, metric := range previousMetrics {
-			state.reusedMetrics[metric.AnalyzerID] = append(state.reusedMetrics[metric.AnalyzerID], metric)
-		}
+		// Copying findings forward without their metrics would silently
+		// shrink a fully-reused analyzer's result set; re-run instead.
+		log.Printf("incremental: could not load the previous scan's metrics (%v); running a full scan", err)
+		return nil
+	}
+	for _, metric := range previousMetrics {
+		state.reusedMetrics[metric.AnalyzerID] = append(state.reusedMetrics[metric.AnalyzerID], metric)
 	}
 	return state
 }
@@ -325,26 +328,34 @@ func (s *Service) prepareIncremental(ctx context.Context, scan core.Scan, work c
 //     full scan.
 //
 // Fully-reused analyzers are marked succeeded so an unchanged workspace still
-// completes (a full scan of it would too). The returned manifest records what
-// was reused versus freshly evaluated (persisted on the snapshot).
+// completes (a full scan of it would too). A reuse write that fails loses
+// findings, so it is never silent: the analyzer lands in the manifest's
+// ReuseFailedAnalyzers, a scan.warning is emitted, and the counters are
+// degraded (a partial fresh run is warned, a fully-reused analyzer with no
+// recorded result is failed) so the scan cannot end a clean "completed". The
+// returned manifest records what was reused versus freshly evaluated
+// (persisted on the snapshot).
 func (s *Service) finishIncremental(scan core.Scan, state *incrementalState, counters *scanCounters) *core.IncrementalReuse {
 	manifest := &core.IncrementalReuse{ReusedFromScanID: state.previousID, ReusedFileCount: len(state.unchanged), ChangedFileCount: state.changedCount}
 	for _, analyzerID := range state.identityAnalyzers {
 		reused := state.reusedFindings[analyzerID]
 		if counters.succeeded(analyzerID) {
-			manifest.RanAnalyzers = append(manifest.RanAnalyzers, analyzerID)
-			if analyzers.ReusesWorkspaceScope(analyzerID) {
-				// The walker's fresh run covered the whole workspace;
-				// anything copied on top would be a duplicate.
-				continue
-			}
-			if len(reused) == 0 {
+			if analyzers.ReusesWorkspaceScope(analyzerID) || len(reused) == 0 {
+				// A walker's fresh run covered the whole workspace, so
+				// anything copied on top would be a duplicate; with nothing
+				// to copy the fresh run is the whole result either way.
+				manifest.RanAnalyzers = append(manifest.RanAnalyzers, analyzerID)
 				continue
 			}
 			if err := s.db.AppendReusedFindings(context.Background(), scan.ID, analyzerID, reused); err != nil {
 				log.Printf("incremental: could not copy reused findings from analyzer %s (%v)", analyzerID, err)
+				// The fresh run only saw changed files: without the
+				// copied-forward findings its coverage is partial.
+				counters.markWarned()
+				s.reportReuseFailure(scan.ID, manifest, analyzerID, len(reused))
 				continue
 			}
+			manifest.RanAnalyzers = append(manifest.RanAnalyzers, analyzerID)
 			s.emit(scan.ID, "analyzer.completed", map[string]any{"analyzer_id": analyzerID, "findings": len(reused), "reused": true})
 			continue
 		}
@@ -361,6 +372,10 @@ func (s *Service) finishIncremental(scan core.Scan, state *incrementalState, cou
 		note := fmt.Sprintf("findings reused from previous scan %s (%d unchanged file(s); analyzer did not re-run)", state.previousID, len(state.unchanged))
 		if _, err := s.db.SaveAnalyzerResult(context.Background(), scan.ID, analyzerRunInputForReuse(analyzerID, version, note), reused, state.reusedMetrics[analyzerID]); err != nil {
 			log.Printf("incremental: could not record reused results for analyzer %s (%v)", analyzerID, err)
+			// Neither re-ran nor reused: the analyzer has no result in this
+			// scan, which must count as lost coverage, not as absent.
+			counters.markFailed()
+			s.reportReuseFailure(scan.ID, manifest, analyzerID, len(reused))
 			continue
 		}
 		counters.markSucceeded(analyzerID)
@@ -368,6 +383,27 @@ func (s *Service) finishIncremental(scan core.Scan, state *incrementalState, cou
 		s.emit(scan.ID, "analyzer.completed", map[string]any{"analyzer_id": analyzerID, "findings": len(reused), "reused": true})
 	}
 	return manifest
+}
+
+// reportReuseFailure makes a failed copy-forward visible: the analyzer is
+// recorded in the manifest and a scan.warning names it and the number of
+// findings that could not be carried into this scan.
+func (s *Service) reportReuseFailure(scanID string, manifest *core.IncrementalReuse, analyzerID string, lost int) {
+	manifest.ReuseFailedAnalyzers = append(manifest.ReuseFailedAnalyzers, analyzerID)
+	s.emit(scanID, "scan.warning", map[string]any{
+		"message":     fmt.Sprintf("Incremental reuse failed for %s: %d finding(s) from unchanged files could not be carried forward; coverage is incomplete.", analyzerID, lost),
+		"analyzer_id": analyzerID,
+		"lost":        lost,
+	})
+}
+
+// reuseFailureNote is the scan-note fragment for a manifest whose reuse
+// writes failed; empty when every reuse landed.
+func reuseFailureNote(manifest *core.IncrementalReuse) string {
+	if manifest == nil || len(manifest.ReuseFailedAnalyzers) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("incremental reuse failed for %s; findings from unchanged files are missing, run a full scan", strings.Join(manifest.ReuseFailedAnalyzers, ", "))
 }
 
 // analyzerRunInputForReuse shapes the run row for a fully-reused analyzer: a

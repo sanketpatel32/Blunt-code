@@ -769,3 +769,78 @@ func TestIncrementalWorkspaceWalkerRerunsWholeTreeAndNeverDoubles(t *testing.T) 
 		t.Fatalf("third scan fingerprints = %v, want %v", got, want)
 	}
 }
+
+// failFindingInserts installs a SQLite trigger that aborts any finding insert
+// for the given relative path (every path when rel is empty), modeling a DB
+// error that strikes only while reused findings are copied forward.
+func failFindingInserts(t *testing.T, fixture *scanFixture, rel string) {
+	t.Helper()
+	condition := ""
+	if rel != "" {
+		condition = fmt.Sprintf(" WHEN NEW.relative_path = '%s'", rel)
+	}
+	if _, err := fixture.db.SQL.Exec(`CREATE TRIGGER fail_finding_inserts BEFORE INSERT ON findings` + condition + ` BEGIN SELECT RAISE(ABORT, 'injected finding insert failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestIncrementalAppendReuseFailureIsNotCleanCompletion: when copying an
+// unchanged file's findings onto a fresh run fails, the finding is lost, so
+// the scan must end completed_with_warnings with the analyzer named in the
+// manifest and the scan note - never a clean "completed".
+func TestIncrementalAppendReuseFailureIsNotCleanCompletion(t *testing.T) {
+	analyzer := &fileEchoAnalyzer{id: "fake", version: "v1"}
+	fixture := newIncrementalFixture(t, []analyzers.Analyzer{analyzer}, map[string]string{"a.py": "x=1\n", "b.py": "y=2\n"})
+
+	first := fixture.startScanWithOptions(t, ScanOptions{})
+	if final := fixture.waitForTerminal(t, first.ID); final.State != "completed" {
+		t.Fatalf("first scan state = %q", final.State)
+	}
+
+	writeFixtureFile(t, fixture, "a.py", "x=1+41\n")
+	failFindingInserts(t, fixture, "b.py")
+	second := fixture.startScanWithOptions(t, ScanOptions{Incremental: true})
+	final := fixture.waitForTerminal(t, second.ID)
+	if final.State != "completed_with_warnings" {
+		t.Fatalf("scan that lost reused findings: state = %q, want completed_with_warnings (note: %s)", final.State, final.ErrorSummary)
+	}
+	if !strings.Contains(final.ErrorSummary, "incremental reuse failed for fake") {
+		t.Fatalf("scan note must name the analyzer whose reuse failed: %q", final.ErrorSummary)
+	}
+	if final.Snapshot == nil || final.Snapshot.Incremental == nil {
+		t.Fatal("incremental scan must persist its reuse manifest")
+	}
+	reuse := final.Snapshot.Incremental
+	if len(reuse.ReuseFailedAnalyzers) != 1 || reuse.ReuseFailedAnalyzers[0] != "fake" {
+		t.Fatalf("reuse_failed_analyzers = %v, want [fake]", reuse.ReuseFailedAnalyzers)
+	}
+	for _, id := range reuse.RanAnalyzers {
+		if id == "fake" {
+			t.Fatalf("analyzer with lost reused findings must not be recorded as cleanly ran: %v", reuse.RanAnalyzers)
+		}
+	}
+}
+
+// TestIncrementalFullReuseFailureIsNotCleanCompletion: an analyzer that did
+// not re-run and whose reused results could not be recorded has no result at
+// all in the scan. That is lost coverage: with no other analyzer succeeding,
+// the scan fails instead of completing with zero findings.
+func TestIncrementalFullReuseFailureIsNotCleanCompletion(t *testing.T) {
+	analyzer := &fileEchoAnalyzer{id: "fake", version: "v1"}
+	fixture := newIncrementalFixture(t, []analyzers.Analyzer{analyzer}, map[string]string{"a.py": "x=1\n"})
+
+	first := fixture.startScanWithOptions(t, ScanOptions{})
+	if final := fixture.waitForTerminal(t, first.ID); final.State != "completed" {
+		t.Fatalf("first scan state = %q", final.State)
+	}
+
+	failFindingInserts(t, fixture, "")
+	second := fixture.startScanWithOptions(t, ScanOptions{Incremental: true})
+	final := fixture.waitForTerminal(t, second.ID)
+	if final.State == "completed" || final.State == "completed_with_warnings" {
+		t.Fatalf("scan whose only analyzer lost every result: state = %q, want failed", final.State)
+	}
+	if final.Snapshot == nil || final.Snapshot.Incremental == nil || len(final.Snapshot.Incremental.ReuseFailedAnalyzers) != 1 {
+		t.Fatalf("reuse manifest must record the failed analyzer: %#v", final.Snapshot)
+	}
+}

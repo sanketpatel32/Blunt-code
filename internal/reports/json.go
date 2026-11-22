@@ -61,6 +61,7 @@ type jsonScan struct {
 	IncrementalChangedFileCount int      `json:"incremental_changed_files,omitempty"`
 	IncrementalReusedAnalyzers  []string `json:"incremental_reused_analyzers,omitempty"`
 	IncrementalRanAnalyzers     []string `json:"incremental_ran_analyzers,omitempty"`
+	IncrementalReuseFailed      []string `json:"incremental_reuse_failed_analyzers,omitempty"`
 }
 type jsonFiles struct {
 	Candidate int `json:"candidate"`
@@ -158,6 +159,9 @@ func jsonScanFromModel(m Model) jsonScan {
 			}
 			for _, id := range reuse.RanAnalyzers {
 				scan.IncrementalRanAnalyzers = append(scan.IncrementalRanAnalyzers, scrubControls(id))
+			}
+			for _, id := range reuse.ReuseFailedAnalyzers {
+				scan.IncrementalReuseFailed = append(scan.IncrementalReuseFailed, scrubControls(id))
 			}
 		}
 	}
