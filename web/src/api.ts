@@ -170,8 +170,8 @@ export const api = {
   checkUpdate: () => request<{ current: string; latest: string; available: boolean; release_url: string; release_notes: string }>('/update/check'),
   applyUpdate: () => request<{ started: boolean; staged_at: string }>('/update/apply', { method: 'POST' }),
   openFolder: (kind: 'data' | 'reports' | 'logs' | 'tools') => request<void>('/system/open-folder', { method: 'POST', body: JSON.stringify({ kind }) }),
-  pentestProbe: (workspaceId: string, input: { target_url: string; auth_mode?: string; auth_token?: string; scope?: string }) => request<PentestProbeResult>(`/workspaces/${encodeURIComponent(workspaceId)}/pentest/probe`, { method: 'POST', body: JSON.stringify(input) }),
-  probeTarget: (input: { target_url: string; auth_mode?: string; auth_token?: string; scope?: string }) => request<PentestProbeResult>('/pentest/probe', { method: 'POST', body: JSON.stringify(input) }),
+  pentestProbe: (workspaceId: string, input: { target_url: string; auth_mode?: string; auth_token?: string; scope?: string; insecure_skip_tls_verify?: boolean }) => request<PentestProbeResult>(`/workspaces/${encodeURIComponent(workspaceId)}/pentest/probe`, { method: 'POST', body: JSON.stringify(input) }),
+  probeTarget: (input: { target_url: string; auth_mode?: string; auth_token?: string; scope?: string; insecure_skip_tls_verify?: boolean }) => request<PentestProbeResult>('/pentest/probe', { method: 'POST', body: JSON.stringify(input) }),
   markdownUrl: (scanId: string) => `${PREFIX}/scans/${encodeURIComponent(scanId)}/report.md`,
   /** URL for the attachment exports (plain GET navigations, not JSON requests). CSV accepts the same filter/sort params as findings — minus limit/offset — so the file matches the on-screen list. findings.json is the versioned full-report document. */
   exportUrl: (scanId: string, format: 'html' | 'sarif' | 'csv' | 'json', params?: Record<string, string>) => {

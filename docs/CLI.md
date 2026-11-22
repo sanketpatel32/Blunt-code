@@ -235,8 +235,22 @@ bluntcode pentest probe <url> [options]
 ### Flags
 - `--scope standard|full|spider`: Probe depth (default: `standard`).
 - `--auth-mode bearer|basic|cookie`: Authentication mode.
-- `--auth-token <credentials>`: Token, credentials, or cookie string.
+- `--auth-token <credentials>`: Token, credentials, or cookie string. Only sent to `https://` targets; combining it with an `http://` target is refused.
+- `--insecure`: Skip TLS certificate verification for this probe (self-signed local or staging targets you control). Verification is on by default; a failed verification is reported as `dast.tls.untrusted-certificate` before any request or credential is sent.
+- `--allow-private`: Allow private-network and link-local targets (see below).
 - `--json`: Output complete structured JSON audit results.
+
+### Target policy
+The probe checks the address of every connection it opens (after DNS resolution, including same-host redirects), not just the URL text:
+
+| Destination | Default | Opt-in |
+| --- | --- | --- |
+| Public addresses | Allowed | - |
+| Loopback (`127.0.0.0/8`, `::1`, `localhost`) | Allowed | - |
+| Private and link-local (`10/8`, `172.16/12`, `192.168/16`, `100.64/10`, `169.254/16`, `fc00::/7`, `fe80::/10`) | Refused | `--allow-private` on the CLI; `BLUNTCODE_PENTEST_ALLOW_PRIVATE=1` in the environment of `bluntcode` for the web UI / API |
+| Cloud metadata (`169.254.169.254`, `169.254.170.2`, `169.254.170.23`, `100.100.100.200`, `fd00:ec2::254`, `metadata.google.internal`), unspecified, multicast, broadcast, reserved | Always refused | - |
+
+The API opt-in is read only from the server's environment; the request body cannot enable it. Environment HTTP proxies are not used by the probe.
 
 ---
 
