@@ -47,6 +47,11 @@ records differ for older versions:
 - **Gitleaks finding paths are workspace-relative again.** When repo config is untrusted gitleaks runs from an isolated working directory and reports paths like `../../../../OneDrive/...`; findings now resolve those back to clean workspace-relative paths.
 - **Bare exclude patterns now match at any depth.** `.bluntcodeignore` and workspace exclude rules like `*.tmp` or `coverage` previously only matched at the workspace root despite documented basename semantics; they now match like gitignore everywhere (and `/name` stays root-anchored).
 - **Windows device-name files no longer kill scans.** Discovery skips `nul`/`con`/`aux`/`comN`/`lptN` (with or without extension) — junk files creatable only via `\\?\` tricks or shell redirects that crash analyzers they reach; a stray `nul` in the repo root was failing every sonar-scanner run.
+- **Analyzer status grid is always visible.** The workspace overview's per-analyzer breakdown sat behind a `<details>` disclosure while every neighboring section rendered inline; the grid now shows directly like the rest.
+- **Rail search is a row, not two fake controls.** The rail foot's search affordance rendered as a bordered input-like box carrying a `Ctrl K` keycap badge — a fake field containing a fake key. It is now a ghost row matching Settings and About, with the shortcut in its tooltip.
+
+### Changed
+- **CLI Docs is a reference, not a wall.** The page rendered all fourteen command entries fully expanded — synopsis, subcommands, flag tables and examples each — a ~12,000px scroll in which nothing was findable. It is now master/detail: a sticky command index grouped by category beside the selected command's complete entry, with search narrowing the index (12,103px → ~1,900px for the default entry).
 
 ## [0.50.0] - 2026-11-22
 

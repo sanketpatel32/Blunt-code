@@ -923,13 +923,6 @@ tr.is-expanded .history-date::before { border-color: var(--color-accent); backgr
 }
 
 /* ── Filter Bar ──────────────────────────────────────────────────── */
-.cli-filter-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-md);
-  align-items: center;
-  margin-bottom: var(--space-lg);
-}
 .cli-search-wrap {
   position: relative;
   flex: 1 1 16rem;
@@ -978,95 +971,85 @@ tr.is-expanded .history-date::before { border-color: var(--color-accent); backgr
   color: var(--color-ink);
   background: var(--color-surface-muted);
 }
-.cli-cat-pills {
+
+/* ── Command index + detail ───────────────────────────────────────
+   One command rendered at a time. Rendering every entry expanded
+   produced a page so tall nothing in it was findable; the index
+   keeps each command one click away and stays put while the
+   detail pane scrolls. */
+.cli-docs-layout {
+  display: grid;
+  grid-template-columns: 15rem minmax(0, 1fr);
+  gap: var(--space-lg);
+  align-items: start;
+}
+.cli-nav {
+  position: sticky;
+  top: var(--space-lg);
+  max-height: calc(100dvh - var(--space-lg) * 2 - 2rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   display: flex;
-  gap: var(--space-2xs);
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: var(--space-3xs);
 }
-.cli-cat-pill {
-  padding: var(--space-3xs) var(--space-sm);
-  border-radius: var(--radius-pill);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  border: var(--rule) solid var(--color-rule);
-  background: var(--color-surface);
+.cli-nav .cli-search-wrap {
+  flex: none;
+  margin-bottom: var(--space-xs);
+}
+.cli-nav-group + .cli-nav-group {
+  margin-top: var(--space-sm);
+}
+.cli-nav-group-label {
+  padding: 0 var(--space-sm) var(--space-3xs);
+  color: var(--color-ink-faint);
+  font: 600 var(--text-2xs)/1.4 var(--font-body);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.cli-nav-item {
+  display: block;
+  width: 100%;
+  padding: var(--space-2xs) var(--space-sm);
+  border: 0;
+  border-radius: var(--radius-button);
+  background: transparent;
   color: var(--color-ink-soft);
+  font: 500 var(--text-sm) var(--font-body);
+  text-align: left;
   cursor: pointer;
-  transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
 }
-.cli-cat-pill:hover {
+.cli-nav-item code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+}
+.cli-nav-item:hover {
   background: var(--color-surface-muted);
   color: var(--color-ink);
-  border-color: var(--color-rule-strong);
 }
-.cli-cat-pill.active {
+.cli-nav-item.active {
   background: var(--color-accent-soft);
-  border-color: var(--color-accent);
-  color: var(--color-accent-strong);
-}
-
-/* ── Quick Jump Bar ────────────────────────────────────────── */
-.cli-quick-jump {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  flex-wrap: wrap;
-  padding: var(--space-xs) var(--space-md);
-  background: var(--color-surface-muted);
-  border-radius: var(--radius-md);
-  border: var(--rule) solid var(--color-rule-faint);
-  margin-bottom: var(--space-lg);
-}
-.cli-jump-label {
-  font-size: var(--text-2xs);
-  font-weight: 500;
-  color: var(--color-ink-faint);
-  font-family: var(--font-body);
-  letter-spacing: 0;
-}
-.cli-jump-chips {
-  display: flex;
-  gap: var(--space-3xs);
-  flex-wrap: wrap;
-  align-items: center;
-  flex: 1;
-}
-.cli-jump-chip {
-  text-decoration: none;
-  
-  font-size: var(--text-2xs);
+  color: var(--color-ink);
   font-weight: 600;
-  padding: 2px var(--space-2xs);
-  border-radius: var(--radius-xs);
-  background: var(--color-surface);
-  border: var(--rule) solid var(--color-rule);
-  color: var(--color-ink-soft);
-  transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
 }
-.cli-jump-chip:hover {
-  border-color: var(--color-accent);
-  color: var(--color-accent-strong);
-  background: var(--color-accent-soft);
+.cli-nav-item:focus-visible {
+  outline: var(--rule-focus) solid var(--color-focus);
+  outline-offset: 1px;
 }
-.cli-jump-chip code {
-  color: inherit;
-  font-family: inherit;
-  font-size: inherit;
-}
-.cli-match-count {
-  font-size: var(--text-2xs);
-  font-weight: 600;
+.cli-nav-empty {
+  padding: var(--space-md) var(--space-sm);
   color: var(--color-ink-faint);
-  font-family: var(--font-mono);
-  white-space: nowrap;
+  font-size: var(--text-sm);
+}
+@media (max-width: 60rem) {
+  .cli-docs-layout { grid-template-columns: 1fr; }
+  .cli-nav {
+    position: static;
+    max-height: 18rem;
+  }
 }
 
 /* ── Command Cards ───────────────────────────────────────────────── */
-.cli-commands-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-lg);
-}
 .cli-empty {
   text-align: center;
   padding: var(--space-3xl);
@@ -1446,23 +1429,6 @@ tr.is-expanded .history-date::before { border-color: var(--color-accent); backgr
   display: flex;
   align-items: center;
   gap: var(--space-xs);
-}
-.cli-back-to-top {
-  font-size: var(--text-2xs);
-  font-family: var(--font-mono);
-  font-weight: 600;
-  text-decoration: none;
-  color: var(--color-ink-faint);
-  padding: 4px var(--space-2xs);
-  border-radius: var(--radius-xs);
-  border: var(--rule) solid var(--color-rule-faint);
-  background: var(--color-surface-muted);
-  transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
-}
-.cli-back-to-top:hover {
-  color: var(--color-accent-strong);
-  border-color: var(--color-accent);
-  background: var(--color-accent-soft);
 }
 
 /* ── Builder Flag Explainer ────────────────────────────────── */
@@ -1862,7 +1828,6 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .analyzer-row { display: grid; grid-template-columns: minmax(5.6rem, 1fr) auto; gap: var(--space-sm); padding: var(--space-sm) 0; border-bottom: var(--rule) solid var(--color-rule-faint); color: var(--color-ink); font-size: var(--text-sm); }
 .analyzer-row small { grid-column: 1 / -1; color: var(--color-ink-soft); }
 .analyzer-summary { margin: var(--space-2xs) 0 var(--space-xs); color: var(--color-ink); font-size: var(--text-sm); }
-.analyzer-details > summary { cursor: pointer; color: var(--color-accent-strong); font-size: var(--text-sm); font-weight: 600; padding: var(--space-2xs) 0; }
 .report-warnings .missing-tools { display: block; }
 
 /* ── L5 · Tables · premium ─────────────────────────────────────── */
@@ -4773,24 +4738,24 @@ dialog.modal-dialog, .code-preview { scrollbar-width: thin; scrollbar-color: var
   padding-top: var(--space-sm);
   border-top: var(--rule) solid var(--color-rule-faint);
 }
-/* A real search affordance rather than a "Ctrl K" shortcut badge worn as
-   chrome. The shortcut still shows, because it is genuinely useful, but the
-   control now says what it does. */
+/* A ghost row, same shape as .rail-link — the bordered input look read as a
+   fake text field bolted onto the rail, and the Ctrl K keycap read as a
+   second fake button inside it. The shortcut lives in the title tooltip. */
 .rail-search {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
   width: 100%;
   padding: 0.4rem var(--space-sm);
-  border: var(--rule) solid var(--color-rule);
+  border: 0;
   border-radius: var(--radius-button);
-  background: var(--color-surface-muted);
-  color: var(--color-ink-faint);
+  background: transparent;
+  color: var(--color-ink-soft);
   font: 500 var(--text-sm) var(--font-body);
   cursor: pointer;
-  transition: border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
 }
-.rail-search:hover { border-color: var(--color-rule-strong); color: var(--color-ink); }
+.rail-search:hover { background: var(--color-surface-muted); color: var(--color-ink); }
 .rail-search:focus-visible { outline: var(--rule-focus) solid var(--color-focus); outline-offset: 1px; }
 .rail-search-icon { width: 0.95rem; height: 0.95rem; flex: none; }
 .rail-search span { flex: 1 1 auto; text-align: left; }
@@ -5628,8 +5593,7 @@ tbody tr:hover > td { background: color-mix(in oklch, var(--color-accent) 5%, tr
   .rail-brand b,
   .rail-group-label,
   .rail-link-label,
-  .rail-search span,
-  .rail-search .kbd-hint {
+  .rail-search span {
     /* fixed for the same reason as .sr-only: inside the rail's own overflow-y
        scroll these would escape the clip and stretch document scroll height. */
     position: fixed; width: 1px; height: 1px; overflow: hidden;

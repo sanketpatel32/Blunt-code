@@ -407,8 +407,9 @@ function PremiumSummaryCard({ label, value, tone, spark, delay }: { label: strin
 }
 
 /** Analyzer status for the latest scan: one summary line (ran / not installed
- *  / failed, with a Set up tools action) and the per-analyzer rows folded
- *  into a disclosure, so a clean scan does not push history down the page. */
+ *  / failed, with a Set up tools action), then the per-analyzer rows grouped
+ *  by category. The grid used to hide inside a <details> disclosure — users
+ *  read the analyzer breakdown as normal status content, so it renders inline. */
 export function AnalyzerStatuses({ runs, go }: { runs?: AnalyzerRun[]; go?: (r: Route) => void }) {
   if (!runs?.length) return <div className="analyzers"><h3>Analyzer status</h3><p className="muted">Analyzer detail appears after a scan.</p></div>;
   const grouped = new Map<string, typeof runs>();
@@ -428,7 +429,6 @@ export function AnalyzerStatuses({ runs, go }: { runs?: AnalyzerRun[]; go?: (r: 
   if (skipped.length) parts.push(`${skipped.length} not needed`);
   return <div className="analyzers"><h3>Analyzer status</h3>
     <p className="analyzer-summary" role="note">{parts.join(' · ')}{missing.length > 0 && go && <> <button type="button" className="text-button" onClick={() => go({ page: 'tools' })}>Set up tools →</button></>}</p>
-    <details className="analyzer-details" open={failed.length > 0 || undefined}><summary>Show each analyzer</summary>
     <div className="analyzer-grid">{[...grouped.entries()].map(([cat, items]) => <div key={cat} className="analyzer-group"><span className="analyzer-group-label" style={{ borderLeftColor: categoryColor(cat as never) }}>{(CATEGORY_LABELS as Record<string, string>)[cat] ?? cat}</span>{items.map((run) => {
     const isSkipped = run.status === 'skipped';
     const notInstalled = run.status === 'failed' && isMissingToolMessage(run.message);
@@ -436,7 +436,6 @@ export function AnalyzerStatuses({ runs, go }: { runs?: AnalyzerRun[]; go?: (r: 
     // id missing from the map falls back to itself, and the raw id stays on hover.
     return <div className="analyzer-row" key={run.analyzer_id}><span title={run.analyzer_id}>{analyzerName(run.analyzer_id)}</span><span className={`state ${notInstalled ? 'not-installed' : run.status}`}>{notInstalled ? 'not installed' : run.status}</span>{isSkipped ? <small role="note" className="text-amber-600">Skipped: {run.message || 'no applicable files or profile excluded this analyzer'}</small> : notInstalled ? <small>Checks skipped until it is set up in Tools.</small> : run.message ? <small>{run.message}</small> : null}</div>;
   })}</div>)}</div>
-    </details>
   </div>;
 }
 

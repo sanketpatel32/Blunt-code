@@ -428,7 +428,7 @@ export function CLIPage() {
   const meta = useLoad(api.meta, []);
   const [tab, setTab] = useState<'reference' | 'ci' | 'builder'>('reference');
   const [search, setSearch] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [selectedId, setSelectedId] = useState<string>(COMMANDS[0].id);
   const [copiedText, setCopiedText] = useState<string | null>(null);
 
   // Command Builder State
@@ -440,28 +440,32 @@ export function CLIPage() {
   const [builderQuiet, setBuilderQuiet] = useState(false);
   const [builderIncremental, setBuilderIncremental] = useState(false);
 
-  const categories = useMemo(() => {
-    const set = new Set<string>();
-    COMMANDS.forEach((c) => set.add(c.category));
-    return ['All', ...Array.from(set)];
-  }, []);
-
   const filteredCommands = useMemo(() => {
-    return COMMANDS.filter((cmd) => {
-      const matchCat = selectedCategory === 'All' || cmd.category === selectedCategory;
-      if (!matchCat) return false;
-      if (!search.trim()) return true;
-      const q = search.toLowerCase();
-      return (
-        cmd.name.toLowerCase().includes(q) ||
-        cmd.description.toLowerCase().includes(q) ||
-        cmd.synopsis.toLowerCase().includes(q) ||
-        cmd.flags?.some((f) => f.flag.toLowerCase().includes(q) || f.desc.toLowerCase().includes(q)) ||
-        cmd.examples?.some((e) => e.cmd.toLowerCase().includes(q) || e.title.toLowerCase().includes(q)) ||
-        cmd.subcommands?.some((s) => s.name.toLowerCase().includes(q) || s.desc.toLowerCase().includes(q))
-      );
-    });
-  }, [selectedCategory, search]);
+    if (!search.trim()) return COMMANDS;
+    const q = search.toLowerCase();
+    return COMMANDS.filter((cmd) => (
+      cmd.name.toLowerCase().includes(q) ||
+      cmd.description.toLowerCase().includes(q) ||
+      cmd.synopsis.toLowerCase().includes(q) ||
+      cmd.flags?.some((f) => f.flag.toLowerCase().includes(q) || f.desc.toLowerCase().includes(q)) ||
+      cmd.examples?.some((e) => e.cmd.toLowerCase().includes(q) || e.title.toLowerCase().includes(q)) ||
+      cmd.subcommands?.some((s) => s.name.toLowerCase().includes(q) || s.desc.toLowerCase().includes(q))
+    ));
+  }, [search]);
+
+  const navGroups = useMemo(() => {
+    const groups: { category: string; commands: CLICommand[] }[] = [];
+    for (const cmd of filteredCommands) {
+      const group = groups.find((g) => g.category === cmd.category);
+      if (group) group.commands.push(cmd);
+      else groups.push({ category: cmd.category, commands: [cmd] });
+    }
+    return groups;
+  }, [filteredCommands]);
+
+  // Selection survives searches: if the current pick is filtered out, the
+  // first match takes over rather than leaving a blank pane.
+  const activeCmd = filteredCommands.find((c) => c.id === selectedId) ?? filteredCommands[0];
 
   const copy = async (text: string) => {
     if (await copyToClipboard(text)) {
@@ -637,207 +641,60 @@ export function CLIPage() {
             </section>
           )}
 
-          {/* Filter Bar */}
-          <div className="cli-filter-bar">
-            <div className="cli-search-wrap">
-              <Search size={16} className="cli-search-icon" aria-hidden="true" />
-              <input
-                type="text"
-                placeholder="Search commands, flags, or recipes..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="cli-search-input"
-              />
-              {search && (
-                <button
-                  type="button"
-                  className="cli-search-clear"
-                  onClick={() => setSearch('')}
-                  aria-label="Clear search"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-            <div className="cli-cat-pills">
-              {categories.map((cat) => (
-                <button
-                  key={cat}
-                  type="button"
-                  onClick={() => setSelectedCategory(cat)}
-                  className={`cli-cat-pill${selectedCategory === cat ? ' active' : ''}`}
-                >
-                  {cat}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Quick Jump Bar */}
-          {filteredCommands.length > 0 && (
-            <div className="cli-quick-jump">
-              <span className="cli-jump-label">Quick Jump:</span>
-              <div className="cli-jump-chips">
-                {filteredCommands.map((cmd) => (
-                  <a
-                    key={cmd.id}
-                    href={`#${cmd.id}`}
-                    className="cli-jump-chip"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      document.getElementById(cmd.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }}
+          {/* Reference layout: a sticky command index beside one full entry.
+              Rendering every entry expanded made a page so tall nothing in it
+              was findable; master/detail keeps each command one click away. */}
+          <div className="cli-docs-layout">
+            <aside className="cli-nav" aria-label="Command index">
+              <div className="cli-search-wrap">
+                <Search size={16} className="cli-search-icon" aria-hidden="true" />
+                <input
+                  type="text"
+                  placeholder="Search commands…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="cli-search-input"
+                />
+                {search && (
+                  <button
+                    type="button"
+                    className="cli-search-clear"
+                    onClick={() => setSearch('')}
+                    aria-label="Clear search"
                   >
-                    <code>{cmd.id}</code>
-                  </a>
-                ))}
+                    ✕
+                  </button>
+                )}
               </div>
-              <span className="cli-match-count">
-                {filteredCommands.length} command{filteredCommands.length === 1 ? '' : 's'}
-              </span>
-            </div>
-          )}
-
-          {/* Commands List */}
-          <div className="cli-commands-list">
-            {filteredCommands.length === 0 ? (
-              <div className="cli-empty">
-                No commands match your query "{search}".
-              </div>
-            ) : (
-              filteredCommands.map((cmd) => (
-                <article key={cmd.id} id={cmd.id} className="cli-command-card">
-                  <div className="cli-cmd-head">
-                    <div>
-                      <div className="cli-cmd-title-row">
-                        <h3 className="cli-cmd-title">{cmd.name}</h3>
-                        {cmd.badge && <span className="badge">{cmd.badge}</span>}
-                        <span className="cli-cmd-category">{cmd.category}</span>
-                      </div>
-                      <p className="cli-cmd-desc">{cmd.description}</p>
-                    </div>
-                    <div className="cli-cmd-actions">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => copy(cmd.synopsis)}
-                        title="Copy synopsis"
-                      >
-                        {copiedText === cmd.synopsis ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
-                        {copiedText === cmd.synopsis ? 'Copied' : 'Copy'}
-                      </Button>
-                      <a
-                        href="#main-content"
-                        className="cli-back-to-top"
-                        title="Back to top"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          window.scrollTo({ top: 0, behavior: 'smooth' });
-                        }}
-                      >
-                        ↑ Top
-                      </a>
-                    </div>
-                  </div>
-
-                  {/* Synopsis Box */}
-                  <div className="cli-terminal-box">
-                    <code className="cli-terminal-code">
-                      <span className="cli-prompt-symbol" aria-hidden="true">&gt;</span>
-                      {cmd.synopsis}
-                    </code>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => copy(cmd.synopsis)}
-                      title="Copy synopsis"
+              {navGroups.map((group) => (
+                <div key={group.category} className="cli-nav-group">
+                  <div className="cli-nav-group-label">{group.category}</div>
+                  {group.commands.map((cmd) => (
+                    <button
+                      key={cmd.id}
+                      type="button"
+                      className={`cli-nav-item${activeCmd?.id === cmd.id ? ' active' : ''}`}
+                      onClick={() => setSelectedId(cmd.id)}
                     >
-                      {copiedText === cmd.synopsis ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
-                    </Button>
-                  </div>
+                      <code>{cmd.name.replace(/^bluntcode\s+/, '')}</code>
+                    </button>
+                  ))}
+                </div>
+              ))}
+              {filteredCommands.length === 0 && (
+                <div className="cli-nav-empty">No commands match "{search}".</div>
+              )}
+            </aside>
 
-                  {/* Subcommands if any */}
-                  {cmd.subcommands && cmd.subcommands.length > 0 && (
-                    <div className="cli-subcommands">
-                      <div className="cli-section-label">Subcommands</div>
-                      <div className="cli-subcmd-grid">
-                        {cmd.subcommands.map((sub) => (
-                          <div key={sub.name} className="cli-subcmd-item">
-                            <div>
-                              <strong>{sub.name}</strong>
-                              <span className="cli-subcmd-desc">{sub.desc}</span>
-                              <div className="cli-subcmd-syntax">
-                                <code>{sub.syntax}</code>
-                              </div>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => copy(sub.syntax)}
-                              title="Copy command"
-                            >
-                              {copiedText === sub.syntax ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Flag Options Table */}
-                  {cmd.flags && cmd.flags.length > 0 && (
-                    <div className="cli-flags-wrap">
-                      <div className="cli-section-label">Options &amp; Flags</div>
-                      <div className="cli-table-container">
-                        <table className="cli-table">
-                          <thead>
-                            <tr>
-                              <th>Flag</th>
-                              <th>Type</th>
-                              <th>Description</th>
-                              <th>Default</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {cmd.flags.map((f) => (
-                              <tr key={f.flag}>
-                                <td className="cli-flag-name"><code>{f.flag}</code></td>
-                                <td className="cli-flag-type">{f.type}</td>
-                                <td className="cli-flag-desc">{f.desc}</td>
-                                <td className="cli-flag-def"><code>{f.def || '—'}</code></td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Examples */}
-                  {cmd.examples && cmd.examples.length > 0 && (
-                    <div className="cli-examples-wrap">
-                      <div className="cli-section-label">Practical Examples</div>
-                      <div className="cli-examples-grid">
-                        {cmd.examples.map((ex, i) => (
-                          <div key={i} className="cli-example-item">
-                            <div>
-                              <div className="cli-example-title">{ex.title}</div>
-                              <code className="cli-example-cmd">{ex.cmd}</code>
-                            </div>
-                            <Button variant="ghost" size="sm" onClick={() => copy(ex.cmd)} title="Copy example">
-                              {copiedText === ex.cmd ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </article>
-              ))
+            {activeCmd && (
+              <article id={activeCmd.id} className="cli-command-card cli-detail">
+                <CommandDetail cmd={activeCmd} copiedText={copiedText} copy={copy} />
+              </article>
             )}
           </div>
         </div>
       )}
+
 
       {/* TAB 2: CI/CD & Automation Recipes */}
       {tab === 'ci' && (
@@ -1128,5 +985,134 @@ export function CLIPage() {
         </section>
       )}
     </div>
+  );
+}
+
+function CommandDetail({
+  cmd,
+  copiedText,
+  copy,
+}: {
+  cmd: CLICommand;
+  copiedText: string | null;
+  copy: (text: string) => void;
+}) {
+  return (
+    <>
+      <div className="cli-cmd-head">
+        <div>
+          <div className="cli-cmd-title-row">
+            <h3 className="cli-cmd-title">{cmd.name}</h3>
+            {cmd.badge && <span className="badge">{cmd.badge}</span>}
+            <span className="cli-cmd-category">{cmd.category}</span>
+          </div>
+          <p className="cli-cmd-desc">{cmd.description}</p>
+        </div>
+        <div className="cli-cmd-actions">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => copy(cmd.synopsis)}
+            title="Copy synopsis"
+          >
+            {copiedText === cmd.synopsis ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+            {copiedText === cmd.synopsis ? 'Copied' : 'Copy'}
+          </Button>
+        </div>
+      </div>
+
+      {/* Synopsis Box */}
+      <div className="cli-terminal-box">
+        <code className="cli-terminal-code">
+          <span className="cli-prompt-symbol" aria-hidden="true">&gt;</span>
+          {cmd.synopsis}
+        </code>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => copy(cmd.synopsis)}
+          title="Copy synopsis"
+        >
+          {copiedText === cmd.synopsis ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+        </Button>
+      </div>
+
+      {/* Subcommands if any */}
+      {cmd.subcommands && cmd.subcommands.length > 0 && (
+        <div className="cli-subcommands">
+          <div className="cli-section-label">Subcommands</div>
+          <div className="cli-subcmd-grid">
+            {cmd.subcommands.map((sub) => (
+              <div key={sub.name} className="cli-subcmd-item">
+                <div>
+                  <strong>{sub.name}</strong>
+                  <span className="cli-subcmd-desc">{sub.desc}</span>
+                  <div className="cli-subcmd-syntax">
+                    <code>{sub.syntax}</code>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => copy(sub.syntax)}
+                  title="Copy command"
+                >
+                  {copiedText === sub.syntax ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Flag Options Table */}
+      {cmd.flags && cmd.flags.length > 0 && (
+        <div className="cli-flags-wrap">
+          <div className="cli-section-label">Options &amp; Flags</div>
+          <div className="cli-table-container">
+            <table className="cli-table">
+              <thead>
+                <tr>
+                  <th>Flag</th>
+                  <th>Type</th>
+                  <th>Description</th>
+                  <th>Default</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cmd.flags.map((f) => (
+                  <tr key={f.flag}>
+                    <td className="cli-flag-name"><code>{f.flag}</code></td>
+                    <td className="cli-flag-type">{f.type}</td>
+                    <td className="cli-flag-desc">{f.desc}</td>
+                    <td className="cli-flag-def"><code>{f.def || '—'}</code></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Examples */}
+      {cmd.examples && cmd.examples.length > 0 && (
+        <div className="cli-examples-wrap">
+          <div className="cli-section-label">Practical Examples</div>
+          <div className="cli-examples-grid">
+            {cmd.examples.map((ex, i) => (
+              <div key={i} className="cli-example-item">
+                <div>
+                  <div className="cli-example-title">{ex.title}</div>
+                  <code className="cli-example-cmd">{ex.cmd}</code>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => copy(ex.cmd)} title="Copy example">
+                  {copiedText === ex.cmd ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
