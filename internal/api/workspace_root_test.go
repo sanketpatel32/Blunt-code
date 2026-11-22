@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -152,15 +153,21 @@ func TestWorkspaceListDoesNotWaitOnHangingRoot(t *testing.T) {
 	}
 	release := make(chan struct{})
 	t.Cleanup(func() { close(release) })
-	s.checkRoot = func(string) string { <-release; return rootProblemMissing }
+	var calls atomic.Int32
+	s.checkRoot = func(string) string { calls.Add(1); <-release; return rootProblemMissing }
 	s.rootTimeout = 50 * time.Millisecond
-	started := time.Now()
-	views := listRootViews(t, s, "/api/v1/workspaces")
-	if elapsed := time.Since(started); elapsed > 2*time.Second {
-		t.Fatalf("list waited %s on a hanging root probe", elapsed)
+	for range 3 {
+		started := time.Now()
+		views := listRootViews(t, s, "/api/v1/workspaces")
+		if elapsed := time.Since(started); elapsed > 2*time.Second {
+			t.Fatalf("list waited %s on a hanging root probe", elapsed)
+		}
+		if v := views[work.ID]; v.RootMissing {
+			t.Fatalf("unresolved probe reported missing: %+v", v)
+		}
 	}
-	if v := views[work.ID]; v.RootMissing {
-		t.Fatalf("unresolved probe reported missing: %+v", v)
+	if n := calls.Load(); n != 1 {
+		t.Fatalf("refreshes started %d probes on one hanging root, want 1 shared probe", n)
 	}
 }
 
@@ -184,5 +191,18 @@ func TestCheckWorkspaceRootUnreadable(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chmod(root, 0o755) })
 	if got := checkWorkspaceRoot(root); got != rootProblemUnreadable {
 		t.Fatalf("locked root = %q, want unreadable", got)
+	}
+	// Listable but not searchable: entries can be named but not reached.
+	if err := os.Chmod(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(root, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := checkWorkspaceRoot(root); got != rootProblemUnreadable {
+		t.Fatalf("unsearchable root = %q, want unreadable", got)
 	}
 }

@@ -6,6 +6,8 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"path/filepath"
+	"sync"
 	"time"
 
 	"bluntcode/internal/core"
@@ -25,8 +27,18 @@ const (
 // elapses are reported healthy (unknown), never missing.
 const rootCheckTimeout = 2 * time.Second
 
-// rootCheckConcurrency caps simultaneous root probes for one list page.
-const rootCheckConcurrency = 8
+// rootProber shares one in-flight probe per root across requests, so a
+// folder whose stat hangs pins at most one goroutine however often the
+// workspace list is refreshed.
+type rootProber struct {
+	mu       sync.Mutex
+	inflight map[string]*rootProbe
+}
+
+type rootProbe struct {
+	done    chan struct{}
+	problem string
+}
 
 // checkWorkspaceRoot classifies a workspace root with one stat and a
 // one-entry directory read: missing, not a directory, unreadable, or ""
@@ -46,52 +58,74 @@ func checkWorkspaceRoot(root string) string {
 		return rootProblemUnreadable
 	}
 	defer dir.Close()
-	if _, err := dir.Readdirnames(1); err != nil && !errors.Is(err, io.EOF) {
+	names, err := dir.Readdirnames(1)
+	if err != nil && !errors.Is(err, io.EOF) {
 		return rootProblemUnreadable
+	}
+	// Listing needs read permission but reaching entries needs search
+	// (execute) permission on POSIX; a scan needs both.
+	if len(names) > 0 {
+		if _, err := os.Lstat(filepath.Join(root, names[0])); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return rootProblemUnreadable
+		}
 	}
 	return ""
 }
 
-// rootProblems probes every root concurrently within rootCheckTimeout and
+// rootProblems probes every root concurrently within rootTimeout and
 // returns the problem per index ("" for usable or unresolved roots).
 func (s *Server) rootProblems(roots []string) []string {
 	problems := make([]string, len(roots))
 	if len(roots) == 0 {
 		return problems
 	}
-	type result struct {
-		index   int
-		problem string
-	}
-	results := make(chan result, len(roots))
-	limit := make(chan struct{}, rootCheckConcurrency)
-	// done stops queued probes from starting once the response has moved on;
-	// a probe already blocked in the kernel finishes into the buffered channel.
-	done := make(chan struct{})
-	defer close(done)
-	check := s.checkRoot
+	probes := make([]*rootProbe, len(roots))
 	for i, root := range roots {
-		go func() {
-			select {
-			case limit <- struct{}{}:
-			case <-done:
-				return
-			}
-			defer func() { <-limit }()
-			results <- result{i, check(root)}
-		}()
+		probes[i] = s.probeRoot(root)
 	}
 	timer := time.NewTimer(s.rootTimeout)
 	defer timer.Stop()
-	for range roots {
+	expired := false
+	for i, probe := range probes {
+		if !expired {
+			select {
+			case <-probe.done:
+				problems[i] = probe.problem
+				continue
+			case <-timer.C:
+				expired = true
+			}
+		}
 		select {
-		case r := <-results:
-			problems[r.index] = r.problem
-		case <-timer.C:
-			return problems
+		case <-probe.done:
+			problems[i] = probe.problem
+		default:
 		}
 	}
 	return problems
+}
+
+// probeRoot joins the in-flight probe for root or starts one.
+func (s *Server) probeRoot(root string) *rootProbe {
+	s.probes.mu.Lock()
+	defer s.probes.mu.Unlock()
+	if probe, ok := s.probes.inflight[root]; ok {
+		return probe
+	}
+	if s.probes.inflight == nil {
+		s.probes.inflight = map[string]*rootProbe{}
+	}
+	probe := &rootProbe{done: make(chan struct{})}
+	s.probes.inflight[root] = probe
+	check := s.checkRoot
+	go func() {
+		probe.problem = check(root)
+		s.probes.mu.Lock()
+		delete(s.probes.inflight, root)
+		s.probes.mu.Unlock()
+		close(probe.done)
+	}()
+	return probe
 }
 
 func (s *Server) rootProblem(root string) string {

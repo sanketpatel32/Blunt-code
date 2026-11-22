@@ -60,6 +60,7 @@ type Server struct {
 	// views; tests swap them to simulate missing or hanging folders.
 	checkRoot   func(root string) string
 	rootTimeout time.Duration
+	probes      rootProber
 }
 
 // scanDetail is a scan payload enriched for single-scan views: the analyzer
