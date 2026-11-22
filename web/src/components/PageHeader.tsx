@@ -15,6 +15,12 @@ export interface PageHeaderProps {
   children?: React.ReactNode;
 }
 
+/** Workspace name inside a page title: ellipsizes inside the available width
+ *  instead of wrapping mid-token into a dangling hyphenated fragment. */
+export function TitleName({ children }: { children: React.ReactNode }) {
+  return <span className="page-title-name">{children}</span>;
+}
+
 export function PageHeader({ title, badge, meta, actions, className = '', children }: PageHeaderProps) {
   return (
     <header className={`page-heading page-header ${className}`}>

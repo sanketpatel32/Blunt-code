@@ -1566,6 +1566,17 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   min-width: 0;
 }
 .page-heading h1, .page-header h1 { font-size: var(--text-page-title); }
+/* A workspace name in a title is one inline block: it truncates with an
+   ellipsis inside the title's width rather than wrapping mid-token so the
+   last line is a bare hyphenated stub. */
+.page-title-name {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
 .page-eyebrow {
   margin: var(--space-2xs) 0 0;
   font-size: var(--text-xs);
@@ -5517,9 +5528,10 @@ tbody tr:hover > td { background: color-mix(in oklch, var(--color-accent) 5%, tr
   /* Severity chips in a right-aligned data-label row must wrap under each
      other — nowrap pushes the whole summary out of the card and clips it. */
   .rtable td[data-label] .ws-findings { flex-wrap: wrap; justify-content: flex-end; row-gap: 2px; white-space: normal; }
-  /* A flex location line right-aligned in the card row read as a detached bar;
-     let it wrap to full width under its label instead. */
-  .rtable td[data-label] .search-location { flex-wrap: wrap; justify-content: flex-end; white-space: normal; overflow-wrap: anywhere; }
+  /* A wrapping location right-justified in the card row puts each line flush
+     against the right border while short locations sit against the label —
+     two alignments for the same value. Paths always read from the left. */
+  .rtable td[data-label] .search-location { flex-wrap: wrap; justify-content: flex-start; text-align: left; white-space: normal; overflow-wrap: anywhere; }
   .rtable td.rtable-actions .table-actions, .rtable td.ws-cell-actions .table-actions { justify-content: flex-start; flex-wrap: wrap; }
   .rtable .history-band-row th { padding: var(--space-md) 2px var(--space-xs); background: transparent; border: 0; }
   /* An occurrence sub-row must read as the footer of the card above it, not
