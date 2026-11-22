@@ -274,7 +274,7 @@ func runWorkspaceShow(ctx context.Context, app *cliCore, args []string, stdout, 
 	} else {
 		fmt.Fprintf(stdout, "  Last Scanned:    -\n")
 	}
-	fmt.Fprintf(stdout, "  Total Scans:     %d\n", len(scans))
+	fmt.Fprintf(stdout, "  Total Scans:     %d\n", total)
 	if len(tags) > 0 {
 		fmt.Fprintf(stdout, "  Tags:            %s\n", strings.Join(tags, ", "))
 	}

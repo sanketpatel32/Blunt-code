@@ -171,6 +171,9 @@ func (s *Service) start(ctx context.Context, work core.Workspace, profile string
 		if closing {
 			cancel()
 		}
+		// A slot may have freed while the snapshot and row write ran: pull the
+		// queue head now instead of stranding it until the next finish.
+		s.drainQueue()
 		return scan, nil
 	}
 	s.mu.Lock()
@@ -224,15 +227,19 @@ func (s *Service) drainQueue() {
 		entry := s.queue[0]
 		s.queue = s.queue[1:]
 		if entry.ctx.Err() != nil {
+			// Cancel raced in after the pop: dequeue could not see this entry
+			// any more, so drain finalizes its row itself.
 			s.mu.Unlock()
+			s.finishCancelled(entry.scan.ID)
 			continue
 		}
 		s.active++
 		s.runs.Add(1)
-		runCtx, cancel := context.WithCancel(context.Background())
-		s.cancels[entry.scan.ID] = cancel
 		s.mu.Unlock()
-		go s.run(runCtx, entry.scan, entry.work, entry.files, entry.opts, entry.deselect)
+		// run keeps entry.ctx: the cancels wrapper still in place cancels the
+		// context run actually uses, so a Cancel landing between pop and launch
+		// cannot be lost to a discarded context.
+		go s.run(entry.ctx, entry.scan, entry.work, entry.files, entry.opts, entry.deselect)
 		return
 	}
 }
