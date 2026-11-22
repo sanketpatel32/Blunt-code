@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import type { Notice } from '../lib/notice';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 
@@ -47,6 +48,22 @@ export function useToasts() {
   return { toasts, notify, dismiss };
 }
 
+/**
+ * The topmost open modal dialog, if any. showModal() makes everything outside it
+ * inert — a toast rendered there could not be read, clicked, or dismissed.
+ */
+function useTopModalDialog(): HTMLDialogElement | null {
+  const [dialog, setDialog] = useState<HTMLDialogElement | null>(null);
+  useEffect(() => {
+    const update = () => setDialog([...document.querySelectorAll<HTMLDialogElement>('dialog.modal-dialog[open]')].at(-1) ?? null);
+    update();
+    const observer = new MutationObserver(update);
+    observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['open'] });
+    return () => observer.disconnect();
+  }, []);
+  return dialog;
+}
+
 export function ToastStack({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: number) => void }) {
   const [closingIds, setClosingIds] = useState<number[]>([]);
   const exitTimers = useRef(new Set<number>());
@@ -77,9 +94,12 @@ export function ToastStack({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: 
   // Loop 138 · role=status already implies aria-live=polite, and the region had
   // no name, so a screen reader announced bare text with no context. The label
   // gives it one; aria-atomic=false keeps each toast a separate announcement.
-  return <div className="toast-stack" role="status" aria-live="polite" aria-atomic="false" aria-label="Notifications">
+  const modal = useTopModalDialog();
+  const stack = <div className="toast-stack" role="status" aria-live="polite" aria-atomic="false" aria-label="Notifications">
     {toasts.map((toast, idx) => <ToastItem key={toast.id} toast={toast} closing={closingIds.includes(toast.id)} onClose={closeToast} index={idx} reduced={reduced} />)}
   </div>;
+  // While a modal is open the stack lives inside it, so its toasts stay reachable.
+  return modal ? createPortal(stack, modal) : stack;
 }
 
 function ToastItem({ toast, closing, onClose, index, reduced }: { toast: Toast; closing: boolean; onClose: (id: number) => void; index: number; reduced: boolean }) {

@@ -137,4 +137,18 @@ describe('toast actions and lifetime bar', () => {
     const bar = host.querySelector<HTMLElement>('.toast-lifetime')!;
     expect(bar.style.animationDuration).toBe('12000ms');
   });
+
+  it('moves into an open modal dialog so its toasts are not inert behind it', async () => {
+    const host = await render();
+    const dialog = document.createElement('dialog');
+    dialog.className = 'modal-dialog';
+    document.body.append(dialog);
+    await act(async () => { dialog.showModal(); await Promise.resolve(); });
+    await act(async () => { notify({ kind: 'error', text: 'Could not suppress this finding.' }); });
+    expect(dialog.querySelector('.toast-stack [role="alert"]')?.textContent).toContain('Could not suppress this finding.');
+    expect(host.querySelector('.toast-stack')).toBeNull();
+    await act(async () => { dialog.close(); await Promise.resolve(); await Promise.resolve(); });
+    expect(dialog.querySelector('.toast-stack')).toBeNull();
+    expect(host.querySelector('.toast-stack')?.textContent).toContain('Could not suppress this finding.');
+  });
 });
