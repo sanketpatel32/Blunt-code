@@ -292,10 +292,11 @@ func TestPlanArgumentsColdAndWarmCache(t *testing.T) {
 	adapter := New("trivy.exe", "0.74.0")
 	adapter.CacheDir = t.TempDir()
 	req := analyzers.ScanRequest{
-		WorkspaceRoot: `C:\ws`,
-		Profile:       analyzers.ProfileDeep,
-		Files:         []string{`C:\ws\Dockerfile`, `C:\ws\package-lock.json`},
-		Languages:     []analyzers.Language{analyzers.LanguageDockerfile, analyzers.LanguageJSON},
+		TrustRepoConfig: true, // legacy native-discovery command line
+		WorkspaceRoot:   `C:\ws`,
+		Profile:         analyzers.ProfileDeep,
+		Files:           []string{`C:\ws\Dockerfile`, `C:\ws\package-lock.json`},
+		Languages:       []analyzers.Language{analyzers.LanguageDockerfile, analyzers.LanguageJSON},
 	}
 
 	// Cold cache: trivy must download its DB, so --skip-db-update must not

@@ -133,11 +133,11 @@ func TestReactDomainConfigContainsReactKnob(t *testing.T) {
 }
 
 func TestWriteInjectedConfigIsStableAndReadable(t *testing.T) {
-	first, ok := writeInjectedConfig()
+	first, ok := writeInjectedConfig(reactDomainConfig())
 	if !ok {
 		t.Fatal("writeInjectedConfig failed")
 	}
-	second, ok := writeInjectedConfig()
+	second, ok := writeInjectedConfig(reactDomainConfig())
 	if !ok || first != second {
 		t.Fatalf("writeInjectedConfig is not stable: %q vs %q (ok=%v)", first, second, ok)
 	}
@@ -194,7 +194,7 @@ func TestPlanPlainTypeScriptWorkspaceKeepsPreReactCommandLine(t *testing.T) {
 	writeFile(t, filepath.Join(root, "package.json"), `{"name":"plain","dependencies":{"typescript":"5.6.0"}}`)
 	main := filepath.Join(root, "src", "main.ts")
 	writeFile(t, main, "export const answer = 42;\n")
-	plan, err := New("biome.exe", "test").Plan(context.Background(), analyzers.ScanRequest{WorkspaceRoot: root, Files: []string{main}, Languages: []analyzers.Language{analyzers.LanguageTypeScript}})
+	plan, err := New("biome.exe", "test").Plan(context.Background(), analyzers.ScanRequest{TrustRepoConfig: true, WorkspaceRoot: root, Files: []string{main}, Languages: []analyzers.Language{analyzers.LanguageTypeScript}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -216,7 +216,7 @@ func TestPlanKeepsWorkspaceOwnedBiomeConfig(t *testing.T) {
 	writeFile(t, filepath.Join(root, "biome.json"), `{"linter":{"enabled":true}}`)
 	app := filepath.Join(root, "src", "App.tsx")
 	writeFile(t, app, "import { useState } from \"react\";\n")
-	plan, err := New("biome.exe", "test").Plan(context.Background(), analyzers.ScanRequest{WorkspaceRoot: root, Files: []string{app}, Languages: []analyzers.Language{analyzers.LanguageTypeScript}})
+	plan, err := New("biome.exe", "test").Plan(context.Background(), analyzers.ScanRequest{TrustRepoConfig: true, WorkspaceRoot: root, Files: []string{app}, Languages: []analyzers.Language{analyzers.LanguageTypeScript}})
 	if err != nil {
 		t.Fatal(err)
 	}

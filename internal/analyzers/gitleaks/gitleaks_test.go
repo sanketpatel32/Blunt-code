@@ -64,10 +64,11 @@ func TestNormalizeRealReport(t *testing.T) {
 func TestPlanScansWorkspaceRootWithJSONReport(t *testing.T) {
 	adapter := New(`C:\BluntCode\tools\gitleaks\8.30.1\gitleaks.exe`, "8.30.1")
 	req := analyzers.ScanRequest{
-		WorkspaceRoot: `C:\source`,
-		ScanID:        "0a1b-2c3d",
-		Files:         []string{`C:\source\config.py`, `C:\source\src\app.ts`},
-		Languages:     []analyzers.Language{analyzers.LanguagePython, analyzers.LanguageTypeScript},
+		TrustRepoConfig: true, // legacy native-discovery command line
+		WorkspaceRoot:   `C:\source`,
+		ScanID:          "0a1b-2c3d",
+		Files:           []string{`C:\source\config.py`, `C:\source\src\app.ts`},
+		Languages:       []analyzers.Language{analyzers.LanguagePython, analyzers.LanguageTypeScript},
 	}
 	plan, err := adapter.Plan(context.Background(), req)
 	if err != nil {

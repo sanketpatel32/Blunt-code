@@ -1,9 +1,10 @@
 // Package gitleaks adapts the external gitleaks secrets scanner
 // (https://github.com/gitleaks/gitleaks). Unlike the built-in secrets
-// detector it ships no rules of its own: gitleaks' default ruleset — plus any
-// .gitleaks.toml config and .gitleaksignore exceptions the workspace itself
-// declares — does the detection, and this adapter only plans the run and
-// normalizes the JSON report.
+// detector it ships no rules of its own: gitleaks' default ruleset does the
+// detection, and this adapter only plans the run and normalizes the JSON
+// report. The workspace's own .gitleaks.toml and .gitleaksignore are ignored
+// unless the workspace explicitly trusts in-repo analyzer config (see
+// analyzers.ScanRequest.TrustRepoConfig and ignore.go).
 package gitleaks
 
 import (
@@ -28,7 +29,14 @@ const remediation = "Rotate the exposed credential, remove it from the source an
 const (
 	planKeyReportPath = "report_path"
 	planKeySource     = "source"
+	planKeyWorkDir    = "work_dir"
+	planKeyTrustRepo  = "trust_repo_config"
 )
+
+// pinnedConfig is the Blunt Code-owned gitleaks config used when the
+// workspace does not trust its in-repo analyzer config: gitleaks' default
+// ruleset with no allowlist the scanned repository can extend.
+const pinnedConfig = "title = \"Blunt Code pinned gitleaks config\"\n\n[extend]\nuseDefault = true\n"
 
 type Adapter struct {
 	Executable string
@@ -67,10 +75,9 @@ func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.
 		return analyzers.AnalyzerPlan{}, fmt.Errorf("gitleaks-secrets does not apply")
 	}
 	// gitleaks has no file allow-list for directory scans: --source takes the
-	// workspace root and the scan covers everything under it, honoring the
-	// workspace's own .gitleaks.toml and .gitleaksignore. Allow-listing the
-	// discovery selection here would silently drop exactly the unclassified
-	// files credentials love to hide in.
+	// workspace root and the scan covers everything under it. Allow-listing
+	// the discovery selection here would silently drop exactly the
+	// unclassified files credentials love to hide in.
 	if req.WorkspaceRoot == "" {
 		return analyzers.AnalyzerPlan{}, fmt.Errorf("gitleaks requires a workspace root to scan")
 	}
@@ -85,11 +92,31 @@ func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.
 		"--redact=0", // full values reach Normalize for preview/length only; they never reach findings
 		"--no-banner",
 	}
+	metadata := map[string]any{planKeyReportPath: reportPath, planKeySource: req.WorkspaceRoot, planKeyTrustRepo: req.TrustRepoConfig}
+	dir := req.WorkspaceRoot
+	if !req.TrustRepoConfig {
+		// gitleaks loads <source>/.gitleaks.toml unless --config is given and
+		// .gitleaksignore from both the --gitleaks-ignore-path (default: the
+		// working directory) and <source>. Pin the config, run from an empty
+		// Blunt Code-owned directory, and let Run neutralize the <source>
+		// ignore file it cannot be told to skip.
+		configPath, err := analyzers.PinnedConfigFile("bluntcode-gitleaks", ".toml", []byte(pinnedConfig))
+		if err != nil {
+			return analyzers.AnalyzerPlan{}, err
+		}
+		workDir, err := analyzers.IsolatedWorkDir("gitleaks")
+		if err != nil {
+			return analyzers.AnalyzerPlan{}, err
+		}
+		args = append(args, "--config", configPath)
+		dir = workDir
+		metadata[planKeyWorkDir] = workDir
+	}
 	return analyzers.AnalyzerPlan{
 		AnalyzerID: ID,
 		Version:    a.Version,
-		Commands:   []analyzers.ProcessSpec{{Executable: a.Executable, Args: args, Dir: req.WorkspaceRoot}},
-		Metadata:   map[string]any{planKeyReportPath: reportPath, planKeySource: req.WorkspaceRoot},
+		Commands:   []analyzers.ProcessSpec{{Executable: a.Executable, Args: args, Dir: dir}},
+		Metadata:   metadata,
 	}, nil
 }
 
@@ -125,6 +152,9 @@ func (a *Adapter) Run(ctx context.Context, plan analyzers.AnalyzerPlan, emit ana
 	// The report is scratch data that can hold full secret values (--redact=0);
 	// it must not outlive the run, even when the process failed.
 	defer os.Remove(reportPath)
+	if workDir, _ := plan.Metadata[planKeyWorkDir].(string); workDir != "" {
+		defer os.RemoveAll(workDir)
+	}
 	result, err := analyzers.RunDirect(ctx, plan, emit)
 	if err != nil {
 		return result, err
@@ -140,6 +170,9 @@ func (a *Adapter) Run(ctx context.Context, plan analyzers.AnalyzerPlan, emit ana
 		return result, fmt.Errorf("read gitleaks report: %w", readErr)
 	}
 	result.Stdout = report // nil when the file is absent; Normalize reads that as no findings
+	if trusted, _ := plan.Metadata[planKeyTrustRepo].(bool); !trusted {
+		return a.rescanIgnoredFiles(ctx, plan, emit, result)
+	}
 	return result, nil
 }
 
@@ -241,8 +274,12 @@ func redactedPreview(secret string) string {
 }
 
 func relative(p analyzers.AnalyzerPlan, path string) string {
-	if len(p.Commands) > 0 {
-		if r, err := filepath.Rel(p.Commands[0].Dir, path); err == nil {
+	root, _ := p.Metadata[planKeySource].(string)
+	if root == "" && len(p.Commands) > 0 {
+		root = p.Commands[0].Dir
+	}
+	if root != "" {
+		if r, err := filepath.Rel(root, path); err == nil {
 			return filepath.ToSlash(r)
 		}
 	}

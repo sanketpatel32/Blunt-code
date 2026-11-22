@@ -18,8 +18,10 @@ const ID = "container-trivy"
 // Plan metadata keys. trivy writes its report to --output instead of stdout,
 // so Run needs the reserved path to pull the JSON back into the result.
 const (
-	planKeyOutput = "output_path"
-	planKeyWarmDB = "db_cache_warm"
+	planKeyOutput  = "output_path"
+	planKeyWarmDB  = "db_cache_warm"
+	planKeyRoot    = "workspace_root"
+	planKeyWorkDir = "work_dir"
 )
 
 // statusFail is the only misconfiguration status that becomes a finding;
@@ -121,11 +123,33 @@ func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.
 		// exist locally.
 		args = append(args, "--skip-db-update")
 	}
+	metadata := map[string]any{planKeyOutput: outputPath, planKeyWarmDB: warm, "offline": a.Offline, "dependency_inputs": len(req.DependencyInputs), planKeyRoot: req.WorkspaceRoot, "trust_repo_config": req.TrustRepoConfig}
+	dir, target := req.WorkspaceRoot, "."
+	if !req.TrustRepoConfig {
+		// trivy loads trivy.yaml, .trivyignore and trivy-secret.yaml from the
+		// working directory; those can skip dirs, ignore findings and disable
+		// secret rules. Run from an empty Blunt Code-owned directory with
+		// explicit empty config/ignore files (both must exist, or trivy exits
+		// fatally) and a secret-config path that does not exist, which makes
+		// trivy fall back to its built-in secret rules.
+		workDir, err := pinnedTrivyWorkDir()
+		if err != nil {
+			os.Remove(outputPath)
+			return analyzers.AnalyzerPlan{}, err
+		}
+		args = append(args,
+			"--config", filepath.Join(workDir, "trivy.yaml"),
+			"--ignorefile", filepath.Join(workDir, ".trivyignore"),
+			"--secret-config", filepath.Join(workDir, "trivy-secret.yaml"),
+		)
+		dir, target = workDir, req.WorkspaceRoot
+		metadata[planKeyWorkDir] = workDir
+	}
 	// trivy fs takes a directory, never a shell-concatenated file list; the
 	// command line stays short no matter how large the selection is.
-	args = append(args, ".")
+	args = append(args, target)
 
-	command := analyzers.ProcessSpec{Executable: a.Executable, Args: args, Dir: req.WorkspaceRoot}
+	command := analyzers.ProcessSpec{Executable: a.Executable, Args: args, Dir: dir}
 	if a.CacheDir != "" {
 		command.Env = map[string]string{"TRIVY_CACHE_DIR": a.CacheDir}
 	}
@@ -133,8 +157,24 @@ func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.
 		AnalyzerID: ID,
 		Version:    a.Version,
 		Commands:   []analyzers.ProcessSpec{command},
-		Metadata:   map[string]any{planKeyOutput: outputPath, planKeyWarmDB: warm, "offline": a.Offline, "dependency_inputs": len(req.DependencyInputs)},
+		Metadata:   metadata,
 	}, nil
+}
+
+// pinnedTrivyWorkDir creates the isolated working directory with the empty
+// Blunt Code-owned trivy.yaml and .trivyignore the pinned command names.
+func pinnedTrivyWorkDir() (string, error) {
+	workDir, err := analyzers.IsolatedWorkDir("trivy")
+	if err != nil {
+		return "", err
+	}
+	for _, name := range []string{"trivy.yaml", ".trivyignore"} {
+		if err := os.WriteFile(filepath.Join(workDir, name), nil, 0o600); err != nil {
+			os.RemoveAll(workDir)
+			return "", fmt.Errorf("write pinned trivy config: %w", err)
+		}
+	}
+	return workDir, nil
 }
 
 // dbCacheWarm reports whether the vulnerability DB is already present in the
@@ -170,6 +210,9 @@ func (a *Adapter) cacheDir() string {
 }
 
 func (a *Adapter) Run(ctx context.Context, p analyzers.AnalyzerPlan, emit analyzers.EventEmitter) (analyzers.AnalyzerResult, error) {
+	if workDir, _ := p.Metadata[planKeyWorkDir].(string); workDir != "" {
+		defer os.RemoveAll(workDir)
+	}
 	result, err := analyzers.RunDirect(ctx, p, emit)
 	// The report lives in the reserved --output file, so pull it into Stdout
 	// (the channel Normalize reads) and remove the file whether or not the
@@ -353,13 +396,17 @@ func severity(s string) (analyzers.Severity, bool) {
 // relative maps a trivy Target to a workspace-relative slash path. Targets
 // are relative to the scanned directory already ("Dockerfile",
 // "package-lock.json", "." for a terraform root module), so this only has to
-// clean separators and fold any absolute target back under the plan's Dir.
+// clean separators and fold any absolute target back under the workspace.
 func relative(p analyzers.AnalyzerPlan, path string) string {
 	if path == "" {
 		return "."
 	}
-	if filepath.IsAbs(path) && len(p.Commands) > 0 {
-		if r, err := filepath.Rel(p.Commands[0].Dir, path); err == nil {
+	root, _ := p.Metadata[planKeyRoot].(string)
+	if root == "" && len(p.Commands) > 0 {
+		root = p.Commands[0].Dir
+	}
+	if filepath.IsAbs(path) && root != "" {
+		if r, err := filepath.Rel(root, path); err == nil {
 			return strings.ReplaceAll(r, `\`, "/")
 		}
 	}

@@ -229,13 +229,19 @@ func reactDomainConfig() []byte {
 	return append(data, '\n')
 }
 
+// defaultConfig is the Blunt Code-owned biome.json for non-React workspaces
+// that do not trust their in-repo analyzer config: biome's default
+// recommended rules with nothing the scanned repository can switch off.
+func defaultConfig() []byte {
+	return []byte("{\n  \"linter\": {\n    \"enabled\": true\n  }\n}\n")
+}
+
 // writeInjectedConfig stores the rendered config under a content-hashed name
 // in the system temp directory and returns its path. Identical content always
 // maps to the same path, so scans share one file instead of piling configs up.
 // Any write failure returns ok=false; the caller then falls back to today's
 // config-less run rather than failing the scan.
-func writeInjectedConfig() (string, bool) {
-	data := reactDomainConfig()
+func writeInjectedConfig(data []byte) (string, bool) {
 	sum := sha256.Sum256(data)
 	path := filepath.Join(os.TempDir(), fmt.Sprintf("bluntcode-biome-%s.json", hex.EncodeToString(sum[:8])))
 	if existing, err := os.ReadFile(path); err == nil && bytes.Equal(existing, data) {

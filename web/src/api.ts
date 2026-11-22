@@ -75,7 +75,7 @@ export const api = {
   },
   deleteWorkspace: (id: string) => request<void>(`/workspaces/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   /** Rename a workspace and/or change its default scan profile (PATCH). */
-  updateWorkspace: (id: string, patch: { name?: string; default_profile?: string }) => request<Workspace>(`/workspaces/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  updateWorkspace: (id: string, patch: { name?: string; default_profile?: string; trust_repo_analyzer_config?: boolean }) => request<Workspace>(`/workspaces/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   discover: (id: string) => request<Workspace>(`/workspaces/${encodeURIComponent(id)}/discover`, { method: 'POST' }),
   tree: async (id: string, path?: string) => {
     const query = path ? `?path=${encodeURIComponent(path)}` : '';

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"bluntcode/internal/analyzers"
@@ -64,10 +65,10 @@ func TestConfigDigestCanonicalizesOrder(t *testing.T) {
 	shuffled := []core.WorkspaceRule{rules[1], rules[0]}
 	exclusions := []string{"one", "two"}
 	shuffledExclusions := []string{"two", "one"}
-	if configDigest(rules, exclusions, nil) != configDigest(shuffled, shuffledExclusions, nil) {
+	if configDigest(rules, exclusions, nil, false, "") != configDigest(shuffled, shuffledExclusions, nil, false, "") {
 		t.Fatal("semantically identical configurations must digest equally")
 	}
-	if configDigest(rules, exclusions, nil) == configDigest(rules, append(exclusions, "three"), nil) {
+	if configDigest(rules, exclusions, nil, false, "") == configDigest(rules, append(exclusions, "three"), nil, false, "") {
 		t.Fatal("an added exclusion must change the config digest")
 	}
 }
@@ -138,5 +139,25 @@ func TestDriftDuringScanRelabels(t *testing.T) {
 	}
 	if final.ErrorSummary == "" {
 		t.Fatal("drifted scan carries no note")
+	}
+}
+
+func TestConfigDigestTracksRepoAnalyzerConfigTrust(t *testing.T) {
+	untrusted := configDigest(nil, []string{"a"}, nil, false, "")
+	if untrusted != configDigest(nil, []string{"a"}, nil, false, "") {
+		t.Fatal("untrusted digest must be stable")
+	}
+	trusted := configDigest(nil, []string{"a"}, nil, true, "x")
+	if trusted == untrusted || trusted == configDigest(nil, []string{"a"}, nil, true, "y") {
+		t.Fatal("trusting repo config, and its contents, must change the config digest")
+	}
+}
+
+func TestRepoAnalyzerConfigsListsDiscoveredConfigFiles(t *testing.T) {
+	files := []core.FileEntry{{RelativePath: "main.go"}, {RelativePath: ".gitleaksignore"}, {RelativePath: "svc/.checkov.yaml"}, {RelativePath: "trivy.yaml"}}
+	got := repoAnalyzerConfigs("", files)
+	want := []string{".gitleaksignore", "svc/.checkov.yaml", "trivy.yaml"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("configs = %v, want %v", got, want)
 	}
 }

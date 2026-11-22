@@ -50,9 +50,10 @@ func TestCheckReportsReadiness(t *testing.T) {
 func TestPlanIsDeepOnly(t *testing.T) {
 	adapter := New(`C:\BluntCode\tools\osv-scanner\2.5.1\osv-scanner.exe`, "2.5.1")
 	base := analyzers.ScanRequest{
-		WorkspaceRoot: `C:\ws`,
-		Files:         []string{`C:\ws\package-lock.json`},
-		Languages:     []analyzers.Language{analyzers.LanguageJavaScript},
+		TrustRepoConfig: true, // legacy native-discovery command line
+		WorkspaceRoot:   `C:\ws`,
+		Files:           []string{`C:\ws\package-lock.json`},
+		Languages:       []analyzers.Language{analyzers.LanguageJavaScript},
 	}
 	// The empty profile behaves exactly like standard everywhere, so it must
 	// skip too. Quick never reaches the adapter (orchestration gates it), but
@@ -111,9 +112,10 @@ func TestPlanOfflineModeAndManagedCache(t *testing.T) {
 	adapter.Offline = true
 	adapter.DBCacheDir = cache
 	plan, err := adapter.Plan(context.Background(), analyzers.ScanRequest{
-		WorkspaceRoot: `C:\ws`,
-		Languages:     []analyzers.Language{analyzers.LanguagePython},
-		Profile:       analyzers.ProfileDeep,
+		TrustRepoConfig: true, // legacy native-discovery command line
+		WorkspaceRoot:   `C:\ws`,
+		Languages:       []analyzers.Language{analyzers.LanguagePython},
+		Profile:         analyzers.ProfileDeep,
 	})
 	if err != nil {
 		t.Fatal(err)

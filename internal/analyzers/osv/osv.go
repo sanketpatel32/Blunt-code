@@ -139,6 +139,17 @@ func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.
 	if a.Offline {
 		args = append(args, "--offline", "--offline-vulnerabilities")
 	}
+	if !req.TrustRepoConfig {
+		// Without --config, osv-scanner loads the osv-scanner.toml next to
+		// each lockfile, and its [[IgnoredVulns]] / [[PackageOverrides]]
+		// entries suppress findings. An explicit config replaces that
+		// per-directory lookup for the whole scan.
+		configPath, err := analyzers.PinnedConfigFile("bluntcode-osv-scanner", ".toml", []byte(pinnedConfig))
+		if err != nil {
+			return analyzers.AnalyzerPlan{}, err
+		}
+		args = append(args, "--config", configPath)
+	}
 	args = append(args, ".")
 	env := map[string]string(nil)
 	if a.DBCacheDir != "" {
@@ -153,13 +164,18 @@ func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.
 			Dir:        req.WorkspaceRoot, // "." above resolves against the workspace
 			Env:        env,
 		}},
-		Metadata: map[string]any{"offline": a.Offline, "dependency_inputs": len(req.DependencyInputs)},
+		Metadata: map[string]any{"offline": a.Offline, "dependency_inputs": len(req.DependencyInputs), "trust_repo_config": req.TrustRepoConfig},
 	}, nil
 }
 
 // Run executes the single planned command. Command-less (non-deep) plans are
 // the documented no-op: the executor then persists state "succeeded" with no
 // findings and emits analyzer.completed with findings: 0.
+// pinnedConfig is the Blunt Code-owned osv-scanner config used when the
+// workspace does not trust its in-repo analyzer config: no ignored
+// vulnerabilities and no package overrides.
+const pinnedConfig = "# Blunt Code pinned osv-scanner config: nothing is ignored or overridden.\n"
+
 func (a *Adapter) Run(ctx context.Context, p analyzers.AnalyzerPlan, emit analyzers.EventEmitter) (analyzers.AnalyzerResult, error) {
 	if len(p.Commands) == 0 {
 		return analyzers.AnalyzerResult{Plan: p}, nil

@@ -42,16 +42,40 @@ func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.
 	}
 	prefix := []string{"lint", "--reporter=json", "--no-errors-on-unmatched"}
 	// React workspaces get the react domain injected via a generated biome
-	// config (see react.go); every other workspace keeps exactly the command
-	// line this adapter produced before, so non-React findings and their
-	// fingerprints cannot shift. No logger is wired into planning, so the
+	// config (see react.go). No logger is wired into planning, so the
 	// detection reason travels in the plan metadata instead of a log line.
 	var metadata map[string]any
-	if d := detectReact(req.WorkspaceRoot, req.Files); d.Detected && !hasWorkspaceBiomeConfig(req.WorkspaceRoot) {
-		if configPath, ok := writeInjectedConfig(); ok {
-			prefix = append(prefix, "--config-path="+configPath)
-			metadata = map[string]any{"react_domain": d.Reason}
+	d := detectReact(req.WorkspaceRoot, req.Files)
+	if req.TrustRepoConfig {
+		// Trusted workspaces keep biome's own discovery: a workspace
+		// biome.json wins, and only config-less React workspaces get the
+		// injected react domain.
+		if d.Detected && !hasWorkspaceBiomeConfig(req.WorkspaceRoot) {
+			if configPath, ok := writeInjectedConfig(reactDomainConfig()); ok {
+				prefix = append(prefix, "--config-path="+configPath)
+				metadata = map[string]any{"react_domain": d.Reason}
+			}
 		}
+	} else {
+		// biome otherwise loads biome.json/biome.jsonc from the workspace
+		// (and nested ones), which can disable the linter, rules or paths.
+		// An explicit --config-path replaces all of them; verified against
+		// biome 2.5.6, including nested "root": false configs.
+		metadata = map[string]any{"pinned_config": true}
+		config := defaultConfig()
+		if d.Detected {
+			config = reactDomainConfig()
+			metadata["react_domain"] = d.Reason
+		}
+		// The pinned file lives in its own Blunt Code-owned directory: biome
+		// treats the --config-path directory as the project root, and a
+		// workspace nested under it (e.g. under the temp dir) would otherwise
+		// fail with "nested root configuration".
+		configPath, err := analyzers.PinnedConfigFile("bluntcode-biome", ".json", config)
+		if err != nil {
+			return analyzers.AnalyzerPlan{}, err
+		}
+		prefix = append(prefix, "--config-path="+configPath)
 	}
 	commands := make([]analyzers.ProcessSpec, 0)
 	for _, args := range analyzers.FileArgumentBatches(prefix, webFiles) {

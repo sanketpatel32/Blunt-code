@@ -262,6 +262,11 @@ type ScanRequest struct {
 	// workspace whose only dependency signal is package-lock.json has no
 	// routable language file at all.
 	DependencyInputs []string
+	// TrustRepoConfig is the per-workspace trust decision for analyzer config
+	// files inside the scanned tree (see repoconfig.go). False — the default —
+	// pins every external analyzer to Blunt Code-owned configuration so the
+	// repository under audit cannot disable rules or exclude paths.
+	TrustRepoConfig bool
 }
 
 type ProcessSpec struct {

@@ -1211,3 +1211,34 @@ func TestVacuum(t *testing.T) {
 		t.Fatalf("Vacuum failed: %v", err)
 	}
 }
+
+func TestWorkspaceTrustRepoAnalyzerConfigRoundTripsAndDefaultsOff(t *testing.T) {
+	db, err := Open(context.Background(), filepath.Join(t.TempDir(), "bluntcode.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	work, err := db.CreateWorkspace(context.Background(), core.Workspace{Name: "Sample", RootPath: "C:/trust"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := db.Workspace(context.Background(), work.ID); got.TrustRepoAnalyzerConfig {
+		t.Fatal("new workspaces must not trust in-repo analyzer config")
+	}
+	if _, err := db.SQL.Exec(`UPDATE workspaces SET settings_json=? WHERE id=?`, `{"future":1}`, work.ID); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := db.Workspace(context.Background(), work.ID)
+	got.TrustRepoAnalyzerConfig = true
+	if updated, err := db.UpdateWorkspace(context.Background(), got); err != nil || !updated.TrustRepoAnalyzerConfig {
+		t.Fatalf("updated = %#v, %v", updated, err)
+	}
+	list, err := db.Workspaces(context.Background())
+	if err != nil || len(list) != 1 || !list[0].TrustRepoAnalyzerConfig || !strings.Contains(list[0].SettingsJSON, `"future":1`) {
+		t.Fatalf("list = %#v, %v", list, err)
+	}
+	list[0].TrustRepoAnalyzerConfig = false
+	if updated, err := db.UpdateWorkspace(context.Background(), list[0]); err != nil || updated.TrustRepoAnalyzerConfig {
+		t.Fatalf("revoked = %#v, %v", updated, err)
+	}
+}

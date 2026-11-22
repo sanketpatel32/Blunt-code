@@ -47,7 +47,7 @@ func (d *DB) CreateWorkspace(ctx context.Context, workspace core.Workspace) (cor
 	}
 	now := time.Now().UTC()
 	workspace.CreatedAt, workspace.UpdatedAt = now, now
-	_, err := d.SQL.ExecContext(ctx, `INSERT INTO workspaces (id,name,root_path,created_at,updated_at,default_profile,settings_json) VALUES (?,?,?,?,?,?,?)`, workspace.ID, workspace.Name, workspace.RootPath, dbTime(now), dbTime(now), workspace.DefaultProfile, "{}")
+	_, err := d.SQL.ExecContext(ctx, `INSERT INTO workspaces (id,name,root_path,created_at,updated_at,default_profile,settings_json) VALUES (?,?,?,?,?,?,?)`, workspace.ID, workspace.Name, workspace.RootPath, dbTime(now), dbTime(now), workspace.DefaultProfile, mergedWorkspaceSettings(core.Workspace{SettingsJSON: "{}", TrustRepoAnalyzerConfig: workspace.TrustRepoAnalyzerConfig}))
 	if err != nil {
 		return core.Workspace{}, fmt.Errorf("create workspace: %w", err)
 	}
@@ -73,7 +73,45 @@ func scanWorkspace(row *sql.Row) (core.Workspace, error) {
 		return w, parseErr
 	}
 	w.LastScanAt, parseErr = parseNullableTime(scanned)
+	applyWorkspaceSettings(&w)
 	return w, parseErr
+}
+
+// workspaceSettingTrustRepoAnalyzerConfig is the settings_json key for
+// core.Workspace.TrustRepoAnalyzerConfig.
+const workspaceSettingTrustRepoAnalyzerConfig = "trust_repo_analyzer_config"
+
+// applyWorkspaceSettings decodes the typed settings carried in settings_json.
+// Malformed JSON leaves every setting at its safe default.
+func applyWorkspaceSettings(w *core.Workspace) {
+	var settings map[string]json.RawMessage
+	if json.Unmarshal([]byte(w.SettingsJSON), &settings) != nil {
+		return
+	}
+	var trust bool
+	if raw, ok := settings[workspaceSettingTrustRepoAnalyzerConfig]; ok && json.Unmarshal(raw, &trust) == nil {
+		w.TrustRepoAnalyzerConfig = trust
+	}
+}
+
+// mergedWorkspaceSettings writes the typed settings back into settings_json,
+// preserving any keys this build does not know about.
+func mergedWorkspaceSettings(w core.Workspace) string {
+	settings := map[string]json.RawMessage{}
+	_ = json.Unmarshal([]byte(w.SettingsJSON), &settings)
+	if settings == nil {
+		settings = map[string]json.RawMessage{}
+	}
+	if w.TrustRepoAnalyzerConfig {
+		settings[workspaceSettingTrustRepoAnalyzerConfig] = json.RawMessage("true")
+	} else {
+		delete(settings, workspaceSettingTrustRepoAnalyzerConfig)
+	}
+	data, err := json.Marshal(settings)
+	if err != nil {
+		return "{}"
+	}
+	return string(data)
 }
 
 const workspaceFields = `id,name,root_path,created_at,updated_at,last_opened_at,last_scan_at,default_profile,settings_json`
@@ -102,6 +140,7 @@ func (d *DB) Workspaces(ctx context.Context) ([]core.Workspace, error) {
 		w.UpdatedAt, _ = time.Parse(time.RFC3339Nano, updated)
 		w.LastOpenedAt, _ = parseNullableTime(opened)
 		w.LastScanAt, _ = parseNullableTime(scanned)
+		applyWorkspaceSettings(&w)
 		result = append(result, w)
 	}
 	return result, rows.Err()
@@ -228,6 +267,7 @@ func (d *DB) WorkspacesPage(ctx context.Context, page, pageSize int, filter Work
 		w.UpdatedAt, _ = time.Parse(time.RFC3339Nano, updated)
 		w.LastOpenedAt, _ = parseNullableTime(opened)
 		w.LastScanAt, _ = parseNullableTime(scanned)
+		applyWorkspaceSettings(&w)
 		result = append(result, w)
 	}
 	return result, total, rows.Err()
@@ -243,7 +283,7 @@ func workspaceFieldsW() string {
 }
 func (d *DB) UpdateWorkspace(ctx context.Context, w core.Workspace) (core.Workspace, error) {
 	w.UpdatedAt = time.Now().UTC()
-	result, err := d.SQL.ExecContext(ctx, `UPDATE workspaces SET name=?, updated_at=?, default_profile=? WHERE id=?`, w.Name, dbTime(w.UpdatedAt), w.DefaultProfile, w.ID)
+	result, err := d.SQL.ExecContext(ctx, `UPDATE workspaces SET name=?, updated_at=?, default_profile=?, settings_json=? WHERE id=?`, w.Name, dbTime(w.UpdatedAt), w.DefaultProfile, mergedWorkspaceSettings(w), w.ID)
 	if err != nil {
 		return core.Workspace{}, err
 	}
