@@ -30,6 +30,31 @@ func demoSeedAllowed(r *http.Request) bool {
 	return true
 }
 
+// unseedDemo removes every workspace tagged demo-ui — seeded junk used to
+// share the DB permanently with real workspaces, and its temp-dir roots decay
+// into "folder missing" rows after a reboot.
+func (s *Server) unseedDemo(w http.ResponseWriter, r *http.Request) {
+	if !demoSeedAllowed(r) {
+		fail(w, 403, "DEMO_SEED_DISABLED", "Set BLUNTCODE_DEMO_SEED=1 to manage demo data.")
+		return
+	}
+	ids, err := s.db.WorkspaceIDsWithTag(r.Context(), "demo-ui")
+	if err != nil {
+		fail(w, 500, "DATABASE_ERROR", "Could not list demo workspaces.")
+		return
+	}
+	removed := 0
+	for _, id := range ids {
+		if err := s.db.DeleteWorkspace(r.Context(), id); err != nil {
+			s.log.Warn("demo purge: delete failed", "workspace", id, "error", err)
+			continue
+		}
+		s.cache.invalidate(id)
+		removed++
+	}
+	writeJSON(w, 200, map[string]any{"workspaces": len(ids), "removed": removed})
+}
+
 // seedDemo inserts clearly tagged synthetic workspaces and scans for UI / harness testing.
 // Opt-in only: BLUNTCODE_DEMO_SEED=1 (and optional BLUNTCODE_DEMO_TOKEN + matching header).
 func (s *Server) seedDemo(w http.ResponseWriter, r *http.Request) {

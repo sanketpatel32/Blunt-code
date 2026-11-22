@@ -51,7 +51,9 @@ func Apply(options ApplyOptions) error {
 		}
 		logf("install attempt %d failed: %v", attempt, err)
 		if attempt < swapAttempts {
-			time.Sleep(swapRetryDelay)
+			// Back off instead of a fixed delay — a held file lock needs a
+			// growing window, not the same wrong guess three times.
+			time.Sleep(swapRetryDelay * time.Duration(attempt))
 		}
 	}
 	if err == nil {

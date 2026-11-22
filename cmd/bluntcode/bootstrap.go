@@ -129,9 +129,11 @@ func openCore() (core *appCore, release func(), err error) {
 	semgrepVersion = toolService.Status("semgrep").Version
 	managedSonar, err := sonarqube.NewManaged(paths.DataDir, toolService.Manager, manifest)
 	if err != nil {
-		_ = db.Close()
-		_ = guard.Close()
-		return abort(fmt.Errorf("configure managed SonarQube: %w", err))
+		// One optional analyzer's platform restriction must not take the whole
+		// app down: warn and keep booting — the registry/UI already model
+		// not-ready tools.
+		logger.Warn("managed SonarQube unavailable; scans run without it", "error", err)
+		managedSonar = nil
 	}
 	registry := analyzers.NewRegistry()
 	// Analyzer adapters only execute Blunt Code-managed paths; no PATH lookup is used.
@@ -157,7 +159,9 @@ func openCore() (core *appCore, release func(), err error) {
 	// entry); the path mirrors the manifest's executable field.
 	_ = registry.Register(analyzerscheckov.New(filepath.Join(paths.ToolsDir, "iac-checkov", "3.3.16", "env", "checkov", "Scripts", "python.exe"), "3.3.16"))
 	_ = registry.Register(semgrep.New(semgrepExecutable, semgrepVersion, semgrepRules))
-	_ = registry.Register(managedSonar)
+	if managedSonar != nil {
+		_ = registry.Register(managedSonar)
+	}
 	registerBuiltinAnalyzers(registry, toolService.Offline)
 	scanService := scans.New(db, registry, bus, paths.ReportsDir, paths.ToolsDir, toolService)
 	app := &appCore{
@@ -177,8 +181,10 @@ func openCore() (core *appCore, release func(), err error) {
 		stopScans(scanService, logger)
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
-		if err := managedSonar.Shutdown(shutdownCtx); err != nil {
-			logger.Warn("managed SonarQube shutdown failed", "error", err)
+		if managedSonar != nil {
+			if err := managedSonar.Shutdown(shutdownCtx); err != nil {
+				logger.Warn("managed SonarQube shutdown failed", "error", err)
+			}
 		}
 		_ = db.Close()
 		_ = guard.Close()

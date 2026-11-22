@@ -72,8 +72,13 @@ func checkWorkspaceRoot(root string) string {
 	return ""
 }
 
+// rootProblemTimeout is the distinct "we could not tell" verdict: a hung or
+// slow mount used to report healthy ("") because unresolved meant usable.
+const rootProblemTimeout = "probe_timeout"
+
 // rootProblems probes every root concurrently within rootTimeout and
-// returns the problem per index ("" for usable or unresolved roots).
+// returns the problem per index ("" for usable; probe_timeout for roots the
+// probe could not resolve in time).
 func (s *Server) rootProblems(roots []string) []string {
 	problems := make([]string, len(roots))
 	if len(roots) == 0 {
@@ -100,6 +105,7 @@ func (s *Server) rootProblems(roots []string) []string {
 		case <-probe.done:
 			problems[i] = probe.problem
 		default:
+			problems[i] = rootProblemTimeout
 		}
 	}
 	return problems

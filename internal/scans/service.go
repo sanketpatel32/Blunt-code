@@ -300,7 +300,10 @@ func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, 
 			s.failScan(scan.ID, fmt.Sprintf("Internal scan error: %v", r))
 		}
 	}()
-	s.emit(scan.ID, "scan.started", map[string]any{"state": "queued"})
+	// The run goroutine is already executing when this emits — reporting the
+	// DB row's pre-claim "queued" state here made the event lie about the
+	// scan's actual lifecycle (started event, queued state).
+	s.emit(scan.ID, "scan.started", map[string]any{"state": "running"})
 	// A scan whose progress cannot be recorded must not run analyzers whose
 	// results could not be recorded either: fail it now (best effort) and let
 	// startup reconciliation catch the row if even that write is lost.

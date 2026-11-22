@@ -40,7 +40,7 @@ func stubUpdateNetwork(t *testing.T, payload string) *[]byte {
 	t.Helper()
 	calls := &[]byte{}
 	original := fetchURLBytes
-	fetchURLBytes = func(url string) ([]byte, error) {
+	fetchURLBytes = func(_ context.Context, url string) ([]byte, error) {
 		*calls = []byte(url)
 		return []byte(payload), nil
 	}
@@ -109,7 +109,9 @@ func TestUpdateCheckSoftFailsWhenUnreachable(t *testing.T) {
 	s := testServer(t)
 	s.version = "0.6.0"
 	original := fetchURLBytes
-	fetchURLBytes = func(url string) ([]byte, error) { return nil, fmt.Errorf("dial tcp: connection refused") }
+	fetchURLBytes = func(_ context.Context, url string) ([]byte, error) {
+		return nil, fmt.Errorf("dial tcp: connection refused")
+	}
 	t.Cleanup(func() { fetchURLBytes = original })
 	recorder := httptest.NewRecorder()
 	s.updateCheck(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/update/check", nil))
@@ -196,7 +198,7 @@ func TestUpdateApplyFailsClosed(t *testing.T) {
 	launched, _ := stubUpdateApply(t)
 
 	original := fetchURLBytes
-	fetchURLBytes = func(url string) ([]byte, error) { return nil, fmt.Errorf("rate limited") }
+	fetchURLBytes = func(_ context.Context, url string) ([]byte, error) { return nil, fmt.Errorf("rate limited") }
 	recorder := httptest.NewRecorder()
 	s.updateApply(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/update/apply", nil))
 	fetchURLBytes = original

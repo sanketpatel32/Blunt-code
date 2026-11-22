@@ -183,7 +183,7 @@ func TestJobsBoundsConcurrentAnalyzerRuns(t *testing.T) {
 // flight — capped, but genuinely overlapping rather than sequential.
 func TestDefaultJobsBoundsAnalyzerConcurrency(t *testing.T) {
 	tracker := newRunTracker()
-	fixture := newScanFixture(t, newCountingAnalyzers(tracker, 5*time.Millisecond, false, "one", "two", "three", "four")...)
+	fixture := newScanFixture(t, newCountingAnalyzers(tracker, 50*time.Millisecond, false, "one", "two", "three", "four")...)
 	scan := fixture.startScan(t) // the default entry point, no options
 	if final := fixture.waitForTerminal(t, scan.ID); final.State != "completed" {
 		t.Fatalf("scan state = %q, want completed", final.State)
