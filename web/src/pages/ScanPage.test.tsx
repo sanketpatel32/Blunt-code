@@ -266,13 +266,13 @@ describe('ScanPage live results panel', () => {
     document.body.append(host);
     root = createRoot(host);
     const notify = vi.fn<(notice: Notice) => void>();
-    await act(async () => { root.render(<ScanPage id="scan-1" go={vi.fn<(route: Route) => void>()} notify={notify} />); });
+    await act(async () => { root.render(<ScanPage key="scan-1" id="scan-1" go={vi.fn<(route: Route) => void>()} notify={notify} />); });
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     await act(async () => { replayHistory(DispatchingEventSource.instances[0]!); });
     expect(digits(host.querySelector('.scan-metric-value')?.textContent)).toBe('10771'); // scan-1's replayed totals are live
-    // Same component instance, new id — the in-app jump between two running scans
-    // (a "View scan" toast, a workspace link) must not carry the old events over.
-    await act(async () => { root.render(<ScanPage id="scan-2" go={vi.fn<(route: Route) => void>()} notify={notify} />); });
+    // App keys ScanPage by id, so the in-app jump between two running scans
+    // (a "View scan" toast, a workspace link) remounts it with fresh state.
+    await act(async () => { root.render(<ScanPage key="scan-2" id="scan-2" go={vi.fn<(route: Route) => void>()} notify={notify} />); });
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     expect(digits(host.querySelector('.scan-metric-value')?.textContent)).toBe('0'); // scan-1's totals must not bleed into scan-2's panels
     expect([...host.querySelectorAll('.scan-flow li strong')].some((node) => node.textContent?.includes('biome finished'))).toBe(false);
@@ -381,7 +381,7 @@ describe('ScanPage terminal and action states (IMP-14)', () => {
     await act(async () => { root.render(<ScanPage id="scan-1" go={vi.fn<(route: Route) => void>()} notify={vi.fn<(notice: Notice) => void>()} />); });
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     const cancel = [...host.querySelectorAll('button')].find((button) => button.textContent?.includes('Cancel scan'))!;
-    expect(cancel).toBeDefined();
+    expect(cancel).toBeInstanceOf(HTMLElement);
     expect(cancel.hasAttribute('disabled')).toBe(false);
     await act(async () => { cancel.click(); });
     const busy = [...host.querySelectorAll('button')].find((button) => button.textContent?.includes('Cancelling'))!;

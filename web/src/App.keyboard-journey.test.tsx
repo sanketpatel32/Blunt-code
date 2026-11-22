@@ -107,7 +107,7 @@ describe('keyboard journey through the core flow', () => {
     //    (the one visible per-row control is Scan; Open details lives in the
     //    row's overflow menu).
     const wsRow = host.querySelector<HTMLElement>('.table-dense tbody tr[role="link"]');
-    expect(wsRow).toBeDefined();
+    expect(wsRow).toBeInstanceOf(HTMLElement);
     await act(async () => {
       wsRow!.focus();
       expect(document.activeElement).toBe(wsRow);
@@ -118,7 +118,7 @@ describe('keyboard journey through the core flow', () => {
 
     // 3) Start the scan from the focused primary action — a scan runs for minutes, so the click confirms first.
     const runScan = [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === 'Run scan')!;
-    expect(runScan).toBeDefined();
+    expect(runScan).toBeInstanceOf(HTMLElement);
     await act(async () => { runScan.focus(); expect(document.activeElement).toBe(runScan); runScan.click(); });
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     // The click opened the confirmation dialog; nothing has been posted yet.
@@ -126,7 +126,7 @@ describe('keyboard journey through the core flow', () => {
     expect(confirmDialog?.textContent).toContain('Run standard scan on Journey?');
     expect(fetchMock.mock.calls.filter(([input, init]) => input.endsWith('/workspaces/ws-1/scans') && init?.method === 'POST')).toHaveLength(0);
     const confirmScan = [...confirmDialog!.querySelectorAll('button')].find((button) => button.textContent === 'Run standard scan')!;
-    expect(confirmScan).toBeDefined();
+    expect(confirmScan).toBeInstanceOf(HTMLElement);
     await act(async () => { confirmScan.focus(); expect(document.activeElement).toBe(confirmScan); confirmScan.click(); });
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     const started = fetchMock.mock.calls.filter(([input, init]) => input.endsWith('/workspaces/ws-1/scans') && init?.method === 'POST');
@@ -140,7 +140,7 @@ describe('keyboard journey through the core flow', () => {
 
     // 5) Inspect a finding by keyboard: the row is focusable, Enter docks the source pane.
     const row = host.querySelector<HTMLTableRowElement>('.findings-table tbody tr')!;
-    expect(row).toBeDefined();
+    expect(row).toBeInstanceOf(HTMLElement);
     await act(async () => { row.focus(); expect(document.activeElement).toBe(row); key(row, 'ArrowDown'); key(row, 'Enter'); });
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     expect(host.querySelector('.analysis-split')?.getAttribute('data-pane')).toBe('open');

@@ -1,4 +1,7 @@
 import { afterEach } from 'vitest';
+import { installDialogPolyfill } from './testDialogPolyfill';
+
+installDialogPolyfill();
 
 // Recharts' ResponsiveContainer measures with ResizeObserver, which jsdom
 // lacks. A no-op observer keeps chart routes renderable in tests.

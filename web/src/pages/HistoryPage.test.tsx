@@ -48,7 +48,7 @@ function bandHeaders(host: HTMLElement) {
  *  is the only other visible control beside "Open report") and return its items. */
 async function openRowMenu(row: HTMLElement) {
   const trigger = row.querySelector<HTMLButtonElement>('button[aria-label^="Actions for scan"]');
-  expect(trigger, 'row exposes an actions menu').toBeDefined();
+  expect(trigger, 'row exposes an actions menu').toBeInstanceOf(HTMLElement);
   await act(async () => {
     trigger!.dispatchEvent(new MouseEvent('pointerdown', { button: 0, bubbles: true, cancelable: true }));
   });
@@ -59,7 +59,7 @@ async function openRowMenu(row: HTMLElement) {
 /** Pick one item from the currently open row menu (Radix selects on click/Enter). */
 async function pickMenuItem(label: string) {
   const item = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((candidate) => candidate.textContent === label);
-  expect(item, `no "${label}" menu item`).toBeDefined();
+  expect(item, `no "${label}" menu item`).toBeInstanceOf(HTMLElement);
   await act(async () => {
     item!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     item!.click();
@@ -630,7 +630,7 @@ describe('HistoryPage', () => {
 
     async function clickButton(host: HTMLElement, label: string) {
       const button = [...host.querySelectorAll('button')].find((candidate) => candidate.textContent === label);
-      expect(button, `no "${label}" button`).toBeDefined();
+      expect(button, `no "${label}" button`).toBeInstanceOf(HTMLElement);
       await act(async () => { button!.click(); });
       await act(async () => {});
     }

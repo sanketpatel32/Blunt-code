@@ -94,7 +94,7 @@ describe('SearchPage', () => {
     // served page says the analyzer produced a hit, and it filters on click.
     const fieldset = host.querySelector('fieldset[aria-label="Filter by analyzer"]')!;
     const chip = [...fieldset.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.includes('codeql-scanner'));
-    expect(chip).toBeDefined();
+    expect(chip).toBeInstanceOf(HTMLElement);
     expect(chip!.querySelector('.chip-count')?.textContent).toBe('1');
     await act(async () => { chip!.click(); });
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
@@ -117,7 +117,7 @@ describe('SearchPage', () => {
     ]));
     // Three identical rows collapse into one group header…
     const group = host.querySelector('.search-group-row');
-    expect(group).toBeDefined();
+    expect(group).toBeInstanceOf(HTMLElement);
     expect(group!.getAttribute('aria-label')).toContain('3 occurrences');
     // …whose title comes from the message clause, not the echoed rule id — the
     // id renders once (neutral rule tag), never the "aws-access-token:
@@ -158,7 +158,7 @@ describe('SearchPage', () => {
     expect(host.textContent).toContain('Nothing to search yet');
     expect(host.textContent).toContain('Add a workspace and run your first scan');
     const add = [...host.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === 'Add workspace')!;
-    expect(add).toBeDefined();
+    expect(add).toBeInstanceOf(HTMLElement);
     await act(async () => { add.click(); });
     expect(go).toHaveBeenCalledWith({ page: 'workspaces' });
   });
@@ -186,7 +186,7 @@ describe('SearchPage', () => {
     await act(async () => { trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
     const options = [...document.body.querySelectorAll<HTMLElement>('[role="option"]')];
     const alpha = options.find((o) => o.textContent === 'Alpha');
-    expect(alpha).toBeDefined(); // listed by name — never by raw id
+    expect(alpha).toBeInstanceOf(HTMLElement); // listed by name — never by raw id
     expect(options.map((o) => o.textContent)).not.toContain('ws-uuid-77');
     await act(async () => {
       alpha!.dispatchEvent(new Event('pointerdown', { bubbles: true }));

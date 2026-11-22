@@ -75,7 +75,7 @@ describe('CLIPage', () => {
     const host = await renderPage();
     const tabs = Array.from(host.querySelectorAll('button.tab')) as HTMLButtonElement[];
     const ciTab = tabs.find((b) => b.textContent?.includes('CI/CD & Automation'));
-    expect(ciTab).toBeDefined();
+    expect(ciTab).toBeInstanceOf(HTMLElement);
 
     await act(async () => {
       ciTab!.click();
@@ -154,7 +154,7 @@ describe('CLIPage', () => {
       const control = host.querySelector(`#${id}`) as (HTMLInputElement | HTMLSelectElement) | null;
       expect(control, `missing #${id}`).not.toBeNull();
       const label = [...host.querySelectorAll('label')].find((l) => l.htmlFor === id);
-      expect(label, `label for #${id} not associated`).toBeDefined();
+      expect(label, `label for #${id} not associated`).toBeInstanceOf(HTMLElement);
       expect(control!.labels).toContain(label!);
     }
   });
@@ -163,7 +163,7 @@ describe('CLIPage', () => {
     const host = await renderPage();
     const tabs = Array.from(host.querySelectorAll('button.tab')) as HTMLButtonElement[];
     const builderTab = tabs.find((b) => b.textContent?.includes('Command Builder'));
-    expect(builderTab).toBeDefined();
+    expect(builderTab).toBeInstanceOf(HTMLElement);
 
     await act(async () => {
       builderTab!.click();
@@ -291,7 +291,7 @@ describe('CLIPage', () => {
     const fastLintBtn = Array.from(host.querySelectorAll('.cli-preset-btn')).find((b) =>
       b.textContent?.includes('Fast Local Lint'),
     ) as HTMLButtonElement | undefined;
-    expect(fastLintBtn).toBeDefined();
+    expect(fastLintBtn).toBeInstanceOf(HTMLElement);
 
     await act(async () => {
       fastLintBtn!.click();

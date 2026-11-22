@@ -342,7 +342,7 @@ describe('HomePage risk board — verdict', () => {
     expect(page1Ids[0]).toBe('ws-0');
     expect(page1Ids[24]).toBe('ws-24');
     const next = findButton(host, 'Next');
-    expect(next).toBeDefined();
+    expect(next).toBeInstanceOf(HTMLElement);
     expect(next!.disabled).toBe(false);
     await act(async () => { next!.click(); await Promise.resolve(); await Promise.resolve(); });
     expect(host.textContent).toContain('Showing 26–50 of 110 by risk');
@@ -426,7 +426,7 @@ describe('HomePage risk board — verdict', () => {
     // "Explore findings" said where the button was, this says what to do, and
     // it lands on exactly the band it promised.
     const explore = findButton(host, 'Fix the');
-    expect(explore).toBeDefined();
+    expect(explore).toBeInstanceOf(HTMLElement);
     expect(explore!.textContent).toContain('critical');
     await act(async () => { explore!.click(); });
     expect(go).toHaveBeenCalledWith({ page: 'search', q: 'severity=critical' });
@@ -441,7 +441,7 @@ describe('HomePage risk board — verdict', () => {
     });
     const lowOnlySummary = { ...summary, critical_count: 0, high_count: 0, medium_count: 0, low_count: 7, info_count: 0, total_findings: 7 };
     const host = await render(homeFetchMock({ scans: [], total: 0, summary: lowOnlySummary }, workspacesPage([lowOnly])));
-    expect(findButton(host, 'Skim the')).toBeDefined();
+    expect(findButton(host, 'Skim the')).toBeInstanceOf(HTMLElement);
     expect(findButton(host, 'Fix the')).toBeUndefined();
   });
 });
@@ -669,7 +669,7 @@ describe('HomePage risk board — activity feed', () => {
     ];
     const host = await render(homeFetchMock({ scans, total: 3, summary }));
     const runningTab = [...host.querySelectorAll<HTMLButtonElement>('.feed-filter-btn')].find((b) => b.textContent === 'Running');
-    expect(runningTab).toBeDefined();
+    expect(runningTab).toBeInstanceOf(HTMLElement);
 
     await act(async () => { runningTab!.click(); });
     const rows = host.querySelectorAll('.feed-list .feed-row');
@@ -697,7 +697,7 @@ describe('HomePage risk board — activity feed', () => {
     // A workspace exists even though it has never been scanned — the primary
     // stays available and targets it, instead of disabling itself.
     const runScan = findButton(host, 'Run scan');
-    expect(runScan).toBeDefined();
+    expect(runScan).toBeInstanceOf(HTMLElement);
     expect(runScan!.disabled).toBe(false);
   });
 });
@@ -705,7 +705,7 @@ describe('HomePage risk board — activity feed', () => {
 describe('HomePage risk board — feed regressions', () => {
   async function clickFilter(host: HTMLElement, label: string) {
     const tab = [...host.querySelectorAll<HTMLButtonElement>('.feed-filter-btn')].find((b) => b.textContent === label);
-    expect(tab).toBeDefined();
+    expect(tab).toBeInstanceOf(HTMLElement);
     await act(async () => { tab!.click(); });
   }
 
@@ -779,7 +779,7 @@ describe('HomePage quick actions', () => {
 
     // The page's one primary is the header's Run scan split-button…
     const runScan = findButton(host, 'Run scan');
-    expect(runScan).toBeDefined();
+    expect(runScan).toBeInstanceOf(HTMLElement);
     expect(runScan!.disabled).toBe(false);
     // …and it names its target: the riskiest workspace, not the mildest.
     await act(async () => { runScan!.click(); });
@@ -801,7 +801,7 @@ describe('HomePage quick actions', () => {
     // With no workspace list to rank, the header primary falls back to the most
     // recently scanned workspace from the feed…
     const runScan = findButton(host, 'Run scan');
-    expect(runScan).toBeDefined();
+    expect(runScan).toBeInstanceOf(HTMLElement);
     expect(runScan!.disabled).toBe(false);
 
     // …and the split-button still confirms first — nothing is posted until the
@@ -811,7 +811,7 @@ describe('HomePage quick actions', () => {
     expect(dialog?.textContent).toContain('Run standard scan on Second Project?');
     expect(fetchMock).not.toHaveBeenCalledWith('/api/v1/workspaces/ws-2/scans', expect.objectContaining({ method: 'POST' }));
     const confirm = [...dialog!.querySelectorAll('button')].find((button) => button.textContent === 'Run standard scan');
-    expect(confirm).toBeDefined();
+    expect(confirm).toBeInstanceOf(HTMLElement);
     await act(async () => { confirm!.click(); await Promise.resolve(); await Promise.resolve(); });
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/workspaces/ws-2/scans', expect.objectContaining({ method: 'POST' }));
     expect(go).toHaveBeenCalledWith({ page: 'scan', id: 'scan-new' });

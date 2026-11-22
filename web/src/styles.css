@@ -2118,11 +2118,13 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .severity-dots i { width: .5rem; height: .5rem; border-radius: 50%; }
 
 /* ── L6 · Dialogs · premium ────────────────────────────────────── */
-.dialog-backdrop { position: fixed; z-index: var(--z-dialog); inset: 0; display: grid; place-items: center; padding: var(--space-xl); background: var(--color-dialog-backdrop); animation: backdrop-in var(--dur-base) var(--ease-out); }
-.dialog-backdrop dialog { position: static; inset: auto; width: min(32rem, 100%); max-height: calc(100dvh - 2 * var(--space-xl)); margin: 0; padding: 0; overflow: auto; border: var(--rule) solid var(--color-rule-strong); outline: var(--rule) solid var(--color-rule-faint); outline-offset: -5px; border-radius: var(--radius-xl); background: var(--color-surface); color: var(--color-ink); box-shadow: var(--shadow-dialog); animation: dialog-in var(--dur-slow) var(--ease-out); }
+.modal-dialog::backdrop { background: var(--color-dialog-backdrop); animation: backdrop-in var(--dur-base) var(--ease-out); }
+/* The page behind an open modal neither scrolls nor takes pointer or focus (showModal makes it inert). */
+html:has(dialog.modal-dialog[open]) { overflow: hidden; }
+dialog.modal-dialog { position: fixed; inset: 0; width: min(32rem, calc(100% - 2 * var(--space-xl))); max-width: none; height: fit-content; max-height: calc(100dvh - 2 * var(--space-xl)); margin: auto; padding: 0; overflow: auto; border: var(--rule) solid var(--color-rule-strong); outline: var(--rule) solid var(--color-rule-faint); outline-offset: -5px; border-radius: var(--radius-xl); background: var(--color-surface); color: var(--color-ink); box-shadow: var(--shadow-dialog); animation: dialog-in var(--dur-slow) var(--ease-out); }
 /* The shortcut sheet is two columns of groups — it needs more room than a
    confirmation dialog, and 44rem keeps the rows from wrapping. */
-.dialog-backdrop dialog.shortcuts-dialog { width: min(44rem, 100%); }
+dialog.modal-dialog.shortcuts-dialog { width: min(44rem, calc(100% - 2 * var(--space-xl))); }
 @keyframes backdrop-in {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -2131,20 +2133,20 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
   from { opacity: 0; transform: translateY(10px) scale(.98); }
   to { opacity: 1; transform: none; }
 }
-.dialog-backdrop form, .confirmation-dialog { padding: var(--space-xl); }
-.dialog-backdrop header, .dialog-backdrop footer { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); }
-.dialog-backdrop h2 { margin: 0; font-family: var(--font-display); font-size: var(--text-xl); font-weight: 600; letter-spacing: -.015em; }
-.dialog-backdrop p { color: var(--color-ink-soft); font-size: var(--text-sm); line-height: 1.6; }
-.dialog-backdrop label { display: grid; gap: var(--space-xs); margin-top: var(--space-md); color: var(--color-ink); font-size: var(--text-sm); font-weight: 600; }
+.modal-dialog form, .confirmation-dialog { padding: var(--space-xl); }
+.modal-dialog header, .modal-dialog footer { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); }
+.modal-dialog h2 { margin: 0; font-family: var(--font-display); font-size: var(--text-xl); font-weight: 600; letter-spacing: -.015em; }
+.modal-dialog p { color: var(--color-ink-soft); font-size: var(--text-sm); line-height: 1.6; }
+.modal-dialog label { display: grid; gap: var(--space-xs); margin-top: var(--space-md); color: var(--color-ink); font-size: var(--text-sm); font-weight: 600; }
 .picker-row { display: flex; gap: var(--space-sm); }
 .picker-row input { flex: 1; }
-.dialog-backdrop label + .picker-row { margin-top: var(--space-xs); }
+.modal-dialog label + .picker-row { margin-top: var(--space-xs); }
 .field-error { margin: var(--space-xs) 0 0; color: var(--color-danger-text); font-size: var(--text-sm); font-weight: 500; line-height: 1.45; }
-.dialog-backdrop .field-error { color: var(--color-danger-text); }
+.modal-dialog .field-error { color: var(--color-danger-text); }
 [aria-invalid="true"] { border-color: var(--color-danger); }
-.dialog-backdrop footer { justify-content: flex-end; margin-top: var(--space-xl); gap: var(--space-sm); }
+.modal-dialog footer { justify-content: flex-end; margin-top: var(--space-xl); gap: var(--space-sm); }
 .sr-only { position: absolute; width: .06rem; height: .06rem; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
-.dialog-backdrop dialog.code-preview-dialog { width: min(58rem, 100%); }
+dialog.modal-dialog.code-preview-dialog { width: min(58rem, calc(100% - 2 * var(--space-xl))); }
 .code-preview-location { margin: var(--space-2xs) 0 0; }
 .code-preview { max-height: min(58dvh, 34rem); margin: var(--space-md) 0 0; overflow: auto; border: var(--rule) solid var(--color-rule); border-radius: var(--radius-md); background: var(--color-surface-muted); color: var(--color-ink); font: var(--text-xs)/1.65 var(--font-mono); }
 .code-preview code { display: grid; grid-template-columns: 3.5rem minmax(0, 1fr); min-width: max-content; padding: 0 var(--space-sm); color: var(--color-ink); white-space: pre; }
@@ -2152,7 +2154,7 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .code-preview code span { padding-right: var(--space-sm); color: var(--color-ink-faint); text-align: right; user-select: none; }
 
 /* ── Command palette ───────────────────────────────────────────── */
-.command-palette { position: static; inset: auto; width: min(32rem, 100%); margin: 0; padding: var(--space-sm); overflow: visible; border: var(--rule) solid var(--color-rule-strong); outline: var(--rule) solid var(--color-rule-faint); outline-offset: -5px; border-radius: var(--radius-xl); background: var(--color-surface); color: var(--color-ink); box-shadow: var(--shadow-xl); }
+.command-palette { padding: var(--space-sm); overflow: visible; border: var(--rule) solid var(--color-rule-strong); outline: var(--rule) solid var(--color-rule-faint); outline-offset: -5px; border-radius: var(--radius-xl); background: var(--color-surface); color: var(--color-ink); box-shadow: var(--shadow-xl); }
 .command-palette input { min-height: 2.75rem; padding: 0 var(--space-md); border: var(--rule) solid var(--color-field-edge); border-radius: var(--radius-md); background: var(--color-surface-muted); color: var(--color-ink); font-size: var(--text-md); letter-spacing: -.01em; transition: background var(--dur-fast) var(--ease-out); }
 .command-palette input:focus { outline: 2px solid var(--color-focus); outline-offset: -2px; background: var(--color-surface); }
 .command-palette [role='listbox'] { max-height: min(50dvh, 22rem); margin: var(--space-sm) 0 0; padding: 0; overflow-y: auto; overscroll-behavior: contain; }
@@ -2475,7 +2477,7 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
   .toast-stack { right: var(--space-sm); bottom: var(--space-sm); left: var(--space-sm); width: auto; align-items: stretch; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .page, .dialog-backdrop, .dialog-backdrop dialog, .toast { animation: none !important; }
+  .page, .modal-dialog, .modal-dialog::backdrop, .toast { animation: none !important; }
 }
 .filter-drawer-backdrop{position:fixed;inset:0;z-index:var(--z-command);display:flex;justify-content:flex-end;background:var(--color-dialog-backdrop);}
 .filter-drawer{width:380px;max-width:100%;height:100%;background:var(--color-surface);box-shadow:var(--shadow-xl);display:flex;flex-direction:column;overflow:auto;}
@@ -2568,7 +2570,7 @@ fieldset.chip-group, fieldset.chip-rail { border: 0; padding: 0; }
 .command-palette .palette-group + .palette-group { border-top: var(--rule) solid var(--color-rule-faint); }
 .fingerprint, .suppression-fingerprint, .workspace-root, .tree-excluded,
 .setting > span, .toast-code { hyphens: auto; overflow-wrap: anywhere; }
-.dialog-backdrop dialog, .code-preview { scrollbar-width: thin; scrollbar-color: var(--color-scrollbar-thumb) var(--color-scrollbar-track); overscroll-behavior: contain; }
+dialog.modal-dialog, .code-preview { scrollbar-width: thin; scrollbar-color: var(--color-scrollbar-thumb) var(--color-scrollbar-track); overscroll-behavior: contain; }
 @page { margin: 14mm;
 }
 @media print {
@@ -5156,7 +5158,7 @@ input[type='checkbox']::after {
 .palette-group:first-child { margin-top: 0; }
 /* No glass on a drafting sheet: overlays separate by their scrim and their
    keyline, not by blurring the drawing behind them. */
-.dialog-backdrop { backdrop-filter: none; }
+.modal-dialog::backdrop { backdrop-filter: none; }
 
 /* ── 12 · Repeated row actions ────────────────────────────────────────   Ten identical filled "Scan" buttons down the workspaces table (and the
    same pattern on tools and history) made the action column the heaviest

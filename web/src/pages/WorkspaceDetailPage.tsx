@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useState, type ReactNode } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState, type ReactNode } from 'react';
 import { type SeverityCountFields, coveragePartial, coverageText, gradeExplanation } from '../lib/risk';
 import { ChevronDown } from 'lucide-react';
 import { api } from '../api';
@@ -69,6 +69,9 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
   const [pruning, setPruning] = useState(false);
   const [pruneConfirm, setPruneConfirm] = useState(false);
   const [copied, setCopied] = useState(false);
+  const copyTimer = useRef<number | undefined>(undefined);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; window.clearTimeout(copyTimer.current); }; }, []);
   const reduced = useReducedMotion();
   // Declared before the handlers below use it (openSettings reads name/profile).
   const item = workspace.data;
@@ -106,7 +109,12 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
   function copyPath() {
     const p = workspace.data?.root_path ?? '';
     if (!p) return;
-    navigator.clipboard?.writeText(p).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false), 1400); }).catch(()=>{});
+    navigator.clipboard?.writeText(p).then(() => {
+      if (!mounted.current) return;
+      setCopied(true);
+      window.clearTimeout(copyTimer.current);
+      copyTimer.current = window.setTimeout(() => setCopied(false), 1400);
+    }).catch(() => {});
   }
   function openSettings() { setNameDraft(item?.name ?? ''); setProfileDraft(item?.default_profile ?? 'standard'); setEditing(true); }
   async function saveSettings() { setSavingSettings(true); try { await api.updateWorkspace(id, { name: nameDraft.trim() || undefined, default_profile: profileDraft }); await workspace.reload(); setEditing(false); notify({ kind: 'success', text: 'Workspace settings saved.' }); } catch (e) { notify({ kind: 'error', text: message(e) }); } finally { setSavingSettings(false); } }

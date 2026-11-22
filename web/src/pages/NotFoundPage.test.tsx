@@ -40,8 +40,8 @@ describe('NotFoundPage', () => {
     expect(host.textContent).toContain('Nothing here');
     expect(host.textContent).toContain('The link may be mistyped or out of date.');
     expect(host.textContent).not.toContain('may have been removed');
-    expect(button(host, 'Go to Home')).toBeDefined();
-    expect(button(host, 'Open Workspaces')).toBeDefined();
+    expect(button(host, 'Go to Home')).toBeInstanceOf(HTMLElement);
+    expect(button(host, 'Open Workspaces')).toBeInstanceOf(HTMLElement);
   });
 
   it('offers the removed-content suggestion for a workspace-shaped address', async () => {

@@ -44,7 +44,7 @@ export function CommandPalette({ open, onClose, commands, note }: { open: boolea
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const { dialogRef } = useDialogA11y({ onClose, autoFocusRef: inputRef });
+  const { dialogRef } = useDialogA11y({ onClose, autoFocusRef: inputRef, open });
   const recent = useMemo(()=>{
     try { const r=localStorage.getItem('bluntcode.recentSearches'); return r?JSON.parse(r):[]; } catch { return []; }
   },[open]);
@@ -74,8 +74,7 @@ export function CommandPalette({ open, onClose, commands, note }: { open: boolea
   };
   let globalIndex=0;
   return (
-    <div role="presentation" className="dialog-backdrop palette-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <dialog ref={dialogRef} open aria-label="Command palette" className="command-palette">
+    <dialog ref={dialogRef} aria-label="Command palette" className="modal-dialog command-palette">
       <input ref={inputRef} value={query} onChange={(event) => { setQuery(event.target.value); setActiveIndex(0); }} onKeyDown={onKeyDown} placeholder="Type a command…" role="combobox" aria-expanded="true" aria-controls="command-palette-list" aria-activedescendant={results[activeIndex] ? `command-option-${results[activeIndex].id}` : undefined} aria-label="Search commands" spellCheck={false} autoComplete="off" />
       {/* The recents store only ever holds the commands that were run. */}
       {recent.length>0 && !query && <div className="palette-recent"><span className="muted">Recent commands</span>{recent.map((r:string)=><span key={r} className="badge">{r}</span>)}</div>}
@@ -95,6 +94,5 @@ export function CommandPalette({ open, onClose, commands, note }: { open: boolea
         {!results.length && <p className="palette-empty" aria-live="polite">No matching command.</p>}
       </div>
       <footer><span><kbd>↑</kbd><kbd>↓</kbd> navigate</span><span><kbd>Enter</kbd> run</span><span><kbd>Esc</kbd> close</span>{note && <span className="palette-note">{note}</span>}</footer>
-    </dialog>
-  </div>);
+    </dialog>);
 }

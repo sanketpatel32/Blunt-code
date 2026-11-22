@@ -44,6 +44,11 @@ function key(key: string, shiftKey = false) {
   window.dispatchEvent(new KeyboardEvent('keydown', { key, shiftKey, bubbles: true, cancelable: true }));
 }
 
+/** Escape as a browser delivers it: to the focused element, which sits inside an open modal dialog. */
+function escape() {
+  (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+}
+
 describe('global keyboard shortcuts', () => {
   beforeEach(() => { window.history.replaceState({}, '', '/'); });
   afterEach(async () => { await act(async () => { root?.unmount(); }); document.body.replaceChildren(); vi.unstubAllGlobals(); });
@@ -71,7 +76,7 @@ describe('global keyboard shortcuts', () => {
     expect(host.textContent).toContain('Choose a project folder.');
     await act(async () => { key('g'); key('h'); });
     expect(window.location.pathname).toBe('/tools'); // dialog owns the keyboard
-    await act(async () => { key('Escape'); });
+    await act(async () => { escape(); });
     expect(host.textContent).not.toContain('Choose a project folder.');
     await act(async () => { key('g'); key('h'); });
     expect(window.location.pathname).toBe('/');
@@ -88,7 +93,7 @@ describe('global keyboard shortcuts', () => {
     expect(host.querySelector('.seq-hint')).toBeNull();
     await act(async () => { key('g'); }); // help dialog does not suspend shortcuts
     expect(host.querySelector('.seq-hint')?.textContent).toBe('g…');
-    await act(async () => { key('Escape'); });
+    await act(async () => { escape(); });
     expect(host.querySelector('dialog[data-shortcuts-dialog]')).toBeNull();
     expect(host.querySelector('.seq-hint')).toBeNull(); // Escape also ended the armed sequence
   });
@@ -127,5 +132,13 @@ describe('global keyboard shortcuts', () => {
     expect(document.activeElement).not.toBe(search);
     await act(async () => { key('/'); });
     expect(document.activeElement).toBe(search);
+  });
+
+  it('lists every command palette entry under a distinct label', async () => {
+    const host = await renderApp();
+    await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true, cancelable: true })); });
+    const labels = [...host.querySelectorAll('.command-palette .palette-label')].map((node) => node.textContent);
+    expect(labels.length).toBeGreaterThan(5);
+    expect(new Set(labels).size).toBe(labels.length);
   });
 });

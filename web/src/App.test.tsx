@@ -40,10 +40,10 @@ async function render(fetchMock: ReturnType<typeof vi.fn>) {
  *  keyboard affordance, then pick the danger item. */
 async function closeAppDialog(host: HTMLElement) {
   const moreOptions = host.querySelector('button[aria-label="More options"]');
-  expect(moreOptions).toBeDefined();
+  expect(moreOptions).toBeInstanceOf(HTMLElement);
   await act(async () => { moreOptions!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
   const closeApp = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent === 'Close app');
-  expect(closeApp).toBeDefined();
+  expect(closeApp).toBeInstanceOf(HTMLElement);
   await act(async () => { closeApp!.click(); await Promise.resolve(); await Promise.resolve(); });
 }
 
@@ -89,10 +89,10 @@ describe('Blunt Code home', () => {
     // Remove is a destructive action: it lives behind the ledger row's overflow
     // menu (the one visible control is Run scan), confirmed via its dialog.
     const ledgerMore = host.querySelector('button[aria-label="More actions for Example API"]');
-    expect(ledgerMore).toBeDefined();
+    expect(ledgerMore).toBeInstanceOf(HTMLElement);
     await act(async () => { ledgerMore!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
     const removeItem = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent === 'Remove workspace');
-    expect(removeItem).toBeDefined();
+    expect(removeItem).toBeInstanceOf(HTMLElement);
     await act(async () => { removeItem!.click(); await Promise.resolve(); await Promise.resolve(); });
     expect(host.textContent).toContain('Remove this workspace?');
     expect(host.textContent).toContain('Your project files will not be changed.');
@@ -170,7 +170,7 @@ describe('Blunt Code home', () => {
 
     const host = await render(fetchMock);
     const install = [...host.querySelectorAll('button')].find((button) => button.textContent === 'Install');
-    expect(install).toBeDefined();
+    expect(install).toBeInstanceOf(HTMLElement);
     await act(async () => { install!.click(); });
     // Install arms the confirmation dialog; the POST fires on confirm.
     await act(async () => { [...host.querySelectorAll<HTMLButtonElement>('dialog button')].find((button) => button.textContent === 'Install')!.click(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
@@ -248,7 +248,7 @@ describe('Blunt Code home', () => {
     expect(host.textContent).toContain('Showing 1 to 6 of 7 scans');
     expect([...host.querySelectorAll('button')].filter((button) => button.textContent === 'Open report')).toHaveLength(6);
     const next = [...host.querySelectorAll('button')].find((button) => button.textContent === 'Next');
-    expect(next).toBeDefined();
+    expect(next).toBeInstanceOf(HTMLElement);
     await act(async () => { next!.click(); });
     expect(host.textContent).toContain('Showing 7 to 7 of 7 scans');
     expect([...host.querySelectorAll('button')].filter((button) => button.textContent === 'Open report')).toHaveLength(1);
@@ -417,7 +417,7 @@ describe('update awareness', () => {
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     expect(host.textContent).toContain('Blunt Code 0.17.0 is available.');
     const review = [...host.querySelectorAll('button')].find((button) => button.textContent === 'Review update');
-    expect(review).toBeDefined();
+    expect(review).toBeInstanceOf(HTMLElement);
     await act(async () => { review!.click(); await Promise.resolve(); await Promise.resolve(); });
     expect(window.location.pathname).toBe('/about');
   });

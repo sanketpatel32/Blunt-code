@@ -47,7 +47,7 @@ describe('ErrorBoundary', () => {
     expect(details?.textContent).toContain('Error details');
     expect(details?.textContent).toContain('boom in render');
     const button = [...host.querySelectorAll('button')].find((b) => b.textContent === 'Reload view');
-    expect(button).toBeDefined();
+    expect(button).toBeInstanceOf(HTMLElement);
     await act(async () => { button!.click(); });
     expect(reload).toHaveBeenCalled();
     expect(errorSpy.mock.calls.some((call) => call[0] === 'Blunt Code view crashed')).toBe(true);
