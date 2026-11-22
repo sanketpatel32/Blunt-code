@@ -8,6 +8,8 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"bluntcode/internal/database"
 )
 
 func printSuppressHelp(w io.Writer) {
@@ -224,8 +226,8 @@ func runSuppressImport(ctx context.Context, app *cliCore, args []string, stdout,
 		return 1
 	}
 
-	count := 0
-	for i, row := range records {
+	var batch []database.SuppressionInput
+	for _, row := range records {
 		if len(row) == 0 {
 			continue
 		}
@@ -237,13 +239,15 @@ func runSuppressImport(ctx context.Context, app *cliCore, args []string, stdout,
 		if len(row) > 1 && strings.TrimSpace(row[1]) != "" {
 			reason = strings.TrimSpace(row[1])
 		}
-		if _, addErr := app.db.AddSuppression(ctx, work.ID, fp, reason); addErr == nil {
-			count++
-		} else {
-			fmt.Fprintf(stderr, "warning: line %d: %v\n", i+1, addErr)
-		}
+		batch = append(batch, database.SuppressionInput{Fingerprint: fp, Reason: reason})
+	}
+	// All-or-nothing: a failure leaves the workspace exactly as it was, so
+	// the import can simply be re-run.
+	if err := app.db.AddSuppressions(ctx, work.ID, batch); err != nil {
+		fmt.Fprintf(stderr, "bluntcode suppress import: %v (nothing was imported)\n", err)
+		return 1
 	}
 
-	fmt.Fprintf(stdout, "Imported %d suppression(s) into workspace %s.\n", count, work.Name)
+	fmt.Fprintf(stdout, "Imported %d suppression(s) into workspace %s.\n", len(batch), work.Name)
 	return 0
 }

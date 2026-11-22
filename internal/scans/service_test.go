@@ -575,7 +575,9 @@ func TestShutdownCancelsActiveScans(t *testing.T) {
 	service := &Service{cancels: map[string]context.CancelFunc{}}
 	ctx, cancel := context.WithCancel(context.Background())
 	service.cancels["scan"] = cancel
-	service.Shutdown()
+	if err := service.Shutdown(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 	if ctx.Err() == nil {
 		t.Fatal("active scan context was not cancelled")
 	}
