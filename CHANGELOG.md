@@ -41,6 +41,9 @@ records differ for older versions:
 ### Changed
 - **Install progress names the download.** The "Preparing X" scan stage now reads "Preparing X (downloading ~N MB, first run only)" from per-artifact manifest sizes, so a first pentest/deep run installing ~1.5 GB of tools no longer looks hung (#54).
 
+### Fixed
+- **Windows device-name files no longer kill scans.** Discovery skips `nul`/`con`/`aux`/`comN`/`lptN` (with or without extension) — junk files creatable only via `\\?\` tricks or shell redirects that crash analyzers they reach; a stray `nul` in the repo root was failing every sonar-scanner run.
+
 ## [0.50.0] - 2026-11-22
 
 ### Added
