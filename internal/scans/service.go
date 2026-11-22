@@ -47,12 +47,32 @@ type Service struct {
 	statusMu       sync.Mutex
 	statusCache    []AnalyzerStatus
 	statusCachedAt time.Time
+	// queue holds scans accepted while every slot was busy, FIFO. Their rows
+	// exist in state 'queued'; drainQueue starts the head whenever a run
+	// finishes and frees a slot. Each entry's cancels[] wrapper cancels it
+	// out of the queue as well, so Cancel and Shutdown need no second path.
+	queue []queuedScan
+}
+
+// queuedScan is everything run() needs, captured at accept time.
+type queuedScan struct {
+	scan     core.Scan
+	work     core.Workspace
+	files    []core.FileEntry
+	opts     ScanOptions
+	deselect func(string) bool
+	ctx      context.Context
 }
 
 // MaxConcurrentScans bounds how many scans may run at once. Per-scan worker
 // pools already parallelize analyzers inside a scan; without this cap,
 // stacked CLI/UI starts would multiply whole analyzer trees on one machine.
 const MaxConcurrentScans = 3
+
+// MaxScanQueue bounds how many scans may wait queued behind a full slot set.
+// Beyond it the API still answers 503 — an unbounded queue is a memory leak
+// and a UX lie (a scan scheduled hours out is worse than an honest refusal).
+const MaxScanQueue = 32
 
 // ErrTooManyScans reports that MaxConcurrentScans scans are already running;
 // the API surfaces it as 503 and the CLI as an operational failure (exit 3).
@@ -102,12 +122,18 @@ func (s *Service) start(ctx context.Context, work core.Workspace, profile string
 		s.mu.Unlock()
 		return core.Scan{}, ErrShuttingDown
 	}
-	if s.active >= MaxConcurrentScans {
+	// At capacity the scan no longer fails outright: it joins the FIFO queue
+	// and run() starts it as soon as a slot frees. Only a queue that itself
+	// is full is still a hard ErrTooManyScans.
+	atCapacity := s.active >= MaxConcurrentScans
+	if atCapacity && len(s.queue) >= MaxScanQueue {
 		s.mu.Unlock()
 		return core.Scan{}, ErrTooManyScans
 	}
-	s.active++
-	s.runs.Add(1)
+	if !atCapacity {
+		s.active++
+		s.runs.Add(1)
+	}
 	s.mu.Unlock()
 	snapshot := s.snapshot(ctx, work, profile, files, excludes, extras.skipCounts, extras.dependencyInputs)
 	if profile == analyzers.ProfilePentest && opts.TargetURL != "" {
@@ -123,13 +149,33 @@ func (s *Service) start(ctx context.Context, work core.Workspace, profile string
 	}
 	scan, err := s.db.CreateScanWithFiles(ctx, core.Scan{WorkspaceID: work.ID, Profile: profile, State: "queued", CandidateFileCount: len(files), SelectedFileCount: snapshot.SelectedFileCount, Snapshot: snapshot}, files)
 	if err != nil {
-		s.mu.Lock()
-		s.active--
-		s.mu.Unlock()
-		s.runs.Done()
+		if !atCapacity {
+			s.mu.Lock()
+			s.active--
+			s.mu.Unlock()
+			s.runs.Done()
+		}
 		return core.Scan{}, err
 	}
+	deselect := s.selectionDeselected(ctx, work.ID)
 	runCtx, cancel := context.WithCancel(context.Background())
+	if atCapacity {
+		s.mu.Lock()
+		entry := queuedScan{scan: scan, work: work, files: files, opts: opts, deselect: deselect, ctx: runCtx}
+		s.queue = append(s.queue, entry)
+		// Cancel and Shutdown find queued scans through cancels[] like any
+		// other: the wrapper cancels the stored ctx and drops the entry.
+		s.cancels[scan.ID] = func() { cancel(); s.dequeue(scan.ID) }
+		closing := s.closing
+		s.mu.Unlock()
+		if closing {
+			cancel()
+		}
+		// A slot may have freed while the snapshot and row write ran: pull the
+		// queue head now instead of stranding it until the next finish.
+		s.drainQueue()
+		return scan, nil
+	}
 	s.mu.Lock()
 	s.cancels[scan.ID] = cancel
 	closing := s.closing
@@ -140,8 +186,62 @@ func (s *Service) start(ctx context.Context, work core.Workspace, profile string
 	if closing {
 		cancel()
 	}
-	go s.run(runCtx, scan, work, files, opts, s.selectionDeselected(ctx, work.ID))
+	go s.run(runCtx, scan, work, files, opts, deselect)
 	return scan, nil
+}
+
+// dequeue drops a queued (never started) scan: it can no longer be drained,
+// its cancels entry is released, and its row ends as cancelled instead of
+// sitting in 'queued' until restart reconciliation marks it interrupted.
+func (s *Service) dequeue(scanID string) {
+	s.mu.Lock()
+	deleted := false
+	for i, entry := range s.queue {
+		if entry.scan.ID == scanID {
+			s.queue = append(s.queue[:i], s.queue[i+1:]...)
+			deleted = true
+			break
+		}
+	}
+	if deleted {
+		delete(s.cancels, scanID)
+	}
+	s.mu.Unlock()
+	if deleted {
+		s.finishCancelled(scanID)
+	}
+}
+
+// drainQueue starts the oldest queued scan when a run freed a slot. Runs in
+// the finishing goroutine's cleanup, before runs.Done(), so the new run's
+// runs.Add can never race Shutdown's Wait into a negative count. Entries
+// whose ctx was cancelled before they drained are skipped — dequeue usually
+// already removed them, this is only the belt to that path's suspenders.
+func (s *Service) drainQueue() {
+	for {
+		s.mu.Lock()
+		if s.closing || s.active >= MaxConcurrentScans || len(s.queue) == 0 {
+			s.mu.Unlock()
+			return
+		}
+		entry := s.queue[0]
+		s.queue = s.queue[1:]
+		if entry.ctx.Err() != nil {
+			// Cancel raced in after the pop: dequeue could not see this entry
+			// any more, so drain finalizes its row itself.
+			s.mu.Unlock()
+			s.finishCancelled(entry.scan.ID)
+			continue
+		}
+		s.active++
+		s.runs.Add(1)
+		s.mu.Unlock()
+		// run keeps entry.ctx: the cancels wrapper still in place cancels the
+		// context run actually uses, so a Cancel landing between pop and launch
+		// cannot be lost to a discarded context.
+		go s.run(entry.ctx, entry.scan, entry.work, entry.files, entry.opts, entry.deselect)
+		return
+	}
 }
 
 // snapshot captures the scan's input context once. skipCounts and
@@ -291,6 +391,7 @@ func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, 
 		delete(s.cancels, scan.ID)
 		s.active--
 		s.mu.Unlock()
+		s.drainQueue()
 	}()
 	// A panic inside an adapter must not take the whole application down with
 	// it or leave the scan row non-terminal: contain it, fail the scan, and

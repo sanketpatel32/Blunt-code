@@ -123,7 +123,8 @@ func resolveScan(ctx context.Context, db *database.DB, identifier string) (core.
 		return core.Scan{}, fmt.Errorf("could not resolve scan or workspace for %q: %w", identifier, err)
 	}
 
-	scans, err := db.Scans(ctx, work.ID)
+	// Only the newest scan is wanted; read one page instead of full history.
+	scans, _, err := db.ScansPage(ctx, work.ID, 1, 1, database.ScansPageFilter{})
 	if err != nil {
 		return core.Scan{}, fmt.Errorf("load scans for workspace %s: %w", work.Name, err)
 	}

@@ -734,6 +734,9 @@ func durationMS(started, finished *time.Time) *int64 {
 	return &ms
 }
 
+// Scans loads a workspace's ENTIRE scan history — unbounded by design, so it
+// stays for tests and full dumps only. Callers that need a count, the latest
+// scan, or a page must use ScansPage so growth can't hurt them.
 func (d *DB) Scans(ctx context.Context, workspaceID string) ([]core.Scan, error) {
 	rows, err := d.SQL.QueryContext(ctx, `SELECT `+scanSelectColumns("")+` FROM scans WHERE workspace_id=? ORDER BY started_at DESC, id DESC`, workspaceID)
 	if err != nil {

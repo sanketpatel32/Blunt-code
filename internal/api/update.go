@@ -251,7 +251,18 @@ func (s *Server) updateApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.log.Info("update staged", "dir", dir, "version", staged.Assets.Version, "signed", staged.Signed)
-	writeJSON(w, http.StatusOK, map[string]any{"started": true, "staged_at": dir, "version": staged.Assets.Version, "signed": staged.Signed})
+	if !staged.Signed {
+		// No release signing key is compiled in (self-built binary): the only
+		// integrity check was a SHA-256 fetched from the same release as the
+		// payload — a compromised release ships both files and both check out.
+		// Stay loud instead of silently downgrading the security model.
+		s.log.Warn("update verification was CHECKSUM-ONLY: no release signing key is compiled in, so the downloaded archive was not signature-verified")
+	}
+	resp := map[string]any{"started": true, "staged_at": dir, "version": staged.Assets.Version, "signed": staged.Signed}
+	if !staged.Signed {
+		resp["warning"] = "This build has no release signing key compiled in; the update was verified by checksum only, not by signature."
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // launchUpdateProcess starts the detached updater. Package-level so tests can
