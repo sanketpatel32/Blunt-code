@@ -151,4 +151,17 @@ describe('toast actions and lifetime bar', () => {
     expect(dialog.querySelector('.toast-stack')).toBeNull();
     expect(host.querySelector('.toast-stack')?.textContent).toContain('Could not suppress this finding.');
   });
+
+  it('follows the most recently opened modal, not the last one in DOM order', async () => {
+    await render();
+    const [later, earlier] = [document.createElement('dialog'), document.createElement('dialog')];
+    for (const dialog of [later, earlier]) { dialog.className = 'modal-dialog'; document.body.append(dialog); }
+    await act(async () => { earlier.showModal(); await Promise.resolve(); });
+    await act(async () => { later.showModal(); await Promise.resolve(); }); // opened last, though first in the DOM
+    await act(async () => { notify({ kind: 'error', text: 'Folder picker failed.' }); });
+    expect(later.querySelector('.toast-stack')?.textContent).toContain('Folder picker failed.');
+    expect(earlier.querySelector('.toast-stack')).toBeNull();
+    await act(async () => { later.close(); await Promise.resolve(); await Promise.resolve(); });
+    expect(earlier.querySelector('.toast-stack')?.textContent).toContain('Folder picker failed.');
+  });
 });

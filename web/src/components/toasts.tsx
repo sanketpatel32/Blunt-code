@@ -55,7 +55,13 @@ export function useToasts() {
 function useTopModalDialog(): HTMLDialogElement | null {
   const [dialog, setDialog] = useState<HTMLDialogElement | null>(null);
   useEffect(() => {
-    const update = () => setDialog([...document.querySelectorAll<HTMLDialogElement>('dialog.modal-dialog[open]')].at(-1) ?? null);
+    // Top-layer order is opening order, not DOM order, so remember when each one opened.
+    let stack: HTMLDialogElement[] = [];
+    const update = () => {
+      const open = [...document.querySelectorAll<HTMLDialogElement>('dialog.modal-dialog[open]')];
+      stack = [...stack.filter((existing) => open.includes(existing)), ...open.filter((added) => !stack.includes(added))];
+      setDialog(stack.at(-1) ?? null);
+    };
     update();
     const observer = new MutationObserver(update);
     observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['open'] });
