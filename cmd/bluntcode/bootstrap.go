@@ -88,6 +88,20 @@ func openCore() (core *appCore, release func(), err error) {
 		_ = guard.Close()
 		return abort(err)
 	}
+	// The git_repository column postdates most workspace rows: refresh it at
+	// startup rather than leaving pre-migration rows stuck on the zero value
+	// until something happens to rediscover them. The probe is a few stat
+	// calls per workspace — well under a millisecond even for a large fleet.
+	if all, err := db.Workspaces(context.Background()); err == nil {
+		for _, work := range all {
+			detected := workspace.IsGitRepository(work.RootPath)
+			if detected != work.GitRepository {
+				if err := db.SetWorkspaceGitRepository(context.Background(), work.ID, detected); err != nil {
+					logger.Warn("startup git_repository refresh failed", "workspace", work.ID, "error", err)
+				}
+			}
+		}
+	}
 	bus := events.New()
 	manifest, err := tools.DefaultManifest()
 	if err != nil {
@@ -205,18 +219,29 @@ func ensureWorkspace(ctx context.Context, db *database.DB, pathArg string) (core
 	if err != nil {
 		return core.Workspace{}, err
 	}
+	// Existing workspaces refresh their git_repository flag on return — the
+	// folder may have gained or lost .git since it was added, and the CLI
+	// path never goes through the discover endpoint that also refreshes it.
+	refreshGit := func(existing core.Workspace) core.Workspace {
+		if detected := workspace.IsGitRepository(root); detected != existing.GitRepository {
+			if err := db.SetWorkspaceGitRepository(ctx, existing.ID, detected); err == nil {
+				existing.GitRepository = detected
+			}
+		}
+		return existing
+	}
 	if existing, lookupErr := db.WorkspaceByRoot(ctx, root); lookupErr == nil {
-		return existing, nil
+		return refreshGit(existing), nil
 	}
 	key := workspace.CanonicalKey(root)
 	if all, listErr := db.Workspaces(ctx); listErr == nil {
 		for _, existing := range all {
 			if workspace.CanonicalKey(existing.RootPath) == key {
-				return existing, nil
+				return refreshGit(existing), nil
 			}
 		}
 	}
-	return db.CreateWorkspace(ctx, core.Workspace{Name: filepath.Base(root), RootPath: root})
+	return db.CreateWorkspace(ctx, core.Workspace{Name: filepath.Base(root), RootPath: root, GitRepository: workspace.IsGitRepository(root)})
 }
 
 // registerBuiltinAnalyzers adds the in-process analyzers. The four static

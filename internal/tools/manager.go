@@ -213,10 +213,30 @@ func (m Manager) IsReady(a Artifact) bool {
 // executable must exit 0 (and, when Expect is set, print the pinned version).
 // A failing probe means the activated bytes are not trustworthy even though
 // their digest matched — the caller rolls the previous version back.
+//
+// A probe that has just been swapped into place can fail for reasons that say
+// nothing about the bytes: a virus scanner briefly holding the new file, or
+// filesystem write visibility lagging the rename. The probe therefore gets
+// one retry after a short pause before its failure counts as real.
 func (m Manager) smokeProbe(ctx context.Context, executable string, s *SmokeTest) error {
 	if s == nil || len(s.Args) == 0 {
 		return nil
 	}
+	if err := m.smokeProbeOnce(ctx, executable, s); err == nil {
+		return nil
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(smokeRetryDelay):
+	}
+	return m.smokeProbeOnce(ctx, executable, s)
+}
+
+// smokeRetryDelay backs off the single smoke-test retry.
+const smokeRetryDelay = 2 * time.Second
+
+func (m Manager) smokeProbeOnce(ctx context.Context, executable string, s *SmokeTest) error {
 	runner := m.SmokeRunner
 	if runner == nil {
 		runner = realSmokeRunner

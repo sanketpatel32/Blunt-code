@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"bluntcode/internal/analyzers"
+	"bluntcode/internal/cleaner"
 	"bluntcode/internal/core"
 	"bluntcode/internal/database"
 	"bluntcode/internal/tools"
@@ -228,7 +229,16 @@ func (s *Service) executeAnalyzer(ctx context.Context, scan core.Scan, work core
 	}
 	status := adapter.Check(ctx, analyzers.ToolEnvironment{ToolsDir: s.toolsDir})
 	if !status.Ready && s.tools != nil && analyzers.InstallableTool(adapter.ID()) {
-		s.emit(scan.ID, "scan.stage", map[string]any{"stage": "Preparing " + adapter.DisplayName()})
+		// First-run installs can pull close to a gigabyte (SonarQube's bundle
+		// alone is ~0.9 GB); an unqualified "Preparing" stage reads as a hang
+		// for minutes. Naming the download size sets the right expectation.
+		stage := "Preparing " + adapter.DisplayName()
+		var downloadBytes int64
+		if pending := s.tools.PendingDownloadBytes(adapter.ID()); pending > 0 {
+			downloadBytes = pending
+			stage += fmt.Sprintf(" (downloading ~%s, first run only)", cleaner.FormatBytes(pending))
+		}
+		s.emit(scan.ID, "scan.stage", map[string]any{"stage": stage, "download_bytes": downloadBytes})
 		if installErr := s.tools.Ensure(ctx, adapter.ID()); installErr == nil {
 			status = adapter.Check(ctx, analyzers.ToolEnvironment{ToolsDir: s.toolsDir})
 		} else if notInstallable := (*tools.NotInstallableError)(nil); errors.As(installErr, &notInstallable) {
