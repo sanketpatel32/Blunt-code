@@ -17,7 +17,7 @@ func send(t *testing.T, s *Server, method, target, body string) *httptest.Respon
 		request.Header.Set("Content-Type", "application/json")
 	}
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	return response
 }
 

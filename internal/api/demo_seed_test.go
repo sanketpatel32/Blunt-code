@@ -18,7 +18,7 @@ func TestSeedDemoDisabledByDefault(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/v1/system/seed-demo", bytes.NewReader([]byte(`{"preset":"small"}`)))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
-	s.Handler().ServeHTTP(rec, req)
+	testHandler(s).ServeHTTP(rec, req)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("want 403, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -38,7 +38,7 @@ func TestSeedDemoInvalidJSON(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/v1/system/seed-demo", bytes.NewReader([]byte(`not json`)))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
-	s.Handler().ServeHTTP(rec, req)
+	testHandler(s).ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("want 400, got %d", rec.Code)
 	}
@@ -51,7 +51,7 @@ func TestSeedDemoInvalidPreset(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/v1/system/seed-demo", bytes.NewReader([]byte(`{"preset":"nope"}`)))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
-	s.Handler().ServeHTTP(rec, req)
+	testHandler(s).ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("want 400, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -65,7 +65,7 @@ func TestSeedDemoRequiresTokenWhenConfigured(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/v1/system/seed-demo", bytes.NewReader([]byte(`{"preset":"small"}`)))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
-	s.Handler().ServeHTTP(rec, req)
+	testHandler(s).ServeHTTP(rec, req)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("want 403 without token, got %d", rec.Code)
 	}
@@ -74,7 +74,7 @@ func TestSeedDemoRequiresTokenWhenConfigured(t *testing.T) {
 	req2.Header.Set("Content-Type", "application/json")
 	req2.Header.Set("X-Bluntcode-Demo-Token", "secret-test")
 	rec2 := httptest.NewRecorder()
-	s.Handler().ServeHTTP(rec2, req2)
+	testHandler(s).ServeHTTP(rec2, req2)
 	if rec2.Code != http.StatusOK {
 		t.Fatalf("want 200 with token, got %d: %s", rec2.Code, rec2.Body.String())
 	}
@@ -88,7 +88,7 @@ func TestSeedDemoSmallSuccessAndRepeat(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/v1/system/seed-demo", bytes.NewReader([]byte(`{"preset":"small"}`)))
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
-		s.Handler().ServeHTTP(rec, req)
+		testHandler(s).ServeHTTP(rec, req)
 		return rec
 	}
 	r1 := call()
@@ -114,7 +114,7 @@ func TestMetaReportsDemoSeedFlags(t *testing.T) {
 	ResetRateLimiter()
 	s := testServer(t)
 	rec := httptest.NewRecorder()
-	s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/meta", nil))
+	testHandler(s).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/meta", nil))
 	var m map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &m); err != nil {
 		t.Fatal(err)
@@ -127,7 +127,7 @@ func TestMetaReportsDemoSeedFlags(t *testing.T) {
 func TestGlobalStatsIncludesAssessmentRollupFields(t *testing.T) {
 	s := testServer(t)
 	rec := httptest.NewRecorder()
-	s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/stats", nil))
+	testHandler(s).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/stats", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatal(rec.Body.String())
 	}

@@ -13,7 +13,6 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -56,6 +55,7 @@ type Server struct {
 	shutdown   func()
 	openFolder func(dir string) error
 	cache      *workspaceCaches
+	token      string
 }
 
 // scanDetail is a scan payload enriched for single-scan views: the analyzer
@@ -94,12 +94,12 @@ func New(db *database.DB, bus *events.Bus, scanService *scans.Service, toolServi
 	if logger == nil {
 		logger = slog.Default()
 	}
-	s := &Server{db: db, bus: bus, scans: scanService, tools: toolService, paths: paths, version: version, log: logger, mux: http.NewServeMux(), openFolder: openFolderInExplorer, cache: newWorkspaceCaches()}
+	s := &Server{db: db, bus: bus, scans: scanService, tools: toolService, paths: paths, version: version, log: logger, mux: http.NewServeMux(), openFolder: openFolderInExplorer, cache: newWorkspaceCaches(), token: NewToken()}
 	s.routes()
 	return s
 }
 func (s *Server) Handler() http.Handler {
-	return securityMiddleware(rateLimitMiddleware(jsonRouteErrors(s.mux)))
+	return securityMiddleware(s.apiGuard(rateLimitMiddleware(jsonRouteErrors(s.mux))))
 }
 
 // StaticGuard applies the API's loopback Host check and baseline security
@@ -114,6 +114,8 @@ func StaticGuard(next http.Handler) http.Handler { return securityMiddleware(nex
 func (s *Server) SetShutdown(fn func()) { s.shutdown = fn }
 func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/health", s.health)
+	s.mux.HandleFunc("GET /api/v1/session", s.session)
+	s.mux.HandleFunc("POST /api/v1/session", s.session)
 	s.mux.HandleFunc("GET /api/v1/meta", s.meta)
 	s.mux.HandleFunc("GET /api/v1/stats", s.globalStats)
 	s.mux.HandleFunc("GET /api/v1/settings", s.getSettings)
@@ -2875,10 +2877,6 @@ func securityMiddleware(next http.Handler) http.Handler {
 			fail(w, 421, "LOCAL_ONLY", "Blunt Code accepts loopback requests only.")
 			return
 		}
-		if isStateChanging(r.Method) && !safeOrigin(r) {
-			fail(w, 403, "CROSS_ORIGIN_FORBIDDEN", "State-changing requests must come from the local Blunt Code origin.")
-			return
-		}
 		// Every response — including mux-generated 404/405 text bodies that
 		// bypass writeJSON — carries no-store, so the embedded UI never serves
 		// a stale API or asset response from cache.
@@ -2908,21 +2906,6 @@ func loopbackHost(host string) bool {
 func isStateChanging(method string) bool {
 	return method == http.MethodPost || method == http.MethodPut || method == http.MethodPatch || method == http.MethodDelete
 }
-func safeOrigin(r *http.Request) bool {
-	origin := r.Header.Get("Origin")
-	if origin == "" {
-		return true
-	}
-	u, err := url.Parse(origin)
-	if err != nil {
-		return false
-	}
-	if u.Scheme != "http" {
-		return false
-	}
-	return loopbackHost(u.Host)
-}
-
 // scanPlan uses the same discovery and routing as a full scan, without creating a job.
 func (s *Server) scanPlan(w http.ResponseWriter, r *http.Request) {
 	work, ok := s.workspace(r)

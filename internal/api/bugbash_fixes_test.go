@@ -19,7 +19,7 @@ func get(t *testing.T, s *Server, method, target string) *httptest.ResponseRecor
 	t.Helper()
 	request := httptest.NewRequest(method, "http://127.0.0.1"+target, nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	return response
 }
 
@@ -280,7 +280,7 @@ func TestWorkspaceTagsRoutesLifecycle(t *testing.T) {
 		t.Helper()
 		request := httptest.NewRequest(http.MethodPut, "http://127.0.0.1"+target, strings.NewReader(body))
 		response := httptest.NewRecorder()
-		s.Handler().ServeHTTP(response, request)
+		testHandler(s).ServeHTTP(response, request)
 		return response
 	}
 	response := put("/api/v1/workspaces/"+work.ID+"/tags", `{"tags":["zeta","alpha","zeta"]}`)

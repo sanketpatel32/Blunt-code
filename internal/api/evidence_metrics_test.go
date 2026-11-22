@@ -66,7 +66,7 @@ func TestWorkspaceRiskPairsGradeWithCoverageAndFreshness(t *testing.T) {
 		t.Helper()
 		request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/workspaces/"+id+"/risk", nil)
 		response := httptest.NewRecorder()
-		s.Handler().ServeHTTP(response, request)
+		testHandler(s).ServeHTTP(response, request)
 		var body map[string]any
 		if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil {
 			t.Fatalf("risk(%s): %d %s", id, response.Code, response.Body.String())
@@ -122,7 +122,7 @@ func TestWorkspaceListPairsLatestScanWithCoverage(t *testing.T) {
 
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/workspaces", nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	var body struct {
 		Items []struct {
 			LatestScan *core.Scan `json:"latest_scan"`
@@ -182,7 +182,7 @@ func TestScanTotalsReconcileAcrossViews(t *testing.T) {
 		t.Helper()
 		request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1"+path, nil)
 		response := httptest.NewRecorder()
-		s.Handler().ServeHTTP(response, request)
+		testHandler(s).ServeHTTP(response, request)
 		if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), dest) != nil {
 			t.Fatalf("%s: %d %s", path, response.Code, response.Body.String())
 		}

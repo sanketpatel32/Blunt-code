@@ -16,7 +16,7 @@ func patchWorkspace(t *testing.T, s *Server, id, body string) *httptest.Response
 	request := httptest.NewRequest(http.MethodPatch, "http://127.0.0.1/api/v1/workspaces/"+id, strings.NewReader(body))
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	return response
 }
 

@@ -4,6 +4,7 @@
  * Prerequisites:
  *   - BLUNTCODE_DEMO_SEED=1 on the server process
  *   - Optional: BLUNTCODE_DEMO_TOKEN + pass DEMO_TOKEN env to this script
+ *   - BLUNTCODE_TOKEN: the API token from the server's "Sign in:" line
  *   - POST /api/v1/system/seed-demo { preset: "large" } succeeded (or seed manually)
  *
  * Usage:
@@ -18,12 +19,14 @@ import { chromium } from 'playwright';
 
 const BASE = process.env.BASE ?? 'http://127.0.0.1:8787';
 const TOKEN = process.env.DEMO_TOKEN ?? '';
+const API_TOKEN = process.env.BLUNTCODE_TOKEN ?? '';
+const AUTH = API_TOKEN ? { Authorization: `Bearer ${API_TOKEN}` } : {};
 const OUT = process.env.OUT ?? '/opt/cursor/artifacts/bluntcode-scale';
 
 const widths = [1280, 1440, 1920];
 
 async function seed(page) {
-  const headers = { 'Content-Type': 'application/json' };
+  const headers = { 'Content-Type': 'application/json', ...AUTH };
   if (TOKEN) headers['X-Bluntcode-Demo-Token'] = TOKEN;
   const res = await page.request.post(`${BASE}/api/v1/system/seed-demo`, {
     headers,
@@ -49,6 +52,8 @@ async function main() {
   const browser = await chromium.launch();
   const context = await browser.newContext();
   const page = await context.newPage();
+  // Sign the context in so UI navigations carry the session cookie.
+  if (API_TOKEN) await page.goto(`${BASE}/#token=${API_TOKEN}`, { waitUntil: 'networkidle' });
 
   try {
     await seed(page);

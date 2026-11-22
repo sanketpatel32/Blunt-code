@@ -85,7 +85,7 @@ func TestFindingsFiltersPaginationAndComparisonStatus(t *testing.T) {
 
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+current.ID+"/findings?limit=25&sort=path", nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	var first findingsResponse
 	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &first) != nil {
 		t.Fatalf("first page: %d %s", response.Code, response.Body.String())
@@ -95,21 +95,21 @@ func TestFindingsFiltersPaginationAndComparisonStatus(t *testing.T) {
 	}
 	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+current.ID+"/findings?limit=25&offset=25", nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	var second findingsResponse
 	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &second) != nil || len(second.Items) != 5 || second.HasMore {
 		t.Fatalf("second page: %d %s", response.Code, response.Body.String())
 	}
 	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+current.ID+"/findings?severity=high&category=security&analyzer=ruff&path=persistent&q=PERSIST&status=persistent", nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	var filtered findingsResponse
 	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &filtered) != nil || filtered.Total != 1 || len(filtered.Items) != 1 || filtered.Items[0].Status != "persistent" {
 		t.Fatalf("filtered page: %d %s", response.Code, response.Body.String())
 	}
 	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+current.ID+"/findings?limit=17", nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("invalid pagination was accepted: %d %s", response.Code, response.Body.String())
 	}
@@ -121,7 +121,7 @@ func csvRows(t *testing.T, s *Server, scanID, query string) [][]string {
 	t.Helper()
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+scanID+"/findings.csv"+query, nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
 		t.Fatalf("findings.csv%s: %d %s", query, response.Code, response.Body.String())
 	}
@@ -225,7 +225,7 @@ func TestFindingsCSVDownloadsAttachmentWithFiltersAndEscaping(t *testing.T) {
 
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+current.ID+"/findings.csv?severity=bogus", nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "INVALID_FINDING_QUERY") {
 		t.Fatalf("shared filter validation must reject bad input: %d %s", response.Code, response.Body.String())
 	}
@@ -236,13 +236,13 @@ func TestFindingsCSVRejectsUnknownScan(t *testing.T) {
 	unknown := "00000000-0000-4000-8000-000000000000"
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+unknown+"/findings.csv", nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusNotFound || !strings.Contains(response.Body.String(), "SCAN_NOT_FOUND") {
 		t.Fatalf("got %d: %s", response.Code, response.Body.String())
 	}
 	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/not-a-uuid/findings.csv", nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusNotFound || !strings.Contains(response.Body.String(), "SCAN_NOT_FOUND") {
 		t.Fatalf("malformed id got %d: %s", response.Code, response.Body.String())
 	}
@@ -482,7 +482,7 @@ func TestFindingsCSVSURVIVESHostileCorpus(t *testing.T) {
 
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+scan.ID+"/findings.csv", nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
 		t.Fatalf("findings.csv: %d %s", response.Code, response.Body.String())
 	}
@@ -670,7 +670,7 @@ func TestFindingsJSONDownloadsAttachment(t *testing.T) {
 
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+scan.ID+"/findings.json", nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
 		t.Fatalf("findings.json: %d %s", response.Code, response.Body.String())
 	}
@@ -771,13 +771,13 @@ func TestFindingsJSONRejectsUnknownScan(t *testing.T) {
 	unknown := "00000000-0000-4000-8000-000000000000"
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+unknown+"/findings.json", nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusNotFound || !strings.Contains(response.Body.String(), "SCAN_NOT_FOUND") {
 		t.Fatalf("got %d: %s", response.Code, response.Body.String())
 	}
 	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/not-a-uuid/findings.json", nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusNotFound || !strings.Contains(response.Body.String(), "SCAN_NOT_FOUND") {
 		t.Fatalf("malformed id got %d: %s", response.Code, response.Body.String())
 	}
@@ -833,7 +833,7 @@ func TestFixedFindingsListsCoverageAwareFixedRows(t *testing.T) {
 
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+current.ID+"/fixed", nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	var body fixedFindingsResponse
 	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil {
 		t.Fatalf("fixed: %d %s", response.Code, response.Body.String())
@@ -851,13 +851,13 @@ func TestFixedFindingsListsCoverageAwareFixedRows(t *testing.T) {
 	// The capped list never changes the reported total.
 	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+current.ID+"/fixed?limit=1", nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil || body.TotalFixed != 2 || len(body.Fixed) != 1 {
 		t.Fatalf("capped list: %d %s", response.Code, response.Body.String())
 	}
 	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+current.ID+"/fixed?limit=0", nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "INVALID_FINDING_QUERY") {
 		t.Fatalf("invalid limit: %d %s", response.Code, response.Body.String())
 	}
@@ -870,7 +870,7 @@ func TestFixedFindingsListsCoverageAwareFixedRows(t *testing.T) {
 	first := completedScan(t, s, solo.ID, "completed", finding("ruff", "ONLY", "src/only.py", "no baseline", analyzers.SeverityLow, analyzers.CategoryCorrectness))
 	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+first.ID+"/fixed", nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil || body.ComparisonAvailable || body.TotalFixed != 0 || len(body.Fixed) != 0 || body.PreviousScanID != nil {
 		t.Fatalf("no baseline: %d %s", response.Code, response.Body.String())
 	}
@@ -878,13 +878,13 @@ func TestFixedFindingsListsCoverageAwareFixedRows(t *testing.T) {
 	unknown := "00000000-0000-4000-8000-000000000000"
 	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+unknown+"/fixed", nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusNotFound || !strings.Contains(response.Body.String(), "SCAN_NOT_FOUND") {
 		t.Fatalf("unknown scan got %d: %s", response.Code, response.Body.String())
 	}
 	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/not-a-uuid/fixed", nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusNotFound || !strings.Contains(response.Body.String(), "SCAN_NOT_FOUND") {
 		t.Fatalf("malformed id got %d: %s", response.Code, response.Body.String())
 	}
@@ -918,7 +918,7 @@ func TestFindingPreviewReturnsContainedSourceExcerpt(t *testing.T) {
 	}
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+scan.ID+"/findings/"+page.Items[0].ID+"/preview", nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"number":2`) || !strings.Contains(response.Body.String(), "second issue") || !strings.Contains(response.Body.String(), `"highlight_start_line":2`) {
 		t.Fatalf("preview: %d %s", response.Code, response.Body.String())
 	}
@@ -959,7 +959,7 @@ func TestFindingPreviewHandlesDeletedAndMissingPaths(t *testing.T) {
 	for _, item := range page.Items {
 		request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+scan.ID+"/findings/"+item.ID+"/preview", nil)
 		response := httptest.NewRecorder()
-		s.Handler().ServeHTTP(response, request)
+		testHandler(s).ServeHTTP(response, request)
 		if response.Code != http.StatusUnprocessableEntity && response.Code != http.StatusNotFound {
 			t.Fatalf("missing file %s: got %d (want 4xx, never 500): %s", item.RelativePath, response.Code, response.Body.String())
 		}
@@ -985,7 +985,7 @@ func TestGetScanIncludesAnalyzerProgress(t *testing.T) {
 	}
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+scan.ID, nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	var body struct {
 		AnalyzerRuns []struct {
 			AnalyzerID string `json:"analyzer_id"`
@@ -1019,7 +1019,7 @@ func TestWorkspaceListIncludesLanguagesAndLatestScan(t *testing.T) {
 	}
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/workspaces", nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	var body struct {
 		Items []struct {
 			Languages  []string   `json:"languages"`
@@ -1067,7 +1067,7 @@ func TestRecentScansListsAcrossWorkspacesNewestFirst(t *testing.T) {
 
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans", nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	var body recentScansResponse
 	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil {
 		t.Fatalf("recent scans: %d %s", response.Code, response.Body.String())
@@ -1087,21 +1087,21 @@ func TestRecentScansListsAcrossWorkspacesNewestFirst(t *testing.T) {
 
 	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans?limit=2", nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil || len(body.Scans) != 2 || body.Total != 3 {
 		t.Fatalf("limited feed: %d %s", response.Code, response.Body.String())
 	}
 
 	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans?limit=500", nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil || len(body.Scans) != 3 {
 		t.Fatalf("oversized limit must clamp to 50, not fail: %d %s", response.Code, response.Body.String())
 	}
 
 	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans?state=completed", nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil || body.Total != 2 || len(body.Scans) != 2 {
 		t.Fatalf("state filter: %d %s", response.Code, response.Body.String())
 	}
@@ -1113,13 +1113,13 @@ func TestRecentScansListsAcrossWorkspacesNewestFirst(t *testing.T) {
 
 	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans?state=bogus", nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("unknown state was accepted: %d %s", response.Code, response.Body.String())
 	}
 	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans?limit=0", nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("zero limit was accepted: %d %s", response.Code, response.Body.String())
 	}
@@ -1171,7 +1171,7 @@ func TestScansSummarySumsLatestCompletedScanPerWorkspace(t *testing.T) {
 
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans", nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	var body recentScansResponse
 	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil {
 		t.Fatalf("recent scans: %d %s", response.Code, response.Body.String())
@@ -1225,7 +1225,7 @@ func TestSuppressionRoutesLifecycle(t *testing.T) {
 
 	request := httptest.NewRequest(http.MethodPost, base, strings.NewReader(`{"fingerprint":"`+fingerprint+`","reason":"wontfix"}`))
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	var created core.Suppression
 	if response.Code != http.StatusCreated || json.Unmarshal(response.Body.Bytes(), &created) != nil ||
 		created.WorkspaceID != work.ID || created.Fingerprint != fingerprint || created.Reason != "wontfix" || created.CreatedAt.IsZero() {
@@ -1234,7 +1234,7 @@ func TestSuppressionRoutesLifecycle(t *testing.T) {
 
 	request = httptest.NewRequest(http.MethodGet, base, nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	var list suppressionsResponse
 	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &list) != nil || len(list.Items) != 1 || list.Items[0].Fingerprint != fingerprint {
 		t.Fatalf("list: %d %s", response.Code, response.Body.String())
@@ -1249,7 +1249,7 @@ func TestSuppressionRoutesLifecycle(t *testing.T) {
 	} {
 		request = httptest.NewRequest(http.MethodPost, base, strings.NewReader(body))
 		response = httptest.NewRecorder()
-		s.Handler().ServeHTTP(response, request)
+		testHandler(s).ServeHTTP(response, request)
 		if response.Code != http.StatusBadRequest {
 			t.Fatalf("%s was accepted: %d %s", name, response.Code, response.Body.String())
 		}
@@ -1258,27 +1258,27 @@ func TestSuppressionRoutesLifecycle(t *testing.T) {
 	// Deleting a well-formed fingerprint that was never suppressed is a 404.
 	request = httptest.NewRequest(http.MethodDelete, base+"/"+strings.Repeat("99", 32), nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("unknown suppression delete: %d %s", response.Code, response.Body.String())
 	}
 	// A malformed fingerprint is a 400, not a 404.
 	request = httptest.NewRequest(http.MethodDelete, base+"/nothex", nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("malformed fingerprint delete: %d %s", response.Code, response.Body.String())
 	}
 
 	request = httptest.NewRequest(http.MethodDelete, base+"/"+fingerprint, nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusNoContent {
 		t.Fatalf("delete: %d %s", response.Code, response.Body.String())
 	}
 	request = httptest.NewRequest(http.MethodGet, base, nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &list) != nil || len(list.Items) != 0 {
 		t.Fatalf("list after delete: %d %s", response.Code, response.Body.String())
 	}
@@ -1295,7 +1295,7 @@ func TestSuppressionRoutesLifecycle(t *testing.T) {
 	} {
 		request = httptest.NewRequest(target.method, target.url, target.body)
 		response = httptest.NewRecorder()
-		s.Handler().ServeHTTP(response, request)
+		testHandler(s).ServeHTTP(response, request)
 		if response.Code != http.StatusNotFound {
 			t.Fatalf("unknown workspace %s %s: %d %s", target.method, target.url, response.Code, response.Body.String())
 		}
@@ -1322,7 +1322,7 @@ func TestReportAndExportsExcludeSuppressedFindings(t *testing.T) {
 		t.Helper()
 		request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+current.ID+"/report", nil)
 		response := httptest.NewRecorder()
-		s.Handler().ServeHTTP(response, request)
+		testHandler(s).ServeHTTP(response, request)
 		var body struct {
 			Findings   []analyzers.Finding `json:"findings"`
 			Comparison map[string]int      `json:"comparison"`
@@ -1356,7 +1356,7 @@ func TestReportAndExportsExcludeSuppressedFindings(t *testing.T) {
 
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+current.ID+"/findings?status=suppressed", nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	var page findingsResponse
 	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &page) != nil ||
 		page.Total != 1 || len(page.Items) != 1 || page.Items[0].RuleID != "DISMISSED" || page.Items[0].Status != "suppressed" {
@@ -1369,7 +1369,7 @@ func TestRejectsNonLoopbackHost(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "http://example.com/api/v1/health", nil)
 	request.Host = "example.com"
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != 421 {
 		t.Fatalf("got %d: %s", response.Code, response.Body.String())
 	}
@@ -1379,7 +1379,7 @@ func TestRejectsCrossOriginPost(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/v1/workspaces", strings.NewReader(`{"root_path":"."}`))
 	request.Header.Set("Origin", "https://example.com")
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusForbidden {
 		t.Fatalf("got %d", response.Code)
 	}
@@ -1389,7 +1389,7 @@ func TestRejectsTraversalInTree(t *testing.T) {
 	root := t.TempDir()
 	request := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/v1/workspaces", strings.NewReader(`{"root_path":`+quote(root)+`}`))
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != 201 {
 		t.Fatal(response.Body.String())
 	}
@@ -1397,7 +1397,7 @@ func TestRejectsTraversalInTree(t *testing.T) {
 	id := extractID(body)
 	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/workspaces/"+id+"/tree?path=..%2Foutside", nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != 400 {
 		t.Fatalf("got %d: %s", response.Code, response.Body.String())
 	}
@@ -1415,7 +1415,7 @@ func TestReportEndpointReturnsStructuredReport(t *testing.T) {
 	}
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+scan.ID+"/report", nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"scan"`) || !strings.Contains(response.Body.String(), `"comparison"`) {
 		t.Fatalf("got %d: %s", response.Code, response.Body.String())
 	}
@@ -1440,7 +1440,7 @@ func TestMarkdownReportIsRegeneratedFromScanData(t *testing.T) {
 	}
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+scan.ID+"/report.md", nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "## Quality Metrics Summary") || strings.Contains(response.Body.String(), "old export") {
 		t.Fatalf("got %d: %s", response.Code, response.Body.String())
 	}
@@ -1465,7 +1465,7 @@ func TestSARIFReportDownloadsAsAttachment(t *testing.T) {
 	}
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+scan.ID+"/report.sarif", nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	disposition := response.Header().Get("Content-Disposition")
 	if response.Code != http.StatusOK || disposition != `attachment; filename="bluntcode-scan-`+scan.ID[:8]+`.sarif"` {
 		t.Fatalf("got %d disposition %q: %s", response.Code, disposition, response.Body.String())
@@ -1509,13 +1509,13 @@ func TestSARIFReportRejectsUnknownScan(t *testing.T) {
 	unknown := "00000000-0000-4000-8000-000000000000"
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+unknown+"/report.sarif", nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusNotFound || !strings.Contains(response.Body.String(), "SCAN_NOT_FOUND") {
 		t.Fatalf("got %d: %s", response.Code, response.Body.String())
 	}
 	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/not-a-uuid/report.sarif", nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusNotFound || !strings.Contains(response.Body.String(), "SCAN_NOT_FOUND") {
 		t.Fatalf("malformed id got %d: %s", response.Code, response.Body.String())
 	}
@@ -1539,7 +1539,7 @@ func TestHTMLReportDownloadsAsAttachment(t *testing.T) {
 	}
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+scan.ID+"/report.html", nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	disposition := response.Header().Get("Content-Disposition")
 	if response.Code != http.StatusOK || disposition != `attachment; filename="bluntcode-scan-`+scan.ID[:8]+`.html"` {
 		t.Fatalf("got %d disposition %q: %s", response.Code, disposition, response.Body.String())
@@ -1561,13 +1561,13 @@ func TestHTMLReportRejectsUnknownScan(t *testing.T) {
 	unknown := "00000000-0000-4000-8000-000000000000"
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+unknown+"/report.html", nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusNotFound || !strings.Contains(response.Body.String(), "SCAN_NOT_FOUND") {
 		t.Fatalf("got %d: %s", response.Code, response.Body.String())
 	}
 	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/not-a-uuid/report.html", nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusNotFound || !strings.Contains(response.Body.String(), "SCAN_NOT_FOUND") {
 		t.Fatalf("malformed id got %d: %s", response.Code, response.Body.String())
 	}
@@ -1577,13 +1577,13 @@ func TestSettingsPersistOfflineMode(t *testing.T) {
 	s := testServer(t)
 	request := httptest.NewRequest(http.MethodPatch, "http://127.0.0.1/api/v1/settings", strings.NewReader(`{"offline":true,"open_browser":false}`))
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"offline":true`) || !strings.Contains(response.Body.String(), `"open_browser":false`) {
 		t.Fatalf("got %d: %s", response.Code, response.Body.String())
 	}
 	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/settings", nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"offline":true`) || !strings.Contains(response.Body.String(), `"open_browser":false`) {
 		t.Fatalf("got %d: %s", response.Code, response.Body.String())
 	}
@@ -1595,7 +1595,7 @@ func TestStopServerRequestsGracefulShutdown(t *testing.T) {
 	s.SetShutdown(func() { stopped <- struct{}{} })
 	request := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/v1/system/stop", nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusAccepted || !strings.Contains(response.Body.String(), `"stopping"`) {
 		t.Fatalf("stop response: %d %s", response.Code, response.Body.String())
 	}
@@ -1610,7 +1610,7 @@ func postOpenFolder(t *testing.T, s *Server, body string) *httptest.ResponseReco
 	t.Helper()
 	request := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/v1/system/open-folder", strings.NewReader(body))
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	return response
 }
 
@@ -1689,7 +1689,7 @@ func TestRejectsUnknownScanProfile(t *testing.T) {
 	}
 	request := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/v1/workspaces/"+work.ID+"/scans", strings.NewReader(`{"profile":"turbo"}`))
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "INVALID_PROFILE") {
 		t.Fatalf("got %d: %s", response.Code, response.Body.String())
 	}
@@ -1712,13 +1712,13 @@ func TestPathOverridesDriveTreeSelection(t *testing.T) {
 	}
 	request := httptest.NewRequest(http.MethodPut, "http://127.0.0.1/api/v1/workspaces/"+work.ID+"/path-overrides", strings.NewReader(`{"overrides":[{"relative_path":"src","mode":"exclude"},{"relative_path":"src/keep.py","mode":"include"}]}`))
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
 		t.Fatalf("save overrides: %d %s", response.Code, response.Body.String())
 	}
 	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/workspaces/"+work.ID+"/tree?path=src", nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	// The tree rows carry the discovery language and mark selection-excluded
 	// nodes with the snapshot skip-count vocabulary, which the Files page
 	// renders as a chip and an "Excluded" note.
@@ -1742,7 +1742,7 @@ func assertJSONList(t *testing.T, s *Server, target, want string) {
 	t.Helper()
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1"+target, nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
 		t.Fatalf("%s: got %d %s", target, response.Code, response.Body.String())
 	}
@@ -1804,7 +1804,7 @@ func TestFindingsAndCSVRejectIdenticalEnumInputs(t *testing.T) {
 		for _, suffix := range []string{"findings", "findings.csv"} {
 			request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+scan.ID+"/"+suffix+q, nil)
 			response := httptest.NewRecorder()
-			s.Handler().ServeHTTP(response, request)
+			testHandler(s).ServeHTTP(response, request)
 			if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "INVALID_FINDING_QUERY") {
 				t.Fatalf("%s%s: got %d %s", suffix, q, response.Code, response.Body.String())
 			}
@@ -1904,7 +1904,7 @@ func TestScanEventsReplaysHistoryThenStreamsLiveInOrder(t *testing.T) {
 	}
 	s.bus.Publish(events.Event{Type: "scan.started", ScanID: scan.ID})
 	s.bus.Publish(events.Event{Type: "analyzer.started", ScanID: scan.ID})
-	httpServer := httptest.NewServer(s.Handler())
+	httpServer := httptest.NewServer(testHandler(s))
 	defer httpServer.Close()
 	requestCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -1960,7 +1960,7 @@ func TestCancelScanEndpointRejectsDoubleAndFinishedCancels(t *testing.T) {
 	work := scanLifecycleWorkspace(t, s)
 	request := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/v1/workspaces/"+work.ID+"/scans", nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusAccepted {
 		t.Fatalf("start scan: %d %s", response.Code, response.Body.String())
 	}
@@ -1974,7 +1974,7 @@ func TestCancelScanEndpointRejectsDoubleAndFinishedCancels(t *testing.T) {
 
 	second := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/v1/workspaces/"+work.ID+"/scans", nil)
 	secondResponse := httptest.NewRecorder()
-	s.Handler().ServeHTTP(secondResponse, second)
+	testHandler(s).ServeHTTP(secondResponse, second)
 	if secondResponse.Code != http.StatusConflict {
 		t.Fatalf("second scan on the same workspace: %d, want 409", secondResponse.Code)
 	}
@@ -1982,7 +1982,7 @@ func TestCancelScanEndpointRejectsDoubleAndFinishedCancels(t *testing.T) {
 	cancelRequest := func() int {
 		request := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/v1/scans/"+started.ID+"/cancel", nil)
 		response := httptest.NewRecorder()
-		s.Handler().ServeHTTP(response, request)
+		testHandler(s).ServeHTTP(response, request)
 		return response.Code
 	}
 	if code := cancelRequest(); code != http.StatusAccepted {
@@ -2021,7 +2021,7 @@ func TestStartScanAllowedAfterInterruptedRecovery(t *testing.T) {
 	}
 	request := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/v1/workspaces/"+work.ID+"/scans", nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusConflict {
 		t.Fatalf("scan during stale running row: %d, want 409", response.Code)
 	}
@@ -2037,7 +2037,7 @@ func TestStartScanAllowedAfterInterruptedRecovery(t *testing.T) {
 	}
 	request = httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/v1/workspaces/"+work.ID+"/scans", nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusAccepted {
 		t.Fatalf("scan after recovery: %d %s, want 202", response.Code, response.Body.String())
 	}
@@ -2049,7 +2049,7 @@ func TestStartScanAllowedAfterInterruptedRecovery(t *testing.T) {
 // case-variant spelling of the same directory, and only one row is stored.
 func TestCreateWorkspaceReusesJunctionAndCaseVariants(t *testing.T) {
 	s := testServer(t)
-	httpServer := httptest.NewServer(s.Handler())
+	httpServer := httptest.NewServer(testHandler(s))
 	defer httpServer.Close()
 
 	target := t.TempDir()
@@ -2118,7 +2118,7 @@ func TestRecentScansWorkspaceFilterScopesFeed(t *testing.T) {
 
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans?workspace_id="+alpha.ID, nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	var body recentScansResponse
 	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil {
 		t.Fatalf("workspace filter: %d %s", response.Code, response.Body.String())
@@ -2129,7 +2129,7 @@ func TestRecentScansWorkspaceFilterScopesFeed(t *testing.T) {
 
 	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans?workspace_id="+alpha.ID+"&state=running", nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil || body.Total != 0 || len(body.Scans) != 0 {
 		t.Fatalf("combined workspace+state filter: %d %s", response.Code, response.Body.String())
 	}
@@ -2150,7 +2150,7 @@ func TestDeleteScanRemovesTerminalScanAndCascades(t *testing.T) {
 
 	request := httptest.NewRequest(http.MethodDelete, "http://127.0.0.1/api/v1/scans/"+active.ID, nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusConflict {
 		t.Fatalf("deleting an active scan must conflict: %d %s", response.Code, response.Body.String())
 	}
@@ -2164,7 +2164,7 @@ func TestDeleteScanRemovesTerminalScanAndCascades(t *testing.T) {
 	}
 	request = httptest.NewRequest(http.MethodDelete, "http://127.0.0.1/api/v1/scans/"+terminal.ID, nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusNoContent {
 		t.Fatalf("deleting a terminal scan: %d %s", response.Code, response.Body.String())
 	}
@@ -2177,13 +2177,13 @@ func TestDeleteScanRemovesTerminalScanAndCascades(t *testing.T) {
 	}
 	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+terminal.ID, nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("deleted scan must 404 on read: %d", response.Code)
 	}
 	request = httptest.NewRequest(http.MethodDelete, "http://127.0.0.1/api/v1/scans/"+terminal.ID, nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("repeat delete must 404: %d", response.Code)
 	}
@@ -2211,7 +2211,7 @@ func TestSearchFindingsSpansWorkspacesWithFilters(t *testing.T) {
 		t.Helper()
 		request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/findings/search"+query, nil)
 		response := httptest.NewRecorder()
-		s.Handler().ServeHTTP(response, request)
+		testHandler(s).ServeHTTP(response, request)
 		if response.Code != http.StatusOK {
 			t.Fatalf("search %q: %d %s", query, response.Code, response.Body.String())
 		}
@@ -2256,13 +2256,13 @@ func TestSearchFindingsSpansWorkspacesWithFilters(t *testing.T) {
 
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/findings/search?page_size=1000", nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("oversized page_size must fail: %d", response.Code)
 	}
 	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/findings/search?severity=bogus", nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("unknown severity must fail: %d", response.Code)
 	}
@@ -2303,7 +2303,7 @@ func TestScanEventsStreamSendsHeartbeats(t *testing.T) {
 	sseHeartbeatInterval = 25 * time.Millisecond
 	defer func() { sseHeartbeatInterval = prevInterval }()
 
-	server := httptest.NewServer(s.Handler())
+	server := httptest.NewServer(testHandler(s))
 	defer server.Close()
 	streamCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -2347,7 +2347,7 @@ func TestWorkspaceRiskScoresLatestCompletedScan(t *testing.T) {
 
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/workspaces/"+empty.ID+"/risk", nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	var body map[string]any
 	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil || body["available"] != false {
 		t.Fatalf("workspace without scans must report unavailable risk: %d %s", response.Code, response.Body.String())
@@ -2372,7 +2372,7 @@ func TestWorkspaceRiskScoresLatestCompletedScan(t *testing.T) {
 	}
 	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/workspaces/"+work.ID+"/risk", nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil {
 		t.Fatalf("risk endpoint: %d %s", response.Code, response.Body.String())
 	}
@@ -2396,7 +2396,7 @@ func TestWorkspaceRiskScoresLatestCompletedScan(t *testing.T) {
 
 	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/workspaces/not-a-real-id/risk", nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("unknown workspace must 404: %d", response.Code)
 	}
@@ -2415,13 +2415,13 @@ func TestPruneWorkspaceScansEndpoint(t *testing.T) {
 
 	request := httptest.NewRequest(http.MethodDelete, "http://127.0.0.1/api/v1/workspaces/"+work.ID+"/scans?keep=0", nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("keep=0 must be rejected: %d", response.Code)
 	}
 	request = httptest.NewRequest(http.MethodDelete, "http://127.0.0.1/api/v1/workspaces/"+work.ID+"/scans?keep=2", nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	var body struct {
 		Deleted []string `json:"deleted"`
 		Kept    int      `json:"kept"`
@@ -2458,7 +2458,7 @@ func TestScanCompareEndpointDiffsAgainstPreviousOrExplicitScan(t *testing.T) {
 		t.Helper()
 		request := httptest.NewRequest(http.MethodGet, url, nil)
 		response := httptest.NewRecorder()
-		s.Handler().ServeHTTP(response, request)
+		testHandler(s).ServeHTTP(response, request)
 		if response.Code != http.StatusOK {
 			t.Fatalf("compare %q: %d %s", url, response.Code, response.Body.String())
 		}
@@ -2485,7 +2485,7 @@ func TestScanCompareEndpointDiffsAgainstPreviousOrExplicitScan(t *testing.T) {
 
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+first.ID+"/compare?with="+second.ID, nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	var reversed map[string]any
 	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &reversed) != nil {
 		t.Fatalf("reversed compare: %d %s", response.Code, response.Body.String())
@@ -2497,7 +2497,7 @@ func TestScanCompareEndpointDiffsAgainstPreviousOrExplicitScan(t *testing.T) {
 
 	request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+second.ID+"/compare?with=nope", nil)
 	response = httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("invalid with id must 400: %d", response.Code)
 	}
@@ -2535,7 +2535,7 @@ func TestGetScanReturnsPersistedSeverityCounts(t *testing.T) {
 
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/scans/"+scan.ID, nil)
 	response := httptest.NewRecorder()
-	s.Handler().ServeHTTP(response, request)
+	testHandler(s).ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
 		t.Fatalf("scan detail: %d %s", response.Code, response.Body.String())
 	}
@@ -2570,7 +2570,7 @@ func TestSystemCleanEndpoint(t *testing.T) {
 	// POST /api/v1/system/clean
 	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/v1/system/clean", bytes.NewReader([]byte(`{"all": true}`)))
 	w := httptest.NewRecorder()
-	s.Handler().ServeHTTP(w, req)
+	testHandler(s).ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("clean returned %d: %s", w.Code, w.Body.String())
@@ -2630,7 +2630,7 @@ func TestUninstallToolEndpoint(t *testing.T) {
 	// DELETE unknown tool -> 404
 	reqUnknown := httptest.NewRequest(http.MethodDelete, "http://127.0.0.1/api/v1/tools/unknown-tool", nil)
 	wUnknown := httptest.NewRecorder()
-	s.Handler().ServeHTTP(wUnknown, reqUnknown)
+	testHandler(s).ServeHTTP(wUnknown, reqUnknown)
 	if wUnknown.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for unknown tool, got %d", wUnknown.Code)
 	}
@@ -2638,7 +2638,7 @@ func TestUninstallToolEndpoint(t *testing.T) {
 	// DELETE /api/v1/tools/ruff -> 200
 	req := httptest.NewRequest(http.MethodDelete, "http://127.0.0.1/api/v1/tools/ruff", nil)
 	w := httptest.NewRecorder()
-	s.Handler().ServeHTTP(w, req)
+	testHandler(s).ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("uninstall returned %d: %s", w.Code, w.Body.String())
@@ -2661,7 +2661,7 @@ func TestUninstallToolEndpoint(t *testing.T) {
 	// Test uninstall via alias "trivy" -> container-trivy
 	reqAlias := httptest.NewRequest(http.MethodDelete, "http://127.0.0.1/api/v1/tools/trivy", nil)
 	wAlias := httptest.NewRecorder()
-	s.Handler().ServeHTTP(wAlias, reqAlias)
+	testHandler(s).ServeHTTP(wAlias, reqAlias)
 	if wAlias.Code != http.StatusOK {
 		t.Fatalf("uninstall alias trivy returned %d: %s", wAlias.Code, wAlias.Body.String())
 	}
@@ -2703,7 +2703,7 @@ func TestSystemCleanAndUninstallRejectsWhileScanning(t *testing.T) {
 	// 1. POST /api/v1/system/clean while scan is running -> 409
 	reqClean := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/v1/system/clean", bytes.NewReader([]byte(`{"all": true}`)))
 	wClean := httptest.NewRecorder()
-	s.Handler().ServeHTTP(wClean, reqClean)
+	testHandler(s).ServeHTTP(wClean, reqClean)
 	if wClean.Code != http.StatusConflict {
 		t.Fatalf("expected 409 for clean during active scan, got %d: %s", wClean.Code, wClean.Body.String())
 	}
@@ -2711,7 +2711,7 @@ func TestSystemCleanAndUninstallRejectsWhileScanning(t *testing.T) {
 	// 2. DELETE /api/v1/tools/ruff while scan is running -> 409
 	reqUninstall := httptest.NewRequest(http.MethodDelete, "http://127.0.0.1/api/v1/tools/ruff", nil)
 	wUninstall := httptest.NewRecorder()
-	s.Handler().ServeHTTP(wUninstall, reqUninstall)
+	testHandler(s).ServeHTTP(wUninstall, reqUninstall)
 	if wUninstall.Code != http.StatusConflict {
 		t.Fatalf("expected 409 for uninstall during active scan, got %d: %s", wUninstall.Code, wUninstall.Body.String())
 	}
@@ -2723,7 +2723,7 @@ func TestSystemCleanAndUninstallRejectsWhileScanning(t *testing.T) {
 
 	// Now clean should succeed
 	wClean2 := httptest.NewRecorder()
-	s.Handler().ServeHTTP(wClean2, reqClean)
+	testHandler(s).ServeHTTP(wClean2, reqClean)
 	if wClean2.Code != http.StatusOK {
 		t.Fatalf("expected 200 for clean after scan finished, got %d: %s", wClean2.Code, wClean2.Body.String())
 	}
