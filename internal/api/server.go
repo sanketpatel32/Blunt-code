@@ -235,8 +235,11 @@ const exportWriteBound = 5 * time.Minute
 // Not usable for SSE or other long-lived streams.
 func exportDeadline(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(exportWriteBound)); err != nil {
-			http.Error(w, "write deadline unsupported", http.StatusInternalServerError)
+		// ErrUnsupported writers (httptest recorders, non-HTTP/1 transports)
+		// simply can't take a deadline — serve them without one. Any other
+		// failure means the server accepted a socket it cannot bound.
+		if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(exportWriteBound)); err != nil && !errors.Is(err, errors.ErrUnsupported) {
+			http.Error(w, "write deadline failed", http.StatusInternalServerError)
 			return
 		}
 		next.ServeHTTP(w, r)

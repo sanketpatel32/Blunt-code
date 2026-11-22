@@ -75,11 +75,13 @@ func newSupervisionService(t *testing.T, adapters ...analyzers.Analyzer) (*datab
 	return db, service, work
 }
 
-// TestConcurrentScanCapRejectsBeyondCapacity pins the machine-load bound:
-// while MaxConcurrentScans scans are running, the next start is refused with
-// ErrTooManyScans (surfaced as HTTP 503 / CLI exit 3), and capacity returns
+// TestConcurrentScanCapQueuesBeyondCapacity pins the machine-load bound:
+// while MaxConcurrentScans scans are running, further starts are accepted
+// and queued FIFO, and only a full queue (MaxScanQueue) is still refused
+// with ErrTooManyScans (surfaced as HTTP 503 / CLI exit 3). Each queued
+// scan drains into a freed slot in submission order, and capacity returns
 // once the running scans finish.
-func TestConcurrentScanCapRejectsBeyondCapacity(t *testing.T) {
+func TestConcurrentScanCapQueuesBeyondCapacity(t *testing.T) {
 	release := make(chan struct{})
 	db, service, work := newSupervisionService(t, blockingAnalyzer{release: release})
 	var ids []string
@@ -90,11 +92,22 @@ func TestConcurrentScanCapRejectsBeyondCapacity(t *testing.T) {
 		}
 		ids = append(ids, scan.ID)
 	}
-	if _, err := service.DiscoverAndStart(context.Background(), work, "standard", nil); !errors.Is(err, ErrTooManyScans) {
-		t.Fatalf("start beyond capacity: want ErrTooManyScans, got %v", err)
+	var queued []string
+	for i := 0; i < 3; i++ {
+		scan, err := service.DiscoverAndStart(context.Background(), work, "standard", nil)
+		if err != nil {
+			t.Fatalf("queue %d: %v", i+1, err)
+		}
+		if scan.State != "queued" {
+			t.Fatalf("queued scan %d: state %q, want queued", i+1, scan.State)
+		}
+		queued = append(queued, scan.ID)
 	}
+	// Release one slot: the FIFO head drains and starts, the rest stay
+	// queued.
 	close(release)
-	for _, id := range ids {
+	waitForTerminalState(t, db, queued[0])
+	for _, id := range append(ids, queued...) {
 		waitForTerminalState(t, db, id)
 	}
 	scan, err := service.DiscoverAndStart(context.Background(), work, "standard", nil)
@@ -102,6 +115,24 @@ func TestConcurrentScanCapRejectsBeyondCapacity(t *testing.T) {
 		t.Fatalf("start after drain: %v", err)
 	}
 	waitForTerminalState(t, db, scan.ID)
+}
+
+// TestScanQueueOverflowStillRejects pins the queue bound: once
+// MaxScanQueue scans wait behind a full slot set, the next start is
+// refused with ErrTooManyScans — an unbounded queue is a memory leak,
+// not a feature.
+func TestScanQueueOverflowStillRejects(t *testing.T) {
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	_, service, work := newSupervisionService(t, blockingAnalyzer{release: release})
+	for i := 0; i < MaxConcurrentScans+MaxScanQueue; i++ {
+		if _, err := service.DiscoverAndStart(context.Background(), work, "standard", nil); err != nil {
+			t.Fatalf("accept %d: %v", i+1, err)
+		}
+	}
+	if _, err := service.DiscoverAndStart(context.Background(), work, "standard", nil); !errors.Is(err, ErrTooManyScans) {
+		t.Fatalf("start beyond queue capacity: want ErrTooManyScans, got %v", err)
+	}
 }
 
 func hashTree(t *testing.T, root string) map[string]string {
