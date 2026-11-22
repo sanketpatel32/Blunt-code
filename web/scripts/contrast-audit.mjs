@@ -41,9 +41,6 @@ function ratio(L1, L2) {
   const lo = Math.min(a, b);
   return (hi + 0.05) / (lo + 0.05);
 }
-const white = [1, 1, 1];
-const nearWhite = oklchToLinear(99, 0.002, 280);
-const nearBlack = oklchToLinear(14, 0.015, 268);
 
 // The palette lives in tokens.css (oklch). Every pairing below is one that
 // actually ships; each names the rule that creates it.

@@ -25,7 +25,7 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
 export const TEMPLATE_EVENT = 'bluntcode:use-template';
 export const TEMPLATE_STORAGE_KEY = 'bluntcode.templatePrefill';
 
-export function useTemplatePrefill(template: WorkspaceTemplate) {
+export function applyTemplatePrefill(template: WorkspaceTemplate) {
   const payload = JSON.stringify({ name: template.suggestedName, languages: template.languages, analyzers: template.analyzers, templateId: template.id });
   try { localStorage.setItem(TEMPLATE_STORAGE_KEY, payload); } catch { /* ignore */ }
   window.dispatchEvent(new CustomEvent(TEMPLATE_EVENT, { detail: { name: template.suggestedName, languages: template.languages, analyzers: template.analyzers, templateId: template.id } }));
@@ -66,7 +66,7 @@ export function WorkspaceTemplates({ onUseTemplate }: { onUseTemplate?: () => vo
                 className="mt-auto w-full"
                 variant="outline"
                 size="sm"
-                onClick={() => { useTemplatePrefill(t); onUseTemplate?.(); }}
+                onClick={() => { applyTemplatePrefill(t); onUseTemplate?.(); }}
                 aria-label={`Use ${t.title} template`}
               >
                 Use template

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef } from 'react';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 
 export type CodeEditorLanguage = 'yaml' | 'python' | 'javascript' | string;
@@ -130,9 +130,6 @@ export function CodeEditor({
   const containerRef = useRef<HTMLDivElement>(null);
   const highlightRef = useRef<HTMLPreElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
-  const [monacoReady, setMonacoReady] = useState(false);
-  const monacoContainerRef = useRef<HTMLDivElement>(null);
-  const monacoEditorRef = useRef<unknown>(null);
 
   // line numbers
   const lineCount = value === '' ? 1 : value.split('\n').length;
@@ -151,87 +148,6 @@ export function CodeEditor({
     }
     if (gutter) gutter.scrollTop = ta.scrollTop;
   }, []);
-
-  // Dynamic monaco import — optional. Uses variable indirection + @vite-ignore so build does not hard-require the package.
-  useEffect(() => {
-    let cancelled = false;
-    async function tryLoad() {
-      // variable indirection prevents Vite static analysis
-      const m1 = 'monaco-editor';
-      try {
-        // @ts-ignore — optional peer dep, may not be installed
-        const mod: unknown = await import(/* @vite-ignore */ /* webpackIgnore: true */ m1);
-        if (cancelled) return;
-        if (mod && monacoContainerRef.current) setMonacoReady(true);
-        return;
-      } catch {
-        // not available — stay on textarea fallback
-      }
-      const m2 = '@monaco-editor/react';
-      if (!cancelled && !monacoReady) {
-        try {
-          // @ts-ignore
-          const alt: unknown = await import(/* @vite-ignore */ /* webpackIgnore: true */ m2);
-          if (cancelled) return;
-          if (alt && monacoContainerRef.current) setMonacoReady(true);
-        } catch {
-          /* ignore */
-        }
-      }
-    }
-    void tryLoad();
-    return () => {
-      cancelled = true;
-    };
-  }, [monacoReady]);
-
-  // If monaco becomes ready, mount a basic instance when available
-  useEffect(() => {
-    if (!monacoReady || !monacoContainerRef.current) return;
-    let disposed = false;
-    (async () => {
-      try {
-        const mp = 'monaco-editor';
-        // @ts-ignore
-        const monaco: { editor?: { create?: (el: HTMLElement, opts: unknown) => { dispose: () => void; onDidChangeModelContent?: (cb: () => void) => { dispose: () => void }; getValue?: () => string; setValue?: (v: string) => void } } } = await import(/* @vite-ignore */ /* webpackIgnore: true */ mp);
-        if (disposed || !monacoContainerRef.current || !monaco.editor?.create) return;
-        const container = monacoContainerRef.current;
-        container.innerHTML = '';
-        const instance = monaco.editor.create(container, {
-          value,
-          language: language === 'javascript' ? 'javascript' : language === 'python' ? 'python' : 'yaml',
-          theme: 'vs',
-          minimap: { enabled: false },
-          fontSize: 12,
-          fontFamily: 'var(--font-mono)',
-          lineNumbers: 'on',
-          tabSize: 2,
-          insertSpaces: true,
-          automaticLayout: true,
-          scrollBeyondLastLine: false,
-          wordWrap: 'on',
-          readOnly,
-        } as unknown);
-        monacoEditorRef.current = instance;
-        const maybe = instance as { onDidChangeModelContent?: (cb: () => void) => { dispose: () => void }; getValue?: () => string };
-        if (maybe.onDidChangeModelContent && maybe.getValue) {
-          maybe.onDidChangeModelContent(() => {
-            const next = maybe.getValue?.() ?? '';
-            if (next !== value) onChange(next);
-          });
-        }
-      } catch {
-        setMonacoReady(false);
-      }
-    })();
-    return () => {
-      disposed = true;
-      const inst = monacoEditorRef.current as { dispose?: () => void } | null;
-      if (inst?.dispose) inst.dispose();
-      monacoEditorRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [monacoReady, language, readOnly]);
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     // plain Tab inserts 2 spaces; Shift+Tab (and other modifier combos) fall through
@@ -270,31 +186,6 @@ export function CodeEditor({
 
   const hasError = Boolean(error);
   const describedBy = [ariaDescribedBy, hasError ? `${id ?? 'code-editor'}-error` : null].filter(Boolean).join(' ') || undefined;
-
-  if (monacoReady) {
-    return (
-      <div className="space-y-2">
-        <div
-          ref={monacoContainerRef}
-          role="region"
-          aria-label={ariaLabel}
-          tabIndex={-1}
-          onKeyDown={(e) => { if (e.key === 'Escape') e.currentTarget.focus(); }}
-          className="overflow-hidden rounded-[var(--radius-md)] border bg-[var(--color-surface)]"
-          style={{
-            minHeight,
-            borderColor: hasError ? 'var(--color-danger)' : 'var(--color-field-edge)',
-            boxShadow: hasError ? '0 0 0 2px var(--color-danger-soft)' : undefined,
-          }}
-        />
-        {hasError && (
-          <p id={`${id ?? 'code-editor'}-error`} role="alert" className="text-xs leading-5 text-[var(--color-danger)] underline decoration-wavy underline-offset-2" style={{ textDecorationColor: 'var(--color-danger)' }}>
-            {error}
-          </p>
-        )}
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-2">
