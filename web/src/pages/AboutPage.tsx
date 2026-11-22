@@ -92,11 +92,11 @@ type UpdateState =
   | { phase: 'error'; message: string };
 
 /**
- * In-app updater. The check respects offline mode server-side; applying stages
- * the official installer detached, then hands off to the app shell, which
- * stops this app (the installer waits for our exit via -WaitForCloseSeconds)
- * and shows the update screen. The staged launcher relaunches the new version
- * when the install finishes.
+ * In-app updater. The check respects offline mode server-side; applying
+ * downloads and verifies the release, starts the detached updater, then hands
+ * off to the app shell, which stops this app (the updater waits for our exit)
+ * and shows the update screen. The updater relaunches the new version when
+ * the install finishes.
  */
 const NEWLINE = '\n';
 
@@ -119,8 +119,8 @@ function UpdateCard({ version, onUpdateHandoff }: { version: string; onUpdateHan
     try {
       await api.applyUpdate();
       // The shell swaps the whole UI to the update screen and stops the
-      // server; the installer waits up to 60s for that exit before swapping
-      // the binary, then the staged launcher reopens the new version.
+      // server; the updater waits up to 60s for that exit before swapping
+      // the binary, then reopens the new version.
       if (onUpdateHandoff) onUpdateHandoff(state.latest);
       else await api.stopServer().catch(() => undefined);
     } catch (error) {

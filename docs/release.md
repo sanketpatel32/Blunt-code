@@ -10,6 +10,10 @@
   disconnected local-rules scan, and no telemetry/version-check request.
 - Do not publish a manifest containing `latest` or an unverified checksum.
 - Verify loopback binding, installer signature/checksum, offline analysis, and report path redaction.
+- Package with `-SigningKeyFile` and publish `BluntCode-X.Y.Z-windows-amd64.zip.sha256.sig` next to the
+  zip and `.sha256`. The in-app updater (`internal/selfupdate`) downloads only from the exact release
+  tag, verifies that signature against `ReleaseSigningKey` when one is pinned, then the SHA-256, and
+  never runs a downloaded script. Keep the private key off the repository and the build worktree.
 
 ## Managed SonarQube Windows lifecycle gate
 

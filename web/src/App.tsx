@@ -102,7 +102,7 @@ export function App() {
     setClosing(false);
   };
   // Update handoff from the About page: swap the whole UI to the update
-  // screen, then stop the server — the staged installer waits up to 60s for
+  // screen, then stop the server — the staged updater waits up to 60s for
   // our exit before swapping the binary and relaunching the new version.
   const updateHandoff = useCallback((version: string) => {
     setFarewell({ mode: 'updating', version });

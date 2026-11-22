@@ -8,7 +8,11 @@ param(
   # build.ps1, which starts with `npm ci` and deletes all of node_modules.
   # Only correct when the tree is already built and verified; if anything is
   # stale, drop this switch and do a full build.
-  [switch]$SkipBuild
+  [switch]$SkipBuild,
+  # Ed25519 private key from `go run ./cmd/releasesign keygen`. Signs the
+  # .sha256 asset into .sha256.sig for the in-app updater. Required once
+  # internal/selfupdate/signing_key.go pins a public key.
+  [string]$SigningKeyFile = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -44,7 +48,9 @@ $releaseName = "BluntCode-$Version-windows-amd64"
 $payload = Join-Path $output $releaseName
 $archive = Join-Path $output "$releaseName.zip"
 if (Test-Path -LiteralPath $payload) { Remove-Item -LiteralPath $payload -Recurse -Force }
-if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive -Force }
+foreach ($stale in @($archive, "$archive.sha256", "$archive.sha256.sig")) {
+  if (Test-Path -LiteralPath $stale) { Remove-Item -LiteralPath $stale -Force }
+}
 New-Item -ItemType Directory -Path $payload -Force | Out-Null
 
 Copy-Item -LiteralPath (Join-Path $root 'bluntcode.exe') -Destination $payload
@@ -56,6 +62,27 @@ Copy-Item -LiteralPath (Join-Path $root 'scripts\install-latest.ps1') -Destinati
 Compress-Archive -LiteralPath $payload -DestinationPath $archive -Force
 $hash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
 Set-Content -LiteralPath "$archive.sha256" -Value "$hash  $(Split-Path -Leaf $archive)" -NoNewline
+
+# The in-app updater refuses a release whose .sha256 is not signed by the key
+# compiled into the running binary, so never publish one without the other.
+$keySource = Get-Content -LiteralPath (Join-Path $root 'internal\selfupdate\signing_key.go') -Raw
+$pinnedKey = if ($keySource -match 'ReleaseSigningKey = "([^"]*)"') { $Matches[1] } else { '' }
+if ($SigningKeyFile) {
+  Push-Location $root
+  try {
+    go run ./cmd/releasesign sign -key $SigningKeyFile -in "$archive.sha256" -out "$archive.sha256.sig"
+    if ($LASTEXITCODE -ne 0) { throw "Signing $archive.sha256 failed with exit code $LASTEXITCODE" }
+    if ($pinnedKey) {
+      go run ./cmd/releasesign verify -pub $pinnedKey -in "$archive.sha256" -sig "$archive.sha256.sig"
+      if ($LASTEXITCODE -ne 0) { throw "The signing key does not match ReleaseSigningKey in internal/selfupdate/signing_key.go." }
+    }
+  } finally {
+    Pop-Location
+  }
+  Write-Host "Signature: $archive.sha256.sig"
+} elseif ($pinnedKey) {
+  throw "internal/selfupdate/signing_key.go pins a release signing key; pass -SigningKeyFile or in-app updates will reject this release."
+}
 Write-Host "Package: $archive"
 Write-Host "SHA256:  $hash"
 Write-Host "Installer: $(Join-Path $output 'install-latest.ps1')"
