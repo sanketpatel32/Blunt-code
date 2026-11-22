@@ -14,7 +14,8 @@
           "--version"
         ],
         "expect": "0.16.0"
-      }
+      },
+      "download_bytes": 11011557
     },
     {
       "tool_id": "biome",
@@ -30,7 +31,8 @@
           "--version"
         ],
         "expect": "2.5.6"
-      }
+      },
+      "download_bytes": 82569216
     },
     {
       "tool_id": "gitleaks-secrets",
@@ -46,7 +48,8 @@
           "version"
         ],
         "expect": "8.30.1"
-      }
+      },
+      "download_bytes": 8438883
     },
     {
       "tool_id": "osv-dependencies",
@@ -62,7 +65,8 @@
           "--version"
         ],
         "expect": "2.5.1"
-      }
+      },
+      "download_bytes": 58970112
     },
     {
       "tool_id": "container-trivy",
@@ -78,7 +82,8 @@
           "--version"
         ],
         "expect": "0.74.0"
-      }
+      },
+      "download_bytes": 51656892
     },
     {
       "tool_id": "iac-checkov",
@@ -90,7 +95,8 @@
       "executable": "env/checkov/Scripts/python.exe",
       "license_url": "https://github.com/bridgecrewio/checkov/blob/3.3.16/LICENSE",
       "install_kind": "uv_tool",
-      "package": "checkov==3.3.16"
+      "package": "checkov==3.3.16",
+      "download_bytes": 2323467
     },
     {
       "tool_id": "uv",
@@ -106,7 +112,8 @@
           "--version"
         ],
         "expect": "0.11.16"
-      }
+      },
+      "download_bytes": 23236992
     },
     {
       "tool_id": "semgrep",
@@ -124,7 +131,8 @@
           "--version"
         ],
         "expect": "1.172.0"
-      }
+      },
+      "download_bytes": 57257253
     },
     {
       "tool_id": "sonarqube-server",
@@ -134,7 +142,8 @@
       "sha256": "ea1c5c1932f9c25350eafc4cdb1a839527c117e5d98b5fcf222a715b6b50a1f2",
       "archive_type": "zip",
       "executable": "sonarqube-26.8.0.126808/bin/windows-x86-64/StartSonar.bat",
-      "license_url": "https://github.com/SonarSource/sonarqube/blob/26.8.0.126808/LICENSE.txt"
+      "license_url": "https://github.com/SonarSource/sonarqube/blob/26.8.0.126808/LICENSE.txt",
+      "download_bytes": 934034362
     },
     {
       "tool_id": "sonar-scanner",
@@ -144,7 +153,8 @@
       "sha256": "76d66269943d503381d9f5e273e5d7a90d6e5001c90615e63008ed1fc0b76921",
       "archive_type": "zip",
       "executable": "sonar-scanner-7.3.0.5189-windows-x64/bin/sonar-scanner.bat",
-      "license_url": "https://github.com/SonarSource/sonar-scanner-cli/blob/7.3.0.5189/LICENSE.txt"
+      "license_url": "https://github.com/SonarSource/sonar-scanner-cli/blob/7.3.0.5189/LICENSE.txt",
+      "download_bytes": 55181382
     },
     {
       "tool_id": "java",
@@ -160,7 +170,8 @@
           "-version"
         ],
         "expect": "21.0.12"
-      }
+      },
+      "download_bytes": 205069442
     }
   ]
 }

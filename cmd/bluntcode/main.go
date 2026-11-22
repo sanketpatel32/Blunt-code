@@ -123,22 +123,27 @@ func runServer(args []string) {
 	flags.BoolVar(&noBrowser, "no-browser", false, "do not open a browser")
 	flags.BoolVar(&showVersion, "version", false, "print version")
 	flags.IntVar(&port, "port", defaultPort, "loopback port (0 selects a free port)")
-	if err := flags.Parse(args); err != nil {
+	// Flags may appear before or after the workspace path so the documented
+	// `bluntcode <path> --no-browser` order works even though flag.FlagSet
+	// stops at the first positional argument (the same loop parseScanFlags
+	// uses).
+	positional, err := collectPositionals(flags, args)
+	if err != nil {
 		os.Exit(2)
 	}
 	if showVersion {
 		fmt.Println(version)
 		return
 	}
-	if flags.NArg() > 1 {
+	if len(positional) > 1 {
+		fmt.Fprintf(os.Stderr, "bluntcode: expected at most one workspace path, got %d (%s)\n", len(positional), strings.Join(positional, ", "))
 		fmt.Fprintln(os.Stderr, "usage: bluntcode [--no-browser] [--port N] [path]")
-		fmt.Fprintln(os.Stderr, "       bluntcode doctor [--json] [--fix]")
-		fmt.Fprintln(os.Stderr, "       bluntcode config [--json]")
-		fmt.Fprintln(os.Stderr, "       bluntcode scan <path> [--profile quick|standard|deep] [--json] [--timeout 30m] [--quiet] [--fail-on high+] [--max-findings N]")
-		fmt.Fprintln(os.Stderr, "       bluntcode prune <path> [--keep N]")
-		fmt.Fprintln(os.Stderr, "       bluntcode agent [--help] | bluntcode agent docs | bluntcode agent scan <path> [scan flags]")
-		fmt.Fprintln(os.Stderr, "       bluntcode llm | bluntcode llms")
+		fmt.Fprintln(os.Stderr, "Run 'bluntcode help' for the full command list.")
 		os.Exit(2)
+	}
+	workspacePath := ""
+	if len(positional) == 1 {
+		workspacePath = positional[0]
 	}
 	// Shared bootstrap (single-instance lock, database, tool service, analyzer
 	// registry, scan service) lives in bootstrap.go and is reused by `scan`.
@@ -152,8 +157,8 @@ func runServer(args []string) {
 		fatal(err)
 	}
 	defer release()
-	if flags.NArg() == 1 {
-		if _, err := ensureWorkspace(context.Background(), app.db, flags.Arg(0)); err != nil {
+	if workspacePath != "" {
+		if _, err := ensureWorkspace(context.Background(), app.db, workspacePath); err != nil {
 			fatal(err)
 		}
 	}
@@ -216,6 +221,26 @@ func runServer(args []string) {
 	}()
 	if err := httpServer.Serve(listener); err != nil && err != http.ErrServerClosed {
 		fatal(err)
+	}
+}
+
+// collectPositionals returns every positional argument on the command line,
+// interleaved with flags in any order. flag.FlagSet stops parsing at the
+// first positional, so each round collects one positional and hands the
+// remainder back until the input is exhausted — the same loop
+// parseScanFlags uses.
+func collectPositionals(flags *flag.FlagSet, args []string) ([]string, error) {
+	var positional []string
+	remaining := args
+	for {
+		if err := flags.Parse(remaining); err != nil {
+			return nil, err
+		}
+		if flags.NArg() == 0 {
+			return positional, nil
+		}
+		positional = append(positional, flags.Arg(0))
+		remaining = flags.Args()[1:]
 	}
 }
 

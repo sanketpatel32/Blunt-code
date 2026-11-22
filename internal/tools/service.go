@@ -111,6 +111,46 @@ type NotInstallableError struct {
 
 func (e *NotInstallableError) Error() string { return toolName(e.ID) + ": " + e.Detail }
 
+// PendingDownloadBytes estimates how many bytes Ensure(id) would download on
+// this platform right now: composite tools (SonarQube's server + scanner +
+// Java bundle) sum only their missing artifacts, and a uv_tool install adds
+// the managed uv bootstrap when it is not ready yet. The number comes from
+// each artifact's approximate manifest download_bytes — a progress hint for
+// "Preparing X (~N MB)" stages, never an integrity or capacity check.
+func (s *Service) PendingDownloadBytes(id string) int64 {
+	var total int64
+	if id == "sonarqube" {
+		artifacts, err := s.sonarQubeArtifacts()
+		if err != nil {
+			return 0
+		}
+		for _, artifact := range artifacts {
+			if !s.Manager.IsReady(artifact) {
+				total += artifact.DownloadBytes
+			}
+		}
+		return total
+	}
+	artifact, ok := s.Manager.Manifest.Find(id, platform())
+	if !ok {
+		return 0
+	}
+	if artifact.InstallKind == "uv_tool" {
+		if _, err := os.Stat(s.Manager.UvToolPaths(artifact).Executable); err == nil {
+			return 0
+		}
+		total = artifact.DownloadBytes
+		if uv, ok := s.Manager.Manifest.Find("uv", platform()); ok && !s.Manager.IsReady(uv) {
+			total += uv.DownloadBytes
+		}
+		return total
+	}
+	if s.Manager.IsReady(artifact) {
+		return 0
+	}
+	return artifact.DownloadBytes
+}
+
 func (s *Service) Ensure(ctx context.Context, id string) error {
 	s.installMu.Lock()
 	defer s.installMu.Unlock()

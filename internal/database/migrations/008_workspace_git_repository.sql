@@ -1,0 +1,1 @@
+ALTER TABLE workspaces ADD COLUMN git_repository INTEGER NOT NULL DEFAULT 0;
