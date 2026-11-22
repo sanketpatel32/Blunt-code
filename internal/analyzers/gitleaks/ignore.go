@@ -42,6 +42,7 @@ func ignoreTargets(root string) []string {
 		return nil
 	}
 	defer f.Close()
+	realRoot, _ := filepath.EvalSymlinks(root)
 	seen := make(map[string]bool)
 	var out []string
 	scanner := bufio.NewScanner(io.LimitReader(f, 16<<20))
@@ -64,8 +65,14 @@ func ignoreTargets(root string) []string {
 			if !ok || seen[rel] || rel == ignoreFileName {
 				continue
 			}
-			info, err := os.Lstat(filepath.Join(root, filepath.FromSlash(rel)))
+			full := filepath.Join(root, filepath.FromSlash(rel))
+			info, err := os.Lstat(full)
 			if err != nil || !info.Mode().IsRegular() || info.Size() > maxStagedFileBytes {
+				continue
+			}
+			// Lstat only checks the last element; a directory link earlier in
+			// the path could still lead outside the workspace.
+			if real, err := filepath.EvalSymlinks(full); err != nil || realRoot == "" || real != filepath.Join(realRoot, filepath.FromSlash(rel)) {
 				continue
 			}
 			seen[rel] = true

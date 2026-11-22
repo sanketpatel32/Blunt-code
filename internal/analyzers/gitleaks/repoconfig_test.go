@@ -49,6 +49,13 @@ func TestIgnoreTargetsResolvesFingerprintsInsideRoot(t *testing.T) {
 		}
 	}
 	write("sub/creds.txt", "x")
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "secret.txt"), []byte("z"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "linked")); err != nil {
+		t.Skip("symlinks unavailable:", err)
+	}
 	write("other.env", "y")
 	write(ignoreFileName, strings.Join([]string{
 		"# comment",
@@ -56,6 +63,7 @@ func TestIgnoreTargetsResolvesFingerprintsInsideRoot(t *testing.T) {
 		"abc1234:other.env:generic-api-key:3",
 		"sub/creds.txt:github-pat:2",
 		"../escape.txt:rule:1",
+		"linked/secret.txt:rule:1",
 		"missing.txt:rule:1",
 		".gitleaksignore:rule:1",
 		"garbage",
