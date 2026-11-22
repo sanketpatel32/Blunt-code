@@ -1451,11 +1451,14 @@ func (s *Server) startScan(w http.ResponseWriter, r *http.Request) {
 	patterns, _ := s.userExcludes(r.Context(), work.ID)
 	scan, err := s.scans.DiscoverAndStartWithOptions(r.Context(), work, input.Profile, patterns, scans.ScanOptions{TargetURL: targetURL})
 	if err != nil {
-		if errors.Is(err, scans.ErrTooManyScans) {
+		switch {
+		case errors.Is(err, scans.ErrTooManyScans):
 			fail(w, 503, "SCAN_CAPACITY", "Too many scans are already running. Wait for one to finish.")
-			return
+		case errors.Is(err, scans.ErrWorkspaceRootMissing):
+			fail(w, 404, "WORKSPACE_ROOT_MISSING", err.Error())
+		default:
+			fail(w, 500, "DATABASE_ERROR", "Could not create scan.")
 		}
-		fail(w, 500, "DATABASE_ERROR", "Could not create scan.")
 		return
 	}
 	writeJSON(w, 202, scan)
@@ -2448,6 +2451,10 @@ func (s *Server) scanPlan(w http.ResponseWriter, r *http.Request) {
 	}
 	plan, err := s.scans.Plan(r.Context(), work, profile, patterns)
 	if err != nil {
+		if errors.Is(err, scans.ErrWorkspaceRootMissing) {
+			fail(w, 404, "WORKSPACE_ROOT_MISSING", err.Error())
+			return
+		}
 		fail(w, 500, "DISCOVERY_FAILED", "Could not review workspace inputs.")
 		return
 	}

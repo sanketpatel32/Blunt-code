@@ -31,6 +31,7 @@ records differ for older versions:
 - **Windows build.** `web/src/lib/hackingTests.ts` embedded a literal PHP web-shell string that Windows Defender quarantines as `Backdoor:PHP/Perhetshell.B!dha`, deleting the file mid-build and making the repo unbuildable on stock Windows; the pentest card's description no longer carries the live shell source (#60).
 - **Settings two-column bento.** A leftover Tailwind `space-y-4` margin utility fought the grid's own `gap`, so section cards never shared a row at ≥1280px; a stray `<Separator>` between the first two sections also consumed a grid cell.
 - **Accessibility.** The scrollable scan-event list is keyboard-focusable (`scrollable-region-focusable`), and nine `aria-label`s on generic elements (paragraph/div/span) gained the roles (`group`/`img`) those attributes require (`aria-prohibited-attr`).
+- **Stale workspace scans tell the truth.** Starting or planning a scan on a workspace whose folder was deleted or moved now returns `404 WORKSPACE_ROOT_MISSING` naming the path, instead of a misleading `500 DATABASE_ERROR "Could not create scan"`; the CLI reports the same cause.
 - **E2E smoke suite.** Scan polling waits up to 300s (SonarQube alone can exceed 90s even warm) and asserts a terminal state before checking results; cleanup cancels the workspace's in-flight scans so deletion no longer hits `409 SCAN_IN_PROGRESS`.
 
 ### Changed
