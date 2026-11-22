@@ -461,20 +461,18 @@ func (d *DB) ReplaceUserRules(ctx context.Context, workspaceID string, rules []c
 	if err != nil {
 		return err
 	}
+	defer func() { _ = tx.Rollback() }()
 	if _, err = tx.ExecContext(ctx, `DELETE FROM workspace_rules WHERE workspace_id=? AND source='user'`, workspaceID); err != nil {
-		_ = tx.Rollback()
 		return err
 	}
 	for _, r := range rules {
 		if r.RuleType != "include" && r.RuleType != "exclude" {
-			_ = tx.Rollback()
 			return fmt.Errorf("invalid rule type")
 		}
 		if r.ID == "" {
 			r.ID = NewID()
 		}
 		if _, err = tx.ExecContext(ctx, `INSERT INTO workspace_rules(id,workspace_id,rule_type,pattern,source,enabled,created_at) VALUES(?,?,?,?,?,?,?)`, r.ID, workspaceID, r.RuleType, r.Pattern, "user", boolInt(r.Enabled), dbTime(time.Now())); err != nil {
-			_ = tx.Rollback()
 			return err
 		}
 	}
@@ -505,17 +503,15 @@ func (d *DB) ReplacePathOverrides(ctx context.Context, workspaceID string, overr
 	if err != nil {
 		return err
 	}
+	defer func() { _ = tx.Rollback() }()
 	if _, err = tx.ExecContext(ctx, `DELETE FROM workspace_path_overrides WHERE workspace_id=?`, workspaceID); err != nil {
-		_ = tx.Rollback()
 		return err
 	}
 	for _, override := range overrides {
 		if override.Mode != "include" && override.Mode != "exclude" || strings.TrimSpace(override.RelativePath) == "" {
-			_ = tx.Rollback()
 			return fmt.Errorf("invalid path override")
 		}
 		if _, err = tx.ExecContext(ctx, `INSERT INTO workspace_path_overrides(workspace_id,relative_path,mode,created_at,updated_at) VALUES(?,?,?,?,?)`, workspaceID, override.RelativePath, override.Mode, dbTime(time.Now()), dbTime(time.Now())); err != nil {
-			_ = tx.Rollback()
 			return err
 		}
 	}
@@ -561,11 +557,7 @@ func (d *DB) AddSuppressions(ctx context.Context, workspaceID string, items []Su
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if err != nil {
-			_ = tx.Rollback()
-		}
-	}()
+	defer func() { _ = tx.Rollback() }()
 	statement, err := tx.PrepareContext(ctx, `INSERT INTO suppressed_findings(workspace_id,fingerprint,reason,created_at) VALUES(?,?,?,?) ON CONFLICT(workspace_id,fingerprint) DO UPDATE SET reason=excluded.reason`)
 	if err != nil {
 		return err
@@ -676,13 +668,12 @@ func (d *DB) CreateScanWithFiles(ctx context.Context, scan core.Scan, files []co
 	if err != nil {
 		return core.Scan{}, err
 	}
+	defer func() { _ = tx.Rollback() }()
 	if _, err = tx.ExecContext(ctx, `INSERT INTO scans(id,workspace_id,state,profile,started_at,candidate_file_count,selected_file_count,snapshot_json) VALUES(?,?,?,?,?,?,?,?)`, scan.ID, scan.WorkspaceID, scan.State, scan.Profile, dbTime(now), scan.CandidateFileCount, scan.SelectedFileCount, scan.SnapshotJSON); err != nil {
-		_ = tx.Rollback()
 		return core.Scan{}, err
 	}
 	for _, file := range files {
 		if _, err = tx.ExecContext(ctx, `INSERT INTO scan_files(scan_id,relative_path,language,selected,skip_reason,size_bytes) VALUES(?,?,?,?,?,?)`, scan.ID, file.RelativePath, nullIfEmpty(file.Language), boolInt(file.Selected), nullIfEmpty(file.SkipReason), file.SizeBytes); err != nil {
-			_ = tx.Rollback()
 			return core.Scan{}, fmt.Errorf("save scan file manifest: %w", err)
 		}
 	}
@@ -1022,13 +1013,12 @@ func (d *DB) UpdateScanState(ctx context.Context, id, state, errorSummary string
 	if err != nil {
 		return err
 	}
+	defer func() { _ = tx.Rollback() }()
 	if _, err = tx.ExecContext(ctx, `UPDATE scans SET state=?,finished_at=CASE WHEN ? IN ('completed','completed_with_warnings','failed','cancelled','interrupted') THEN ? ELSE finished_at END,error_summary=? WHERE id=?`, state, state, finishedAt, errorSummary, id); err != nil {
-		_ = tx.Rollback()
 		return err
 	}
 	if isTerminalScanState(state) {
 		if err = stampWorkspaceLastScan(ctx, tx, id, finishedAt); err != nil {
-			_ = tx.Rollback()
 			return err
 		}
 	}
@@ -1040,12 +1030,11 @@ func (d *DB) MarkInterruptedScans(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	defer func() { _ = tx.Rollback() }()
 	if _, err = tx.ExecContext(ctx, `UPDATE workspaces SET last_scan_at=? WHERE id IN (SELECT workspace_id FROM scans WHERE state IN ('queued','preparing','installing_tools','discovering','running','normalizing','generating_report'))`, finishedAt); err != nil {
-		_ = tx.Rollback()
 		return err
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE scans SET state='interrupted',finished_at=?,error_summary='Previous application process exited before scan completion.' WHERE state IN ('queued','preparing','installing_tools','discovering','running','normalizing','generating_report')`, finishedAt); err != nil {
-		_ = tx.Rollback()
 		return err
 	}
 	return tx.Commit()
@@ -1493,9 +1482,9 @@ func (d *DB) SaveAnalyzerResult(ctx context.Context, scanID string, run Analyzer
 	if err != nil {
 		return "", err
 	}
+	defer func() { _ = tx.Rollback() }()
 	duration := run.FinishedAt.Sub(run.StartedAt).Milliseconds()
 	if _, err = tx.ExecContext(ctx, `INSERT INTO analyzer_runs(id,scan_id,analyzer_id,version,state,started_at,finished_at,duration_ms,exit_code,finding_count,warning_count,error_summary) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, runID, scanID, run.AnalyzerID, run.Version, run.State, dbTime(run.StartedAt), dbTime(run.FinishedAt), duration, run.ExitCode, len(findings), run.WarningCount, nullIfEmpty(run.Error)); err != nil {
-		_ = tx.Rollback()
 		return "", err
 	}
 	// Occurrence-distinct identities for fresh output only: reused findings
@@ -1504,13 +1493,11 @@ func (d *DB) SaveAnalyzerResult(ctx context.Context, scanID string, run Analyzer
 	analyzers.SetFingerprints(findings)
 	for _, finding := range findings {
 		if err = insertFinding(ctx, tx, scanID, runID, finding); err != nil {
-			_ = tx.Rollback()
 			return "", err
 		}
 	}
 	for _, metric := range metrics {
 		if _, err = tx.ExecContext(ctx, `INSERT INTO metrics(id,scan_id,analyzer_id,scope,metric_key,label,value_number,unit,metadata_json) VALUES(?,?,?,?,?,?,?,?,?)`, NewID(), scanID, metric.AnalyzerID, "project", metric.Key, metric.Label, metric.Value, nullIfEmpty(metric.Unit), "{}"); err != nil {
-			_ = tx.Rollback()
 			return "", err
 		}
 	}
@@ -1557,6 +1544,7 @@ func (d *DB) CompleteScan(ctx context.Context, scanID, state, reportPath string)
 	if err != nil {
 		return err
 	}
+	defer func() { _ = tx.Rollback() }()
 	counts := map[string]int{}
 	// Suppressed findings stay stored, but they must not feed the scan record's
 	// totals or severity counts. The workspace join resolves the scan's
@@ -1581,7 +1569,6 @@ func (d *DB) CompleteScan(ctx context.Context, scanID, state, reportPath string)
 		err = stampWorkspaceLastScan(ctx, tx, scanID, finishedAt)
 	}
 	if err != nil {
-		_ = tx.Rollback()
 		return err
 	}
 	return tx.Commit()
@@ -1597,6 +1584,7 @@ func (d *DB) RecountWorkspaceScans(ctx context.Context, workspaceID string) erro
 	if err != nil {
 		return err
 	}
+	defer func() { _ = tx.Rollback() }()
 	count := func(severity string) string {
 		return `(SELECT COUNT(*) FROM findings f WHERE f.scan_id=scans.id AND f.severity='` + severity + `' AND NOT EXISTS (SELECT 1 FROM suppressed_findings s WHERE s.workspace_id=scans.workspace_id AND s.fingerprint=f.fingerprint))`
 	}
@@ -1605,7 +1593,6 @@ func (d *DB) RecountWorkspaceScans(ctx context.Context, workspaceID string) erro
 		_, err = tx.ExecContext(ctx, `UPDATE scans SET total_findings=critical_count+high_count+medium_count+low_count+info_count WHERE workspace_id=? AND finished_at IS NOT NULL`, workspaceID)
 	}
 	if err != nil {
-		_ = tx.Rollback()
 		return err
 	}
 	return tx.Commit()
@@ -2313,22 +2300,19 @@ func (d *DB) SaveScanFileHashes(ctx context.Context, scanID string, hashes map[s
 	if err != nil {
 		return err
 	}
+	defer func() { _ = tx.Rollback() }()
 	if _, err = tx.ExecContext(ctx, `DELETE FROM scan_file_hashes WHERE scan_id=?`, scanID); err != nil {
-		_ = tx.Rollback()
 		return err
 	}
 	if _, err = tx.ExecContext(ctx, `DELETE FROM scan_hash_meta WHERE scan_id=?`, scanID); err != nil {
-		_ = tx.Rollback()
 		return err
 	}
 	for path, hash := range hashes {
 		if _, err = tx.ExecContext(ctx, `INSERT INTO scan_file_hashes(scan_id,relative_path,content_hash) VALUES(?,?,?)`, scanID, path, hash); err != nil {
-			_ = tx.Rollback()
 			return err
 		}
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO scan_hash_meta(scan_id,analyzers_json) VALUES(?,?)`, scanID, analyzersJSON); err != nil {
-		_ = tx.Rollback()
 		return err
 	}
 	return tx.Commit()
@@ -2378,19 +2362,17 @@ func (d *DB) AppendReusedFindings(ctx context.Context, scanID, analyzerID string
 	if err != nil {
 		return err
 	}
+	defer func() { _ = tx.Rollback() }()
 	var runID string
 	if err = tx.QueryRowContext(ctx, `SELECT id FROM analyzer_runs WHERE scan_id=? AND analyzer_id=? AND state='succeeded' ORDER BY started_at DESC LIMIT 1`, scanID, analyzerID).Scan(&runID); err != nil {
-		_ = tx.Rollback()
 		return err
 	}
 	for _, finding := range findings {
 		if err = insertFinding(ctx, tx, scanID, runID, finding); err != nil {
-			_ = tx.Rollback()
 			return err
 		}
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE analyzer_runs SET finding_count=finding_count+? WHERE id=?`, len(findings), runID); err != nil {
-		_ = tx.Rollback()
 		return err
 	}
 	return tx.Commit()
@@ -2525,13 +2507,12 @@ func (d *DB) SetWorkspaceTags(ctx context.Context, workspaceID string, tags []st
 	if err != nil {
 		return err
 	}
+	defer func() { _ = tx.Rollback() }()
 	if _, err = tx.ExecContext(ctx, `DELETE FROM workspace_tags WHERE workspace_id=?`, workspaceID); err != nil {
-		_ = tx.Rollback()
 		return err
 	}
 	for _, tag := range normalized {
 		if _, err = tx.ExecContext(ctx, `INSERT INTO workspace_tags(workspace_id, tag) VALUES(?,?)`, workspaceID, tag); err != nil {
-			_ = tx.Rollback()
 			return err
 		}
 	}
@@ -2562,11 +2543,7 @@ func (d *DB) PruneOldScans(ctx context.Context, workspaceID string, keep int) (i
 	if err != nil {
 		return nil, nil, err
 	}
-	defer func() {
-		if err != nil {
-			_ = tx.Rollback()
-		}
-	}()
+	defer func() { _ = tx.Rollback() }()
 	rows, err := tx.QueryContext(ctx, `SELECT id,COALESCE(report_markdown_path,'') FROM scans WHERE workspace_id=? AND state IN `+terminalScanStates+` ORDER BY started_at DESC, id DESC LIMIT -1 OFFSET ?`, workspaceID, keep)
 	if err != nil {
 		return nil, nil, err
@@ -2622,16 +2599,12 @@ func (d *DB) DeleteScan(ctx context.Context, id string) (deleted bool, orphanedR
 	if err != nil {
 		return false, "", err
 	}
-	defer func() {
-		if err != nil {
-			_ = tx.Rollback()
-		}
-	}()
+	defer func() { _ = tx.Rollback() }()
 	var workspaceID, reportPath string
 	err = tx.QueryRowContext(ctx, `SELECT workspace_id,COALESCE(report_markdown_path,'') FROM scans WHERE id=? AND state IN `+terminalScanStates, id).Scan(&workspaceID, &reportPath)
 	if errors.Is(err, sql.ErrNoRows) {
 		err = nil
-		return false, "", tx.Rollback()
+		return false, "", nil
 	}
 	if err != nil {
 		return false, "", err
