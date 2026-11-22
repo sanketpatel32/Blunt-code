@@ -326,6 +326,10 @@ func (s *Server) listWorkspaces(w http.ResponseWriter, r *http.Request) {
 			fail(w, 400, "INVALID_WORKSPACE_QUERY", err.Error())
 			return
 		}
+		if filt.Query != "" {
+			s.warmUnscannedLanguages(ctx)
+			filt.QueryLanguageIDs = s.cache.languageMatches(filt.Query)
+		}
 		items, total, err = s.db.WorkspacesPage(ctx, page, pageSize, filt)
 		if err != nil {
 			if strings.Contains(err.Error(), "out of range") {

@@ -39,6 +39,7 @@ records differ for older versions:
 - Incremental scans that drop reused findings no longer report a clean completion (#32).
 - Scan failure paths, shutdown cancellation, suppression import atomicity and event-history eviction are real (#38).
 - `useLoad` stale data/abort races, API timeouts, path encoding, and Home/Search/History page restore (#36).
+- Workspace search dropped matches the server found (client re-filtered by language) and "Last scan" sorted by last-opened instead of scan time (#46, #47 via #48).
 - Stale version claims in docs; THIRD_PARTY_NOTICES completed (#39).
 
 ## [0.49.1] - 2026-11-06

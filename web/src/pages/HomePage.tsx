@@ -202,19 +202,14 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
     });
   }, [workspaceItems]);
 
-  // ── The ledger: server-ranked page (findings desc); filter is server search + optional client language match ──
+  // ── The ledger: server-ranked page (findings desc); the server's search (name, path, language) is the only filter ──
   const ledgerRows = useMemo(() => {
-    const query = ledgerFilter.trim().toLowerCase();
-    const base = !query
-      ? ledgerBase
-      : ledgerBase.filter((row) =>
-          row.workspace.languages?.some((language) => language.toLowerCase().includes(query)));
-    const scored = base.filter((row) => row.score !== null);
-    const unscored = base
+    const scored = ledgerBase.filter((row) => row.score !== null);
+    const unscored = ledgerBase
       .filter((row) => row.score === null)
       .sort((a, b) => a.workspace.name.localeCompare(b.workspace.name));
     return [...scored, ...unscored];
-  }, [ledgerBase, ledgerFilter]);
+  }, [ledgerBase]);
 
   const feedRows = useMemo(() => {
     return scans.filter((scan) => {
