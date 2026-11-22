@@ -122,6 +122,25 @@ describe('API client', () => {
     }
   });
 
+  it('times out a read whose body stalls after the headers arrive', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal('fetch', vi.fn((_: string, init: RequestInit) => Promise.resolve({
+        ok: true,
+        status: 200,
+        text: () => new Promise<string>((_resolve, reject) => {
+          init.signal!.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+        }),
+      } as unknown as Response)));
+      const pending = api.stats();
+      const assertion = expect(pending).rejects.toMatchObject({ code: 'TIMEOUT' });
+      await vi.advanceTimersByTimeAsync(READ_TIMEOUT_MS);
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('does not put a timeout on mutations', async () => {
     let signal: AbortSignal | undefined;
     vi.stubGlobal('fetch', vi.fn((_: string, init: RequestInit) => { signal = init.signal ?? undefined; return Promise.resolve(new Response(JSON.stringify({ cancelled: true }), { status: 200 })); }));

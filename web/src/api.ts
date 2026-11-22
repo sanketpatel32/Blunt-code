@@ -25,17 +25,11 @@ async function requestWithStatus<T>(path: string, init?: RequestInit): Promise<{
   else callerSignal?.addEventListener('abort', onCallerAbort, { once: true });
   const timer = timeoutMs > 0 ? setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs) : undefined;
   try {
-    let response: Response;
-    try {
-      response = await fetch(`${PREFIX}${path}`, {
-        ...init,
-        signal: controller.signal,
-        headers: { Accept: 'application/json', ...(init?.body ? { 'Content-Type': 'application/json' } : {}), ...init?.headers },
-      });
-    } catch (e) {
-      if (timedOut) throw new ApiError('TIMEOUT', `Request timed out after ${Math.round(timeoutMs / 1000)}s`);
-      throw e;
-    }
+    const response = await fetch(`${PREFIX}${path}`, {
+      ...init,
+      signal: controller.signal,
+      headers: { Accept: 'application/json', ...(init?.body ? { 'Content-Type': 'application/json' } : {}), ...init?.headers },
+    });
     if (!response.ok) {
       const body = await response.json().catch(() => null) as { error?: { code?: string; message?: string; details?: Record<string, unknown> } } | null;
       throw new ApiError(body?.error?.code ?? 'REQUEST_FAILED', body?.error?.message ?? `Request failed (${response.status})`, response.status, body?.error?.details);
@@ -45,6 +39,10 @@ async function requestWithStatus<T>(path: string, init?: RequestInit): Promise<{
     const text = await response.text();
     const data = (text.trim() ? JSON.parse(text) : null) as T;
     return { data, status: response.status };
+  } catch (e) {
+    // The deadline can land while headers or the body are still arriving; both surface as TIMEOUT.
+    if (timedOut) throw new ApiError('TIMEOUT', `Request timed out after ${Math.round(timeoutMs / 1000)}s`);
+    throw e;
   } finally {
     if (timer) clearTimeout(timer);
     callerSignal?.removeEventListener('abort', onCallerAbort);
