@@ -47,7 +47,11 @@ func (d *DB) CreateWorkspace(ctx context.Context, workspace core.Workspace) (cor
 	}
 	now := time.Now().UTC()
 	workspace.CreatedAt, workspace.UpdatedAt = now, now
-	_, err := d.SQL.ExecContext(ctx, `INSERT INTO workspaces (id,name,root_path,created_at,updated_at,default_profile,settings_json) VALUES (?,?,?,?,?,?,?)`, workspace.ID, workspace.Name, workspace.RootPath, dbTime(now), dbTime(now), workspace.DefaultProfile, mergedWorkspaceSettings(core.Workspace{SettingsJSON: "{}", TrustRepoAnalyzerConfig: workspace.TrustRepoAnalyzerConfig}))
+	gitRepository := 0
+	if workspace.GitRepository {
+		gitRepository = 1
+	}
+	_, err := d.SQL.ExecContext(ctx, `INSERT INTO workspaces (id,name,root_path,created_at,updated_at,default_profile,settings_json,git_repository) VALUES (?,?,?,?,?,?,?,?)`, workspace.ID, workspace.Name, workspace.RootPath, dbTime(now), dbTime(now), workspace.DefaultProfile, mergedWorkspaceSettings(core.Workspace{SettingsJSON: "{}", TrustRepoAnalyzerConfig: workspace.TrustRepoAnalyzerConfig}), gitRepository)
 	if err != nil {
 		return core.Workspace{}, fmt.Errorf("create workspace: %w", err)
 	}
@@ -58,10 +62,12 @@ func scanWorkspace(row *sql.Row) (core.Workspace, error) {
 	var w core.Workspace
 	var created, updated string
 	var opened, scanned sql.NullString
-	err := row.Scan(&w.ID, &w.Name, &w.RootPath, &created, &updated, &opened, &scanned, &w.DefaultProfile, &w.SettingsJSON)
+	var gitRepository int
+	err := row.Scan(&w.ID, &w.Name, &w.RootPath, &created, &updated, &opened, &scanned, &w.DefaultProfile, &w.SettingsJSON, &gitRepository)
 	if err != nil {
 		return w, err
 	}
+	w.GitRepository = gitRepository != 0
 	var parseErr error
 	if w.CreatedAt, parseErr = time.Parse(time.RFC3339Nano, created); parseErr != nil {
 		return w, parseErr
@@ -114,7 +120,7 @@ func mergedWorkspaceSettings(w core.Workspace) string {
 	return string(data)
 }
 
-const workspaceFields = `id,name,root_path,created_at,updated_at,last_opened_at,last_scan_at,default_profile,settings_json`
+const workspaceFields = `id,name,root_path,created_at,updated_at,last_opened_at,last_scan_at,default_profile,settings_json,git_repository`
 
 func (d *DB) Workspace(ctx context.Context, id string) (core.Workspace, error) {
 	return scanWorkspace(d.SQL.QueryRowContext(ctx, `SELECT `+workspaceFields+` FROM workspaces WHERE id=?`, id))
@@ -143,9 +149,11 @@ func (d *DB) queryWorkspaces(ctx context.Context, query string) ([]core.Workspac
 		var w core.Workspace
 		var created, updated string
 		var opened, scanned sql.NullString
-		if err := rows.Scan(&w.ID, &w.Name, &w.RootPath, &created, &updated, &opened, &scanned, &w.DefaultProfile, &w.SettingsJSON); err != nil {
+		var gitRepository int
+		if err := rows.Scan(&w.ID, &w.Name, &w.RootPath, &created, &updated, &opened, &scanned, &w.DefaultProfile, &w.SettingsJSON, &gitRepository); err != nil {
 			return nil, err
 		}
+		w.GitRepository = gitRepository != 0
 		w.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
 		w.UpdatedAt, _ = time.Parse(time.RFC3339Nano, updated)
 		w.LastOpenedAt, _ = parseNullableTime(opened)
@@ -295,9 +303,11 @@ func (d *DB) WorkspacesPage(ctx context.Context, page, pageSize int, filter Work
 		var w core.Workspace
 		var created, updated string
 		var opened, scanned sql.NullString
-		if err := rows.Scan(&w.ID, &w.Name, &w.RootPath, &created, &updated, &opened, &scanned, &w.DefaultProfile, &w.SettingsJSON); err != nil {
+		var gitRepository int
+		if err := rows.Scan(&w.ID, &w.Name, &w.RootPath, &created, &updated, &opened, &scanned, &w.DefaultProfile, &w.SettingsJSON, &gitRepository); err != nil {
 			return nil, 0, err
 		}
+		w.GitRepository = gitRepository != 0
 		w.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
 		w.UpdatedAt, _ = time.Parse(time.RFC3339Nano, updated)
 		w.LastOpenedAt, _ = parseNullableTime(opened)
@@ -341,6 +351,18 @@ func (d *DB) DeleteWorkspace(ctx context.Context, id string) error {
 }
 func (d *DB) TouchWorkspace(ctx context.Context, id string) error {
 	_, err := d.SQL.ExecContext(ctx, `UPDATE workspaces SET last_opened_at=?,updated_at=? WHERE id=?`, dbTime(time.Now()), dbTime(time.Now()), id)
+	return err
+}
+
+// SetWorkspaceGitRepository persists whether the workspace root is a git
+// working tree. Detection runs at create and again on discover, so the flag
+// follows a root that gains or loses its .git entry between scans.
+func (d *DB) SetWorkspaceGitRepository(ctx context.Context, id string, isRepository bool) error {
+	value := 0
+	if isRepository {
+		value = 1
+	}
+	_, err := d.SQL.ExecContext(ctx, `UPDATE workspaces SET git_repository=? WHERE id=?`, value, id)
 	return err
 }
 

@@ -438,7 +438,12 @@ func runScanCommand(args []string, stdout, stderr io.Writer) int {
 	app, release, err := openCore()
 	if err != nil {
 		if errors.Is(err, instance.ErrAlreadyRunning) {
-			fmt.Fprintln(stderr, "bluntcode scan: another Blunt Code process (app or scan) is already using the data directory; close it and retry")
+			// The app holds the data directory, but it serves the same scan
+			// engine over loopback — drive it rather than refusing outright.
+			if code, ok := runRemoteScan(cfg, stdout, stderr); ok {
+				return code
+			}
+			fmt.Fprintln(stderr, "bluntcode scan: another Blunt Code process is already using the data directory and did not accept the API handoff; close it and retry")
 			return 3
 		}
 		fmt.Fprintf(stderr, "bluntcode scan: %v\n", err)
@@ -620,13 +625,17 @@ func runSingleScan(app *appCore, cfg scanConfig, work core.Workspace, baseline s
 		}
 		fmt.Fprintf(stderr, "baseline written to %s\n", cfg.saveBaseline)
 	}
+	// The summary must not share stdout with a document format — appending
+	// prose after a JSON/SARIF/CSV document corrupts it for downstream
+	// pipelines. When --output held the document, stdout is free and the
+	// human summary still prints, matching the pre-flag UX.
 	switch {
 	case !documentFormats && cfg.json:
 		if err := writeScanJSON(stdout, summary); err != nil {
 			fmt.Fprintf(stderr, "bluntcode scan: could not write summary: %v\n", err)
 			return scanRunResult{code: 3}
 		}
-	default:
+	case !documentFormats || cfg.output != "":
 		writeScanHuman(stdout, summary)
 	}
 	if outcome.interruptSeen {

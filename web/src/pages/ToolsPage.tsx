@@ -19,7 +19,6 @@ import { StatTile } from '../components/viz/StatTile';
 import { Ring } from '../components/viz/Ring';
 import { DataTableShell } from '../components/DataTableShell';
 import { Button } from '../components/ui/button';
-import { Card } from '../components/ui/card';
 
 type ToolOperation = 'install' | 'repair' | 'update' | 'uninstall';
 type BusyAction = { tool: string; operation: ToolOperation };

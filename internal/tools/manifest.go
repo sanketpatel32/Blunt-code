@@ -59,6 +59,11 @@ type Artifact struct {
 	InstallKind string     `json:"install_kind,omitempty"` // artifact or uv_tool
 	Package     string     `json:"package,omitempty"`
 	Smoke       *SmokeTest `json:"smoke,omitempty"`
+	// DownloadBytes is the artifact's approximate download size (the pinned
+	// URL's Content-Length), used only to show "downloading ~N MB" in scan
+	// progress so a first-run install never looks hung. It never feeds
+	// verification — the SHA-256 above stays the integrity gate.
+	DownloadBytes int64 `json:"download_bytes,omitempty"`
 }
 
 func (a Artifact) Validate() error {

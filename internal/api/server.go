@@ -459,7 +459,7 @@ func (s *Server) createWorkspace(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, existing)
 		return
 	}
-	created, err := s.db.CreateWorkspace(r.Context(), core.Workspace{Name: input.Name, RootPath: root})
+	created, err := s.db.CreateWorkspace(r.Context(), core.Workspace{Name: input.Name, RootPath: root, GitRepository: workspace.IsGitRepository(root)})
 	if err != nil {
 		// A concurrent add of the same folder can win the UNIQUE race between
 		// the lookup above and the insert; answer with the row it created.
@@ -883,6 +883,13 @@ func (s *Server) discoverWorkspace(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		fail(w, 500, "DISCOVERY_FAILED", "Could not discover workspace files.")
 		return
+	}
+	// Re-detect version control here too: a folder can gain or lose its .git
+	// entry after being added, and the workspace's git_repository flag is the
+	// one place that fact lives. A failed stamp degrades to a stale flag —
+	// warn rather than block discovery over metadata.
+	if err := s.db.SetWorkspaceGitRepository(r.Context(), work.ID, workspace.IsGitRepository(work.RootPath)); err != nil {
+		s.log.Warn("discover: could not refresh git_repository", "workspace", work.ID, "error", err)
 	}
 	writeJSON(w, 200, result)
 }

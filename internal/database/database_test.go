@@ -199,7 +199,7 @@ func TestWorkspaceLastScanAtMigrationBackfillsTerminalScans(t *testing.T) {
 	if _, err := db.SQL.ExecContext(ctx, `INSERT INTO scans(id,workspace_id,state,profile,started_at) VALUES(?,?,?,?,?)`, "legacy-running", runningWork.ID, "running", "standard", dbTime(started.Add(time.Hour))); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.SQL.ExecContext(ctx, `DELETE FROM schema_migrations WHERE version=8`); err != nil {
+	if _, err := db.SQL.ExecContext(ctx, `DELETE FROM schema_migrations WHERE version=9`); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Migrate(ctx); err != nil {

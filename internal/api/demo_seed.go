@@ -12,6 +12,7 @@ import (
 	"bluntcode/internal/analyzers"
 	"bluntcode/internal/core"
 	"bluntcode/internal/database"
+	"bluntcode/internal/workspace"
 )
 
 // Demo seed env (disabled by default; never auto-seeds production):
@@ -81,7 +82,7 @@ func seedDemoSmall(ctx context.Context, db *database.DB) (map[string]any, error)
 			return nil, err
 		}
 		name := fmt.Sprintf("[Demo UI] Project %d", i+1)
-		w, err := db.CreateWorkspace(ctx, core.Workspace{Name: name, RootPath: dir})
+		w, err := db.CreateWorkspace(ctx, core.Workspace{Name: name, RootPath: dir, GitRepository: workspace.IsGitRepository(dir)})
 		if err != nil {
 			return nil, err
 		}
@@ -140,7 +141,7 @@ func seedDemoLarge(ctx context.Context, db *database.DB, dataDir, presetName str
 			return nil, err
 		}
 		name := fmt.Sprintf("[Demo UI] Corpus %03d — %s", w+1, strings.Repeat("wide-name-", 3))
-		created, err := db.CreateWorkspace(ctx, core.Workspace{Name: name, RootPath: longRoot})
+		created, err := db.CreateWorkspace(ctx, core.Workspace{Name: name, RootPath: longRoot, GitRepository: workspace.IsGitRepository(longRoot)})
 		if err != nil {
 			return nil, err
 		}
