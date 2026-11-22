@@ -8,10 +8,11 @@ import (
 	"testing"
 
 	"bluntcode/internal/analyzers"
+	"bluntcode/internal/testutil/testpath"
 )
 
 func TestIdentity(t *testing.T) {
-	adapter := New(`C:\BluntCode\tools\checkov\3.3.16\env\tools\checkov\Scripts\python.exe`, "3.3.16")
+	adapter := New(testpath.Native(`C:\BluntCode\tools\checkov\3.3.16\env\tools\checkov\Scripts\python.exe`), "3.3.16")
 	if adapter.ID() != "iac-checkov" || adapter.DisplayName() != "Checkov" {
 		t.Fatalf("id=%q display=%q", adapter.ID(), adapter.DisplayName())
 	}
@@ -39,12 +40,12 @@ func TestEnsureInstalledRequiresExecutable(t *testing.T) {
 }
 
 func TestPlanRequiresDeepProfile(t *testing.T) {
-	adapter := New(`C:\BluntCode\tools\checkov\3.3.16\env\tools\checkov\Scripts\python.exe`, "3.3.16")
+	adapter := New(testpath.Native(`C:\BluntCode\tools\checkov\3.3.16\env\tools\checkov\Scripts\python.exe`), "3.3.16")
 	req := analyzers.ScanRequest{
-		WorkspaceRoot: `C:\source`,
+		WorkspaceRoot: testpath.Native(`C:\source`),
 		WorkspaceID:   "w1",
 		ScanID:        "scan-1",
-		Files:         []string{`C:\source\Dockerfile`},
+		Files:         []string{testpath.Native(`C:\source\Dockerfile`)},
 		Languages:     []analyzers.Language{analyzers.LanguageDockerfile},
 	}
 	for _, profile := range []string{"", analyzers.ProfileQuick, analyzers.ProfileStandard} {
@@ -60,14 +61,14 @@ func TestPlanRequiresDeepProfile(t *testing.T) {
 }
 
 func TestPlanScansWorkspaceDirectoryOnce(t *testing.T) {
-	adapter := New(`C:\BluntCode\tools\checkov\3.3.16\env\tools\checkov\Scripts\python.exe`, "3.3.16")
+	adapter := New(testpath.Native(`C:\BluntCode\tools\checkov\3.3.16\env\tools\checkov\Scripts\python.exe`), "3.3.16")
 	req := analyzers.ScanRequest{
-		WorkspaceRoot: `C:\source`,
+		WorkspaceRoot: testpath.Native(`C:\source`),
 		WorkspaceID:   "w1",
 		ScanID:        "scan-1",
 		// main.tf and app.py are not routable languages; Dockerfile and the
 		// kubernetes manifest keep the analyzer selected.
-		Files:     []string{`C:\source\main.tf`, `C:\source\Dockerfile`, `C:\source\app.py`, `C:\source\deploy\k8s.yaml`},
+		Files:     []string{testpath.Native(`C:\source\main.tf`), testpath.Native(`C:\source\Dockerfile`), testpath.Native(`C:\source\app.py`), testpath.Native(`C:\source\deploy\k8s.yaml`)},
 		Languages: []analyzers.Language{analyzers.LanguageDockerfile, analyzers.LanguageYAML},
 		Profile:   analyzers.ProfileDeep,
 	}
@@ -79,13 +80,13 @@ func TestPlanScansWorkspaceDirectoryOnce(t *testing.T) {
 		t.Fatalf("plan = %#v", plan)
 	}
 	command := plan.Commands[0]
-	if command.Executable != adapter.Executable || command.Dir != `C:\source` {
+	if command.Executable != adapter.Executable || command.Dir != testpath.Native(`C:\source`) {
 		t.Fatalf("unexpected managed process: %#v", command)
 	}
 	outputDir := filepath.Join(os.TempDir(), outputDirPrefix+"scan-1")
 	want := []string{
 		"-m", "checkov.main",
-		"-d", `C:\source`,
+		"-d", testpath.Native(`C:\source`),
 		"-o", "json",
 		"--output-file-path", outputDir,
 		"--framework", frameworks,
@@ -109,8 +110,8 @@ func TestPlanSkipsWorkspacesWithoutRoutableFiles(t *testing.T) {
 	// Terraform now routes (discovery classifies .tf/.tfvars/.hcl), so a
 	// pure-.tf workspace APPLIES — this test used to pin the gap.
 	tfOnly := analyzers.ScanRequest{
-		WorkspaceRoot: `C:\tf-only`,
-		Files:         []string{`C:\tf-only\main.tf`},
+		WorkspaceRoot: testpath.Native(`C:\tf-only`),
+		Files:         []string{testpath.Native(`C:\tf-only\main.tf`)},
 		Profile:       analyzers.ProfileDeep,
 	}
 	if _, err := adapter.Plan(context.Background(), tfOnly); err != nil {
@@ -118,8 +119,8 @@ func TestPlanSkipsWorkspacesWithoutRoutableFiles(t *testing.T) {
 	}
 	// A workspace with nothing checkov reads still does not apply.
 	none := analyzers.ScanRequest{
-		WorkspaceRoot: `C:\src-only`,
-		Files:         []string{`C:\src-only\main.py`, `C:\src-only\app.ts`},
+		WorkspaceRoot: testpath.Native(`C:\src-only`),
+		Files:         []string{testpath.Native(`C:\src-only\main.py`), testpath.Native(`C:\src-only\app.ts`)},
 		Profile:       analyzers.ProfileDeep,
 	}
 	if _, err := adapter.Plan(context.Background(), none); err == nil {
@@ -154,7 +155,7 @@ func TestNormalizeRealReport(t *testing.T) {
 		Stdout:   b,
 		Stderr:   []byte(""),
 		ExitCode: 1,
-		Plan:     analyzers.AnalyzerPlan{AnalyzerID: ID, Commands: []analyzers.ProcessSpec{{Dir: `C:\ws`}}},
+		Plan:     analyzers.AnalyzerPlan{AnalyzerID: ID, Commands: []analyzers.ProcessSpec{{Dir: testpath.Native(`C:\ws`)}}},
 	})
 	if err != nil {
 		t.Fatal(err)

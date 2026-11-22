@@ -15,6 +15,7 @@ import (
 
 	"bluntcode/internal/analyzers"
 	"bluntcode/internal/discovery"
+	"bluntcode/internal/testutil/testpath"
 )
 
 func writeFile(t *testing.T, dir, name, content string) string {
@@ -81,17 +82,17 @@ func TestSupportedLanguagesCoverDiscovery(t *testing.T) {
 func TestPlanSelectsAllLanguageFiles(t *testing.T) {
 	adapter := New()
 	req := analyzers.ScanRequest{
-		WorkspaceRoot: `C:\ws`,
+		WorkspaceRoot: testpath.Native(`C:\ws`),
 		Languages:     adapter.SupportedLanguages(),
 		Files: []string{
-			`C:\ws\main.py`,
-			`C:\ws\app.tsx`,
-			`C:\ws\main.go`,
-			`C:\ws\README.md`,  // markdown is tracked: docs carry debt markers too
-			`C:\ws\Dockerfile`, // '# TODO' lives in Dockerfile comments
-			`C:\ws\config.env`, // env is excluded: credential blob, not a comment carrier
-			`C:\ws\server.pem`, // certificate is excluded likewise
-			`C:\ws\logo.png`,   // never classified by discovery; filtered like ruff does
+			testpath.Native(`C:\ws\main.py`),
+			testpath.Native(`C:\ws\app.tsx`),
+			testpath.Native(`C:\ws\main.go`),
+			testpath.Native(`C:\ws\README.md`),  // markdown is tracked: docs carry debt markers too
+			testpath.Native(`C:\ws\Dockerfile`), // '# TODO' lives in Dockerfile comments
+			testpath.Native(`C:\ws\config.env`), // env is excluded: credential blob, not a comment carrier
+			testpath.Native(`C:\ws\server.pem`), // certificate is excluded likewise
+			testpath.Native(`C:\ws\logo.png`),   // never classified by discovery; filtered like ruff does
 		},
 	}
 	plan, err := adapter.Plan(context.Background(), req)
@@ -99,7 +100,7 @@ func TestPlanSelectsAllLanguageFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	files, _ := plan.Metadata[planKeyFiles].([]string)
-	want := []string{`C:\ws\main.py`, `C:\ws\app.tsx`, `C:\ws\main.go`, `C:\ws\README.md`, `C:\ws\Dockerfile`}
+	want := []string{testpath.Native(`C:\ws\main.py`), testpath.Native(`C:\ws\app.tsx`), testpath.Native(`C:\ws\main.go`), testpath.Native(`C:\ws\README.md`), testpath.Native(`C:\ws\Dockerfile`)}
 	if len(files) != len(want) {
 		t.Fatalf("plan files = %v, want %v", files, want)
 	}
@@ -115,7 +116,7 @@ func TestPlanSelectsAllLanguageFiles(t *testing.T) {
 
 func TestPlanRejectsEmptySelection(t *testing.T) {
 	adapter := New()
-	req := analyzers.ScanRequest{WorkspaceRoot: `C:\ws`, Files: []string{`C:\ws\logo.png`, `C:\ws\config.env`}}
+	req := analyzers.ScanRequest{WorkspaceRoot: testpath.Native(`C:\ws`), Files: []string{testpath.Native(`C:\ws\logo.png`), testpath.Native(`C:\ws\config.env`)}}
 	if _, err := adapter.Plan(context.Background(), req); err == nil {
 		t.Fatal("expected error when the selection has no supported files")
 	}

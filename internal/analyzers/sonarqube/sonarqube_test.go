@@ -102,6 +102,9 @@ func TestSonarProjectPath(t *testing.T) {
 }
 
 func TestBootstrapCreatesDPAPIProtectedScannerToken(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("managed credentials are DPAPI-protected and only persist on Windows")
+	}
 	var changed, generated bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -272,6 +275,9 @@ func TestManagedServerSurvivesStarterContextCancellation(t *testing.T) {
 }
 
 func TestManagedServerCommandUsesPinnedJavaInsteadOfBatchWrapper(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("the managed SonarQube server is the Windows distribution launched via bin\\java.exe")
+	}
 	installer := ManagedInstaller{
 		Root:               `C:\tools\sonarqube`,
 		ServerRelativePath: `sonarqube-26.8\bin\windows-x86-64\StartSonar.bat`,
@@ -318,17 +324,17 @@ func TestManagedServerEnvironmentUsesSeparatePrivateDatabasePort(t *testing.T) {
 }
 
 func TestManagedRuntimeDirectoryIsStableAcrossRestarts(t *testing.T) {
-	root := `C:\BluntCode`
+	root := t.TempDir()
 	first := managedRuntimeDir(root)
 	second := managedRuntimeDir(root)
-	if first != second || !strings.HasSuffix(first, `sonarqube\managed-runtime`) {
+	if first != second || first != filepath.Join(root, "sonarqube", "managed-runtime") {
 		t.Fatalf("managed runtime must be stable and private: %q / %q", first, second)
 	}
 }
 
 func TestScannerPropertiesRemainInAppData(t *testing.T) {
 	root := t.TempDir()
-	p, cleanup, err := ScannerProperties(root, `C:\workspace`, "bluntcode:one", "http://127.0.0.1:9000", "secret", []string{"vendor/**"})
+	p, cleanup, err := ScannerProperties(root, filepath.Join(t.TempDir(), "workspace"), "bluntcode:one", "http://127.0.0.1:9000", "secret", []string{"vendor/**"})
 	if err != nil {
 		t.Fatal(err)
 	}

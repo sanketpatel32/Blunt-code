@@ -3,8 +3,9 @@
 Use supported Go and Node versions documented by the release. Run
 `powershell -File scripts\verify.ps1` before submitting changes — it is the
 whole local gate (gofmt, go vet, go build, go test, web typecheck, web tests,
-contrast audit), and because this repo has no CI, green there is the only
-green there is. `-SkipWeb` skips the slow web half while iterating on
+contrast audit). CI (`.github/workflows/ci.yml`) runs the same gates on every
+push and pull request, with `go test ./...` on both `windows-latest` and
+`ubuntu-latest`. `-SkipWeb` skips the slow web half while iterating on
 Go-only changes; never ship on a `-SkipWeb` run. Parser fixtures must be
 deterministic, small, and captured from machine-readable tool output. Do not
 add telemetry, cloud services, source uploads, or automatic source
@@ -24,10 +25,11 @@ corpus scan” loop without Windows.
 - **Go API + database:** e.g. `go test ./internal/api/... ./internal/database/...`
   — handler and repository behavior without the analyzer/runtime graph.
 
-**Baseline limitation (not introduced by feature PRs):** `go test ./...` on
-Linux includes Windows-oriented analyzer packages (`internal/analyzers`, etc.);
-those failures are **environment/baseline**, not proof that a UI change regressed
-production behavior on Windows.
+**Go tests are cross-platform:** `go test ./...` passes on Linux too. Write
+Windows-style fixture paths through `testpath.Native` (`internal/testutil/testpath`)
+or build them with `filepath.Join(t.TempDir(), …)`, and gate genuinely
+Windows-only behavior (DPAPI, `cmd.exe`/`taskkill`, the managed SonarQube
+distribution) with `if runtime.GOOS != "windows" { t.Skip(...) }`.
 
 **Authoritative local gate for shipping:** `powershell -File scripts\verify.ps1`
 on a Windows machine with the supported toolchain.

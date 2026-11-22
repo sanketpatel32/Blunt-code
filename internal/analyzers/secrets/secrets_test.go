@@ -16,6 +16,7 @@ import (
 
 	"bluntcode/internal/analyzers"
 	"bluntcode/internal/discovery"
+	"bluntcode/internal/testutil/testpath"
 )
 
 func writeFile(t *testing.T, dir, name, content string) string {
@@ -62,18 +63,18 @@ func TestSupportedLanguagesCoverDiscovery(t *testing.T) {
 func TestPlanSelectsAllLanguageFiles(t *testing.T) {
 	adapter := New()
 	req := analyzers.ScanRequest{
-		WorkspaceRoot: `C:\ws`,
+		WorkspaceRoot: testpath.Native(`C:\ws`),
 		Languages:     adapter.SupportedLanguages(),
 		Files: []string{
-			`C:\ws\main.py`,
-			`C:\ws\app.tsx`,
-			`C:\ws\main.go`,
-			`C:\ws\config.env`,  // classified as env; credentials hide here
-			`C:\ws\.env`,        // dotfile form of env
-			`C:\ws\server.pem`,  // classified as certificate
-			`C:\ws\Dockerfile`,  // basename form of dockerfile
-			`C:\ws\logo.png`,    // never classified by discovery; filtered like ruff does
-			`C:\ws\archive.zip`, // ditto
+			testpath.Native(`C:\ws\main.py`),
+			testpath.Native(`C:\ws\app.tsx`),
+			testpath.Native(`C:\ws\main.go`),
+			testpath.Native(`C:\ws\config.env`),  // classified as env; credentials hide here
+			testpath.Native(`C:\ws\.env`),        // dotfile form of env
+			testpath.Native(`C:\ws\server.pem`),  // classified as certificate
+			testpath.Native(`C:\ws\Dockerfile`),  // basename form of dockerfile
+			testpath.Native(`C:\ws\logo.png`),    // never classified by discovery; filtered like ruff does
+			testpath.Native(`C:\ws\archive.zip`), // ditto
 		},
 	}
 	plan, err := adapter.Plan(context.Background(), req)
@@ -82,8 +83,8 @@ func TestPlanSelectsAllLanguageFiles(t *testing.T) {
 	}
 	files, _ := plan.Metadata[planKeyFiles].([]string)
 	want := []string{
-		`C:\ws\main.py`, `C:\ws\app.tsx`, `C:\ws\main.go`,
-		`C:\ws\config.env`, `C:\ws\.env`, `C:\ws\server.pem`, `C:\ws\Dockerfile`,
+		testpath.Native(`C:\ws\main.py`), testpath.Native(`C:\ws\app.tsx`), testpath.Native(`C:\ws\main.go`),
+		testpath.Native(`C:\ws\config.env`), testpath.Native(`C:\ws\.env`), testpath.Native(`C:\ws\server.pem`), testpath.Native(`C:\ws\Dockerfile`),
 	}
 	if len(files) != len(want) {
 		t.Fatalf("plan files = %v, want %v", files, want)
@@ -100,7 +101,7 @@ func TestPlanSelectsAllLanguageFiles(t *testing.T) {
 
 func TestPlanRejectsEmptySelection(t *testing.T) {
 	adapter := New()
-	req := analyzers.ScanRequest{WorkspaceRoot: `C:\ws`, Files: []string{`C:\ws\logo.png`, `C:\ws\archive.zip`}}
+	req := analyzers.ScanRequest{WorkspaceRoot: testpath.Native(`C:\ws`), Files: []string{testpath.Native(`C:\ws\logo.png`), testpath.Native(`C:\ws\archive.zip`)}}
 	if _, err := adapter.Plan(context.Background(), req); err == nil {
 		t.Fatal("expected error when the selection has no supported files")
 	}

@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    name: Go (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      # Match the maintainer checkout: CRLF conversion changes hashed assets
+      # (cmd/bluntcode/static/index.html CSP hashes) and byte-compared fixtures.
+      - name: Disable autocrlf
+        if: runner.os == 'Windows'
+        run: git config --global core.autocrlf false
+      # The runner's default TEMP is the 8.3 short form (C:\Users\RUNNER~1\...),
+      # which never equals its symlink/junction-resolved long form, so every
+      # t.TempDir()-rooted containment check fails. Use a long-form temp dir.
+      - name: Use long-form TEMP
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          echo "TEMP=${{ runner.temp }}" >> "$GITHUB_ENV"
+          echo "TMP=${{ runner.temp }}" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        if: runner.os == 'Linux'
+        run: |
+          unformatted=$(gofmt -l cmd internal)
+          if [ -n "$unformatted" ]; then
+            echo "gofmt drift in:"; echo "$unformatted"; exit 1
+          fi
+      - name: go vet
+        run: go vet ./...
+      - name: go build
+        run: go build ./...
+      - name: go test
+        run: go test ./...
+
+  web:
+    name: Web
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: typecheck + build
+        run: npm run build
+      - name: vitest
+        run: npm test
+      - name: contrast audit
+        run: npm run audit:contrast

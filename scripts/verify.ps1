@@ -1,7 +1,8 @@
 # verify.ps1 - the one command that proves the tree is shippable.
 # Runs the full local gate in order and stops at the first red: gofmt (CRLF-
 # tolerant), go vet, go build, go test, then the web half (tsc -b, vitest,
-# contrast audit). There is no CI for this repo - this script is the CI.
+# contrast audit). .github/workflows/ci.yml runs the same gates on push/PR
+# (Windows + Ubuntu); this script is the local equivalent.
 #
 # Usage:  powershell -File scripts\verify.ps1          # everything
 #         powershell -File scripts\verify.ps1 -SkipWeb # Go-only iterations

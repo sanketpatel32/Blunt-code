@@ -2,6 +2,7 @@ package biome
 
 import (
 	"bluntcode/internal/analyzers"
+	"bluntcode/internal/testutil/testpath"
 	"context"
 	"os"
 	"path/filepath"
@@ -24,9 +25,9 @@ func TestNormalizeFixture(t *testing.T) {
 func TestPlanBatchesLargeWorkspaceFileLists(t *testing.T) {
 	files := make([]string, 428)
 	for i := range files {
-		files[i] = `C:\workspace\src\` + strings.Repeat("long-name-", 10) + "file.ts"
+		files[i] = testpath.Native(`C:\workspace\src\` + strings.Repeat("long-name-", 10) + "file.ts")
 	}
-	plan, err := New("biome.exe", "test").Plan(context.Background(), analyzers.ScanRequest{WorkspaceRoot: `C:\workspace`, Files: files, Languages: []analyzers.Language{analyzers.LanguageTypeScript}})
+	plan, err := New("biome.exe", "test").Plan(context.Background(), analyzers.ScanRequest{WorkspaceRoot: testpath.Native(`C:\workspace`), Files: files, Languages: []analyzers.Language{analyzers.LanguageTypeScript}})
 	if err != nil || len(plan.Commands) < 2 {
 		t.Fatalf("plan=%#v err=%v", plan, err)
 	}
@@ -108,9 +109,9 @@ func TestPlanFiltersToJavaScriptAndTypeScriptFiles(t *testing.T) {
 func TestPlanRejectsSelectionWithoutWebFiles(t *testing.T) {
 	adapter := New("biome.exe", "test")
 	req := analyzers.ScanRequest{
-		WorkspaceRoot: `C:\ws`,
+		WorkspaceRoot: testpath.Native(`C:\ws`),
 		Languages:     []analyzers.Language{analyzers.LanguageTypeScript},
-		Files:         []string{`C:\ws\only.py`},
+		Files:         []string{testpath.Native(`C:\ws\only.py`)},
 	}
 	if _, err := adapter.Plan(context.Background(), req); err == nil {
 		t.Fatal("expected error when no JavaScript/TypeScript files are in the selection")

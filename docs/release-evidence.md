@@ -4,7 +4,7 @@ This document maps every P0 acceptance case from the improvement plan (IMP-01 th
 
 Status legend:
 
-- **Automated** — verified by a named in-tree test (`go test ./...` / `vitest run`); run locally, the repo has no CI.
+- **Automated** — verified by a named in-tree test (`go test ./...` / `vitest run`); run locally and in CI (`.github/workflows/ci.yml`, Windows + Ubuntu).
 - **Partial** — the property is enforced for a representative slice, not exhaustively; the untested remainder is named.
 - **Manual procedure** — reproducible steps recorded here, not automated.
 - **Open** — no evidence yet; treated as not done.
@@ -101,7 +101,7 @@ Each has a `Normalize`-level test asserting the parsed finding set (see the matc
 2. `powershell -File scripts/smoke.ps1 -ExePath <temp>\BluntCode-X.Y.Z\bluntcode.exe` — must print all probes passing and exit 0.
 3. The release process itself (per AGENTS.md ship rule) additionally builds from the exact tagged commit in a clean worktree and verifies the 4 assets; the zip-sha256 is recorded in the release notes.
 
-**Open:** this is a manual procedure, not an automated packaging test; there is no CI in the repo to run it.
+**Open:** this is a manual procedure, not an automated packaging test; CI does not build or smoke-test the release zip.
 
 ## Leakage checks — logs and exported diagnostics
 
@@ -123,7 +123,7 @@ These are tracked as not-yet-automated; none is claimed as done:
 3. **Docs-vs-inventory agreement** (IMP-01): llms.txt/CLI-manual analyzer claims are not diffed against the capability inventory automatically.
 4. **Git-history input class** (IMP-02): no analyzer currently consumes history as a distinct input; nothing to test until one does.
 5. **Whole-scan outbound-denied assertion, vuln-data age staleness, pentest cancellation** (IMP-04) and **per-endpoint origin tests** (IMP-05): per-component coverage as listed above; the aggregate assertions are not scripted.
-6. **CI**: the repository has no CI (GitHub Actions removed deliberately); every automated item above runs locally via `go test ./...` and `npm test` in `web/`.
+6. **CI**: `.github/workflows/ci.yml` runs `go vet`/`go build`/`go test ./...` on `windows-latest` and `ubuntu-latest` plus the web typecheck, build, vitest, and contrast audit on push/PR; release packaging is still manual.
 
 ## Post-release correction: v0.23.0 binary (2026-09-12)
 

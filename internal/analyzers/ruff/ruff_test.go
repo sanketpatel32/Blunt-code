@@ -2,6 +2,7 @@ package ruff
 
 import (
 	"bluntcode/internal/analyzers"
+	"bluntcode/internal/testutil/testpath"
 	"context"
 	"fmt"
 	"os"
@@ -24,7 +25,7 @@ func TestNormalizeFixture(t *testing.T) {
 
 func TestPlanAddsExtendedSelectOnlyForDeepProfile(t *testing.T) {
 	adapter := New("ruff.exe", "test")
-	base := analyzers.ScanRequest{WorkspaceRoot: `C:\ws`, Files: []string{`C:\ws\main.py`}, Languages: []analyzers.Language{analyzers.LanguagePython}}
+	base := analyzers.ScanRequest{WorkspaceRoot: testpath.Native(`C:\ws`), Files: []string{testpath.Native(`C:\ws\main.py`)}, Languages: []analyzers.Language{analyzers.LanguagePython}}
 
 	for _, profile := range []string{"", analyzers.ProfileStandard, analyzers.ProfileQuick} {
 		req := base
@@ -33,7 +34,7 @@ func TestPlanAddsExtendedSelectOnlyForDeepProfile(t *testing.T) {
 		if err != nil {
 			t.Fatalf("profile %q: %v", profile, err)
 		}
-		want := []string{"check", "--output-format", "json", "--no-fix", `C:\ws\main.py`}
+		want := []string{"check", "--output-format", "json", "--no-fix", testpath.Native(`C:\ws\main.py`)}
 		if !reflect.DeepEqual(plan.Commands[0].Args, want) {
 			t.Fatalf("profile %q args = %#v, want %#v (non-deep must stay identical to the default invocation)", profile, plan.Commands[0].Args, want)
 		}
@@ -45,7 +46,7 @@ func TestPlanAddsExtendedSelectOnlyForDeepProfile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"check", "--output-format", "json", "--no-fix", "--select=" + deepSelect, `C:\ws\main.py`}
+	want := []string{"check", "--output-format", "json", "--no-fix", "--select=" + deepSelect, testpath.Native(`C:\ws\main.py`)}
 	if !reflect.DeepEqual(plan.Commands[0].Args, want) {
 		t.Fatalf("deep args = %#v, want %#v", plan.Commands[0].Args, want)
 	}
@@ -54,21 +55,21 @@ func TestPlanAddsExtendedSelectOnlyForDeepProfile(t *testing.T) {
 func TestPlanFiltersToPythonFilesOnly(t *testing.T) {
 	adapter := New("ruff.exe", "test")
 	req := analyzers.ScanRequest{
-		WorkspaceRoot: `C:\ws`,
+		WorkspaceRoot: testpath.Native(`C:\ws`),
 		Languages:     []analyzers.Language{analyzers.LanguagePython, analyzers.LanguageJavaScript, analyzers.LanguageTypeScript},
 		Files: []string{
-			`C:\ws\main.py`,
-			`C:\ws\app.tsx`,
-			`C:\ws\static\assets\index-ABC123.js`,
-			`C:\ws\typed.pyi`,
-			`C:\ws\bundle.min.js`,
+			testpath.Native(`C:\ws\main.py`),
+			testpath.Native(`C:\ws\app.tsx`),
+			testpath.Native(`C:\ws\static\assets\index-ABC123.js`),
+			testpath.Native(`C:\ws\typed.pyi`),
+			testpath.Native(`C:\ws\bundle.min.js`),
 		},
 	}
 	plan, err := adapter.Plan(context.Background(), req)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"check", "--output-format", "json", "--no-fix", `C:\ws\main.py`, `C:\ws\typed.pyi`}
+	want := []string{"check", "--output-format", "json", "--no-fix", testpath.Native(`C:\ws\main.py`), testpath.Native(`C:\ws\typed.pyi`)}
 	if !reflect.DeepEqual(plan.Commands[0].Args, want) {
 		t.Fatalf("args = %#v, want %#v (non-Python files must never reach ruff)", plan.Commands[0].Args, want)
 	}
@@ -77,12 +78,12 @@ func TestPlanFiltersToPythonFilesOnly(t *testing.T) {
 func TestPlanRejectsSelectionWithoutPythonFiles(t *testing.T) {
 	adapter := New("ruff.exe", "test")
 	req := analyzers.ScanRequest{
-		WorkspaceRoot: `C:\ws`,
+		WorkspaceRoot: testpath.Native(`C:\ws`),
 		// A stale caller may claim Python is present while listing only web
 		// files; the file list is authoritative, so Plan must refuse rather
 		// than invoke a bare `ruff check` that would scan its working dir.
 		Languages: []analyzers.Language{analyzers.LanguagePython},
-		Files:     []string{`C:\ws\app.ts`, `C:\ws\app.js`},
+		Files:     []string{testpath.Native(`C:\ws\app.ts`), testpath.Native(`C:\ws\app.js`)},
 	}
 	if _, err := adapter.Plan(context.Background(), req); err == nil {
 		t.Fatal("expected error when no Python files are in the selection")
@@ -124,10 +125,10 @@ func TestPlanBatchesLargeWorkspaceFileLists(t *testing.T) {
 	// must split file arguments exactly like the biome and semgrep adapters.
 	files := make([]string, 692)
 	for i := range files {
-		files[i] = `C:\ws\src\some\deeply\nested\package\module_file_with_a_long_name_` + strings.Repeat("x", 4) + fmt.Sprint(i) + ".py"
+		files[i] = testpath.Native(`C:\ws\src\some\deeply\nested\package\module_file_with_a_long_name_` + strings.Repeat("x", 4) + fmt.Sprint(i) + ".py")
 	}
 	adapter := New("ruff.exe", "test")
-	plan, err := adapter.Plan(context.Background(), analyzers.ScanRequest{WorkspaceRoot: `C:\ws`, Files: files, Languages: []analyzers.Language{analyzers.LanguagePython}})
+	plan, err := adapter.Plan(context.Background(), analyzers.ScanRequest{WorkspaceRoot: testpath.Native(`C:\ws`), Files: files, Languages: []analyzers.Language{analyzers.LanguagePython}})
 	if err != nil {
 		t.Fatal(err)
 	}

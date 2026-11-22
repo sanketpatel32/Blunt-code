@@ -256,7 +256,7 @@ func (s *Server) meta(w http.ResponseWriter, r *http.Request) {
 	demoToken := strings.TrimSpace(os.Getenv("BLUNTCODE_DEMO_TOKEN"))
 	writeJSON(w, http.StatusOK, map[string]any{
 		"version": s.version, "api_version": APIVersion, "os": runtime.GOOS, "architecture": runtime.GOARCH, "data_directory": s.paths.DataDir,
-		"demo_seed_env_enabled": demoEnv,
+		"demo_seed_env_enabled":    demoEnv,
 		"demo_seed_requires_token": demoEnv && demoToken != "",
 	})
 }

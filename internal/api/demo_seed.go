@@ -107,10 +107,10 @@ func seedDemoSmall(ctx context.Context, db *database.DB) (map[string]any, error)
 }
 
 type demoLargeOptions struct {
-	nWorkspaces        int
-	scansWithHistory   int
-	perScanFindings    int
-	findingsCap        int
+	nWorkspaces      int
+	scansWithHistory int
+	perScanFindings  int
+	findingsCap      int
 }
 
 func seedDemoLarge(ctx context.Context, db *database.DB, dataDir, presetName string, opts demoLargeOptions) (map[string]any, error) {

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"bluntcode/internal/analyzers"
+	"bluntcode/internal/testutil/testpath"
 )
 
 // realReport is the unedited JSON produced by trivy 0.74.0 (windows-amd64)
@@ -31,7 +32,7 @@ func normalizeRealReport(t *testing.T) []analyzers.Finding {
 	got, _, err := adapter.Normalize(context.Background(), analyzers.AnalyzerResult{
 		Stdout:   loadRealReport(t),
 		ExitCode: 0,
-		Plan:     analyzers.AnalyzerPlan{AnalyzerID: ID, Commands: []analyzers.ProcessSpec{{Dir: `C:\ws`}}},
+		Plan:     analyzers.AnalyzerPlan{AnalyzerID: ID, Commands: []analyzers.ProcessSpec{{Dir: testpath.Native(`C:\ws`)}}},
 	})
 	if err != nil {
 		t.Fatalf("Normalize: %v", err)
@@ -225,8 +226,8 @@ func TestPlanIsDeepProfileOnly(t *testing.T) {
 	// trivy cache (tests must stay hermetic and deterministic).
 	adapter.CacheDir = t.TempDir()
 	base := analyzers.ScanRequest{
-		WorkspaceRoot: `C:\ws`,
-		Files:         []string{`C:\ws\Dockerfile`, `C:\ws\package-lock.json`},
+		WorkspaceRoot: testpath.Native(`C:\ws`),
+		Files:         []string{testpath.Native(`C:\ws\Dockerfile`), testpath.Native(`C:\ws\package-lock.json`)},
 		Languages:     []analyzers.Language{analyzers.LanguageDockerfile, analyzers.LanguageJSON},
 	}
 	for _, profile := range []string{"", analyzers.ProfileQuick, analyzers.ProfileStandard} {
@@ -257,9 +258,9 @@ func TestPlanOfflineRefusesColdCache(t *testing.T) {
 	adapter.CacheDir = t.TempDir()
 	adapter.Offline = true
 	req := analyzers.ScanRequest{
-		WorkspaceRoot: `C:\ws`,
+		WorkspaceRoot: testpath.Native(`C:\ws`),
 		Profile:       analyzers.ProfileDeep,
-		Files:         []string{`C:\ws\Dockerfile`},
+		Files:         []string{testpath.Native(`C:\ws\Dockerfile`)},
 		Languages:     []analyzers.Language{analyzers.LanguageDockerfile},
 	}
 	_, err := adapter.Plan(context.Background(), req)
@@ -292,9 +293,9 @@ func TestPlanArgumentsColdAndWarmCache(t *testing.T) {
 	adapter := New("trivy.exe", "0.74.0")
 	adapter.CacheDir = t.TempDir()
 	req := analyzers.ScanRequest{
-		WorkspaceRoot: `C:\ws`,
+		WorkspaceRoot: testpath.Native(`C:\ws`),
 		Profile:       analyzers.ProfileDeep,
-		Files:         []string{`C:\ws\Dockerfile`, `C:\ws\package-lock.json`},
+		Files:         []string{testpath.Native(`C:\ws\Dockerfile`), testpath.Native(`C:\ws\package-lock.json`)},
 		Languages:     []analyzers.Language{analyzers.LanguageDockerfile, analyzers.LanguageJSON},
 	}
 
@@ -310,7 +311,7 @@ func TestPlanArgumentsColdAndWarmCache(t *testing.T) {
 	if !reflect.DeepEqual(plan.Commands[0].Args, wantCold) {
 		t.Fatalf("cold args = %#v, want %#v", plan.Commands[0].Args, wantCold)
 	}
-	if plan.Commands[0].Dir != `C:\ws` {
+	if plan.Commands[0].Dir != testpath.Native(`C:\ws`) {
 		t.Fatalf("Dir = %q", plan.Commands[0].Dir)
 	}
 	// A pinned CacheDir always travels as TRIVY_CACHE_DIR so the child
@@ -353,13 +354,13 @@ func TestPlanRejectsSelectionWithoutManifestFiles(t *testing.T) {
 	adapter := New("trivy.exe", "0.74.0")
 	adapter.CacheDir = t.TempDir()
 	req := analyzers.ScanRequest{
-		WorkspaceRoot: `C:\ws`,
+		WorkspaceRoot: testpath.Native(`C:\ws`),
 		Profile:       analyzers.ProfileDeep,
 		// A stale caller may claim manifests exist while listing only code;
 		// the file list is authoritative, so Plan must refuse rather than
 		// launch a whole-workspace trivy sweep.
 		Languages: []analyzers.Language{analyzers.LanguageDockerfile},
-		Files:     []string{`C:\ws\main.py`, `C:\ws\main.go`},
+		Files:     []string{testpath.Native(`C:\ws\main.py`), testpath.Native(`C:\ws\main.go`)},
 	}
 	if _, err := adapter.Plan(context.Background(), req); err == nil {
 		t.Fatal("expected error when no manifest files are in the selection")
@@ -376,9 +377,9 @@ func TestPlanAppliesToDependencyInputOnlyWorkspaces(t *testing.T) {
 	adapter := New("trivy.exe", "0.74.0")
 	adapter.CacheDir = t.TempDir()
 	req := analyzers.ScanRequest{
-		WorkspaceRoot:    `C:\ws`,
+		WorkspaceRoot:    testpath.Native(`C:\ws`),
 		Profile:          analyzers.ProfileDeep,
-		Files:            []string{`C:\ws\main.go`},
+		Files:            []string{testpath.Native(`C:\ws\main.go`)},
 		Languages:        []analyzers.Language{analyzers.LanguageGo},
 		DependencyInputs: []string{"go.mod"},
 	}
@@ -399,9 +400,9 @@ func TestRunLoadsAndRemovesOutputFile(t *testing.T) {
 	adapter := New(`Z:\definitely\missing\trivy.exe`, "0.74.0")
 	adapter.CacheDir = t.TempDir()
 	plan, err := adapter.Plan(context.Background(), analyzers.ScanRequest{
-		WorkspaceRoot: `C:\ws`,
+		WorkspaceRoot: testpath.Native(`C:\ws`),
 		Profile:       analyzers.ProfileDeep,
-		Files:         []string{`C:\ws\Dockerfile`},
+		Files:         []string{testpath.Native(`C:\ws\Dockerfile`)},
 		Languages:     []analyzers.Language{analyzers.LanguageDockerfile},
 	})
 	if err != nil {
@@ -462,7 +463,7 @@ func TestSeverityUnmappedMarkerPersistsThroughFinding(t *testing.T) {
 	findings, _, err := adapter.Normalize(context.Background(), analyzers.AnalyzerResult{
 		Stdout:   []byte(doc),
 		ExitCode: 0,
-		Plan:     analyzers.AnalyzerPlan{AnalyzerID: ID, Commands: []analyzers.ProcessSpec{{Dir: `C:\ws`}}},
+		Plan:     analyzers.AnalyzerPlan{AnalyzerID: ID, Commands: []analyzers.ProcessSpec{{Dir: testpath.Native(`C:\ws`)}}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -483,12 +484,12 @@ func TestSeverityUnmappedMarkerPersistsThroughFinding(t *testing.T) {
 }
 
 func TestRelativeAndTruncate(t *testing.T) {
-	plan := analyzers.AnalyzerPlan{Commands: []analyzers.ProcessSpec{{Dir: `C:\ws`}}}
+	plan := analyzers.AnalyzerPlan{Commands: []analyzers.ProcessSpec{{Dir: testpath.Native(`C:\ws`)}}}
 	for path, want := range map[string]string{
-		"Dockerfile":       "Dockerfile",
-		"sub\\main.tf":     "sub/main.tf",
-		`C:\ws\a\k8s.yaml`: "a/k8s.yaml",
-		".":                ".",
+		"Dockerfile":                        "Dockerfile",
+		"sub\\main.tf":                      "sub/main.tf",
+		testpath.Native(`C:\ws\a\k8s.yaml`): "a/k8s.yaml",
+		".":                                 ".",
 	} {
 		if got := relative(plan, path); got != want {
 			t.Fatalf("relative(%q) = %q, want %q", path, got, want)

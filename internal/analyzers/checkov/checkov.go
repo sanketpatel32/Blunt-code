@@ -319,11 +319,15 @@ var informationalChecks = map[string]bool{
 // relative slash path.
 func relative(scanDir, path string) string {
 	if scanDir != "" && filepath.IsAbs(filepath.FromSlash(path)) {
-		if rel, err := filepath.Rel(scanDir, path); err == nil {
+		// On Unix the scan-relative "/Dockerfile" is itself absolute; only
+		// rebase paths that really sit under scanDir.
+		if rel, err := filepath.Rel(scanDir, path); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			path = rel
 		}
 	}
-	cleaned := strings.TrimLeft(filepath.ToSlash(filepath.Clean(path)), "/")
+	// A Windows checkov reports "\main.tf"; normalize both separators so the
+	// result is the same whichever OS parses the report.
+	cleaned := strings.TrimLeft(strings.ReplaceAll(filepath.ToSlash(filepath.Clean(path)), `\`, "/"), "/")
 	if cleaned == "" || cleaned == "." {
 		return filepath.ToSlash(path)
 	}
