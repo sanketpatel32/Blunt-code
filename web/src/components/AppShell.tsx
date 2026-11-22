@@ -146,7 +146,10 @@ export function AppShell({ workspace, route, onNavigate, onClose, theme, onToggl
 
           {workspaceNav.length > 0 && (
             <div className="rail-workspace">
-              <p className="rail-group-label">{workspace?.name ?? 'This workspace'}</p>
+              {/* The name is a label, not a headline: one line, ellipsized, the
+                  full name on hover — three ragged wrapped lines used to shove
+                  the actual sections halfway down the rail. */}
+              <p className="rail-group-label rail-ws-name" title={workspace?.name ?? undefined}>{workspace?.name ?? 'This workspace'}</p>
               <ul className="rail-group">
                 {workspaceNav.map((section) => {
                   const active = isSameSection(route, section.route);
@@ -213,7 +216,10 @@ export function AppShell({ workspace, route, onNavigate, onClose, theme, onToggl
               aria-label={theme === 'dark' ? t('common.switchToLight') : t('common.switchToDark')}
               title={theme === 'dark' ? t('common.switchToLight') : t('common.switchToDark')}
             />
-            <NotificationsCenter routeKey={href(route)} />
+            {/* The rail's utility row sits at the viewport bottom edge — a
+                bottom-anchored menu pops up over the page or clips. Opening
+                to the right keeps the whole panel beside the rail. */}
+            <NotificationsCenter routeKey={href(route)} side="right" />
             {seqArmed && <span className="seq-hint" aria-hidden="true">g…</span>}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -274,7 +280,7 @@ export function AppShell({ workspace, route, onNavigate, onClose, theme, onToggl
             <SheetDescription>Pages and workspace sections</SheetDescription>
             <nav aria-label="Mobile navigation" className="mt-6" onClick={(event) => { if ((event.target as Element).closest('a')) setMobileOpen(false); }}>
               <ul className="rail-group">{items([...PRIMARY, ...SECONDARY, ...SETTINGS_PAGES]).map((item) => <li key={item.route.page}>{link(item)}</li>)}</ul>
-              {workspaceNav.length > 0 && <><p className="rail-group-label mt-6">{workspace?.name ?? 'This workspace'}</p><ul className="rail-group">{workspaceNav.map((section) => <li key={section.key}><a className={cn('rail-link', isSameSection(route, section.route) && 'active')} aria-current={isSameSection(route, section.route) ? 'page' : undefined} href={href(section.route)} onClick={(e) => navigateFromLink(e, () => onNavigate(section.route))}><span className="rail-link-icon" aria-hidden="true">{section.icon}</span><span className="rail-link-label">{section.label}</span></a></li>)}</ul></>}
+              {workspaceNav.length > 0 && <><p className="rail-group-label rail-ws-name mt-6" title={workspace?.name ?? undefined}>{workspace?.name ?? 'This workspace'}</p><ul className="rail-group">{workspaceNav.map((section) => <li key={section.key}><a className={cn('rail-link', isSameSection(route, section.route) && 'active')} aria-current={isSameSection(route, section.route) ? 'page' : undefined} href={href(section.route)} onClick={(e) => navigateFromLink(e, () => onNavigate(section.route))}><span className="rail-link-icon" aria-hidden="true">{section.icon}</span><span className="rail-link-label">{section.label}</span></a></li>)}</ul></>}
             </nav>
           </SheetContent>
         </Sheet>
@@ -318,19 +324,4 @@ function isSameSection(a: Route, b: Route): boolean {
   return a.page === b.page && a.id === b.id && ['workspace', 'files', 'history', 'pentest'].includes(a.page);
 }
 
-/** Injected by Vite from package.json — the footer used to hardcode "v0.7"
- *  while the app shipped 0.15.0. Falls back for non-Vite test runners. */
-const APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'dev';
 
-export function AppFooter() {
-  const { t } = useT();
-  return (
-    <footer className="app-footer">
-      <span><span className="font-medium">Blunt Code</span><span className="hidden md:inline text-[var(--color-ink-soft)]"> · local code analysis for Windows</span></span>
-      {/* Real legal/version content, not decoration: the footer's inherited
-          ghost token fails contrast, so this span carries the readable
-          ink-soft color instead. */}
-      <span className="hidden sm:inline text-[var(--color-ink-soft)]">{t('common.noAccount')} · v{APP_VERSION}</span>
-    </footer>
-  );
-}

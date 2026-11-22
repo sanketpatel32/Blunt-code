@@ -356,7 +356,9 @@ function WorkspaceRow({ workspace, go, onScan, onRemove }: { workspace: Workspac
         </span>
       </td>
       <LanguagesCell languages={workspace.languages} />
-      <td data-label="Risk" className="ws-cell-risk">{grade ? <span className="ws-risk" title={`Weighted risk score ${score} from the latest finished scan`}><GradeTile grade={grade} size="sm" announce /></span> : <span className="ws-none">Never scanned</span>}</td>
+      {/* "Never scanned" is only true when no scan exists at all — a failed
+          latest scan still ran, so it grades as a dash, not a contradiction. */}
+      <td data-label="Risk" className="ws-cell-risk">{grade ? <span className="ws-risk" title={`Weighted risk score ${score} from the latest finished scan`}><GradeTile grade={grade} size="sm" announce /></span> : workspace.latest_scan ? <span className="ws-none" title="The latest scan did not finish, so there is no grade yet">—</span> : <span className="ws-none">Never scanned</span>}</td>
       <FindingsCell workspace={workspace} />
       <LastScanCell workspace={workspace} />
       {/* Buttons inside must not double-fire the row's open-on-click. */}

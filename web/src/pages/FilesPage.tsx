@@ -351,7 +351,10 @@ function FileTree({ nodes, query, lang, workspaceId, overrides, onOverrides, col
     <BulkBar targets={bulkTargets} selected={bulkSelected} overrides={overrides} onOverrides={onOverrides} filtered={needle !== '' || langFilter !== ''} />
     <p className="tree-loaded-count">{loaded.count} {loaded.count === 1 ? 'path' : 'paths'} loaded{langFilter ? ` · filtered by ${LANG_LABELS[langFilter] ?? langFilter}` : ''}</p>
     {needle && <div className="tree-search-meta" aria-live="polite"><p><strong>{matches.size}</strong> {matches.size === 1 ? 'matching path' : 'matching paths'}</p><p>Searching loaded folders; expand more to include their contents</p></div>}
-    {anyVisible ? <TreeLevel nodes={nodes} state={state} root /> : !hasScans && nodes.length === 0 && !needle && !langFilter ? <Empty title="No files discovered yet" icon={<MagnifierIcon />}>Run a scan to populate the file tree.</Empty> : <Empty title="No matching paths" icon={<MagnifierIcon />}>Try a shorter search or clear the language filter.</Empty>}
+    {/* Empty-state copy must match why it's empty: "no matching paths" only
+        applies when a search or language filter is actually on — otherwise it
+        tells the user to undo something they never did. */}
+    {anyVisible ? <TreeLevel nodes={nodes} state={state} root /> : (needle || langFilter) ? <Empty title="No matching paths" icon={<MagnifierIcon />}>Try a shorter search or clear the language filter.</Empty> : <Empty title="No files discovered yet" icon={<MagnifierIcon />}>{hasScans ? 'The last scan selected no files — check the workspace path and exclusion rules.' : 'Run a scan to populate the file tree.'}</Empty>}
   </>;
 }
 

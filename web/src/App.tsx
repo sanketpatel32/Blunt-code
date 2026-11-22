@@ -7,7 +7,7 @@ import { href, parseRoute, type Route } from './lib/router';
 import { isTextEntryTarget, parseShortcut } from './lib/shortcuts';
 import { isActiveScanState } from './lib/scanEvents';
 import type { Notice } from './lib/notice';
-import { AppShell, AppFooter } from './components/AppShell';
+import { AppShell } from './components/AppShell';
 import { AppClosedScreen } from './components/AppClosedScreen';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ToastStack, useToasts } from './components/toasts';
@@ -197,7 +197,7 @@ export function App() {
     { id: 'nav-cli', label: 'Go to CLI Docs', keywords: 'cli terminal commands headless manual reference automation ci cd', hint: 'g c', group: 'Navigation', run: () => go({ page: 'cli' }) },
     { id: 'nav-settings', label: 'Go to Settings', keywords: 'preferences', hint: 'g s', group: 'Navigation', run: () => go({ page: 'settings' }) },
     { id: 'nav-about', label: 'Go to About', keywords: 'version info', hint: 'g a', group: 'Navigation', run: () => go({ page: 'about' }) },
-    { id: 'nav-search', label: 'Go to findings', keywords: 'search findings', group: 'Navigation', run: () => go({ page: 'search' }) },
+    { id: 'nav-search', label: 'Go to Findings', keywords: 'search findings', group: 'Navigation', run: () => go({ page: 'search' }) },
     { id: 'nav-pentest', label: 'Go to Pentest', keywords: FEATURES.pentestTemplateLibraries ? 'pentest zap nuclei burp hacking' : 'pentest dast owasp hacking', group: 'Navigation', run: () => go({ page: 'pentest' }) },
     { id: 'filter-critical', label: 'Filter critical findings', keywords: 'severity critical', group: 'Filters', run: () => go({ page: 'search', q: 'severity=critical' }) },
     { id: 'action-add-workspace', label: 'Add workspace', keywords: 'new project folder scan', hint: 'N', group: 'Navigation', run: () => setAddOpen(true) },
@@ -251,7 +251,6 @@ export function App() {
     {shortcutsOpen && <ShortcutsDialog onClose={() => setShortcutsOpen(false)} />}
     {/* Mounted only while open so useDialogA11y's mount-time focus move/restore actually runs — an always-mounted palette never receives keyboard focus. */}
     {paletteOpen && <CommandPalette open onClose={() => setPaletteOpen(false)} commands={allPaletteCommands} note={workspacesForPalette.length ? `${workspacesForPalette.length} workspace${workspacesForPalette.length === 1 ? '' : 's'} indexed` : undefined} />}
-    <AppFooter />
     <ToastStack toasts={toasts} onDismiss={dismiss} />
   </div></LazyMotion></MotionConfig></I18nProvider>;
 }

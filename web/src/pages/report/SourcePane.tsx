@@ -15,7 +15,7 @@ function previewErrorText(error: unknown): string {
   const text = typeof error === 'string' ? error : message(error);
   if (text.startsWith('SOURCE_FILE_TOO_LARGE')) return 'This source file is larger than 1 MB, so Blunt Code will not load it into the preview. Open it in your editor instead.';
   if (text.startsWith('SOURCE_FILE_NOT_FOUND')) return 'The file moved or was deleted after this scan ran, so there is nothing to preview yet.';
-  if (text.startsWith('SOURCE_PATH_UNAVAILABLE')) return 'This finding has no file location — it was reported at the project level.';
+  if (text.startsWith('SOURCE_PATH_UNAVAILABLE')) return 'No source preview is available for this finding — it was reported at the project level.';
   if (text.startsWith('SOURCE_NOT_A_FILE')) return 'Only source files can be previewed.';
   if (text.startsWith('FINDING_NOT_FOUND')) return 'This finding is no longer in the report, so there is nothing to preview.';
   return text;

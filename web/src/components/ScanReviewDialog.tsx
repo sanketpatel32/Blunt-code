@@ -25,8 +25,11 @@ export function ScanReviewDialog({ workspaceId, workspaceName, profile, confirmL
   return <Dialog open onOpenChange={(open) => { if (!open && !busy) onCancel(); }}>
     <DialogContent className="max-w-2xl" onCloseAutoFocus={(event) => { event.preventDefault(); returnFocus.current?.focus(); }}>
       <DialogHeader>
-        <DialogTitle>Run {profile} scan{workspaceName ? ` on ${workspaceName}` : ''}?</DialogTitle>
-        <DialogDescription>Review current inputs, analyzer readiness, and network use. Files are rediscovered when the scan starts; this review does not modify your project.</DialogDescription>
+        {/* The workspace name lives in the description, not the question — a
+            long name truncated mid-token left a dangling "…name-?" line that
+            read like the dialog doubting itself. */}
+        <DialogTitle>Run {profile} scan?</DialogTitle>
+        <DialogDescription>{workspaceName ? <>on <strong className="break-all">{workspaceName}</strong> — </> : null}Review current inputs, analyzer readiness, and network use. Files are rediscovered when the scan starts; this review does not modify your project.</DialogDescription>
       </DialogHeader>
       {review.loading ? <p role="status">Reviewing workspace inputs…</p> : review.error || !validPlan ? <div role="alert" className="availability-note">
         <p>{review.error ?? 'The server did not return a scan plan.'}</p>
