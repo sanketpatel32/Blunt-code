@@ -45,11 +45,11 @@ export function ScanActionDropdown({
   const [pendingProfile, setPendingProfile] = useState<string | null>(null);
   const isFullWidth = className.includes('w-full');
 
-  async function triggerScan(profile: string) {
+  async function triggerScan(profile: string, opts?: { incremental: boolean }) {
     if (running) return;
     setRunning(true);
     try {
-      const active = await api.startScan(workspaceId, profile);
+      const active = await api.startScan(workspaceId, profile, undefined, opts);
       notify?.({ kind: 'info', text: `${profile.charAt(0).toUpperCase() + profile.slice(1)} scan initiated.` });
       onScanStarted?.(active.id);
       go({ page: 'scan', id: active.id });
@@ -160,10 +160,10 @@ export function ScanActionDropdown({
           confirmLabel={`Run ${pendingProfile} scan`}
           busy={running}
           onCancel={() => setPendingProfile(null)}
-          onConfirm={() => {
+          onConfirm={(opts) => {
             const selected = pendingProfile;
             setPendingProfile(null);
-            if (selected) void triggerScan(selected);
+            if (selected) void triggerScan(selected, opts);
           }}
         />
       )}

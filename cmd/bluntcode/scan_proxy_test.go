@@ -7,11 +7,11 @@ import (
 // Flags the API cannot express stay refused — the refusal names them, so
 // they must be detected before any remote call happens.
 func TestRemoteUnsupportedNamesUnproxyableFlags(t *testing.T) {
-	got := remoteUnsupported(scanConfig{watch: true, incremental: true, format: scanFormatText})
+	got := remoteUnsupported(scanConfig{watch: true, watchPoll: 2, format: scanFormatText})
 	if len(got) != 2 {
 		t.Fatalf("want 2 unsupported flags, got %v", got)
 	}
-	if !contains(got, "--watch") || !contains(got, "--incremental") {
+	if !contains(got, "--watch") || !contains(got, "--watch-poll") {
 		t.Fatalf("unsupported list must name the flags: %v", got)
 	}
 }
@@ -19,7 +19,7 @@ func TestRemoteUnsupportedNamesUnproxyableFlags(t *testing.T) {
 func TestRemoteUnsupportedPassesExpressibleFlags(t *testing.T) {
 	cfg := scanConfig{
 		profile: "deep", target: "https://localhost:3000", format: scanFormatSARIF,
-		output: "out.sarif", saveBaseline: "base.sarif",
+		output: "out.sarif", saveBaseline: "base.sarif", jobs: 4, incremental: true,
 	}
 	if got := remoteUnsupported(cfg); len(got) != 0 {
 		t.Fatalf("expressible flags must not block the proxy: %v", got)

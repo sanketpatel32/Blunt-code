@@ -4,9 +4,9 @@ package main
 // lock, a headless scan used to refuse outright. The running server is the
 // same engine behind loopback auth, so the CLI now drives its scan API for
 // the flag subset the API can express — "scan this folder" keeps working
-// while the app is open. Flags the API cannot honor (--watch, --incremental,
-// --jobs, --baseline, --format github) still refuse, naming exactly what
-// cannot be proxied.
+// while the app is open. Flags the API cannot honor (--watch/--watch-poll/
+// --watch-quiet, --baseline, --format github) still refuse, naming exactly
+// what cannot be proxied; --jobs and --incremental ride the scan body.
 
 import (
 	"bufio"
@@ -43,12 +43,6 @@ func remoteUnsupported(cfg scanConfig) []string {
 	}
 	if cfg.baseline != "" {
 		flags = append(flags, "--baseline")
-	}
-	if cfg.incremental {
-		flags = append(flags, "--incremental")
-	}
-	if cfg.jobs != 0 {
-		flags = append(flags, "--jobs")
 	}
 	if cfg.format == scanFormatGitHub {
 		flags = append(flags, "--format github")
@@ -307,6 +301,12 @@ func runRemoteScan(cfg scanConfig, stdout, stderr io.Writer) (int, bool) {
 	scanBody := `{"profile":` + jsonString(cfg.profile)
 	if cfg.target != "" {
 		scanBody += `,"target_url":` + jsonString(cfg.target)
+	}
+	if cfg.jobs != 0 {
+		scanBody += fmt.Sprintf(`,"jobs":%d`, cfg.jobs)
+	}
+	if cfg.incremental {
+		scanBody += `,"incremental":true`
 	}
 	scanBody += `}`
 	var scanID string

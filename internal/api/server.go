@@ -1417,8 +1417,10 @@ func (s *Server) startScan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		Profile   string `json:"profile"`
-		TargetURL string `json:"target_url"`
+		Profile     string `json:"profile"`
+		TargetURL   string `json:"target_url"`
+		Jobs        int    `json:"jobs"`
+		Incremental bool   `json:"incremental"`
 	}
 	if err := decode(r, &input); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, io.EOF) {
 		fail(w, 400, "INVALID_JSON", "Invalid scan request.")
@@ -1431,6 +1433,10 @@ func (s *Server) startScan(w http.ResponseWriter, r *http.Request) {
 	targetURL, err := scans.NormalizeScanTarget(input.Profile, strings.TrimSpace(input.TargetURL))
 	if err != nil {
 		fail(w, 400, "INVALID_TARGET", err.Error())
+		return
+	}
+	if input.Jobs < 0 || input.Jobs > 32 {
+		fail(w, 400, "INVALID_JOBS", "jobs must be between 0 (default concurrency) and 32.")
 		return
 	}
 	recent, err := s.db.Scans(r.Context(), work.ID)
@@ -1449,7 +1455,7 @@ func (s *Server) startScan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	patterns, _ := s.userExcludes(r.Context(), work.ID)
-	scan, err := s.scans.DiscoverAndStartWithOptions(r.Context(), work, input.Profile, patterns, scans.ScanOptions{TargetURL: targetURL})
+	scan, err := s.scans.DiscoverAndStartWithOptions(r.Context(), work, input.Profile, patterns, scans.ScanOptions{Jobs: input.Jobs, Incremental: input.Incremental, TargetURL: targetURL})
 	if err != nil {
 		switch {
 		case errors.Is(err, scans.ErrTooManyScans):

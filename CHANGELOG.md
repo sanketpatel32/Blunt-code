@@ -34,8 +34,15 @@ records differ for older versions:
 - **Stale workspace scans tell the truth.** Starting or planning a scan on a workspace whose folder was deleted or moved now returns `404 WORKSPACE_ROOT_MISSING` naming the path, instead of a misleading `500 DATABASE_ERROR "Could not create scan"`; the CLI reports the same cause.
 - **E2E smoke suite.** Scan polling waits up to 300s (SonarQube alone can exceed 90s even warm) and asserts a terminal state before checking results; cleanup cancels the workspace's in-flight scans so deletion no longer hits `409 SCAN_IN_PROGRESS`.
 
+### Added
+- **Parallel analyzers by default.** Scans now run up to 3 analyzers concurrently instead of strictly one-after-another, roughly halving wall-clock on multi-analyzer profiles while managed-tool installs stay serialized. `scan --jobs N` overrides; `--jobs 1` restores sequential. The API accepts `jobs` and `incremental` on scan start, so `bluntcode scan --jobs/--incremental` now works while the app is open instead of refusing.
+- **Incremental scans from the UI.** The scan review dialog offers "re-scan only files changed since the last completed scan" (silently a full scan on first run) — the biggest re-scan speedup on large workspaces.
+
 ### Changed
 - **Install progress names the download.** The "Preparing X" scan stage now reads "Preparing X (downloading ~N MB, first run only)" from per-artifact manifest sizes, so a first pentest/deep run installing ~1.5 GB of tools no longer looks hung (#54).
+
+### Fixed
+- **Windows device-name files no longer kill scans.** Discovery skips `nul`/`con`/`aux`/`comN`/`lptN` (with or without extension) — junk files creatable only via `\\?\` tricks or shell redirects that crash analyzers they reach; a stray `nul` in the repo root was failing every sonar-scanner run.
 
 ## [0.50.0] - 2026-11-22
 
