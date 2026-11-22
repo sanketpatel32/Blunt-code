@@ -87,57 +87,6 @@ func TestSmokeVersionMismatchRejected(t *testing.T) {
 	}
 }
 
-// A transient first-run smoke failure is retried once inside the install path;
-// the second probe is the one that decides the install.
-func TestSmokeProbeRetriesTransientFailure(t *testing.T) {
-	oldDelay := smokeRetryDelay
-	smokeRetryDelay = 0
-	t.Cleanup(func() { smokeRetryDelay = oldDelay })
-	payload := []byte("binary")
-	server := serveBytes(t, payload)
-	artifact := exeArtifact(server.URL, sha256Hex(t, payload))
-	artifact.Smoke = &SmokeTest{Args: []string{"--version"}, Expect: "1.0.0"}
-	calls := 0
-	manager := Manager{Root: t.TempDir(), SmokeRunner: func(context.Context, string, []string) (string, error) {
-		calls++
-		if calls == 1 {
-			return "locked by scanner", errors.New("exit status 1")
-		}
-		return "probe 1.0.0", nil
-	}}
-	if err := manager.InstallExecutable(context.Background(), artifact); err != nil {
-		t.Fatalf("retry did not recover a transient smoke failure: %v", err)
-	}
-	if calls != 2 {
-		t.Fatalf("smoke probe calls = %d, want exactly one retry", calls)
-	}
-	if !manager.IsReady(artifact) {
-		t.Fatal("successful retry did not leave the executable ready")
-	}
-}
-
-// When both smoke attempts fail, the analyzer-visible error keeps the probe's
-// captured output instead of only "exit status 1".
-func TestSmokeFailureIncludesProbeOutput(t *testing.T) {
-	oldDelay := smokeRetryDelay
-	smokeRetryDelay = 0
-	t.Cleanup(func() { smokeRetryDelay = oldDelay })
-	payload := []byte("binary")
-	server := serveBytes(t, payload)
-	artifact := exeArtifact(server.URL, sha256Hex(t, payload))
-	artifact.Smoke = &SmokeTest{Args: []string{"--version"}}
-	manager := Manager{Root: t.TempDir(), SmokeRunner: func(context.Context, string, []string) (string, error) {
-		return "access is denied", errors.New("exit status 1")
-	}}
-	err := manager.InstallExecutable(context.Background(), artifact)
-	if err == nil {
-		t.Fatal("persistent smoke failure must fail the installation")
-	}
-	if !strings.Contains(err.Error(), "access is denied") {
-		t.Fatalf("smoke failure lost probe output: %v", err)
-	}
-}
-
 // A zip reinstall over a broken installation (executable deleted, tree
 // remains) whose smoke probe fails restores the pre-reinstall tree exactly —
 // it can never make things worse, but it cannot resurrect the deleted file

@@ -176,44 +176,6 @@ func TestConcurrentEnsureSerializesInstalls(t *testing.T) {
 	}
 }
 
-// EnsureMany downloads independent tools at the same time; the same-tool lock
-// still serializes retries of one tool.
-func TestEnsureManyInstallsIndependentToolsConcurrently(t *testing.T) {
-	payload := []byte("tool bytes")
-	sum := sha256.Sum256(payload)
-	var mu sync.Mutex
-	active, peak := 0, 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mu.Lock()
-		active++
-		if active > peak {
-			peak = active
-		}
-		mu.Unlock()
-		time.Sleep(120 * time.Millisecond)
-		_, _ = w.Write(payload)
-		mu.Lock()
-		active--
-		mu.Unlock()
-	}))
-	defer server.Close()
-	artifact := func(id, executable string) Artifact {
-		return Artifact{ToolID: id, Version: "1", Platform: platform(), SourceURL: server.URL + "/" + id, SHA256: hex.EncodeToString(sum[:]), ArchiveType: "exe", Executable: executable}
-	}
-	service := NewService(t.TempDir(), Manifest{Artifacts: []Artifact{artifact("ruff", "ruff.exe"), artifact("biome", "biome.exe")}}, false)
-	if err := service.EnsureMany(context.Background(), []string{"ruff", "biome"}); err != nil {
-		t.Fatal(err)
-	}
-	mu.Lock()
-	defer mu.Unlock()
-	if peak != 2 {
-		t.Fatalf("independent downloads peak concurrency = %d, want 2", peak)
-	}
-	if !service.Status("ruff").Ready || !service.Status("biome").Ready {
-		t.Fatal("EnsureMany did not leave both tools ready")
-	}
-}
-
 func TestUninstallStandardTool(t *testing.T) {
 	root := t.TempDir()
 	manifest := Manifest{

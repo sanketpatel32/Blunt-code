@@ -151,6 +151,89 @@ func (s *Service) PendingDownloadBytes(id string) int64 {
 	return artifact.DownloadBytes
 }
 
+// InstallEstimate is the pinned-download size needed to make one or more
+// managed tools ready. Bytes sums only the manifest-pinned archives that are
+// still missing; Estimated is false only when every needed artifact has a
+// pinned size and no uv-managed dependency resolution is involved.
+type InstallEstimate struct {
+	Bytes     int64 `json:"bytes"`
+	Estimated bool  `json:"estimated"`
+}
+
+// InstallEstimates sums the missing pinned downloads for the given managed
+// tool ids (analyzer or tools ids; aliases are canonicalized). Shared
+// dependencies such as managed uv are counted once.
+func (s *Service) InstallEstimates(ids []string) InstallEstimate {
+	var estimate InstallEstimate
+	seen := map[string]struct{}{}
+	complete := true
+	add := func(a Artifact) {
+		key := a.ToolID + "|" + a.Version + "|" + a.Platform
+		if _, ok := seen[key]; ok {
+			return
+		}
+		seen[key] = struct{}{}
+		if a.DownloadBytes > 0 {
+			estimate.Bytes += a.DownloadBytes
+		} else {
+			complete = false
+		}
+	}
+	for _, raw := range ids {
+		id := CanonicalToolID(raw)
+		if id == "sonarqube" {
+			artifacts, err := s.sonarQubeArtifacts()
+			if err != nil {
+				complete = false
+				continue
+			}
+			for _, artifact := range artifacts {
+				if !s.Manager.IsReady(artifact) {
+					add(artifact)
+				}
+			}
+			continue
+		}
+		artifact, ok := s.Manager.Manifest.Find(id, platform())
+		if !ok {
+			complete = false
+			continue
+		}
+		if artifact.InstallKind == "uv_tool" {
+			paths := s.Manager.UvToolPaths(artifact)
+			if _, err := os.Stat(paths.Executable); err == nil {
+				continue
+			}
+			if !uvWheelCached(artifact, paths) {
+				add(artifact)
+			}
+			// uv resolves the managed Python and wheel dependencies beyond the
+			// pinned wheel, so its total download is not pinned in the manifest.
+			complete = false
+			if uv, ok := s.Manager.Manifest.Find("uv", platform()); ok && !s.Manager.IsReady(uv) {
+				add(uv)
+			}
+			continue
+		}
+		if !s.Manager.IsReady(artifact) {
+			add(artifact)
+		}
+	}
+	estimate.Estimated = !complete
+	return estimate
+}
+
+// uvWheelCached reports whether the verified wheel is already on disk, in which
+// case InstallUvTool reuses it instead of downloading it again.
+func uvWheelCached(artifact Artifact, paths UvToolPaths) bool {
+	filename, err := wheelFilename(artifact.SourceURL)
+	if err != nil {
+		return false
+	}
+	wheel := filepath.Join(paths.Root, "downloads", filename)
+	return VerifySHA256(wheel, artifact.SHA256) == nil
+}
+
 func (s *Service) Ensure(ctx context.Context, id string) error {
 	s.installMu.Lock()
 	defer s.installMu.Unlock()
