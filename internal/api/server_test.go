@@ -2409,8 +2409,20 @@ func TestPruneWorkspaceScansEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := os.MkdirAll(s.paths.ReportsDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	var reportFiles []string
 	for i := 0; i < 4; i++ {
-		completedScan(t, s, work.ID, "completed", finding("ruff", "R", "src/x.py", "issue", analyzers.SeverityLow, analyzers.CategoryStyle))
+		scan := completedScan(t, s, work.ID, "completed", finding("ruff", "R", "src/x.py", "issue", analyzers.SeverityLow, analyzers.CategoryStyle))
+		report := filepath.Join(s.paths.ReportsDir, "report-"+strconv.Itoa(i)+".md")
+		if err := os.WriteFile(report, []byte("# report"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.db.SQL.ExecContext(ctx, `UPDATE scans SET report_markdown_path=?, started_at=? WHERE id=?`, report, time.Now().Add(time.Duration(i)*time.Minute).UTC().Format(time.RFC3339Nano), scan.ID); err != nil {
+			t.Fatal(err)
+		}
+		reportFiles = append(reportFiles, report)
 	}
 
 	request := httptest.NewRequest(http.MethodDelete, "http://127.0.0.1/api/v1/workspaces/"+work.ID+"/scans?keep=0", nil)
@@ -2438,6 +2450,12 @@ func TestPruneWorkspaceScansEndpoint(t *testing.T) {
 	}
 	if remaining != 2 {
 		t.Fatalf("workspace must retain exactly the newest 2 scans, got %d", remaining)
+	}
+	for i, report := range reportFiles {
+		_, err := os.Stat(report)
+		if pruned := i < 2; pruned != os.IsNotExist(err) {
+			t.Fatalf("report %d: pruned=%v but stat err=%v", i, pruned, err)
+		}
 	}
 }
 

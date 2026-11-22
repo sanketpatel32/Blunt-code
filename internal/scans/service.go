@@ -33,6 +33,11 @@ type Service struct {
 	tools      *tools.Service
 	mu         sync.Mutex
 	cancels    map[string]context.CancelFunc
+	// runs tracks every scan goroutine so Shutdown can wait for them before
+	// the database closes underneath late writes. closing refuses new scans
+	// once Shutdown began, keeping runs.Add from racing runs.Wait.
+	runs    sync.WaitGroup
+	closing bool
 	// active counts started-but-not-finished scans (a reserved slot counts
 	// from start until run's cleanup), bounding total load on the machine.
 	active int
@@ -52,6 +57,10 @@ const MaxConcurrentScans = 3
 // ErrTooManyScans reports that MaxConcurrentScans scans are already running;
 // the API surfaces it as 503 and the CLI as an operational failure (exit 3).
 var ErrTooManyScans = errors.New("scan capacity reached: too many concurrent scans")
+
+// ErrShuttingDown reports that the service is shutting down and accepts no
+// new scans.
+var ErrShuttingDown = errors.New("scan service is shutting down")
 
 const diagnosticLogCap = int64(500 << 20)
 
@@ -81,11 +90,16 @@ func (s *Service) start(ctx context.Context, work core.Workspace, profile string
 		profile = "standard"
 	}
 	s.mu.Lock()
+	if s.closing {
+		s.mu.Unlock()
+		return core.Scan{}, ErrShuttingDown
+	}
 	if s.active >= MaxConcurrentScans {
 		s.mu.Unlock()
 		return core.Scan{}, ErrTooManyScans
 	}
 	s.active++
+	s.runs.Add(1)
 	s.mu.Unlock()
 	snapshot := s.snapshot(ctx, work, profile, files, excludes, extras.skipCounts, extras.dependencyInputs)
 	scan, err := s.db.CreateScanWithFiles(ctx, core.Scan{WorkspaceID: work.ID, Profile: profile, State: "queued", CandidateFileCount: len(files), SelectedFileCount: snapshot.SelectedFileCount, Snapshot: snapshot}, files)
@@ -93,12 +107,20 @@ func (s *Service) start(ctx context.Context, work core.Workspace, profile string
 		s.mu.Lock()
 		s.active--
 		s.mu.Unlock()
+		s.runs.Done()
 		return core.Scan{}, err
 	}
 	runCtx, cancel := context.WithCancel(context.Background())
 	s.mu.Lock()
 	s.cancels[scan.ID] = cancel
+	closing := s.closing
 	s.mu.Unlock()
+	// Shutdown may have begun while the scan row was being created; it could
+	// not see this cancel func, so cancel here and let run finish the scan as
+	// cancelled instead of starting analyzers on a closing service.
+	if closing {
+		cancel()
+	}
 	go s.run(runCtx, scan, work, files, opts, s.selectionDeselected(ctx, work.ID))
 	return scan, nil
 }
@@ -194,9 +216,15 @@ func (s *Service) Cancel(ctx context.Context, scanID string) error {
 	return nil
 }
 
-// Shutdown cancels every running scan before managed analyzers are stopped.
-func (s *Service) Shutdown() {
+// Shutdown refuses new scans, cancels every running scan, and waits until
+// their goroutines have recorded a terminal state, so callers can stop
+// managed analyzers and close the database afterwards without late writes
+// hitting a closed store. It returns an error when ctx ends first; the scans
+// still running then are reconciled to "interrupted" on the next start
+// (database.MarkInterruptedScans). Shutdown is safe to call more than once.
+func (s *Service) Shutdown(ctx context.Context) error {
 	s.mu.Lock()
+	s.closing = true
 	cancels := make([]context.CancelFunc, 0, len(s.cancels))
 	for _, cancel := range s.cancels {
 		cancels = append(cancels, cancel)
@@ -205,11 +233,26 @@ func (s *Service) Shutdown() {
 	for _, cancel := range cancels {
 		cancel()
 	}
+	done := make(chan struct{})
+	go func() {
+		s.runs.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		s.mu.Lock()
+		pending := len(s.cancels)
+		s.mu.Unlock()
+		return fmt.Errorf("%d scan(s) still running at shutdown: %w", pending, ctx.Err())
+	}
 }
 func (s *Service) emit(scanID, event string, data map[string]any) {
 	s.bus.Publish(events.Event{Type: event, ScanID: scanID, Data: data})
 }
 func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, files []core.FileEntry, opts ScanOptions, deselect func(string) bool) {
+	defer s.runs.Done()
 	defer func() {
 		s.mu.Lock()
 		delete(s.cancels, scan.ID)
@@ -221,12 +264,17 @@ func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, 
 	// still publish a terminal event so streams and the UI resolve.
 	defer func() {
 		if r := recover(); r != nil {
-			_ = s.db.UpdateScanState(context.Background(), scan.ID, "failed", fmt.Sprintf("Internal scan error: %v", r))
-			s.emit(scan.ID, "scan.completed", map[string]any{"state": "failed"})
+			s.failScan(scan.ID, fmt.Sprintf("Internal scan error: %v", r))
 		}
 	}()
 	s.emit(scan.ID, "scan.started", map[string]any{"state": "queued"})
-	s.transition(scan.ID, "preparing", map[string]any{"stage": "Preparing workspace"})
+	// A scan whose progress cannot be recorded must not run analyzers whose
+	// results could not be recorded either: fail it now (best effort) and let
+	// startup reconciliation catch the row if even that write is lost.
+	if err := s.transition(scan.ID, "preparing", map[string]any{"stage": "Preparing workspace"}); err != nil {
+		s.failScan(scan.ID, fmt.Sprintf("Could not record scan progress: %v", err))
+		return
+	}
 	languages, absoluteFiles, filesByLanguage := scanInputs(work.RootPath, files)
 	// A workspace with no routable source files still has scan signal when
 	// discovery tracked dependency manifests: osv, trivy, and the license
@@ -234,8 +282,7 @@ func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, 
 	// (lockfiles are smart-skipped as artifacts). Only a workspace with
 	// neither source files nor dependency inputs is truly unscannable.
 	if len(absoluteFiles) == 0 && len(scanDependencyInputs(scan)) == 0 {
-		_ = s.db.UpdateScanState(context.Background(), scan.ID, "failed", "No supported source files were selected.")
-		s.emit(scan.ID, "scan.completed", map[string]any{"state": "failed"})
+		s.failScan(scan.ID, "No supported source files were selected.")
 		return
 	}
 	// Content hashes are computed once per scan (the scan already touches
@@ -274,8 +321,7 @@ func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, 
 		// A recovered worker panic fails the scan exactly like the run-level
 		// recover below does for sequential scans.
 		if panicValue := s.runAnalyzersBounded(ctx, scan, work, languages, routing, counters, jobs, deselect); panicValue != "" {
-			_ = s.db.UpdateScanState(context.Background(), scan.ID, "failed", fmt.Sprintf("Internal scan error: %v", panicValue))
-			s.emit(scan.ID, "scan.completed", map[string]any{"state": "failed"})
+			s.failScan(scan.ID, fmt.Sprintf("Internal scan error: %v", panicValue))
 			return
 		}
 	} else if !s.runAnalyzersSequential(ctx, scan, work, languages, routing, counters, deselect) {
@@ -378,7 +424,10 @@ func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, 
 			}
 			note += zeroCoverageNote
 		}
-		_ = s.db.SetScanNote(context.Background(), scan.ID, note)
+		if err := s.db.SetScanNote(context.Background(), scan.ID, note); err != nil {
+			log.Printf("scan %s: could not record the scan note (%v)", scan.ID, err)
+			s.emit(scan.ID, "scan.warning", map[string]any{"message": "Could not record the scan note: " + err.Error()})
+		}
 	}
 	s.emit(scan.ID, "scan.stage", map[string]any{"stage": "Generating report"})
 	reportPath, err := s.writeReport(scan, work, files)
@@ -390,25 +439,44 @@ func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, 
 		}
 		s.emit(scan.ID, "scan.warning", map[string]any{"message": "Could not write Markdown report."})
 	}
+	completed := map[string]any{"state": state}
 	if err := s.db.CompleteScan(context.Background(), scan.ID, state, reportPath); err != nil {
 		// CompleteScan also finalizes counts; fall back to a plain state write
 		// so the scan still reaches a terminal state when only the summary
 		// write fails. The incremental note rides along so the scan stays
 		// explainable either way.
+		log.Printf("scan %s: could not persist the final summary (%v)", scan.ID, err)
 		fallback := "Scan finished, but persisting its final summary failed."
 		if incrementalNote != "" {
 			fallback += " " + incrementalNote
 		}
-		_ = s.db.UpdateScanState(context.Background(), scan.ID, state, fallback)
+		if err := s.setState(scan.ID, state, fallback); err != nil {
+			completed["error"] = err.Error()
+		}
 	}
 	// Automated scan history retention: keep most recent scans per workspace to prevent database bloat.
 	// Pruning before emitting scan.completed ensures subscribers refreshing history immediately see the pruned state.
-	if s.db != nil {
-		if keep := config.MaxScansPerWorkspace(); keep > 0 {
-			_, _ = s.db.PruneOldScans(context.Background(), work.ID, keep)
+	if keep := config.MaxScansPerWorkspace(); keep > 0 {
+		if err := s.pruneOldScans(work.ID, keep); err != nil {
+			log.Printf("retention: %v", err)
+			s.emit(scan.ID, "scan.warning", map[string]any{"message": "Scan history retention failed: " + err.Error()})
 		}
 	}
-	s.emit(scan.ID, "scan.completed", map[string]any{"state": state})
+	s.emit(scan.ID, "scan.completed", completed)
+}
+
+// pruneOldScans applies the scan retention limit and deletes the Markdown
+// reports of the pruned scans with them, so retention bounds disk usage and
+// not just database rows.
+func (s *Service) pruneOldScans(workspaceID string, keep int) error {
+	_, orphanedReports, err := s.db.PruneOldScans(context.Background(), workspaceID, keep)
+	if err != nil {
+		return fmt.Errorf("could not prune old scans of workspace %s: %w", workspaceID, err)
+	}
+	if err := reports.RemoveFiles(s.reportsDir, orphanedReports); err != nil {
+		return fmt.Errorf("pruned old scans of workspace %s, but could not remove their reports: %w", workspaceID, err)
+	}
+	return nil
 }
 
 func analyzerTimeout(id string) time.Duration {
@@ -494,13 +562,44 @@ func pruneDiagnosticLogs(dir string) {
 		}
 	}
 }
-func (s *Service) transition(scanID, state string, data map[string]any) {
-	_ = s.db.UpdateScanState(context.Background(), scanID, state, "")
-	s.emit(scanID, "scan.stage", data)
+
+// setState persists a scan state change. The write uses a fresh context on
+// purpose: a cancelled scan must still be able to record that it ended. A
+// failed write is logged and returned, never swallowed.
+func (s *Service) setState(scanID, state, summary string) error {
+	if err := s.db.UpdateScanState(context.Background(), scanID, state, summary); err != nil {
+		log.Printf("scan %s: could not record state %q (%v)", scanID, state, err)
+		return fmt.Errorf("record scan state %q: %w", state, err)
+	}
+	return nil
 }
+
+func (s *Service) transition(scanID, state string, data map[string]any) error {
+	if err := s.setState(scanID, state, ""); err != nil {
+		return err
+	}
+	s.emit(scanID, "scan.stage", data)
+	return nil
+}
+
+// failScan ends a scan as failed and always publishes the terminal event so
+// streams resolve. When the failed state itself cannot be persisted, the
+// event carries the error: the row is still non-terminal and is reconciled to
+// "interrupted" on the next start (database.MarkInterruptedScans).
+func (s *Service) failScan(scanID, summary string) {
+	data := map[string]any{"state": "failed"}
+	if err := s.setState(scanID, "failed", summary); err != nil {
+		data["error"] = err.Error()
+	}
+	s.emit(scanID, "scan.completed", data)
+}
+
 func (s *Service) finishCancelled(scanID string) {
-	_ = s.db.UpdateScanState(context.Background(), scanID, "cancelled", "Cancelled by user.")
-	s.emit(scanID, "scan.cancelled", nil)
+	var data map[string]any
+	if err := s.setState(scanID, "cancelled", "Cancelled by user."); err != nil {
+		data = map[string]any{"error": err.Error()}
+	}
+	s.emit(scanID, "scan.cancelled", data)
 }
 
 // scanInputs derives the scan's language list, the flat absolute file list,

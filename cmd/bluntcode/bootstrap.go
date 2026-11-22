@@ -166,7 +166,10 @@ func openCore() (core *appCore, release func(), err error) {
 		settings:    appSettings,
 	}
 	release = func() {
-		scanService.Shutdown()
+		// Scans must reach a terminal state before managed SonarQube stops
+		// and the database closes; otherwise late analyzer writes hit a
+		// closed store.
+		stopScans(scanService, logger)
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
 		if err := managedSonar.Shutdown(shutdownCtx); err != nil {
@@ -177,6 +180,21 @@ func openCore() (core *appCore, release func(), err error) {
 		_ = logSink.Close()
 	}
 	return app, release, nil
+}
+
+// scanShutdownTimeout bounds how long shutdown waits for cancelled scans to
+// record their terminal state. Scans still running after it are reconciled to
+// "interrupted" on the next start.
+const scanShutdownTimeout = 15 * time.Second
+
+// stopScans cancels every running scan and waits (bounded) for the scan
+// goroutines to finish. Safe to call more than once.
+func stopScans(service *scans.Service, logger *slog.Logger) {
+	ctx, cancel := context.WithTimeout(context.Background(), scanShutdownTimeout)
+	defer cancel()
+	if err := service.Shutdown(ctx); err != nil {
+		logger.Warn("scans did not stop before the shutdown timeout", "error", err)
+	}
 }
 
 // nopWriteCloser keeps openCore logging-safe when the log file cannot be

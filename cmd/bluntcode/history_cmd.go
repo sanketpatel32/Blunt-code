@@ -10,6 +10,8 @@ import (
 	"bluntcode/internal/analyzers"
 	"bluntcode/internal/database"
 	"bluntcode/internal/scans"
+
+	"bluntcode/internal/reports"
 )
 
 func printHistoryHelp(w io.Writer) {
@@ -170,7 +172,7 @@ func runHistoryDelete(ctx context.Context, app *cliCore, args []string, stdout, 
 	}
 	scanID := positional[0]
 
-	deleted, err := app.db.DeleteScan(ctx, scanID)
+	deleted, orphanedReport, err := app.db.DeleteScan(ctx, scanID)
 	if err != nil {
 		fmt.Fprintf(stderr, "bluntcode history delete: %v\n", err)
 		return 1
@@ -178,6 +180,9 @@ func runHistoryDelete(ctx context.Context, app *cliCore, args []string, stdout, 
 	if !deleted {
 		fmt.Fprintf(stderr, "bluntcode history delete: scan %s not found\n", scanID)
 		return 1
+	}
+	if err := reports.RemoveFiles(app.paths.ReportsDir, []string{orphanedReport}); err != nil {
+		fmt.Fprintf(stderr, "bluntcode history delete: warning: could not remove report file: %v\n", err)
 	}
 
 	if *jsonOut {

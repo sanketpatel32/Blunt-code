@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -196,7 +197,11 @@ func (s *Service) executeAnalyzer(ctx context.Context, scan core.Scan, work core
 	}
 	started := time.Now()
 	s.emit(scan.ID, "analyzer.started", map[string]any{"analyzer_id": adapter.ID(), "name": adapter.DisplayName()})
-	_ = s.db.UpdateScanState(context.Background(), scan.ID, "running", "")
+	if err := s.setState(scan.ID, "running", ""); err != nil {
+		counters.markFailed()
+		s.emit(scan.ID, "analyzer.failed", map[string]any{"analyzer_id": adapter.ID(), "error": err.Error()})
+		return analyzerFailed
+	}
 	status := adapter.Check(ctx, analyzers.ToolEnvironment{ToolsDir: s.toolsDir})
 	if !status.Ready && s.tools != nil && analyzers.InstallableTool(adapter.ID()) {
 		s.emit(scan.ID, "scan.stage", map[string]any{"stage": "Preparing " + adapter.DisplayName()})
@@ -213,14 +218,14 @@ func (s *Service) executeAnalyzer(ctx context.Context, scan core.Scan, work core
 		if errorText == "" {
 			errorText = "Analyzer is not ready."
 		}
-		_, _ = s.db.SaveAnalyzerResult(context.Background(), scan.ID, database.AnalyzerRunInput{AnalyzerID: adapter.ID(), Version: status.Version, State: "failed", StartedAt: started, FinishedAt: time.Now(), Error: errorText}, nil, nil)
+		s.recordFailedRun(scan.ID, database.AnalyzerRunInput{AnalyzerID: adapter.ID(), Version: status.Version, State: "failed", StartedAt: started, FinishedAt: time.Now(), Error: errorText})
 		counters.markFailed()
 		s.emit(scan.ID, "analyzer.failed", map[string]any{"analyzer_id": adapter.ID(), "error": errorText})
 		return analyzerFailed
 	}
 	plan, err := adapter.Plan(ctx, analyzers.ScanRequest{WorkspaceID: work.ID, ScanID: scan.ID, WorkspaceRoot: work.RootPath, Files: adapterFiles, Languages: languages, Profile: scan.Profile, DependencyInputs: scanDependencyInputs(scan)})
 	if err != nil {
-		_, _ = s.db.SaveAnalyzerResult(context.Background(), scan.ID, database.AnalyzerRunInput{AnalyzerID: adapter.ID(), Version: status.Version, State: "failed", StartedAt: started, FinishedAt: time.Now(), Error: err.Error()}, nil, nil)
+		s.recordFailedRun(scan.ID, database.AnalyzerRunInput{AnalyzerID: adapter.ID(), Version: status.Version, State: "failed", StartedAt: started, FinishedAt: time.Now(), Error: err.Error()})
 		counters.markFailed()
 		s.emit(scan.ID, "analyzer.failed", map[string]any{"analyzer_id": adapter.ID(), "error": err.Error()})
 		return analyzerFailed
@@ -283,7 +288,7 @@ func (s *Service) executeAnalyzer(ctx context.Context, scan core.Scan, work core
 		}
 	}
 	errorText := err.Error()
-	_, _ = s.db.SaveAnalyzerResult(context.Background(), scan.ID, database.AnalyzerRunInput{AnalyzerID: adapter.ID(), Version: plan.Version, State: "failed", StartedAt: started, FinishedAt: finished, ExitCode: result.ExitCode, Error: errorText}, nil, nil)
+	s.recordFailedRun(scan.ID, database.AnalyzerRunInput{AnalyzerID: adapter.ID(), Version: plan.Version, State: "failed", StartedAt: started, FinishedAt: finished, ExitCode: result.ExitCode, Error: errorText})
 	counters.markFailed()
 	s.emit(scan.ID, "analyzer.failed", map[string]any{"analyzer_id": adapter.ID(), "error": errorText})
 	return analyzerFailed
@@ -342,4 +347,12 @@ func (s *Service) runAnalyzersBounded(ctx context.Context, scan core.Scan, work 
 	wg.Wait()
 	message, _ := panicValue.Load().(string)
 	return message
+}
+
+// recordFailedRun persists a failed analyzer run. The run is counted as failed
+// either way; a write failure is logged so the missing row is explainable.
+func (s *Service) recordFailedRun(scanID string, run database.AnalyzerRunInput) {
+	if _, err := s.db.SaveAnalyzerResult(context.Background(), scanID, run, nil, nil); err != nil {
+		log.Printf("scan %s: could not record failed %s run (%v)", scanID, run.AnalyzerID, err)
+	}
 }

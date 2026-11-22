@@ -122,3 +122,70 @@ func TestSubscribeBridgesReplayToLiveWithoutLossOrDuplication(t *testing.T) {
 		t.Fatalf("test connected too late to exercise the replay/live boundary (only event %d seen)", first)
 	}
 }
+
+// TestBusEvictsOldestIdleScanAndKeepsWatchedStreams pins history eviction:
+// past historyScanLimit scans the least recently active scan without
+// subscribers loses its history, while a watched scan — even the oldest one —
+// keeps both its history and its live subscribers.
+func TestBusEvictsOldestIdleScanAndKeepsWatchedStreams(t *testing.T) {
+	b := New()
+	for i := 0; i < historyScanLimit; i++ {
+		b.Publish(Event{Type: "scan.started", ScanID: "scan-" + strconv.Itoa(i)})
+	}
+	ch, unsubscribe := b.Subscribe("scan-0")
+	defer unsubscribe()
+	<-ch // replayed scan.started
+
+	b.Publish(Event{Type: "scan.started", ScanID: "scan-new"})
+	if _, ok := b.history["scan-1"]; ok {
+		t.Fatal("the oldest idle scan (scan-1) kept its history")
+	}
+	for _, kept := range []string{"scan-0", "scan-2", "scan-new"} {
+		if _, ok := b.history[kept]; !ok {
+			t.Fatalf("%s lost its history", kept)
+		}
+	}
+	if len(b.history) != historyScanLimit {
+		t.Fatalf("history holds %d scans, want %d", len(b.history), historyScanLimit)
+	}
+	b.Publish(Event{Type: "scan.completed", ScanID: "scan-0"})
+	select {
+	case got := <-ch:
+		if got.Type != "scan.completed" {
+			t.Fatalf("watched stream got %q", got.Type)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("the watched scan's subscriber was cut off by eviction")
+	}
+	// scan-0 is now the most recently active scan; the next eviction takes
+	// scan-2, the oldest idle one.
+	b.Publish(Event{Type: "scan.started", ScanID: "scan-newer"})
+	if _, ok := b.history["scan-2"]; ok {
+		t.Fatal("scan-2 should have been evicted next")
+	}
+}
+
+func TestBusNeverEvictsWatchedScans(t *testing.T) {
+	b := New()
+	var unsubscribes []func()
+	for i := 0; i < historyScanLimit; i++ {
+		id := "scan-" + strconv.Itoa(i)
+		b.Publish(Event{Type: "scan.started", ScanID: id})
+		_, unsubscribe := b.Subscribe(id)
+		unsubscribes = append(unsubscribes, unsubscribe)
+	}
+	defer func() {
+		for _, unsubscribe := range unsubscribes {
+			unsubscribe()
+		}
+	}()
+	b.Publish(Event{Type: "scan.started", ScanID: "scan-extra"})
+	if len(b.history) != historyScanLimit+1 {
+		t.Fatalf("history holds %d scans; watched scans must not be evicted", len(b.history))
+	}
+	for i := 0; i < historyScanLimit; i++ {
+		if len(b.subscribers["scan-"+strconv.Itoa(i)]) != 1 {
+			t.Fatalf("scan-%d lost its subscriber", i)
+		}
+	}
+}

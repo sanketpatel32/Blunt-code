@@ -1174,7 +1174,7 @@ func TestPruneKeepsComparisonAnchorAndSuppressionHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	deleted, err := db.PruneOldScans(ctx, work.ID, 2)
+	deleted, _, err := db.PruneOldScans(ctx, work.ID, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1209,5 +1209,85 @@ func TestVacuum(t *testing.T) {
 	defer db.Close()
 	if err := db.Vacuum(context.Background()); err != nil {
 		t.Fatalf("Vacuum failed: %v", err)
+	}
+}
+
+func TestPruneAndDeleteReturnOnlyUnreferencedReports(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "bluntcode.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	work, err := db.CreateWorkspace(ctx, core.Workspace{Name: "Reports", RootPath: "C:/reports"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Oldest first: a private report, a report shared with a kept scan, no
+	// report at all, then the kept scans.
+	reportsFor := []string{"r/old.md", "r/shared.md", "", "r/shared.md", "r/new.md"}
+	ids := make([]string, len(reportsFor))
+	for i, report := range reportsFor {
+		scan, err := db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: "running"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := db.CompleteScan(ctx, scan.ID, "completed", report); err != nil {
+			t.Fatal(err)
+		}
+		ids[i] = scan.ID
+		time.Sleep(2 * time.Millisecond)
+	}
+	deleted, orphaned, err := db.PruneOldScans(ctx, work.ID, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(deleted) != 3 {
+		t.Fatalf("deleted = %v, want the 3 oldest scans", deleted)
+	}
+	if len(orphaned) != 1 || orphaned[0] != "r/old.md" {
+		t.Fatalf("orphaned reports = %v, want only r/old.md (shared.md is still referenced)", orphaned)
+	}
+
+	ok, report, err := db.DeleteScan(ctx, ids[3])
+	if err != nil || !ok || report != "r/shared.md" {
+		t.Fatalf("DeleteScan = %v %q %v, want the now-unreferenced shared report", ok, report, err)
+	}
+	ok, report, err = db.DeleteScan(ctx, ids[3])
+	if err != nil || ok || report != "" {
+		t.Fatalf("repeat DeleteScan = %v %q %v, want not found", ok, report, err)
+	}
+	running, err := db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: "running"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok, _, err := db.DeleteScan(ctx, running.ID); err != nil || ok {
+		t.Fatalf("DeleteScan of a running scan = %v %v, want refused", ok, err)
+	}
+}
+
+func TestAddSuppressionsIsAllOrNothing(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "bluntcode.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	work, err := db.CreateWorkspace(ctx, core.Workspace{Name: "Bulk", RootPath: "C:/bulk"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = db.AddSuppressions(ctx, work.ID, []SuppressionInput{{Fingerprint: "fp-a"}, {Fingerprint: "fp-b"}, {Fingerprint: " "}})
+	if err == nil {
+		t.Fatal("a batch with an invalid row must fail")
+	}
+	if got, err := db.SuppressedFingerprints(ctx, work.ID); err != nil || len(got) != 0 {
+		t.Fatalf("failed batch left suppressions behind: %v %v", got, err)
+	}
+	if err := db.AddSuppressions(ctx, work.ID, []SuppressionInput{{Fingerprint: "fp-a", Reason: "r"}, {Fingerprint: "fp-b"}}); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := db.SuppressedFingerprints(ctx, work.ID); err != nil || !got["fp-a"] || !got["fp-b"] {
+		t.Fatalf("suppressions after a good batch = %v %v", got, err)
 	}
 }

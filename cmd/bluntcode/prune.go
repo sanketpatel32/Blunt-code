@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+
+	"bluntcode/internal/reports"
 )
 
 const pruneUsage = "usage: bluntcode prune <path> [--keep N]"
@@ -68,12 +70,15 @@ func runPrune(args []string) {
 		fmt.Fprintf(os.Stderr, "bluntcode prune: %v\n", err)
 		os.Exit(1)
 	}
-	deleted, err := app.db.PruneOldScans(ctx, work.ID, keep)
+	deleted, orphanedReports, err := app.db.PruneOldScans(ctx, work.ID, keep)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "bluntcode prune: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Fprintf(os.Stdout, "pruned %d scan(s), kept %d most recent for workspace %s\n", len(deleted), keep, work.Name)
+	if err := reports.RemoveFiles(app.paths.ReportsDir, orphanedReports); err != nil {
+		fmt.Fprintf(os.Stderr, "bluntcode prune: warning: could not remove report files: %v\n", err)
+	}
 	// A deleted scan may still be referenced: a CI --baseline <scan-id> (or a
 	// baseline SARIF exported from it) breaks the moment its scan is gone.
 	// Retention stays allowed, but never silent about what it invalidated.

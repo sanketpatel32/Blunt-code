@@ -1266,8 +1266,9 @@ func (s *Server) importSuppressions(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, "DATABASE_ERROR", "Could not load suppressions.")
 		return
 	}
-	imported, skippedInvalid, duplicate := 0, 0, 0
+	skippedInvalid, duplicate := 0, 0
 	seen := map[string]bool{}
+	var batch []database.SuppressionInput
 	for _, row := range records[1:] {
 		if column >= len(row) {
 			skippedInvalid++
@@ -1282,13 +1283,17 @@ func (s *Server) importSuppressions(w http.ResponseWriter, r *http.Request) {
 			duplicate++
 			continue
 		}
-		if _, err := s.db.AddSuppression(r.Context(), work.ID, fingerprint, ""); err != nil {
-			fail(w, 500, "DATABASE_ERROR", "Could not save suppression.")
-			return
-		}
 		seen[fingerprint] = true
-		imported++
+		batch = append(batch, database.SuppressionInput{Fingerprint: fingerprint})
 	}
+	// One transaction for the whole file: a failure imports nothing, so the
+	// 500 below is the truth and a retry starts from the same state.
+	if err := s.db.AddSuppressions(r.Context(), work.ID, batch); err != nil {
+		s.log.Warn("suppression import failed", "workspace", work.ID, "error", err)
+		fail(w, 500, "DATABASE_ERROR", "Could not save suppressions; nothing was imported.")
+		return
+	}
+	imported := len(batch)
 	if imported > 0 {
 		s.suppressionsChanged(r.Context(), work.ID)
 	}
@@ -1580,12 +1585,18 @@ func (s *Server) pruneWorkspaceScans(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "INVALID_PRUNE_REQUEST", "keep must be an integer between 1 and 100.")
 		return
 	}
-	deleted, err := s.db.PruneOldScans(r.Context(), work.ID, keep)
+	deleted, orphanedReports, err := s.db.PruneOldScans(r.Context(), work.ID, keep)
 	if err != nil {
 		fail(w, 500, "DATABASE_ERROR", "Could not prune scans.")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"deleted": deleted, "kept": keep})
+	s.cache.invalidate(work.ID)
+	response := map[string]any{"deleted": deleted, "kept": keep}
+	if err := reports.RemoveFiles(s.paths.ReportsDir, orphanedReports); err != nil {
+		s.log.Warn("prune: could not remove report files", "workspace", work.ID, "error", err)
+		response["warning"] = "Scans were deleted, but some report files could not be removed."
+	}
+	writeJSON(w, 200, response)
 }
 
 // knownScanState reports whether state belongs to the scan lifecycle: the
@@ -1787,12 +1798,15 @@ func (s *Server) deleteScan(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 409, map[string]any{"error": map[string]string{"code": "SCAN_NOT_TERMINAL", "message": "Cancel this scan before deleting it."}})
 		return
 	}
-	deleted, err := s.db.DeleteScan(r.Context(), id)
+	deleted, orphanedReport, err := s.db.DeleteScan(r.Context(), id)
 	if err != nil || !deleted {
 		fail(w, 500, "DATABASE_ERROR", "Could not delete scan.")
 		return
 	}
 	s.cache.invalidate(scan.WorkspaceID)
+	if err := reports.RemoveFiles(s.paths.ReportsDir, []string{orphanedReport}); err != nil {
+		s.log.Warn("delete scan: could not remove report file", "scan", id, "error", err)
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 

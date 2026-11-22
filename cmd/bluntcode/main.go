@@ -189,7 +189,7 @@ func runServer(args []string) {
 	shutdown := func() {
 		shutdownOnce.Do(func() {
 			app.logger.Info("shutdown requested")
-			app.scans.Shutdown()
+			stopScans(app.scans, app.logger)
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 			defer cancel()
 			if err := httpServer.Shutdown(shutdownCtx); err != nil {

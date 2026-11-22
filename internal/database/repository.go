@@ -414,6 +414,46 @@ func (d *DB) AddSuppression(ctx context.Context, workspaceID, fingerprint, reaso
 	return core.Suppression{WorkspaceID: workspaceID, Fingerprint: fingerprint, Reason: reason, CreatedAt: now}, nil
 }
 
+// SuppressionInput is one row of a bulk suppression import.
+type SuppressionInput struct {
+	Fingerprint string
+	Reason      string
+}
+
+// AddSuppressions records a batch of dismissals in a single transaction with
+// the same upsert semantics as AddSuppression: either every row lands or none
+// does, so a failed import can be retried as a whole instead of leaving a
+// partial import behind.
+func (d *DB) AddSuppressions(ctx context.Context, workspaceID string, items []SuppressionInput) (err error) {
+	if len(items) == 0 {
+		return nil
+	}
+	tx, err := d.SQL.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+	statement, err := tx.PrepareContext(ctx, `INSERT INTO suppressed_findings(workspace_id,fingerprint,reason,created_at) VALUES(?,?,?,?) ON CONFLICT(workspace_id,fingerprint) DO UPDATE SET reason=excluded.reason`)
+	if err != nil {
+		return err
+	}
+	defer statement.Close()
+	now := dbTime(time.Now().UTC())
+	for _, item := range items {
+		if strings.TrimSpace(item.Fingerprint) == "" {
+			return fmt.Errorf("fingerprint is required")
+		}
+		if _, err = statement.ExecContext(ctx, workspaceID, item.Fingerprint, nullIfEmpty(item.Reason), now); err != nil {
+			return fmt.Errorf("suppress %s: %w", item.Fingerprint, err)
+		}
+	}
+	return tx.Commit()
+}
+
 // RemoveSuppression deletes one dismissal; it returns sql.ErrNoRows when the
 // fingerprint was not suppressed, so the next scan stores and counts the
 // finding normally again.
@@ -2252,37 +2292,57 @@ func (d *DB) SetWorkspaceTags(ctx context.Context, workspaceID string, tags []st
 	return tx.Commit()
 }
 
+// terminalScanStates is the SQL list of states a scan never leaves; only
+// these scans may be deleted by retention or by hand.
+const terminalScanStates = `('completed','completed_with_warnings','failed','cancelled','interrupted')`
+
 // PruneOldScans keeps the N most recent terminal scans for a workspace and
-// deletes older scans. Non-terminal scans are never deleted. Deletion cascades
-// via foreign keys to findings, metrics, scan_files, scan_file_hashes,
-// scan_hash_meta, and analyzer_runs. The deleted ids are returned — never
-// discarded — because a deleted scan can be referenced externally: a CI
-// `--baseline <scan-id>` or a baseline SARIF exported from it. Callers report
-// the ids so retention cannot silently invalidate a referenced baseline.
-// Suppression history is unaffected: suppressions live on the workspace, not
-// on scan rows.
-func (d *DB) PruneOldScans(ctx context.Context, workspaceID string, keep int) ([]string, error) {
+// deletes older scans in one transaction. Non-terminal scans are never
+// deleted. Deletion cascades via foreign keys to findings, metrics,
+// scan_files, scan_file_hashes, scan_hash_meta, and analyzer_runs. The
+// deleted ids are returned — never discarded — because a deleted scan can be
+// referenced externally: a CI `--baseline <scan-id>` or a baseline SARIF
+// exported from it. Callers report the ids so retention cannot silently
+// invalidate a referenced baseline. The second result lists the Markdown
+// report files that no surviving scan references any more; the database does
+// not own those files, so the caller must delete them (see
+// reports.RemoveFiles) or they leak forever. Suppression history is
+// unaffected: suppressions live on the workspace, not on scan rows.
+func (d *DB) PruneOldScans(ctx context.Context, workspaceID string, keep int) (ids []string, orphanedReports []string, err error) {
 	if keep < 1 || keep > 100 {
-		return nil, fmt.Errorf("keep must be between 1 and 100")
+		return nil, nil, fmt.Errorf("keep must be between 1 and 100")
 	}
-	rows, err := d.SQL.QueryContext(ctx, `SELECT id FROM scans WHERE workspace_id=? AND state IN ('completed','completed_with_warnings','failed','cancelled','interrupted') ORDER BY started_at DESC, id DESC LIMIT -1 OFFSET ?`, workspaceID, keep)
+	tx, err := d.SQL.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	defer rows.Close()
-	var ids []string
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+	rows, err := tx.QueryContext(ctx, `SELECT id,COALESCE(report_markdown_path,'') FROM scans WHERE workspace_id=? AND state IN `+terminalScanStates+` ORDER BY started_at DESC, id DESC LIMIT -1 OFFSET ?`, workspaceID, keep)
+	if err != nil {
+		return nil, nil, err
+	}
+	var reportPaths []string
 	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
+		var id, reportPath string
+		if err = rows.Scan(&id, &reportPath); err != nil {
+			_ = rows.Close()
+			return nil, nil, err
 		}
 		ids = append(ids, id)
+		reportPaths = append(reportPaths, reportPath)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
+	if err = rows.Close(); err != nil {
+		return nil, nil, err
+	}
+	if err = rows.Err(); err != nil {
+		return nil, nil, err
 	}
 	if len(ids) == 0 {
-		return nil, nil
+		return nil, nil, tx.Commit()
 	}
 	placeholders := make([]string, len(ids))
 	args := make([]any, len(ids))
@@ -2290,26 +2350,80 @@ func (d *DB) PruneOldScans(ctx context.Context, workspaceID string, keep int) ([
 		placeholders[i] = "?"
 		args[i] = id
 	}
-	if _, err := d.SQL.ExecContext(ctx, `DELETE FROM scans WHERE id IN (`+strings.Join(placeholders, ",")+`)`, args...); err != nil {
-		return nil, err
+	if _, err = tx.ExecContext(ctx, `DELETE FROM scans WHERE id IN (`+strings.Join(placeholders, ",")+`)`, args...); err != nil {
+		return nil, nil, err
 	}
-	return ids, nil
+	if orphanedReports, err = unreferencedReports(ctx, tx, reportPaths); err != nil {
+		return nil, nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, nil, err
+	}
+	return ids, orphanedReports, nil
 }
 
 // DeleteScan removes one scan by ID. Only terminal scans may be deleted; a
 // running scan must be cancelled first. Deletion cascades via foreign keys to
 // findings, metrics, scan_files, scan_file_hashes, scan_hash_meta, and
-// analyzer_runs. The second return is false when no terminal scan has this ID.
-func (d *DB) DeleteScan(ctx context.Context, id string) (bool, error) {
-	result, err := d.SQL.ExecContext(ctx, `DELETE FROM scans WHERE id=? AND state IN ('completed','completed_with_warnings','failed','cancelled','interrupted')`, id)
+// analyzer_runs. deleted is false when no terminal scan has this ID.
+// orphanedReport names the scan's Markdown report when no surviving scan
+// references it; the caller owns deleting that file.
+func (d *DB) DeleteScan(ctx context.Context, id string) (deleted bool, orphanedReport string, err error) {
+	tx, err := d.SQL.BeginTx(ctx, nil)
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
-	n, err := result.RowsAffected()
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+	var reportPath string
+	err = tx.QueryRowContext(ctx, `SELECT COALESCE(report_markdown_path,'') FROM scans WHERE id=? AND state IN `+terminalScanStates, id).Scan(&reportPath)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = nil
+		return false, "", tx.Rollback()
+	}
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
-	return n > 0, nil
+	if _, err = tx.ExecContext(ctx, `DELETE FROM scans WHERE id=?`, id); err != nil {
+		return false, "", err
+	}
+	orphaned, err := unreferencedReports(ctx, tx, []string{reportPath})
+	if err != nil {
+		return false, "", err
+	}
+	if err = tx.Commit(); err != nil {
+		return false, "", err
+	}
+	if len(orphaned) > 0 {
+		orphanedReport = orphaned[0]
+	}
+	return true, orphanedReport, nil
+}
+
+// unreferencedReports filters report paths down to the distinct, non-empty
+// ones no remaining scan row points at. Report filenames carry only a
+// second-resolution timestamp, so two scans can share one file; deleting one
+// of them must not take the other's report with it.
+func unreferencedReports(ctx context.Context, tx *sql.Tx, paths []string) ([]string, error) {
+	var orphaned []string
+	seen := map[string]bool{}
+	for _, path := range paths {
+		if path == "" || seen[path] {
+			continue
+		}
+		seen[path] = true
+		var references int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM scans WHERE report_markdown_path=?`, path).Scan(&references); err != nil {
+			return nil, err
+		}
+		if references == 0 {
+			orphaned = append(orphaned, path)
+		}
+	}
+	return orphaned, nil
 }
 
 // DefaultSearchPageSize and MaxSearchPageSize bound the cross-workspace
