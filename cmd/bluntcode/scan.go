@@ -134,7 +134,7 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	failOn := flags.String("fail-on", "", "fail (exit 1) when unresolved findings remain at these severities: comma-separated critical, high, medium, low, info (case-insensitive); a trailing + means \"and above\" (for example high+)")
 	maxFindings := flags.Int("max-findings", 0, "fail (exit 1) when the scan reports more than N unresolved findings (positive integer)")
 	baseline := flags.String("baseline", "", "exclude known findings from the gate: a previous scan ID or the path of a SARIF 2.1.0 file exported by Blunt Code")
-	jobs := flags.Int("jobs", 0, "run at most N analyzers concurrently (positive integer); by default analyzers run one after another")
+	jobs := flags.Int("jobs", 0, "run at most N analyzers concurrently (positive integer); default runs up to 3 at once, --jobs 1 restores one-at-a-time")
 	incremental := flags.Bool("incremental", false, "reuse the previous completed scan's findings for unchanged files and run analyzers only on changed files (a boolean flag: --incremental, never --incremental <value>); composes with gate, baseline, format, and jobs flags")
 	output := flags.String("output", "", "write the selected document format (json, github, sarif, csv, jsonl, or markdown) to this file instead of stdout; progress stays on stderr")
 	saveBaseline := flags.String("save-baseline", "", "write the scan's SARIF 2.1.0 document to this file after a completed scan (same bytes as --format sarif)")

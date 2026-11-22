@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { api } from '../api';
 import { useLoad } from '../hooks/useLoad';
 import { formatBytes } from '../lib/format';
@@ -7,9 +7,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 
 export function ScanReviewDialog({ workspaceId, workspaceName, profile, confirmLabel, busy, onCancel, onConfirm }: {
   workspaceId: string; workspaceName?: string; profile: string; confirmLabel: string; busy: boolean;
-  onCancel: () => void; onConfirm: () => void;
+  onCancel: () => void; onConfirm: (opts: { incremental: boolean }) => void;
 }) {
   const returnFocus = useRef(document.activeElement instanceof HTMLElement ? document.activeElement : null);
+  const [incremental, setIncremental] = useState(false);
   const review = useLoad((signal) => api.scanPlan(workspaceId, profile, { signal }), [workspaceId, profile]);
   const plan = review.data;
   const validPlan = plan && Array.isArray(plan.analyzers) && typeof plan.selected_files === 'number';
@@ -42,11 +43,15 @@ export function ScanReviewDialog({ workspaceId, workspaceName, profile, confirmL
         </div>
         {setup && setup.tools > 0 && setupRows.length > 0 && <p className="availability-note"><strong>First run setup:</strong> {setupNames} {setupRows.length === 1 ? 'needs' : 'need'} managed tools; expect {setupSize}. This can take several minutes.</p>}
         <p className="availability-note">Managed tool setup can download software. Missing or failed analyzers reduce coverage. You can cancel a running scan from its scan page.</p>
+        <label className="flex items-center gap-2 text-sm text-[var(--color-ink-soft)]">
+          <input type="checkbox" checked={incremental} onChange={(event) => setIncremental(event.target.checked)} />
+          Incremental — re-scan only files changed since the last completed scan (falls back to a full scan when there is none)
+        </label>
         {planned.length === 0 && <p role="alert">No analyzers have applicable inputs for this profile. Choose another profile or update file selection.</p>}
       </>}
       <DialogFooter>
         <Button variant="outline" onClick={onCancel} disabled={busy}>Cancel</Button>
-        <Button onClick={onConfirm} disabled={busy || review.loading || !!review.error || !validPlan || planned.length === 0}>{busy ? 'Starting…' : confirmLabel}</Button>
+        <Button onClick={() => onConfirm({ incremental })} disabled={busy || review.loading || !!review.error || !validPlan || planned.length === 0}>{busy ? 'Starting…' : confirmLabel}</Button>
       </DialogFooter>
     </DialogContent>
   </Dialog>;

@@ -81,11 +81,11 @@ export function WorkspacesPage({ go, onAdd, notify }: { go: (r: Route) => void; 
 
   function openScan(workspace: Workspace, profile: string) { setPendingScan({ workspace, profile }); }
 
-  async function runPendingScan() {
+  async function runPendingScan(opts: { incremental: boolean }) {
     if (!pendingScan || scanning) return;
     setScanning(true);
     try {
-      const active = await api.startScan(pendingScan.workspace.id, pendingScan.profile);
+      const active = await api.startScan(pendingScan.workspace.id, pendingScan.profile, undefined, opts);
       notify({ kind: 'info', text: `${pendingScan.profile.charAt(0).toUpperCase()}${pendingScan.profile.slice(1)} scan initiated.` });
       setPendingScan(null);
       go({ page: 'scan', id: active.id });

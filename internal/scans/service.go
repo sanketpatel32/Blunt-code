@@ -58,6 +58,14 @@ const MaxConcurrentScans = 3
 // the API surfaces it as 503 and the CLI as an operational failure (exit 3).
 var ErrTooManyScans = errors.New("scan capacity reached: too many concurrent scans")
 
+// DefaultAnalyzerJobs is the per-scan analyzer concurrency used when the
+// caller does not set ScanOptions.Jobs. Three keeps managed-tool startups
+// (serialized behind tools.Ensure's lock anyway) and subprocess-heavy runs
+// overlapping without stacking SonarQube's ~1 GB JVM against several
+// subprocess-heavy analyzers at once; ScanOptions.Jobs overrides it, and an
+// explicit jobs=1 keeps the old one-at-a-time behavior.
+const DefaultAnalyzerJobs = 3
+
 // ErrShuttingDown reports that the service is shutting down and accepts no
 // new scans.
 var ErrShuttingDown = errors.New("scan service is shutting down")
@@ -338,12 +346,17 @@ func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, 
 			routing = scanRouting{files: incremental.changedByLanguage, full: filesByLanguage, incremental: true, anyChange: incremental.changedCount > 0}
 		}
 	}
-	// Analyzers run either sequentially (the historical default, jobs < 1) or
-	// with at most jobs runs in flight (jobs >= 1). Both drivers share the
-	// same per-analyzer pipeline in executeAnalyzer, so events, persistence,
-	// and error summaries are identical either way.
+	// Analyzers run with at most jobs runs in flight. Callers that do not set
+	// ScanOptions.Jobs get DefaultAnalyzerJobs; an explicit jobs=1 preserves
+	// the original one-at-a-time model. Both drivers share the same
+	// per-analyzer pipeline in executeAnalyzer, so events, persistence, and
+	// error summaries are identical either way.
 	counters := newScanCounters()
-	if jobs := opts.Jobs; jobs >= 1 {
+	jobs := opts.Jobs
+	if jobs < 1 {
+		jobs = DefaultAnalyzerJobs
+	}
+	if jobs > 1 {
 		// A recovered worker panic fails the scan exactly like the run-level
 		// recover below does for sequential scans.
 		if panicValue := s.runAnalyzersBounded(ctx, scan, work, languages, routing, counters, jobs, deselect); panicValue != "" {
