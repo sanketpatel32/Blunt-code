@@ -39,6 +39,28 @@ func (s *Server) findingNotes(w http.ResponseWriter, r *http.Request) {
 			fail(w, 400, "INVALID_NOTE", "Enter a note between 1 and 10,000 characters.")
 			return
 		}
+		// Notes attach to real findings only — a phantom fingerprint would
+		// silently accumulate orphans that never render anywhere.
+		exists, err := s.db.FingerprintExists(r.Context(), work.ID, fingerprint)
+		if err != nil {
+			fail(w, 500, "DATABASE_ERROR", "Could not validate the finding.")
+			return
+		}
+		if !exists {
+			fail(w, 404, "FINDING_NOT_FOUND", "No finding in this workspace has that fingerprint.")
+			return
+		}
+		// Unbounded notes per fingerprint let a POST loop grow the table
+		// forever; the drawer then fetches the whole list on every open.
+		noteCount, err := s.db.FindingNoteCount(r.Context(), work.ID, fingerprint)
+		if err != nil {
+			fail(w, 500, "DATABASE_ERROR", "Could not save note.")
+			return
+		}
+		if noteCount >= 100 {
+			fail(w, 409, "NOTE_LIMIT", "This finding already has 100 notes. Delete some before adding more.")
+			return
+		}
 		note, err := s.db.AddFindingNote(r.Context(), work.ID, fingerprint, input.Text, input.ImportKey)
 		if err != nil {
 			fail(w, 500, "DATABASE_ERROR", "Could not save note.")

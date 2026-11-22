@@ -192,6 +192,11 @@ func (s *ManagedServer) ExitStatus() (error, bool) {
 	defer s.mu.Unlock()
 	return s.exitErr, s.exited
 }
+
+// readinessHTTPClient backs the lightweight status probe; allocating a fresh
+// client per check (connection pool, TLS state, GC churn) was pure waste.
+var readinessHTTPClient = &http.Client{Timeout: 3 * time.Second}
+
 func (s *ManagedServer) Healthy(ctx context.Context) (bool, error) {
 	u := s.URL
 	if u == "" {
@@ -204,7 +209,7 @@ func (s *ManagedServer) Healthy(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	res, err := (&http.Client{Timeout: 3 * time.Second}).Do(req)
+	res, err := readinessHTTPClient.Do(req)
 	if err != nil {
 		return false, err
 	}

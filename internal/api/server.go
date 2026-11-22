@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"bluntcode/internal/analyzers"
@@ -56,6 +57,15 @@ type Server struct {
 	cache      *workspaceCaches
 	token      string
 	tickets    ticketStore
+	// wsLocks serializes per-workspace check-and-act sequences (active-scan
+	// probe then delete, active-scan probe then start) that are otherwise a
+	// read-then-act race on the scans table.
+	wsLocks sync.Map // workspaceID -> *sync.Mutex
+	// treeCache memoizes the file-tree walk per workspace+path; discovery on
+	// every tree UI click re-walked the whole directory and cross-multiplied
+	// overrides per item. Entries expire quickly so rule/scan changes show up
+	// within ~30s.
+	treeCache sync.Map // workspaceID|path -> cachedTree
 	// checkRoot and rootTimeout back the root_missing probe on workspace
 	// views; tests swap them to simulate missing or hanging folders.
 	checkRoot   func(root string) string
@@ -67,6 +77,11 @@ type Server struct {
 // run rows GET /scans/{id} serves, plus the new/fixed comparison counts the
 // report model computes. The workspace view's latest_scan shares it so the
 // workspace page's "Latest analysis" card renders the same detail.
+type cachedTree struct {
+	payload map[string]any
+	expires time.Time
+}
+
 type scanDetail struct {
 	core.Scan
 	AnalyzerRuns []map[string]any `json:"analyzer_runs"`
@@ -104,12 +119,22 @@ func New(db *database.DB, bus *events.Bus, scanService *scans.Service, toolServi
 	if logger == nil {
 		logger = slog.Default()
 	}
-	s := &Server{db: db, bus: bus, scans: scanService, tools: toolService, paths: paths, version: version, log: logger, mux: http.NewServeMux(), openFolder: openFolderInExplorer, cache: newWorkspaceCaches(), token: NewToken(), checkRoot: checkWorkspaceRoot, rootTimeout: rootCheckTimeout}
+	s := &Server{db: db, bus: bus, scans: scanService, tools: toolService, paths: paths, version: version, log: logger, mux: http.NewServeMux(), openFolder: openFolderInExplorer, cache: newWorkspaceCaches(), token: mustToken(), checkRoot: checkWorkspaceRoot, rootTimeout: rootCheckTimeout}
 	s.routes()
 	return s
 }
+
+// lockWorkspace takes the per-workspace mutation lock and returns its
+// release. Callers hold it across a check-and-act span only.
+func (s *Server) lockWorkspace(id string) (unlock func()) {
+	v, _ := s.wsLocks.LoadOrStore(id, &sync.Mutex{})
+	mu := v.(*sync.Mutex)
+	mu.Lock()
+	return mu.Unlock
+}
+
 func (s *Server) Handler() http.Handler {
-	return securityMiddleware(s.apiGuard(rateLimitMiddleware(jsonRouteErrors(s.mux))))
+	return securityMiddleware(s.apiGuard(rateLimitMiddleware(s.mux, jsonRouteErrors(s.mux))))
 }
 
 // StaticGuard applies the API's loopback Host check and baseline security
@@ -132,6 +157,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("PATCH /api/v1/settings", s.updateSettings)
 	s.mux.HandleFunc("GET /api/v1/workspaces", s.listWorkspaces)
 	s.mux.HandleFunc("POST /api/v1/system/seed-demo", s.seedDemo)
+	s.mux.HandleFunc("POST /api/v1/system/unseed-demo", s.unseedDemo)
 	s.mux.HandleFunc("POST /api/v1/workspaces", s.createWorkspace)
 	s.mux.HandleFunc("POST /api/v1/system/select-folder", s.selectFolder)
 	s.mux.HandleFunc("POST /api/v1/system/open-folder", s.openSystemFolder)
@@ -549,7 +575,9 @@ func (s *Server) workspaceView(ctx context.Context, workspace core.Workspace, la
 }
 
 func (s *Server) buildWorkspaceView(ctx context.Context, workspace core.Workspace, latest *core.Scan, lastCompleted *core.Scan, pre *viewPrefetch, rootProblem string) (workspaceView, error) {
-	view := workspaceView{Workspace: workspace, RootMissing: rootProblem != "", RootProblem: rootProblem}
+	// A probe timeout is not proof the folder is gone — a stalled share must
+	// not be reported as missing (or block the scan button), only labelled.
+	view := workspaceView{Workspace: workspace, RootMissing: rootProblem != "" && rootProblem != "probe_timeout", RootProblem: rootProblem}
 	attach := func(scan *core.Scan) (*scanDetail, error) {
 		if scan == nil {
 			return nil, nil
@@ -718,17 +746,19 @@ func (s *Server) deleteWorkspace(w http.ResponseWriter, r *http.Request) {
 	// Deleting mid-scan would cascade the scan row out from under a running
 	// engine: its writes would land against deleted rows and the scan page
 	// would poll a vanished scan. Same contract as DELETE /scans/{id} — cancel
-	// the scan first.
-	scans, err := s.db.Scans(r.Context(), workspace.ID)
+	// the scan first. The per-workspace lock serializes this check-and-act
+	// against startScan on the same workspace, closing the race between the
+	// active-scan read and the delete.
+	unlock := s.lockWorkspace(workspace.ID)
+	defer unlock()
+	active, err := s.db.ActiveScanID(r.Context(), workspace.ID)
 	if err != nil {
 		fail(w, 500, "DATABASE_ERROR", "Could not check active scans.")
 		return
 	}
-	for _, scan := range scans {
-		if !terminalScanState(scan.State) {
-			fail(w, 409, "SCAN_IN_PROGRESS", "A scan is still running on this workspace. Cancel it before removing the workspace.")
-			return
-		}
+	if active != "" {
+		fail(w, 409, "SCAN_IN_PROGRESS", "A scan is still running on this workspace. Cancel it before removing the workspace.")
+		return
 	}
 	if err := s.db.DeleteWorkspace(r.Context(), workspace.ID); err != nil {
 		fail(w, 500, "DATABASE_ERROR", "Could not delete workspace.")
@@ -738,6 +768,10 @@ func (s *Server) deleteWorkspace(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 func (s *Server) selectFolder(w http.ResponseWriter, r *http.Request) {
+	if runtime.GOOS != "windows" {
+		fail(w, 400, "UNSUPPORTED_PLATFORM", "The native folder picker is only available on Windows.")
+		return
+	}
 	path, cancelled, err := folderpicker.Select(r.Context())
 	if err != nil {
 		fail(w, 500, "FOLDER_PICKER_FAILED", "Could not open the native folder picker.")
@@ -751,6 +785,11 @@ func (s *Server) stopServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusAccepted, map[string]string{"state": "stopping"})
+	// Flush the acknowledgement before the process can exit, or callers see a
+	// dropped connection instead of the 202.
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
 	go s.shutdown()
 }
 
@@ -765,6 +804,10 @@ const openFolderTimeout = 5 * time.Second
 // resolves the kind against its configured directories, so a caller can never
 // direct Explorer (or the process launcher) at an arbitrary location.
 func (s *Server) openSystemFolder(w http.ResponseWriter, r *http.Request) {
+	if runtime.GOOS != "windows" {
+		fail(w, 400, "UNSUPPORTED_PLATFORM", "Opening a folder in the system file browser is only supported on Windows.")
+		return
+	}
 	var input struct {
 		Kind string `json:"kind"`
 	}
@@ -811,7 +854,11 @@ func (s *Server) cleanSystem(w http.ResponseWriter, r *http.Request) {
 		All    *bool `json:"all,omitempty"`
 	}
 	if r.Body != nil {
-		bodyBytes, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+		bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+		if err != nil {
+			fail(w, 400, "INVALID_REQUEST", "Could not read the request body.")
+			return
+		}
 		if len(strings.TrimSpace(string(bodyBytes))) > 0 {
 			d := json.NewDecoder(bytes.NewReader(bodyBytes))
 			d.DisallowUnknownFields()
@@ -822,9 +869,13 @@ func (s *Server) cleanSystem(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	opts := cleaner.Options{}
+	if input.All == nil && input.Logs == nil && input.Cache == nil && input.Vacuum == nil {
+		// A destructive endpoint must never default to "delete everything":
+		// the caller picks a target explicitly ({"all":true} included).
+		fail(w, 400, "SELECT_TARGET", "Specify what to clean: logs, cache, vacuum, or all.")
+		return
+	}
 	if input.All != nil && *input.All {
-		opts.All = true
-	} else if input.Logs == nil && input.Cache == nil && input.Vacuum == nil {
 		opts.All = true
 	} else {
 		if input.Logs != nil {
@@ -930,7 +981,20 @@ func (s *Server) tree(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "INVALID_PATH", err.Error())
 		return
 	}
-	patterns, _ := s.userExcludes(r.Context(), work.ID)
+	cacheKey := work.ID + "|" + relative
+	if cached, ok := s.treeCache.Load(cacheKey); ok {
+		if entry := cached.(cachedTree); time.Now().Before(entry.expires) {
+			writeJSON(w, 200, entry.payload)
+			return
+		}
+		s.treeCache.Delete(cacheKey)
+	}
+	patterns, err := s.userExcludes(r.Context(), work.ID)
+	if err != nil {
+		// A failed rules read must not silently present an unfiltered tree.
+		fail(w, 500, "DATABASE_ERROR", "Could not load exclusion rules.")
+		return
+	}
 	files, err := discovery.Tree(r.Context(), work.RootPath, relative, patterns)
 	if err != nil {
 		fail(w, 500, "DISCOVERY_FAILED", "Could not read workspace tree.")
@@ -941,7 +1005,9 @@ func (s *Server) tree(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, "DATABASE_ERROR", "Could not load file selections.")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"items": treeItems(files, overrides), "path": relative})
+	payload := map[string]any{"items": treeItems(files, overrides), "path": relative}
+	s.treeCache.Store(cacheKey, cachedTree{payload: payload, expires: time.Now().Add(30 * time.Second)})
+	writeJSON(w, 200, payload)
 }
 
 type treeItem struct {
@@ -1458,16 +1524,19 @@ func (s *Server) startScan(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "INVALID_JOBS", "jobs must be between 0 (default concurrency) and 32.")
 		return
 	}
-	recent, err := s.db.Scans(r.Context(), work.ID)
+	// Bounded EXISTS probe instead of loading the whole history (and every
+	// row's snapshot_json) for a boolean; the workspace lock makes the
+	// check-and-act atomic so two POSTs can't both see "no active scan".
+	unlock := s.lockWorkspace(work.ID)
+	defer unlock()
+	active, err := s.db.ActiveScanID(r.Context(), work.ID)
 	if err != nil {
 		fail(w, 500, "DATABASE_ERROR", "Could not check active scan.")
 		return
 	}
-	for _, scan := range recent {
-		if !terminalScanState(scan.State) {
-			writeJSON(w, 409, map[string]any{"error": map[string]any{"code": "SCAN_ALREADY_ACTIVE", "message": "A scan is already active.", "details": map[string]string{"scan_id": scan.ID}}})
-			return
-		}
+	if active != "" {
+		writeJSON(w, 409, map[string]any{"error": map[string]any{"code": "SCAN_ALREADY_ACTIVE", "message": "A scan is already active.", "details": map[string]string{"scan_id": active}}})
+		return
 	}
 	if s.failRootUnavailable(w, work) {
 		return
@@ -1476,7 +1545,12 @@ func (s *Server) startScan(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "SCAN_ENGINE_UNAVAILABLE", "The scan engine is unavailable.")
 		return
 	}
-	patterns, _ := s.userExcludes(r.Context(), work.ID)
+	patterns, err := s.userExcludes(r.Context(), work.ID)
+	if err != nil {
+		// A failed rules read must not silently run the scan unfiltered.
+		fail(w, 500, "DATABASE_ERROR", "Could not load exclusion rules.")
+		return
+	}
 	scan, err := s.scans.DiscoverAndStartWithOptions(r.Context(), work, input.Profile, patterns, scans.ScanOptions{Jobs: input.Jobs, Incremental: input.Incremental, TargetURL: targetURL})
 	if err != nil {
 		switch {

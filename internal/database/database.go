@@ -36,7 +36,12 @@ func Open(ctx context.Context, path string) (*DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
-	db.SetMaxOpenConns(1)
+	// WAL permits concurrent readers beside the single writer; one pooled
+	// connection serialized every handler (a slow report read stalled even
+	// scan-cancel). Per-connection pragmas ride in the DSN above, so each new
+	// connection is fully configured. Writes still serialize at the SQLite
+	// level via busy_timeout(5000).
+	db.SetMaxOpenConns(8)
 	if err = db.PingContext(ctx); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("ping sqlite: %w", err)

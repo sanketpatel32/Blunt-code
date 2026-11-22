@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"bluntcode/internal/workspace"
@@ -47,21 +48,46 @@ func apiWorkspaceRoot(raw string) (string, error) {
 }
 
 // sensitiveRoot refuses folders that are never a project but would turn the
-// file tree and source previews into a read of the whole machine: a drive
-// or filesystem root, the Windows directory, and the home folder itself
-// (projects inside it are fine).
+// file tree and source previews into a read of the whole machine — or of the
+// user's secrets. A registered workspace is browsable via /tree and readable
+// via source preview, so known credential directories are denied outright.
 func sensitiveRoot(root string) string {
 	clean := filepath.Clean(root)
 	if filepath.Dir(clean) == clean {
 		return "That is the root of a drive. Choose your project folder instead."
 	}
+	// The Windows-directory check must not depend on env vars being populated:
+	// a security boundary keyed on WINDIR silently disables when the variable
+	// is unset. Fall back to the conventional location on Windows.
 	for _, name := range []string{"WINDIR", "SystemRoot"} {
 		if dir := os.Getenv(name); dir != "" && within(clean, dir) {
 			return "The Windows folder cannot be a workspace. Choose your project folder instead."
 		}
 	}
-	if home, err := os.UserHomeDir(); err == nil && home != "" && samePath(clean, home) {
-		return "Your whole home folder cannot be a workspace. Choose a project folder inside it."
+	if runtime.GOOS == "windows" && within(clean, `C:\Windows`) {
+		return "The Windows folder cannot be a workspace. Choose your project folder instead."
+	}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		if samePath(clean, home) {
+			return "Your whole home folder cannot be a workspace. Choose a project folder inside it."
+		}
+		// Credential and key-material directories: scanning one hands private
+		// keys and cloud secrets to anything holding the API token.
+		for _, secretDir := range []string{".ssh", ".aws", ".gnupg", ".kube", ".docker"} {
+			if within(clean, filepath.Join(home, secretDir)) {
+				return "That folder holds credentials and cannot be a workspace. Choose your project folder instead."
+			}
+		}
+		if within(clean, filepath.Join(home, ".config", "gcloud")) {
+			return "That folder holds credentials and cannot be a workspace. Choose your project folder instead."
+		}
+	}
+	if runtime.GOOS != "windows" {
+		for _, systemDir := range []string{"/etc", "/root", "/boot", "/private/etc", "/System"} {
+			if within(clean, systemDir) {
+				return "That is a system directory and cannot be a workspace. Choose your project folder instead."
+			}
+		}
 	}
 	return ""
 }

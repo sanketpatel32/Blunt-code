@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -356,8 +357,12 @@ func (s *Service) runAnalyzersSequential(ctx context.Context, scan core.Scan, wo
 func (s *Service) runAnalyzersBounded(ctx context.Context, scan core.Scan, work core.Workspace, languages []analyzers.Language, routing scanRouting, counters *scanCounters, jobs int, deselect func(string) bool) string {
 	sem := make(chan struct{}, jobs)
 	var wg sync.WaitGroup
-	var panicValue atomic.Value
+	// Every panic is recorded with its analyzer id — a shared atomic.Value
+	// silently kept only the LAST panic when two adapters crashed.
+	var panicsMu sync.Mutex
+	var panics []string
 	for _, adapter := range s.registry.All() {
+		adapter := adapter
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -366,7 +371,9 @@ func (s *Service) runAnalyzersBounded(ctx context.Context, scan core.Scan, work 
 			// here and reported to the coordinator.
 			defer func() {
 				if r := recover(); r != nil {
-					panicValue.Store(fmt.Sprintf("%v", r))
+					panicsMu.Lock()
+					panics = append(panics, fmt.Sprintf("%s panicked: %v", adapter.ID(), r))
+					panicsMu.Unlock()
 				}
 			}()
 			select {
@@ -379,8 +386,9 @@ func (s *Service) runAnalyzersBounded(ctx context.Context, scan core.Scan, work 
 		}()
 	}
 	wg.Wait()
-	message, _ := panicValue.Load().(string)
-	return message
+	panicsMu.Lock()
+	defer panicsMu.Unlock()
+	return strings.Join(panics, "; ")
 }
 
 // recordFailedRun persists a failed analyzer run. The run is counted as failed

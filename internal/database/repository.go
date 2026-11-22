@@ -8,9 +8,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"math"
+	"os"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"bluntcode/internal/analyzers"
@@ -18,10 +21,21 @@ import (
 	"bluntcode/internal/reports"
 )
 
+// idCounter makes ID generation infallible: row IDs need uniqueness, not
+// cryptographic strength, so a crypto/rand outage must not crash a request
+// (previously panic()ed mid-insert). The counter + time seed keeps collisions
+// impossible within a process even if rand fails, and the rand suffix keeps
+// cross-process collisions improbable.
+var idCounter atomic.Uint64
+
 func NewID() string {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
-		panic(fmt.Sprintf("random ID: %v", err))
+		// No panic in library write paths: fall back to a time/counter ID. A
+		// crypto/rand failure is surfaced by NewToken (which cannot fall back),
+		// not by database row identifiers.
+		seq := idCounter.Add(1)
+		return fmt.Sprintf("%012x-%04x-%04x-%04x-%012x", time.Now().UnixNano(), seq&0xffff, (seq>>16)&0xffff, os.Getpid()&0xffff, time.Now().UnixMicro()&0xffffffffffff)
 	}
 	return hex.EncodeToString(b[0:4]) + "-" + hex.EncodeToString(b[4:6]) + "-" + hex.EncodeToString(b[6:8]) + "-" + hex.EncodeToString(b[8:10]) + "-" + hex.EncodeToString(b[10:])
 }
@@ -104,7 +118,12 @@ func applyWorkspaceSettings(w *core.Workspace) {
 // preserving any keys this build does not know about.
 func mergedWorkspaceSettings(w core.Workspace) string {
 	settings := map[string]json.RawMessage{}
-	_ = json.Unmarshal([]byte(w.SettingsJSON), &settings)
+	if err := json.Unmarshal([]byte(w.SettingsJSON), &settings); err != nil {
+		// Corrupt stored JSON: return the blob untouched rather than silently
+		// dropping every unknown key the merge claims to preserve.
+		log.Printf("workspace %s: corrupt settings_json preserved as-is: %v", w.ID, err)
+		return w.SettingsJSON
+	}
 	if settings == nil {
 		settings = map[string]json.RawMessage{}
 	}
@@ -332,7 +351,10 @@ func (d *DB) UpdateWorkspace(ctx context.Context, w core.Workspace) (core.Worksp
 	if err != nil {
 		return core.Workspace{}, err
 	}
-	n, _ := result.RowsAffected()
+	n, err := result.RowsAffected()
+	if err != nil {
+		return core.Workspace{}, err
+	}
 	if n == 0 {
 		return core.Workspace{}, sql.ErrNoRows
 	}
@@ -343,7 +365,10 @@ func (d *DB) DeleteWorkspace(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	n, _ := result.RowsAffected()
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
 	if n == 0 {
 		return sql.ErrNoRows
 	}
@@ -422,7 +447,11 @@ func (d *DB) Rules(ctx context.Context, workspaceID string) ([]core.WorkspaceRul
 			return nil, err
 		}
 		r.Enabled = enabled != 0
-		r.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
+		if parsed, parseErr := time.Parse(time.RFC3339Nano, created); parseErr == nil {
+			r.CreatedAt = parsed
+		} else {
+			log.Printf("workspace rule %s: unparsable created_at %q: %v", r.ID, created, parseErr)
+		}
 		rr = append(rr, r)
 	}
 	return rr, rows.Err()
@@ -562,7 +591,10 @@ func (d *DB) RemoveSuppression(ctx context.Context, workspaceID, fingerprint str
 	if err != nil {
 		return err
 	}
-	n, _ := result.RowsAffected()
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
 	if n == 0 {
 		return sql.ErrNoRows
 	}
@@ -927,6 +959,41 @@ func hydrateScanSnapshot(scan *core.Scan) {
 		scan.Snapshot = &snapshot
 	}
 }
+
+// ActiveScanID returns the id of a non-terminal scan for this workspace
+// ("" when none) with a bounded probe instead of materializing the whole
+// scan history — and each row's snapshot_json — for a boolean check.
+func (d *DB) ActiveScanID(ctx context.Context, workspaceID string) (string, error) {
+	var id string
+	err := d.SQL.QueryRowContext(ctx, `SELECT id FROM scans WHERE workspace_id=? AND state NOT IN ('completed','completed_with_warnings','failed','cancelled','interrupted') ORDER BY started_at DESC LIMIT 1`, workspaceID).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return id, err
+}
+
+// FingerprintExists reports whether a finding with this fingerprint exists in
+// the workspace, guarding note writes against orphaned phantom fingerprints.
+func (d *DB) FingerprintExists(ctx context.Context, workspaceID, fingerprint string) (bool, error) {
+	var one int
+	err := d.SQL.QueryRowContext(ctx, `SELECT 1 FROM findings f JOIN scans s ON f.scan_id=s.id WHERE s.workspace_id=? AND f.fingerprint=? LIMIT 1`, workspaceID, fingerprint).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+// maxNotesPerFinding caps stored notes per (workspace, fingerprint) so a
+// POST loop cannot grow finding_notes without bound.
+const maxNotesPerFinding = 100
+
+// FindingNoteCount returns how many notes already exist for the fingerprint.
+func (d *DB) FindingNoteCount(ctx context.Context, workspaceID, fingerprint string) (int, error) {
+	var n int
+	err := d.SQL.QueryRowContext(ctx, `SELECT COUNT(*) FROM finding_notes WHERE workspace_id=? AND fingerprint=?`, workspaceID, fingerprint).Scan(&n)
+	return n, err
+}
+
 func isTerminalScanState(state string) bool {
 	switch state {
 	case "completed", "completed_with_warnings", "failed", "cancelled", "interrupted":
@@ -1555,7 +1622,10 @@ func (d *DB) Findings(ctx context.Context, scanID string) ([]analyzers.Finding, 
 		}
 		f.Severity = analyzers.Severity(severity)
 		f.Category = analyzers.Category(category)
-		_ = json.Unmarshal([]byte(metadata), &f.Metadata)
+		if err := json.Unmarshal([]byte(metadata), &f.Metadata); err != nil {
+			// Corrupt metadata is not fatal to the row, but it must not be silent.
+			log.Printf("finding %s: corrupt metadata_json replaced with empty object: %v", f.ID, err)
+		}
 		output = append(output, f)
 	}
 	return output, rows.Err()
@@ -1592,7 +1662,10 @@ func (d *DB) Finding(ctx context.Context, scanID, id string) (analyzers.Finding,
 	}
 	f.Severity = analyzers.Severity(severity)
 	f.Category = analyzers.Category(category)
-	_ = json.Unmarshal([]byte(metadata), &f.Metadata)
+	if err := json.Unmarshal([]byte(metadata), &f.Metadata); err != nil {
+		// Corrupt metadata is not fatal to the row, but it must not be silent.
+		log.Printf("finding %s: corrupt metadata_json replaced with empty object: %v", f.ID, err)
+	}
 	return f, nil
 }
 
@@ -1879,7 +1952,10 @@ func scanFindingRow(rows *sql.Rows) (analyzers.Finding, error) {
 	}
 	f.Severity = analyzers.Severity(severity)
 	f.Category = analyzers.Category(category)
-	_ = json.Unmarshal([]byte(metadata), &f.Metadata)
+	if err := json.Unmarshal([]byte(metadata), &f.Metadata); err != nil {
+		// Corrupt metadata is not fatal to the row, but it must not be silent.
+		log.Printf("finding %s: corrupt metadata_json replaced with empty object: %v", f.ID, err)
+	}
 	return f, nil
 }
 
@@ -2403,6 +2479,25 @@ func (d *DB) WorkspaceTagsMap(ctx context.Context, ids []string) (map[string][]s
 	return out, rows.Err()
 }
 
+// WorkspaceIDsWithTag returns ids of workspaces carrying a tag — used by the
+// demo-seed purge to remove synthetic rows wholesale.
+func (d *DB) WorkspaceIDsWithTag(ctx context.Context, tag string) ([]string, error) {
+	rows, err := d.SQL.QueryContext(ctx, `SELECT DISTINCT workspace_id FROM workspace_tags WHERE tag=?`, tag)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 // SetWorkspaceTags atomically replaces the workspace's tag set. Tags are
 // validated, de-duplicated, and stored sorted.
 func (d *DB) SetWorkspaceTags(ctx context.Context, workspaceID string, tags []string) error {
@@ -2732,7 +2827,10 @@ func (d *DB) SearchFindings(ctx context.Context, filter GlobalFindingsFilter) ([
 		}
 		f.Severity = analyzers.Severity(severity)
 		f.Category = analyzers.Category(category)
-		_ = json.Unmarshal([]byte(metadata), &f.Metadata)
+		if err := json.Unmarshal([]byte(metadata), &f.Metadata); err != nil {
+			// Corrupt metadata is not fatal to the row, but it must not be silent.
+			log.Printf("finding %s: corrupt metadata_json replaced with empty object: %v", f.ID, err)
+		}
 		items = append(items, SearchedFinding{Finding: f, ScanID: scanID, WorkspaceID: workspaceID})
 	}
 	if err := rows.Err(); err != nil {

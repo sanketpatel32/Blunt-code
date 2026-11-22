@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,9 +20,11 @@ import (
 const updateRepository = selfupdate.Repository
 
 // fetchURLBytes performs the outbound HTTP GET for the release check.
-// Package-level so tests can stub the network.
-var fetchURLBytes = func(url string) ([]byte, error) {
-	request, err := http.NewRequest(http.MethodGet, url, nil)
+// Package-level so tests can stub the network. The caller's context is
+// honored — a client disconnecting must cancel the GitHub call, not leave
+// it running until the client timeout.
+var fetchURLBytes = func(ctx context.Context, url string) ([]byte, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -44,11 +47,11 @@ var fetchURLBytes = func(url string) ([]byte, error) {
 }
 
 // compareSemver orders dotted numeric versions: -1 when a<b, 0 when equal,
-// 1 when a>b. Non-numeric segments fall back to string order so a stray
-// suffix never panics.
+// 1 when a>b. A prerelease sorts below its release (1.2.3-beta < 1.2.3) per
+// semver §11; build metadata (+…) is ignored.
 func compareSemver(a, b string) int {
-	as := strings.Split(strings.TrimPrefix(strings.TrimSpace(a), "v"), ".")
-	bs := strings.Split(strings.TrimPrefix(strings.TrimSpace(b), "v"), ".")
+	as, aPre := splitVersion(a)
+	bs, bPre := splitVersion(b)
 	for i := 0; i < 3; i++ {
 		var an, bn int
 		if i < len(as) {
@@ -64,7 +67,32 @@ func compareSemver(a, b string) int {
 			return 1
 		}
 	}
-	return 0
+	// Same numeric version: a prerelease is always less than the release.
+	if aPre == bPre {
+		return 0
+	}
+	if aPre == "" {
+		return 1
+	}
+	if bPre == "" {
+		return -1
+	}
+	return strings.Compare(aPre, bPre)
+}
+
+// splitVersion separates the dotted numeric core from a -prerelease suffix
+// (and drops +build metadata), returning numeric segments and the suffix.
+func splitVersion(v string) ([]string, string) {
+	v = strings.TrimPrefix(strings.TrimSpace(v), "v")
+	if i := strings.IndexByte(v, '+'); i >= 0 {
+		v = v[:i]
+	}
+	pre := ""
+	if i := strings.IndexByte(v, '-'); i >= 0 {
+		pre = v[i+1:]
+		v = v[:i]
+	}
+	return strings.Split(v, "."), pre
 }
 
 func atoiSafe(value string) int {
@@ -107,8 +135,8 @@ type UpdateCheckResult struct {
 }
 
 // CheckUpdateDirect checks GitHub releases for a newer version than currentVersion.
-func CheckUpdateDirect(currentVersion string) (UpdateCheckResult, error) {
-	body, err := fetchURLBytes("https://api.github.com/repos/" + updateRepository + "/releases/latest")
+func CheckUpdateDirect(ctx context.Context, currentVersion string) (UpdateCheckResult, error) {
+	body, err := fetchURLBytes(ctx, "https://api.github.com/repos/"+updateRepository+"/releases/latest")
 	if err != nil {
 		return UpdateCheckResult{}, fmt.Errorf("could not reach GitHub releases: %w", err)
 	}
@@ -139,7 +167,7 @@ func (s *Server) updateCheck(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusConflict, "UPDATE_OFFLINE", "Offline mode is enabled; turn it off in Settings to check for updates.")
 		return
 	}
-	res, err := CheckUpdateDirect(s.version)
+	res, err := CheckUpdateDirect(r.Context(), s.version)
 	if err != nil {
 		// Soft-fail with 200 + unavailable instead of a 502 pass-through so an
 		// offline machine never accumulates console errors on every load.
@@ -180,7 +208,7 @@ func (s *Server) updateApply(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusNotImplemented, "UNSUPPORTED_PLATFORM", "In-app updates are Windows-only.")
 		return
 	}
-	check, err := CheckUpdateDirect(s.version)
+	check, err := CheckUpdateDirect(r.Context(), s.version)
 	if err != nil {
 		fail(w, http.StatusBadGateway, "UPDATE_APPLY_FAILED", "Could not reach GitHub releases: "+err.Error())
 		return

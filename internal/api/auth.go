@@ -4,8 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
-	"encoding/json"
-	"io"
+	"fmt"
 	"mime"
 	"net/http"
 	"net/url"
@@ -22,12 +21,25 @@ import (
 const TokenFragmentKey = "token"
 
 // NewToken returns a fresh 256-bit API token.
-func NewToken() string {
+// NewToken mints a credential; the error is returned, not panic()ed, because
+// tokens are minted on request paths (session tickets), not only at startup.
+// Init-time callers that cannot propagate use mustToken.
+func NewToken() (string, error) {
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {
-		panic("bluntcode: crypto/rand unavailable: " + err.Error())
+		return "", fmt.Errorf("crypto/rand unavailable: %w", err)
 	}
-	return base64.RawURLEncoding.EncodeToString(raw)
+	return base64.RawURLEncoding.EncodeToString(raw), nil
+}
+
+// mustToken is for process bootstrap only: a token at startup is mandatory,
+// so failure there is legitimately fatal.
+func mustToken() string {
+	token, err := NewToken()
+	if err != nil {
+		panic("bluntcode: " + err.Error())
+	}
+	return token
 }
 
 // Token is the credential every /api/ request except GET /health must carry,
@@ -37,11 +49,12 @@ func (s *Server) Token() string { return s.token }
 
 // SetToken replaces the generated token, e.g. so the host process can share
 // one token between the HTTP server and its on-disk token file.
-func (s *Server) SetToken(token string) {
+func (s *Server) SetToken(token string) error {
 	if strings.TrimSpace(token) == "" {
-		panic("bluntcode: empty API token")
+		return fmt.Errorf("bluntcode: empty API token")
 	}
 	s.token = token
+	return nil
 }
 
 // TicketParam is the query parameter carrying a ticket on GET navigations.
@@ -63,7 +76,7 @@ type ticket struct {
 	expires time.Time
 }
 
-func (t *ticketStore) mint(path string, now time.Time) string {
+func (t *ticketStore) mint(path string, now time.Time) (string, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.tickets == nil {
@@ -74,9 +87,12 @@ func (t *ticketStore) mint(path string, now time.Time) string {
 			delete(t.tickets, id)
 		}
 	}
-	id := NewToken()
+	id, err := NewToken()
+	if err != nil {
+		return "", err
+	}
 	t.tickets[id] = ticket{path: path, expires: now.Add(ticketTTL)}
-	return id
+	return id, nil
 }
 
 func (t *ticketStore) redeem(id, path string, now time.Time) bool {
@@ -213,7 +229,9 @@ func (s *Server) sessionTicket(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Path string `json:"path"`
 	}
-	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&input); err != nil {
+	// Same strict decode every other endpoint uses: unknown fields are
+	// rejected, not silently ignored.
+	if err := decode(r, &input); err != nil {
 		fail(w, http.StatusBadRequest, "INVALID_REQUEST", "Send {\"path\": \"/api/v1/...\"}.")
 		return
 	}
@@ -222,5 +240,10 @@ func (s *Server) sessionTicket(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, "INVALID_REQUEST", "Tickets are issued for a single /api/"+APIVersion+"/ path.")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ticket": s.tickets.mint(input.Path, time.Now()), "expires_in": int(ticketTTL.Seconds())})
+	ticket, err := s.tickets.mint(input.Path, time.Now())
+	if err != nil {
+		fail(w, http.StatusInternalServerError, "TICKET_FAILED", "Could not issue a session ticket.")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ticket": ticket, "expires_in": int(ticketTTL.Seconds())})
 }

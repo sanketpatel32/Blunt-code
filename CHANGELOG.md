@@ -21,6 +21,8 @@ records differ for older versions:
 
 ## [Unreleased]
 
+## [0.51.0] - 2026-11-22
+
 ### Fixed
 - **CLI flag order.** `bluntcode <path> --no-browser --port N` now works as documented: the default command accepts flags before, after, or interleaved with the workspace path instead of rejecting them as extra arguments (#49).
 - **`workspaces.git_repository`** is actually populated — via a migration, detection at workspace add/discover, and a startup refresh — so the API no longer reports `false` for real git working trees (#50).
@@ -53,6 +55,24 @@ records differ for older versions:
 
 ### Changed
 - **CLI Docs is a reference, not a wall.** The page rendered all fourteen command entries fully expanded — synopsis, subcommands, flag tables and examples each — a ~12,000px scroll in which nothing was findable. It is now master/detail: a sticky command index grouped by category beside the selected command's complete entry, with search narrowing the index (12,103px → ~1,900px for the default entry).
+
+### Added
+- **Demo data can be removed.** `POST /api/v1/system/unseed-demo` bulk-deletes every workspace tagged `demo-ui` (both seed presets tag their synthetic workspaces), so demo corpus no longer shares the database — or decays into "folder missing" rows once its temp dirs are cleaned — with real workspaces. Same `BLUNTCODE_DEMO_SEED`/`BLUNTCODE_DEMO_TOKEN` opt-in as seeding (#126).
+- **Workspace file tree is cached for 30s.** Every tree click re-walked the workspace and cross-multiplied path overrides per entry; the endpoint now memoizes per workspace+path (#117).
+
+### Fixed
+- **Root probing is bounded and honest.** A stat on a disconnected network share can hang for minutes; root checks now run concurrently under a timeout, and a root the probe could not resolve reports `probe_timeout` — shown in the UI as "Folder unreachable" — instead of falsely claiming "Folder missing" or stalling the workspace list. A timed-out root also no longer blocks the scan button (#99).
+- **Sensitive roots are refused.** Adding a workspace rooted at a drive root, the Windows directory, the user profile root, or secrets/config directories (`.ssh`, `.aws`, `.gnupg`, `.config`, `AppData`, `etc`, `Program Files`…) is rejected up front instead of letting a scan crawl private material or the whole disk. The `C:\Windows` guard no longer depends on env vars (#103, #123).
+- **Scan start is atomic per workspace.** The active-scan check and the insert now hold a per-workspace lock, so two POSTs can no longer both observe "no active scan" and double-start; the `409` carries the conflicting `scan_id` (#108, #111). The start event reports the true state instead of a stale `queued` after the worker is already running (#118).
+- **One panicking analyzer can't poison the scan.** Per-analyzer panics are contained in their worker, recorded with the analyzer id, and fail the scan with a real message instead of silently dropping all but the last crash (#105).
+- **Rate limiter is per-route.** A burst on one endpoint (suppression imports, tag edits) used to drain the single global budget and starve unrelated mutations; each route template now holds its own bucket and reset is synchronized (#100).
+- **Update checks stop polluting the console.** An unreachable GitHub returns `200 {unreachable: true}` instead of a 5xx that shows as a network error in devtools; fetches run under the request context so a hung connection can't pin the handler; the comparison understands prerelease tags (#115, #123).
+- **Managed SonarQube no longer aborts startup.** If the bundled runtime can't start, the app warns and continues — deep/pentest scans mark the analyzer unavailable rather than the whole app refusing to boot (#94).
+- **Tool manager hardening.** `IsReady` verifies size and executable bit instead of existence alone, so a half-written or quarantined binary no longer counts as installed; path removal uses Windows-appropriate handling with real retry backoff instead of posix `chmod` + `RemoveAll` on every platform (#97, #106, #121).
+- **Notes validate.** POST rejects empty/oversized text, oversized `import_key`, malformed fingerprints, and fingerprints that belong to no finding in the workspace; a per-finding cap stops an unbounded notes table (#119, #125).
+- **Pentest input validation** rejects malformed targets and options before a probe starts (#122).
+- **Self-update verifies before replacing.** The signed checksum is fetched and verified before the archive is staged, so a bad signature can't leave a half-applied update (#127).
+- **Repository hardening.** `NewID` no longer depends on crypto-randomness (a primary key needs uniqueness, not secrecy), so a degraded RNG can't crash the process; malformed `settings_json`/metadata unmarshal failures are logged instead of silently producing zero values; update paths check `RowsAffected`; the SQLite pool no longer serializes concurrent readers (#101, #104, #107, #112, #116).
 
 ## [0.50.0] - 2026-11-22
 

@@ -239,6 +239,8 @@ func Stage(ctx context.Context, tag, dir, signingKey string) (Staged, error) {
 	}
 	signed := strings.TrimSpace(signingKey) != ""
 	if signed {
+		// A pinned key makes the .sha256.sig asset mandatory — no silent
+		// downgrade to checksum-only verification.
 		signature, err := fetchSmall(ctx, assets.SignatureURL)
 		if err != nil {
 			return Staged{}, fmt.Errorf("download release signature: %w", err)

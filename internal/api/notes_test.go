@@ -1,7 +1,9 @@
 package api
 
 import (
+	"bluntcode/internal/analyzers"
 	"bluntcode/internal/core"
+	"bluntcode/internal/database"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -16,7 +18,20 @@ func TestFindingNotesAPIValidationAndPersistence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := "/api/v1/workspaces/" + work.ID + "/notes/fingerprint"
+	// Notes attach to real findings only; seed one with fingerprint "fingerprint".
+	scan, err := s.db.CreateScan(context.Background(), core.Scan{WorkspaceID: work.ID, State: "completed"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.SaveAnalyzerResult(context.Background(), scan.ID, database.AnalyzerRunInput{AnalyzerID: "ruff", Version: "t", State: "succeeded"}, []analyzers.Finding{{RelativePath: "a.go", StartLine: 1, RuleID: "r", Severity: "low", Message: "m"}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	// SaveAnalyzerResult derives the fingerprint from finding content.
+	stored, err := s.db.Findings(context.Background(), scan.ID)
+	if err != nil || len(stored) == 0 {
+		t.Fatalf("seeded finding missing: %v", err)
+	}
+	path := "/api/v1/workspaces/" + work.ID + "/notes/" + stored[0].Fingerprint
 	request := func(method, body string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(method, path, strings.NewReader(body))
 		r.Header.Set("Content-Type", "application/json")

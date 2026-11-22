@@ -198,7 +198,10 @@ func runServer(args []string) {
 	if !noBrowser && app.settings.OpenBrowser {
 		openBrowser(signInURL(url, server.Token()), app.logger)
 	}
-	httpServer := &http.Server{Handler: root, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second}
+	// ReadTimeout covers header+body together so a client trickling a request
+	// body can't hold a connection (and its DB slot) forever. WriteTimeout is
+	// deliberately unset: scan progress streams over SSE with no deadline.
+	httpServer := &http.Server{Handler: root, ReadTimeout: 30 * time.Second, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second}
 	var shutdownOnce sync.Once
 	shutdown := func() {
 		shutdownOnce.Do(func() {
@@ -331,7 +334,10 @@ const (
 func staticHandler() http.Handler {
 	content, err := fs.Sub(staticFiles, "static")
 	if err != nil {
-		panic(err)
+		// Never panic in library-adjacent code: serve a plain 500 instead.
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "static assets unavailable", http.StatusInternalServerError)
+		})
 	}
 	files := http.FileServer(http.FS(content))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

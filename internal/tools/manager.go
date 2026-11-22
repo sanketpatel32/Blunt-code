@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -114,20 +115,30 @@ func removePathRobust(path string) error {
 		return nil
 	}
 	var err error
-	for attempt := 0; attempt < 3; attempt++ {
+	delay := 50 * time.Millisecond
+	for attempt := 0; attempt < 4; attempt++ {
 		err = os.RemoveAll(path)
 		if err == nil || os.IsNotExist(err) {
 			return nil
 		}
-		_ = filepath.WalkDir(path, func(p string, d fs.DirEntry, walkErr error) error {
-			if walkErr == nil {
-				_ = os.Chmod(p, 0o666)
+		// The read-only-attribute workaround is a Windows concern only: on
+		// POSIX, chmod 0o666 made every removed tool file world-writable —
+		// and was unnecessary anyway since directory write permission governs
+		// removal there.
+		if runtime.GOOS == "windows" {
+			if walkErr := filepath.WalkDir(path, func(p string, d fs.DirEntry, we error) error {
+				if we == nil {
+					_ = os.Chmod(p, 0o666)
+				}
+				return nil
+			}); walkErr != nil {
+				return fmt.Errorf("clear read-only attributes under %s: %w", path, walkErr)
 			}
-			return nil
-		})
-		time.Sleep(50 * time.Millisecond)
+		}
+		time.Sleep(delay)
+		delay *= 2 // real backoff, not a fixed busy-wait
 	}
-	return os.RemoveAll(path)
+	return err
 }
 
 // Uninstall removes the tool's files and directories from disk.
@@ -205,8 +216,16 @@ func (m Manager) Executable(a Artifact) string {
 }
 func (m Manager) IsReady(a Artifact) bool {
 	p := m.Executable(a)
-	_, err := os.Stat(p)
-	return err == nil
+	info, err := os.Stat(p)
+	if err != nil || info.IsDir() || info.Size() == 0 {
+		return false
+	}
+	// A zero-byte or non-executable artifact is a half-extracted install, not
+	// a ready tool — existence alone used to report Ready for both.
+	if runtime.GOOS != "windows" && info.Mode().Perm()&0o111 == 0 {
+		return false
+	}
+	return true
 }
 
 // smokeProbe runs the artifact's post-activation smoke test: the installed

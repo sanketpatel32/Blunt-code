@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -50,7 +51,7 @@ func runUpdateCheck(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	res, err := api.CheckUpdateDirect(version)
+	res, err := api.CheckUpdateDirect(context.Background(), version)
 	if err != nil {
 		fmt.Fprintf(stderr, "bluntcode update check: %v\n", err)
 		return 1
