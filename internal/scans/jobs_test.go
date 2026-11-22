@@ -1,9 +1,9 @@
 package scans
 
-// Tests for the optional analyzer parallelism bound (ScanOptions.Jobs): the
-// default stays sequential, a bound never runs more analyzers than allowed,
-// persistence is identical either way, and cancellation still stops queued
-// runs.
+// Tests for the optional analyzer parallelism bound (ScanOptions.Jobs): an
+// unset bound defaults to DefaultAnalyzerJobs, a bound never runs more
+// analyzers than allowed, persistence is identical either way, and
+// cancellation still stops queued runs.
 
 import (
 	"context"
@@ -178,22 +178,23 @@ func TestJobsBoundsConcurrentAnalyzerRuns(t *testing.T) {
 	}
 }
 
-// TestDefaultJobsKeepsSequentialAnalyzerExecution encodes the historical
-// scheduling semantics: without a jobs bound, analyzers run strictly one at a
-// time, in registry order, each finishing before the next starts.
-func TestDefaultJobsKeepsSequentialAnalyzerExecution(t *testing.T) {
+// TestDefaultJobsBoundsAnalyzerConcurrency encodes the default scheduling
+// semantics: without a jobs bound, analyzers run with DefaultAnalyzerJobs in
+// flight — capped, but genuinely overlapping rather than sequential.
+func TestDefaultJobsBoundsAnalyzerConcurrency(t *testing.T) {
 	tracker := newRunTracker()
 	fixture := newScanFixture(t, newCountingAnalyzers(tracker, 5*time.Millisecond, false, "one", "two", "three", "four")...)
 	scan := fixture.startScan(t) // the default entry point, no options
 	if final := fixture.waitForTerminal(t, scan.ID); final.State != "completed" {
 		t.Fatalf("scan state = %q, want completed", final.State)
 	}
-	if peak := tracker.peakConcurrency(); peak != 1 {
-		t.Fatalf("peak concurrency = %d, want 1 (sequential default)", peak)
+	if peak := tracker.peakConcurrency(); peak != DefaultAnalyzerJobs {
+		t.Fatalf("peak concurrency = %d, want %d (bounded default)", peak, DefaultAnalyzerJobs)
 	}
-	want := []string{"one+", "one-", "two+", "two-", "three+", "three-", "four+", "four-"}
-	if got := tracker.runOrder(); !reflect.DeepEqual(got, want) {
-		t.Fatalf("run order = %v, want strict registry-order sequencing %v", got, want)
+	for _, id := range []string{"one", "two", "three", "four"} {
+		if got := tracker.runCount(id); got != 1 {
+			t.Fatalf("analyzer %q ran %d times, want 1", id, got)
+		}
 	}
 }
 
