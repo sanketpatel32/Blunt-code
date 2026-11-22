@@ -21,6 +21,18 @@ records differ for older versions:
 
 ## [Unreleased]
 
+## [0.52.0] - 2026-11-22
+
+### Changed
+- **`internal/api/server.go` and `internal/database/repository.go` split by domain** — the two ~2000+ line files now read as per-domain handler/repository files; no behavior change (#146).
+- **Session tickets removed.** The API token no longer travels in URLs or cookies (`/session/tickets` deleted): every request carries `Authorization: Bearer`, live progress streams over a fetch `ReadableStream`, and downloads/exports arrive as bearer-fetched blobs — so no credential can leak to a rogue localhost service or a log line (#113, #151). Inline HTML reports open inside a re-sandboxed iframe and keep their `Content-Disposition` filenames.
+
+### Fixed
+- **Scan history loads are bounded** — per-workspace scan lists page instead of buffering every scan (#111); the report model compares the previous scan via finding identities rather than both scans' full findings (#109).
+- **Scans queue instead of 503** — a full slot set queues starts FIFO (`MaxScanQueue`) and drains into freed slots, including cancels racing dispatch (#114).
+- **Unsigned self-updates warn loudly** — checksum-only installs now return `signed: false` with a warning instead of looking identical to a signed release (#127); heavy export/report routes set per-request write deadlines (#122); transactions can no longer leak — one `rollbackOnError` helper replaces 29 hand-rolled `tx.Rollback` defers (#147).
+- **UI sweep #129–#142** — real layout/behavior fixes across the app: command-palette clipping, signed-out landing, notifications popover anchoring, About page styling, activity-row truncation, severity filter chips, tools-ready ring, and more.
+
 ## [0.51.0] - 2026-11-22
 
 ### Fixed
