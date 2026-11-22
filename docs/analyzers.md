@@ -67,7 +67,7 @@ network class also ships machine-readable from `GET /api/v1/analyzers`
 | Trivy | Outbound, cold cache only | Downloads its vulnerability database the first time; warm caches scan locally, and offline mode refuses cold-cache scans instead of downloading |
 | Update check | Outbound, explicit | `GET /api/v1/update/check` reads `api.github.com/repos/.../releases/latest` when the About page asks; never automatic in the background |
 | SonarQube | Loopback only | Talks to the managed server it starts on a dynamic loopback port; never an external host |
-| Pentest probe | Explicit target only | Probes exactly the URL you enter. Redirects to any other host are refused and reported as a finding (CWE-601), so the probe cannot be pivoted to third parties or internal endpoints you did not name |
+| Pentest probe | Explicit target only | Probes exactly the URL you enter. Redirects to any other host are refused and reported as a finding (CWE-601), so the probe cannot be pivoted to third parties or internal endpoints you did not name. Private/link-local targets need `BLUNTCODE_PENTEST_ALLOW_PRIVATE=1` (or `--allow-private`); cloud metadata endpoints are always refused; TLS is verified by default; credentials are only sent over `https://` |
 
 Offline mode (Settings) closes the outbound column: tool installs and the
 update check are refused, the built-in in-process analyzers are withheld so
