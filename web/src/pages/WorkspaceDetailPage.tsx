@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useState, type ReactNode } from 'react';
 import { type SeverityCountFields, coveragePartial, coverageText, gradeExplanation } from '../lib/risk';
 import { ChevronDown } from 'lucide-react';
 import { api } from '../api';
+import { openSigned } from '../session';
 import type { AnalyzerRun, RiskProfile, Scan } from '../types';
 import type { Route } from '../lib/router';
 import type { Notice } from '../lib/notice';
@@ -123,7 +124,7 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
   // is not duplicated here — the sidebar owns Overview / Pentest / Files / History.
   const workspaceMenu: RowMenuItem[] = [
     { label: 'View last report', icon: <FileText className="h-4 w-4" />, disabled: !latest, onSelect: () => { if (latest) go({ page: 'scan', id: latest.id }); } },
-    ...(latest ? [{ label: 'Export Markdown', icon: <FileDown className="h-4 w-4" />, onSelect: () => { window.location.href = api.markdownUrl(latest.id); } }] : []),
+    ...(latest ? [{ label: 'Export Markdown', icon: <FileDown className="h-4 w-4" />, onSelect: () => { void openSigned(api.markdownUrl(latest.id)); } }] : []),
     { label: 'Workspace settings', icon: <Settings2 className="h-4 w-4" />, onSelect: openSettings },
     { label: 'Prune scan history…', icon: <Eraser className="h-4 w-4" />, onSelect: () => setPruneOpen(true) },
     { label: 'Remove workspace', icon: <Trash2 className="h-4 w-4" />, tone: 'danger', onSelect: () => setDeleteOpen(true) },
