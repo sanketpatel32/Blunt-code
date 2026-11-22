@@ -20,7 +20,7 @@ two different kinds of third-party software:
 
 Everything in this file was checked against the upstream license files and
 package metadata for the versions pinned in `internal/tools/manifest.json` and
-`go.mod` / `web/package-lock.json` at Blunt Code 0.49.1. When a pin changes,
+`go.mod` / `web/package-lock.json` at Blunt Code 0.50.0. When a pin changes,
 update the matching row here in the same commit.
 
 ## 1. Managed analyzer tools (downloaded at install time, not redistributed)

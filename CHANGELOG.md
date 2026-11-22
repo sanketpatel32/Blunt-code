@@ -19,6 +19,28 @@ records differ for older versions:
   0.21.2.
 - **0.3.0, 0.4.0** are tagged but have no GitHub release page.
 
+## [0.50.0] - 2026-11-22
+
+### Added
+- **Per-launch API token.** The loopback API now requires a bearer token minted per launch plus exact same-origin checks and one-time GET tickets, so another local process or a browser tab can no longer drive the app (#41).
+- **Real DAST profile.** The pentest profile runs an actual web prober against loopback-only targets with resolved-address SSRF guards, TLS verification by default, and no credentials over cleartext HTTP (#43, #37).
+- **Signature-verified self-update.** Update downloads the tag-pinned release zip, verifies its signed checksum, and swaps it in after exit — no remote PowerShell (#34).
+- **GitHub Actions CI.** Windows + Ubuntu Go builds/tests and web lint/test on every push; the Go suite is now portable across platforms (#33).
+- **Desktop design system.** Shared list chrome — filter bars, tables, pagination — plus the spec it implements (#10, #11).
+
+### Changed
+- **Analyzer config pinning.** Scanned repositories can no longer steer the audit via their own ruff/gitleaks/checkov/trivy config unless the workspace explicitly opts in (#45).
+- **Offline-safe builtins.** Local analyzers (secrets, todo, etc.) still run in offline mode; only network-dependent tools are blocked, and a blocked tool warns instead of failing the scan (#43).
+- **Privacy.** Update checking is opt-in and bundled analyzers no longer phone home (#42).
+- **Web dialogs** use native `showModal()` semantics with proper focus, Escape, backdrop and busy handling (#44).
+- **API layer** split out of `server.go`; dead Semgrep YAML parser removed; ESLint added (#35).
+
+### Fixed
+- Incremental scans that drop reused findings no longer report a clean completion (#32).
+- Scan failure paths, shutdown cancellation, suppression import atomicity and event-history eviction are real (#38).
+- `useLoad` stale data/abort races, API timeouts, path encoding, and Home/Search/History page restore (#36).
+- Stale version claims in docs; THIRD_PARTY_NOTICES completed (#39).
+
 ## [0.49.1] - 2026-11-06
 
 ### Fixed

@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"bluntcode/internal/analyzers"
 	"bluntcode/internal/config"
 	"bluntcode/internal/core"
 	"bluntcode/internal/database"
@@ -641,10 +642,11 @@ func sampleWorkspace(t *testing.T) string {
 }
 
 // TestRunScanCommandOfflineMissingToolsFailsHonestly covers the offline
-// no-tools matrix end to end: every analyzer fails cleanly with an offline
-// message, the scan state is failed, the exit code is 3 (never a silent 0),
-// and the JSON summary reflects it. It also exercises flags-after-path
-// ordering and quiet stderr.
+// no-tools matrix end to end: every network-dependent analyzer fails cleanly
+// with an offline message while local-only analyzers keep running, so the
+// scan state is completed_with_warnings — never a silent completed — the
+// exit code is 3, and the JSON summary reflects it. It also exercises
+// flags-after-path ordering and quiet stderr.
 func TestRunScanCommandOfflineMissingToolsFailsHonestly(t *testing.T) {
 	paths := isolateDataDir(t)
 	ws := sampleWorkspace(t)
@@ -660,8 +662,8 @@ func TestRunScanCommandOfflineMissingToolsFailsHonestly(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
 		t.Fatalf("invalid JSON summary: %v\n%s", err, out.String())
 	}
-	if result.State != "failed" {
-		t.Fatalf("state = %q, want failed (no analyzer can succeed offline)", result.State)
+	if result.State != "completed_with_warnings" {
+		t.Fatalf("state = %q, want completed_with_warnings (local-only analyzers still run offline; blocked tools must warn, not fail the scan)", result.State)
 	}
 	if result.TimedOut {
 		t.Fatalf("timed_out = true")
@@ -669,13 +671,21 @@ func TestRunScanCommandOfflineMissingToolsFailsHonestly(t *testing.T) {
 	if len(result.Analyzers) == 0 {
 		t.Fatalf("analyzer runs missing from summary")
 	}
+	succeeded := 0
 	for _, run := range result.Analyzers {
 		if run.State == "succeeded" {
-			t.Fatalf("analyzer %s succeeded offline", run.ID)
+			if !analyzers.AllowedOffline(run.ID) {
+				t.Fatalf("network analyzer %s succeeded offline", run.ID)
+			}
+			succeeded++
+			continue
 		}
 		if !strings.Contains(run.Error, "offline mode is enabled") {
 			t.Fatalf("analyzer %s error = %q, want offline explanation", run.ID, run.Error)
 		}
+	}
+	if succeeded == 0 {
+		t.Fatal("no analyzer ran: built-in local analyzers must still work offline")
 	}
 	if result.Severity.Total != result.TotalFindings {
 		t.Fatalf("severity.total %d != total_findings %d", result.Severity.Total, result.TotalFindings)

@@ -34,7 +34,7 @@ func TestPlanAddsExtendedSelectOnlyForDeepProfile(t *testing.T) {
 		if err != nil {
 			t.Fatalf("profile %q: %v", profile, err)
 		}
-		want := []string{"check", "--output-format", "json", "--no-fix", testpath.Native(`C:\ws\main.py`)}
+		want := []string{"check", "--output-format", "json", "--no-fix", "--isolated", testpath.Native(`C:\ws\main.py`)}
 		if !reflect.DeepEqual(plan.Commands[0].Args, want) {
 			t.Fatalf("profile %q args = %#v, want %#v (non-deep must stay identical to the default invocation)", profile, plan.Commands[0].Args, want)
 		}
@@ -46,7 +46,7 @@ func TestPlanAddsExtendedSelectOnlyForDeepProfile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"check", "--output-format", "json", "--no-fix", "--select=" + deepSelect, testpath.Native(`C:\ws\main.py`)}
+	want := []string{"check", "--output-format", "json", "--no-fix", "--isolated", "--select=" + deepSelect, testpath.Native(`C:\ws\main.py`)}
 	if !reflect.DeepEqual(plan.Commands[0].Args, want) {
 		t.Fatalf("deep args = %#v, want %#v", plan.Commands[0].Args, want)
 	}
@@ -69,7 +69,7 @@ func TestPlanFiltersToPythonFilesOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"check", "--output-format", "json", "--no-fix", testpath.Native(`C:\ws\main.py`), testpath.Native(`C:\ws\typed.pyi`)}
+	want := []string{"check", "--output-format", "json", "--no-fix", "--isolated", testpath.Native(`C:\ws\main.py`), testpath.Native(`C:\ws\typed.pyi`)}
 	if !reflect.DeepEqual(plan.Commands[0].Args, want) {
 		t.Fatalf("args = %#v, want %#v (non-Python files must never reach ruff)", plan.Commands[0].Args, want)
 	}
@@ -139,6 +139,9 @@ func TestPlanBatchesLargeWorkspaceFileLists(t *testing.T) {
 	total := 0
 	for _, command := range plan.Commands {
 		for _, arg := range command.Args[4:] { // skip check --output-format json --no-fix
+			if strings.HasPrefix(arg, "--") {
+				continue
+			}
 			if !strings.HasSuffix(arg, ".py") {
 				t.Fatalf("non-Python argument reached ruff: %s", arg)
 			}

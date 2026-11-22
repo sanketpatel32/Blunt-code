@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"bluntcode/internal/analyzers"
+	"bluntcode/internal/testutil/testpath"
 )
 
 func TestPlanPinsConfigAndIsolatesWorkingDirectoryByDefault(t *testing.T) {
@@ -76,8 +77,8 @@ func TestIgnoreTargetsResolvesFingerprintsInsideRoot(t *testing.T) {
 }
 
 func TestMergeReportsReplacesStagedFiles(t *testing.T) {
-	root := filepath.Join(string(filepath.Separator), "ws")
-	stage := filepath.Join(string(filepath.Separator), "stage")
+	root := testpath.Native(`C:\ws`)
+	stage := testpath.Native(`C:\stage`)
 	mainReport, _ := json.Marshal([]map[string]any{
 		{"File": filepath.Join(root, "sub", "creds.txt"), "RuleID": "aws-access-token", "StartLine": 1},
 		{"File": filepath.Join(root, "keep.txt"), "RuleID": "generic-api-key", "StartLine": 4},
