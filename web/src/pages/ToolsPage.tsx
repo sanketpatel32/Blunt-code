@@ -17,6 +17,9 @@ import { formatBytes } from '../lib/format';
 import { ChevronDown, Cpu, PackageCheck } from 'lucide-react';
 import { StatTile } from '../components/viz/StatTile';
 import { Ring } from '../components/viz/Ring';
+import { DataTableShell } from '../components/DataTableShell';
+import { Button } from '../components/ui/button';
+import { Card } from '../components/ui/card';
 
 type ToolOperation = 'install' | 'repair' | 'update' | 'uninstall';
 type BusyAction = { tool: string; operation: ToolOperation };
@@ -167,7 +170,7 @@ export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r
             </>}
           </span>
         </div>
-        {analyzers.loading ? <SkeletonTable rows={ANALYZER_CATALOG.length} cols={5} className="tool-table" /> : !rows.length ? <Empty title="Nothing to set up" icon={<WrenchIcon />}>Analyzers appear automatically. Optional tools can be installed from here.</Empty> : <div className="tool-table table-wrap">
+        {analyzers.loading ? <SkeletonTable rows={ANALYZER_CATALOG.length} cols={5} className="tool-table" /> : !rows.length ? <Empty title="Nothing to set up" icon={<WrenchIcon />}>Analyzers appear automatically. Optional tools can be installed from here.</Empty> : <DataTableShell className="tool-table">
           <table className="rtable">
             <thead>
               <tr>
@@ -213,7 +216,7 @@ export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r
                           {analyzer.managed_tool ? (activeOperation
                             ? <span className="tools-busy"><span className="spinner" aria-hidden="true" />{operationBusyLabels[activeOperation]}</span>
                             : <>
-                              {!analyzer.ready && <button type="button" className="button secondary tools-install" onClick={() => setPending({ analyzer, operation: 'install' })}>Install</button>}
+                              {!analyzer.ready && <Button type="button" variant="outline" size="sm" className="tools-install button secondary" onClick={() => setPending({ analyzer, operation: 'install' })}>Install</Button>}
                               <RowMenu
                                 label={`Actions for ${name}`}
                                 items={[
@@ -249,7 +252,7 @@ export function ToolsPage({ notify, go }: { notify: (n: Notice) => void; go?: (r
               })}
             </tbody>
           </table>
-        </div>}
+        </DataTableShell>}
         <LanguageCoverage />
         {pending && <ConfirmationDialog
           tone={pending.operation === 'uninstall' ? 'destructive' : 'primary'}

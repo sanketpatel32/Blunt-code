@@ -1,9 +1,9 @@
 /**
  * Opt-in synthetic UI + API check for the home ledger (Playwright).
  *
- * Requires a RUNNING Blunt Code API on loopback with:
- *   - BLUNTCODE_DEMO_SEED=1 (and optional BLUNTCODE_DEMO_TOKEN + X-Bluntcode-Demo-Token)
- *   - A temporary isolated data directory (e.g. LOCALAPPDATA=/tmp/blunt-harness-$$ on Linux)
+ * Requires a RUNNING loopback API on 127.0.0.1 with:
+ *   - Production: BLUNTCODE_DEMO_SEED=1 (optional BLUNTCODE_DEMO_TOKEN)
+ *   - Linux dev: cmd/loopback-harness -i-understand-dev-only -demo-seed -data <tmpdir> [-static-dir web/dist]
  *
  * This validates that the ledger renders the full server page (25 rows) matching
  * the footer range, that paging advances without skipping workspace ids, and
