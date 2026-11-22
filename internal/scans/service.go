@@ -88,6 +88,17 @@ func (s *Service) start(ctx context.Context, work core.Workspace, profile string
 	s.active++
 	s.mu.Unlock()
 	snapshot := s.snapshot(ctx, work, profile, files, excludes, extras.skipCounts, extras.dependencyInputs)
+	if profile == analyzers.ProfilePentest && opts.TargetURL != "" {
+		snapshot.TargetURL = opts.TargetURL
+		// The DAST probe is expected coverage only when a target was named;
+		// snapshot() leaves target-driven analyzers out by default.
+		for _, adapter := range s.registry.All() {
+			if analyzers.RequiresTarget(adapter.ID()) && analyzers.ProfileAllows(profile, adapter.ID()) {
+				snapshot.EnabledAnalyzers = append(snapshot.EnabledAnalyzers, adapter.ID())
+			}
+		}
+		sort.Strings(snapshot.EnabledAnalyzers)
+	}
 	scan, err := s.db.CreateScanWithFiles(ctx, core.Scan{WorkspaceID: work.ID, Profile: profile, State: "queued", CandidateFileCount: len(files), SelectedFileCount: snapshot.SelectedFileCount, Snapshot: snapshot}, files)
 	if err != nil {
 		s.mu.Lock()
@@ -133,7 +144,7 @@ func (s *Service) snapshot(ctx context.Context, work core.Workspace, profile str
 		// profile-gated analyzers are recorded as expected only when the tier
 		// includes them, so a later audit can compare expected against
 		// succeeded analyzers instead of against the whole registry.
-		if analyzers.ProfileAllows(profile, adapter.ID()) {
+		if analyzers.ProfileAllows(profile, adapter.ID()) && !analyzers.RequiresTarget(adapter.ID()) {
 			analyzerIDs = append(analyzerIDs, adapter.ID())
 		}
 		analyzerVersions[adapter.ID()] = adapter.Check(ctx, analyzers.ToolEnvironment{ToolsDir: s.toolsDir}).Version

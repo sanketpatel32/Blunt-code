@@ -53,6 +53,9 @@ func (s *Service) Plan(ctx context.Context, work core.Workspace, profile string,
 			row.Reason = "Unavailable in the current runtime"
 		case !analyzers.ProfileAllows(profile, status.ID):
 			row.Reason = "Excluded by profile"
+		case analyzers.RequiresTarget(status.ID):
+			row.Planned = true
+			row.Reason = "Runs only when the scan names a target URL"
 		case len(filesForLanguages(byLanguage, adapter.SupportedLanguages()...)) == 0 && !(analyzers.TakesDependencyInputs(status.ID) && len(found.DependencyInputs) > 0):
 			row.Reason = "No applicable selected inputs"
 		default:

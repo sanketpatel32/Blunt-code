@@ -20,6 +20,11 @@ const (
 	InputDependencies InputKind = "dependencies"
 	InputIaC          InputKind = "iac"
 	InputLicenseFiles InputKind = "license-files"
+	// InputTargetURL is a live HTTP endpoint the user names for the scan
+	// (`bluntcode scan --target`, the scan API's target_url). Analyzers that
+	// take it probe the running application instead of workspace files and
+	// only run when a target was supplied.
+	InputTargetURL InputKind = "target-url"
 )
 
 // ExecutionKind describes how an adapter runs.
@@ -111,6 +116,7 @@ type Capability struct {
 var capabilityOrder = []string{
 	"ruff", "biome", "gitleaks-secrets", "osv-dependencies", "container-trivy",
 	"iac-checkov", "semgrep", "sonarqube", "pentest", "secrets", "todo", "license-scan",
+	"dast-probe",
 }
 
 var capabilityTable = map[string]Capability{
@@ -137,28 +143,28 @@ var capabilityTable = map[string]Capability{
 	},
 	"osv-dependencies": {
 		ID: "osv-dependencies", DisplayName: "OSV Scanner", Category: "dependencies",
-		Execution: ExecutionExternal, Profiles: []string{ProfileDeep},
+		Execution: ExecutionExternal, Profiles: []string{ProfileDeep, ProfilePentest},
 		InputKinds: []InputKind{InputDependencies}, ManagedTool: "osv-dependencies",
 		Network:      NetworkOutbound,
 		NetworkNote:  "Queries the OSV.dev API at scan time unless offline vulnerability databases are provisioned (offline mode fails readiness instead of dialing out).",
 		TimeoutClass: TimeoutFast, Reuse: ReuseScopeWorkspace,
-		Description: "Dependency vulnerability scanner over lockfiles and manifests; deep scans only.",
+		Description: "Dependency vulnerability scanner over lockfiles and manifests; deep and pentest scans only.",
 	},
 	"container-trivy": {
 		ID: "container-trivy", DisplayName: "Trivy", Category: "dependencies",
-		Execution: ExecutionExternal, Profiles: []string{ProfileDeep},
+		Execution: ExecutionExternal, Profiles: []string{ProfileDeep, ProfilePentest},
 		InputKinds: []InputKind{InputDependencies, InputIaC}, ManagedTool: "container-trivy",
 		Network:      NetworkOutbound,
 		NetworkNote:  "Downloads its vulnerability database on a cold cache at scan time; warm caches and offline mode scan locally (offline mode fails readiness when the database was never provisioned).",
 		TimeoutClass: TimeoutFast, Reuse: ReuseScopeWorkspace,
-		Description: "Filesystem scanner for dependency vulnerabilities, secrets, and misconfigurations; deep scans only.",
+		Description: "Filesystem scanner for dependency vulnerabilities, secrets, and misconfigurations; deep and pentest scans only.",
 	},
 	"iac-checkov": {
 		ID: "iac-checkov", DisplayName: "Checkov", Category: "infrastructure",
-		Execution: ExecutionExternal, Profiles: []string{ProfileDeep},
+		Execution: ExecutionExternal, Profiles: []string{ProfileDeep, ProfilePentest},
 		InputKinds: []InputKind{InputIaC}, ManagedTool: "iac-checkov",
 		Network: NetworkNone, TimeoutClass: TimeoutFast, Reuse: ReuseScopeWorkspace,
-		Description: "Infrastructure-as-code policy checks (Terraform, Dockerfile, Kubernetes, CloudFormation); deep scans only.",
+		Description: "Infrastructure-as-code policy checks (Terraform, Dockerfile, Kubernetes, CloudFormation); deep and pentest scans only.",
 	},
 	"semgrep": {
 		ID: "semgrep", DisplayName: "Semgrep", Category: "security",
@@ -181,7 +187,7 @@ var capabilityTable = map[string]Capability{
 		Execution: ExecutionInProcess, Profiles: []string{ProfileStandard, ProfileDeep, ProfilePentest},
 		InputKinds: []InputKind{InputSource},
 		Network:    NetworkNone, TimeoutClass: TimeoutFast,
-		Description: "Static pass for exploitable patterns (injection sinks, weak crypto, debug endpoints). Dynamic probes are a separate, explicitly targeted operation.",
+		Description: "Static pass for exploitable patterns (injection sinks, weak crypto, debug endpoints). Dynamic probing is the separate dast-probe analyzer.",
 	},
 	"secrets": {
 		ID: "secrets", DisplayName: "Secrets Detector", Category: "secrets",
@@ -203,6 +209,15 @@ var capabilityTable = map[string]Capability{
 		InputKinds: []InputKind{InputLicenseFiles, InputDependencies},
 		Network:    NetworkNone, TimeoutClass: TimeoutFast,
 		Description: "License identification from license files and package manifests (SPDX normalization, policy flags).",
+	},
+	"dast-probe": {
+		ID: "dast-probe", DisplayName: "DAST Probe", Category: "security",
+		Execution: ExecutionInProcess, Profiles: []string{ProfilePentest},
+		InputKinds:   []InputKind{InputTargetURL},
+		Network:      NetworkOutbound,
+		NetworkNote:  "Sends HTTP requests to the target URL named for the scan, and only that host (redirects elsewhere are refused); offline mode limits it to loopback targets.",
+		TimeoutClass: TimeoutFast,
+		Description:  "Dynamic probe of a running app: security headers, CSP, CORS origin reflection, banner leaks, and exposed sensitive paths. Pentest scans only, and only when a target URL is given.",
 	},
 }
 
@@ -271,6 +286,30 @@ func TakesDependencyInputs(analyzerID string) bool {
 		}
 	}
 	return false
+}
+
+// RequiresTarget reports whether the analyzer probes a live target URL
+// instead of workspace files. Such analyzers run only when the scan names a
+// target; without one they are skipped and not expected for coverage.
+func RequiresTarget(analyzerID string) bool {
+	if cap, ok := capabilityTable[analyzerID]; ok {
+		for _, kind := range cap.InputKinds {
+			if kind == InputTargetURL {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// AllowedOffline reports whether offline mode may register the analyzer
+// unconditionally: anything whose normal scan opens no outbound connection.
+// Outbound analyzers must carry their own offline gate (local databases for
+// osv/trivy, loopback-only targets for dast-probe) and fail honestly when
+// that gate refuses.
+func AllowedOffline(analyzerID string) bool {
+	cap, ok := capabilityTable[analyzerID]
+	return ok && cap.Network != NetworkOutbound
 }
 
 // TimeoutClassFor routes the per-analyzer deadline budget.

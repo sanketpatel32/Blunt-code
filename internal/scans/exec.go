@@ -37,6 +37,10 @@ type ScanOptions struct {
 	// Code build) changed. Totals, suppression, and comparison semantics are
 	// identical to a full scan.
 	Incremental bool
+	// TargetURL is the live endpoint the pentest profile's dast-probe
+	// analyzer probes. Empty keeps the scan static-only. Validate it with
+	// NormalizeScanTarget before starting the scan.
+	TargetURL string
 }
 
 // analyzerOutcome classifies how one analyzer execution ended.
@@ -114,6 +118,13 @@ func severityCounts(findings []analyzers.Finding) map[string]int {
 // scanDependencyInputs surfaces the discovery-tracked dependency manifests
 // (workspace-relative) from the scan snapshot; nil-safe for scans whose
 // snapshot predates the field.
+func scanTargetURL(scan core.Scan) string {
+	if scan.Snapshot == nil {
+		return ""
+	}
+	return scan.Snapshot.TargetURL
+}
+
 func scanDependencyInputs(scan core.Scan) []string {
 	if scan.Snapshot == nil {
 		return nil
@@ -160,7 +171,18 @@ func (s *Service) executeAnalyzer(ctx context.Context, scan core.Scan, work core
 	// every analyzer, so ruff received minified JavaScript and failed
 	// parsing it as Python.
 	adapterFiles := filesForLanguages(routing.forAnalyzer(adapter.ID()), adapter.SupportedLanguages()...)
-	if len(adapterFiles) == 0 {
+	targetURL := scanTargetURL(scan)
+	if analyzers.RequiresTarget(adapter.ID()) {
+		// Target-driven analyzers (the DAST probe) read a live endpoint, not
+		// files: the file gate does not apply, the target does.
+		if !analyzers.ProfileAllows(scan.Profile, adapter.ID()) {
+			return analyzerSkipped
+		}
+		if targetURL == "" {
+			s.emit(scan.ID, "analyzer.skipped", map[string]any{"analyzer_id": adapter.ID(), "reason": "No target URL given: dynamic probing runs only when a pentest scan names one (--target / target_url)."})
+			return analyzerSkipped
+		}
+	} else if len(adapterFiles) == 0 {
 		// Dependency-driven adapters (osv, trivy) key off dependency inputs,
 		// not source languages: a workspace whose only dependency signal is a
 		// lockfile has no language-routable file at all (lockfiles are
@@ -181,6 +203,8 @@ func (s *Service) executeAnalyzer(ctx context.Context, scan core.Scan, work core
 	//              ruff's built-in default rule set (E4, E7, E9, F);
 	//              deep-only analyzers (osv-dependencies, later trivy and
 	//              checkov) are recorded as skipped.
+	//   pentest  - everything deep runs, plus dast-probe against the scan's
+	//              target URL when one is given (skipped otherwise).
 	//   deep     - every analyzer, with ruff's rule selection widened via
 	//              --select for a broader correctness and maintainability
 	//              sweep. Biome, semgrep, and sonarqube already run their
@@ -189,7 +213,7 @@ func (s *Service) executeAnalyzer(ctx context.Context, scan core.Scan, work core
 	if !analyzers.ProfileAllows(scan.Profile, adapter.ID()) {
 		reason := "Quick profile runs language-specific analyzers only."
 		if scan.Profile != analyzers.ProfileQuick {
-			reason = "Deep-only analyzer: runs on deep scans."
+			reason = fmt.Sprintf("Not part of the %s profile.", profileOrStandard(scan.Profile))
 		}
 		s.emit(scan.ID, "analyzer.skipped", map[string]any{"analyzer_id": adapter.ID(), "reason": reason})
 		return analyzerSkipped
@@ -218,7 +242,7 @@ func (s *Service) executeAnalyzer(ctx context.Context, scan core.Scan, work core
 		s.emit(scan.ID, "analyzer.failed", map[string]any{"analyzer_id": adapter.ID(), "error": errorText})
 		return analyzerFailed
 	}
-	plan, err := adapter.Plan(ctx, analyzers.ScanRequest{WorkspaceID: work.ID, ScanID: scan.ID, WorkspaceRoot: work.RootPath, Files: adapterFiles, Languages: languages, Profile: scan.Profile, DependencyInputs: scanDependencyInputs(scan)})
+	plan, err := adapter.Plan(ctx, analyzers.ScanRequest{WorkspaceID: work.ID, ScanID: scan.ID, WorkspaceRoot: work.RootPath, Files: adapterFiles, Languages: languages, Profile: scan.Profile, DependencyInputs: scanDependencyInputs(scan), TargetURL: targetURL})
 	if err != nil {
 		_, _ = s.db.SaveAnalyzerResult(context.Background(), scan.ID, database.AnalyzerRunInput{AnalyzerID: adapter.ID(), Version: status.Version, State: "failed", StartedAt: started, FinishedAt: time.Now(), Error: err.Error()}, nil, nil)
 		counters.markFailed()

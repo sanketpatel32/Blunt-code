@@ -262,6 +262,10 @@ type ScanRequest struct {
 	// workspace whose only dependency signal is package-lock.json has no
 	// routable language file at all.
 	DependencyInputs []string
+	// TargetURL is the live endpoint the scan was asked to probe (pentest
+	// profile only). Empty means no dynamic probing; target-driven analyzers
+	// (capability input kind target-url) are skipped before Plan.
+	TargetURL string
 }
 
 type ProcessSpec struct {

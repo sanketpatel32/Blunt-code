@@ -1,0 +1,431 @@
+// Package dast implements Blunt Code's dynamic HTTP probe: one GET plus a
+// CORS preflight against a user-named target (and, at full/spider scope, a
+// handful of sensitive-path GETs on the same host), graded into findings.
+// It backs `bluntcode pentest probe`, POST /api/v1/pentest/probe, and the
+// dast-probe analyzer the pentest scan profile runs when given a target.
+package dast
+
+import (
+	"context"
+	"crypto/tls"
+	"errors"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
+)
+
+// errCrossHostRedirect marks a redirect the probe refused to follow because
+// it leaves the host the user explicitly targeted.
+var errCrossHostRedirect = errors.New("cross-host redirect refused")
+
+type ProbeRequest struct {
+	TargetURL string `json:"target_url"`
+	AuthMode  string `json:"auth_mode,omitempty"`
+	AuthToken string `json:"auth_token,omitempty"`
+	Scope     string `json:"scope,omitempty"`
+}
+
+type Finding struct {
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	Severity    string `json:"severity"`
+	Category    string `json:"category"`
+	OWASP       string `json:"owasp"`
+	CWE         string `json:"cwe"`
+	Message     string `json:"message"`
+	Remediation string `json:"remediation"`
+	Evidence    string `json:"evidence,omitempty"`
+}
+
+type ProbeResponse struct {
+	TargetURL      string    `json:"target_url"`
+	StatusCode     int       `json:"status_code"`
+	ResponseTimeMS int64     `json:"response_time_ms"`
+	Server         string    `json:"server,omitempty"`
+	PoweredBy      string    `json:"powered_by,omitempty"`
+	Grade          string    `json:"grade"`
+	RiskScore      int       `json:"risk_score"`
+	HeadersFound   []string  `json:"headers_found"`
+	HeadersMissing []string  `json:"headers_missing"`
+	Findings       []Finding `json:"findings"`
+	ProbedAt       string    `json:"probed_at"`
+}
+
+// Run performs dynamic security probing against input.TargetURL.
+func Run(ctx context.Context, input ProbeRequest) (ProbeResponse, error) {
+	parsedURL, err := NormalizeTarget(input.TargetURL)
+	if err != nil {
+		return ProbeResponse{}, err
+	}
+	target := parsedURL.String()
+
+	client := &http.Client{
+		Timeout: 6 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // Probe test allow testing self-signed local targets
+		},
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 5 {
+				return fmt.Errorf("stopped after 5 redirects")
+			}
+			// The probe's scope is the host the user explicitly named.
+			// Following a redirect to any other host would turn the scanner
+			// into an SSRF pivot (internal metadata endpoints, third-party
+			// hosts), so cross-host redirects are refused and surfaced as
+			// their own finding instead.
+			if req.URL.Host != via[0].URL.Host {
+				return fmt.Errorf("%w: %s redirects to %s", errCrossHostRedirect, via[0].URL.Host, req.URL.Host)
+			}
+			return nil
+		},
+	}
+
+	reqCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+	defer cancel()
+
+	start := time.Now()
+	req, err := http.NewRequestWithContext(reqCtx, "GET", target, nil)
+	if err != nil {
+		return ProbeResponse{}, fmt.Errorf("could not create request: %w", err)
+	}
+
+	req.Header.Set("User-Agent", "BluntCode-Pentest/1.0 (Security Audit Probe)")
+	if input.AuthMode == "bearer" && input.AuthToken != "" {
+		req.Header.Set("Authorization", "Bearer "+input.AuthToken)
+	} else if input.AuthMode == "basic" && input.AuthToken != "" {
+		req.Header.Set("Authorization", "Basic "+input.AuthToken)
+	} else if input.AuthMode == "cookie" && input.AuthToken != "" {
+		req.Header.Set("Cookie", input.AuthToken)
+	}
+
+	resp, err := client.Do(req)
+	duration := time.Since(start).Milliseconds()
+	if err != nil {
+		if errors.Is(err, errCrossHostRedirect) {
+			// The target answered, but pointed somewhere the user did not
+			// name. That is a security observation about the target, not a
+			// connectivity failure, so it gets its own finding.
+			return ProbeResponse{
+				TargetURL:      target,
+				StatusCode:     0,
+				ResponseTimeMS: duration,
+				Grade:          "C",
+				RiskScore:      45,
+				Findings: []Finding{{
+					ID:          "dast.redirect.cross-host",
+					Title:       "Target Redirects To A Different Host",
+					Severity:    "medium",
+					Category:    "redirect",
+					OWASP:       "A01:2021-Broken Access Control",
+					CWE:         "CWE-601",
+					Message:     err.Error(),
+					Remediation: "Confirm the redirect is intended. The probe only follows redirects on the host it was given.",
+					Evidence:    err.Error(),
+				}},
+				ProbedAt: time.Now().UTC().Format(time.RFC3339),
+			}, nil
+		}
+		return ProbeResponse{
+			TargetURL:      target,
+			StatusCode:     0,
+			ResponseTimeMS: duration,
+			Grade:          "F",
+			RiskScore:      90,
+			HeadersMissing: []string{"Strict-Transport-Security", "Content-Security-Policy", "X-Frame-Options", "X-Content-Type-Options"},
+			Findings: []Finding{
+				{
+					ID:          "dast.endpoint.unreachable",
+					Title:       "Target Endpoint Unreachable",
+					Severity:    "high",
+					Category:    "connectivity",
+					OWASP:       "A05:2021-Security Misconfiguration",
+					CWE:         "CWE-400",
+					Message:     fmt.Sprintf("Could not connect to target %s (%v). Verify the server is running and accessible.", target, err),
+					Remediation: "Ensure the local development server or target service is running and listening on the specified port.",
+					Evidence:    err.Error(),
+				},
+			},
+			ProbedAt: time.Now().UTC().Format(time.RFC3339),
+		}, nil
+	}
+	defer resp.Body.Close()
+
+	// Drain a small amount of body safely
+	_, _ = io.CopyN(io.Discard, resp.Body, 32*1024)
+
+	var findings []Finding
+	headersFound := make([]string, 0)
+	headersMissing := make([]string, 0)
+
+	// 1. Strict-Transport-Security
+	if strings.HasPrefix(target, "https://") {
+		if hsts := resp.Header.Get("Strict-Transport-Security"); hsts != "" {
+			headersFound = append(headersFound, "Strict-Transport-Security")
+		} else {
+			headersMissing = append(headersMissing, "Strict-Transport-Security")
+			findings = append(findings, Finding{
+				ID:          "dast.headers.missing-hsts",
+				Title:       "Missing HTTP Strict Transport Security (HSTS)",
+				Severity:    "medium",
+				Category:    "security_header",
+				OWASP:       "A05:2021-Security Misconfiguration",
+				CWE:         "CWE-523",
+				Message:     "The response does not enforce HTTPS via the Strict-Transport-Security header. Users may be vulnerable to SSL stripping attacks.",
+				Remediation: "Set header: Strict-Transport-Security: max-age=31536000; includeSubDomains",
+				Evidence:    "Header absent on HTTPS endpoint.",
+			})
+		}
+	}
+
+	// 2. Content-Security-Policy
+	if csp := resp.Header.Get("Content-Security-Policy"); csp != "" {
+		headersFound = append(headersFound, "Content-Security-Policy")
+		if strings.Contains(csp, "'unsafe-inline'") || strings.Contains(csp, "'unsafe-eval'") {
+			findings = append(findings, Finding{
+				ID:          "dast.csp.unsafe-directive",
+				Title:       "Weak Content Security Policy (unsafe-inline / unsafe-eval)",
+				Severity:    "medium",
+				Category:    "security_header",
+				OWASP:       "A03:2021-Injection",
+				CWE:         "CWE-79",
+				Message:     "Content-Security-Policy contains 'unsafe-inline' or 'unsafe-eval', weakening protection against Cross-Site Scripting (XSS).",
+				Remediation: "Refactor scripts to use cryptographic nonces or hashes rather than unsafe-inline.",
+				Evidence:    csp,
+			})
+		}
+	} else {
+		headersMissing = append(headersMissing, "Content-Security-Policy")
+		findings = append(findings, Finding{
+			ID:          "dast.headers.missing-csp",
+			Title:       "Missing Content Security Policy (CSP)",
+			Severity:    "medium",
+			Category:    "security_header",
+			OWASP:       "A05:2021-Security Misconfiguration",
+			CWE:         "CWE-1021",
+			Message:     "No Content-Security-Policy header detected. CSP prevents execution of untrusted scripts and unauthorized cross-domain assets.",
+			Remediation: "Configure a strict Content-Security-Policy header (e.g., default-src 'self').",
+		})
+	}
+
+	// 3. X-Frame-Options
+	if xfo := resp.Header.Get("X-Frame-Options"); xfo != "" {
+		headersFound = append(headersFound, "X-Frame-Options")
+	} else {
+		headersMissing = append(headersMissing, "X-Frame-Options")
+		findings = append(findings, Finding{
+			ID:          "dast.headers.missing-xfo",
+			Title:       "Missing Anti-Clickjacking Header (X-Frame-Options)",
+			Severity:    "medium",
+			Category:    "security_header",
+			OWASP:       "A05:2021-Security Misconfiguration",
+			CWE:         "CWE-1021",
+			Message:     "Missing X-Frame-Options header allows the web application to be embedded in an <iframe>, enabling Clickjacking attacks.",
+			Remediation: "Add header: X-Frame-Options: DENY or SAMEORIGIN.",
+		})
+	}
+
+	// 4. X-Content-Type-Options
+	if xcto := resp.Header.Get("X-Content-Type-Options"); xcto != "" {
+		headersFound = append(headersFound, "X-Content-Type-Options")
+	} else {
+		headersMissing = append(headersMissing, "X-Content-Type-Options")
+		findings = append(findings, Finding{
+			ID:          "dast.headers.missing-xcto",
+			Title:       "Missing MIME-Sniffing Protection (X-Content-Type-Options)",
+			Severity:    "low",
+			Category:    "security_header",
+			OWASP:       "A05:2021-Security Misconfiguration",
+			CWE:         "CWE-706",
+			Message:     "Missing X-Content-Type-Options header allows browsers to MIME-sniff response bodies into executable script contexts.",
+			Remediation: "Add header: X-Content-Type-Options: nosniff",
+		})
+	}
+
+	// 5. Server / X-Powered-By Banner Leaks
+	serverBanner := resp.Header.Get("Server")
+	poweredBy := resp.Header.Get("X-Powered-By")
+	if serverBanner != "" || poweredBy != "" {
+		leak := serverBanner
+		if poweredBy != "" {
+			if leak != "" {
+				leak += " / " + poweredBy
+			} else {
+				leak = poweredBy
+			}
+		}
+		findings = append(findings, Finding{
+			ID:          "dast.info.server-banner-leak",
+			Title:       "Server Information Disclosure (Banner Leak)",
+			Severity:    "info",
+			Category:    "information_disclosure",
+			OWASP:       "A05:2021-Security Misconfiguration",
+			CWE:         "CWE-200",
+			Message:     fmt.Sprintf("Server discloses backend technologies: %s. This aids attackers in discovering targeted CVE exploits.", leak),
+			Remediation: "Disable server signature and technology header tokens (e.g. ServerTokens Prod in Apache, server_tokens off in Nginx).",
+			Evidence:    leak,
+		})
+	}
+
+	// 6. CORS Wildcard Check
+	corsReq, _ := http.NewRequestWithContext(reqCtx, "OPTIONS", target, nil)
+	if corsReq != nil {
+		corsReq.Header.Set("Origin", "https://evil-attacker.com")
+		corsReq.Header.Set("Access-Control-Request-Method", "POST")
+		if corsResp, err := client.Do(corsReq); err == nil {
+			allowOrigin := corsResp.Header.Get("Access-Control-Allow-Origin")
+			allowCreds := corsResp.Header.Get("Access-Control-Allow-Credentials")
+			corsResp.Body.Close()
+			if allowOrigin == "*" && allowCreds == "true" {
+				findings = append(findings, Finding{
+					ID:          "dast.cors.wildcard-credentials",
+					Title:       "CORS Wildcard with Credentials Enabled",
+					Severity:    "high",
+					Category:    "security_misconfiguration",
+					OWASP:       "A05:2021-Security Misconfiguration",
+					CWE:         "CWE-942",
+					Message:     "The server reflects wildcard Access-Control-Allow-Origin with credentials allowed.",
+					Remediation: "Restrict Access-Control-Allow-Origin to explicit trusted domains.",
+					Evidence:    "Access-Control-Allow-Origin: * with Access-Control-Allow-Credentials: true",
+				})
+			} else if allowOrigin == "https://evil-attacker.com" && allowCreds == "true" {
+				findings = append(findings, Finding{
+					ID:          "dast.cors.arbitrary-origin-reflection",
+					Title:       "Arbitrary CORS Origin Reflection with Credentials",
+					Severity:    "critical",
+					Category:    "security_misconfiguration",
+					OWASP:       "A05:2021-Security Misconfiguration",
+					CWE:         "CWE-942",
+					Message:     "The server blindly reflects the attacker's Origin header with credentials enabled, allowing full cross-origin authenticated data theft.",
+					Remediation: "Validate Origin headers against a strict whitelist before echoing Access-Control-Allow-Origin.",
+					Evidence:    "Origin: https://evil-attacker.com reflected in response.",
+				})
+			}
+		}
+	}
+
+	// 7. Sensitive Path Probes (if spider or full scope)
+	if input.Scope == "spider" || input.Scope == "full" {
+		probePaths := []struct {
+			path  string
+			title string
+			match string
+		}{
+			{"/.env", "Exposed .env Configuration File", "DB_PASSWORD="},
+			{"/.git/HEAD", "Exposed Git Repository Metadata", "ref: refs/"},
+			{"/actuator/health", "Exposed Spring Boot Actuator Endpoint", "UP"},
+			{"/swagger.json", "Public Swagger/OpenAPI Documentation", "swagger"},
+		}
+
+		baseURL := strings.TrimRight(target, "/")
+		for _, p := range probePaths {
+			probeURL := baseURL + p.path
+			if pReq, err := http.NewRequestWithContext(reqCtx, "GET", probeURL, nil); err == nil {
+				if pResp, err := client.Do(pReq); err == nil {
+					pBody, _ := io.ReadAll(io.LimitReader(pResp.Body, 1024))
+					pResp.Body.Close()
+					if pResp.StatusCode == 200 && (p.match == "" || strings.Contains(string(pBody), p.match)) {
+						findings = append(findings, Finding{
+							ID:          "dast.path.exposed-" + strings.TrimPrefix(p.path, "/"),
+							Title:       p.title,
+							Severity:    "critical",
+							Category:    "information_disclosure",
+							OWASP:       "A01:2021-Broken Access Control",
+							CWE:         "CWE-538",
+							Message:     fmt.Sprintf("Sensitive resource is publicly accessible at %s.", probeURL),
+							Remediation: "Block public web access to repository files and internal config endpoints via web server routing rules.",
+							Evidence:    fmt.Sprintf("HTTP 200 received at %s", probeURL),
+						})
+					}
+				}
+			}
+		}
+	}
+
+	// Compute Grade and Risk Score
+	riskScore := 0
+	for _, f := range findings {
+		switch f.Severity {
+		case "critical":
+			riskScore += 30
+		case "high":
+			riskScore += 20
+		case "medium":
+			riskScore += 10
+		case "low":
+			riskScore += 5
+		}
+	}
+	if riskScore > 100 {
+		riskScore = 100
+	}
+
+	grade := "A"
+	if riskScore >= 70 {
+		grade = "F"
+	} else if riskScore >= 50 {
+		grade = "D"
+	} else if riskScore >= 30 {
+		grade = "C"
+	} else if riskScore >= 15 {
+		grade = "B"
+	}
+
+	return ProbeResponse{
+		TargetURL:      target,
+		StatusCode:     resp.StatusCode,
+		ResponseTimeMS: duration,
+		Server:         serverBanner,
+		PoweredBy:      poweredBy,
+		Grade:          grade,
+		RiskScore:      riskScore,
+		HeadersFound:   headersFound,
+		HeadersMissing: headersMissing,
+		Findings:       findings,
+		ProbedAt:       time.Now().UTC().Format(time.RFC3339),
+	}, nil
+}
+
+// NormalizeTarget applies the probe's URL rules (an http:// default scheme,
+// a non-empty host) without contacting anything, so callers can reject a bad
+// target before a scan starts.
+func NormalizeTarget(raw string) (*url.URL, error) {
+	target := strings.TrimSpace(raw)
+	if target == "" {
+		return nil, fmt.Errorf("target_url is required")
+	}
+	lower := strings.ToLower(target)
+	if !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "https://") {
+		if strings.Contains(target, "://") {
+			return nil, fmt.Errorf("target URL must use http or https")
+		}
+		target = "http://" + target
+	}
+	parsed, err := url.Parse(target)
+	if err != nil || parsed.Hostname() == "" {
+		return nil, fmt.Errorf("invalid target URL format")
+	}
+	return parsed, nil
+}
+
+// IsLoopbackTarget reports whether the target's host is this machine
+// (localhost or a loopback IP literal). Offline mode only probes such
+// targets: the request never leaves the host. Redirects stay on the named
+// host (see Run), so a loopback target cannot be bounced off-machine.
+func IsLoopbackTarget(raw string) bool {
+	parsed, err := NormalizeTarget(raw)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	// Only the literal name: *.localhost subdomains may be handed to a DNS
+	// resolver on some platforms, which is a network request offline forbids.
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}

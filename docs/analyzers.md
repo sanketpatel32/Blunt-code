@@ -67,13 +67,14 @@ network class also ships machine-readable from `GET /api/v1/analyzers`
 | Trivy | Outbound, cold cache only | Downloads its vulnerability database the first time; warm caches scan locally, and offline mode refuses cold-cache scans instead of downloading |
 | Update check | Outbound, explicit | `GET /api/v1/update/check` reads `api.github.com/repos/.../releases/latest` when the About page asks; never automatic in the background |
 | SonarQube | Loopback only | Talks to the managed server it starts on a dynamic loopback port; never an external host |
-| Pentest probe | Explicit target only | Probes exactly the URL you enter. Redirects to any other host are refused and reported as a finding (CWE-601), so the probe cannot be pivoted to third parties or internal endpoints you did not name |
+| Pentest probe / `dast-probe` | Explicit target only | Probes exactly the URL you enter (`bluntcode pentest probe <url>`, or a pentest-profile scan's `--target` / `target_url`). Redirects to any other host are refused and reported as a finding (CWE-601), so the probe cannot be pivoted to third parties or internal endpoints you did not name |
 
 Offline mode (Settings) closes the outbound column: tool installs and the
-update check are refused, the built-in in-process analyzers are withheld so
-an offline scan cannot silently "succeed" on reduced coverage, osv/trivy fail
-readiness without their local databases, and the UI ships no webfont or other
-third-party asset requests.
+update check are refused, osv/trivy fail readiness without their local
+databases, the DAST probe is limited to loopback targets, and the UI ships no
+webfont or other third-party asset requests. The built-in in-process
+analyzers (secrets, TODO, license, static pentest patterns) never use the
+network, so they keep running offline.
 
 ## Process supervision and source protection
 

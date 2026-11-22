@@ -11,8 +11,8 @@ import (
 
 // AnalyzerStatus is the capability inventory entry of one analyzer merged with
 // its live registry state: the languages the adapter actually routes, the
-// installed version, and readiness. Unregistered entries (built-ins withheld
-// in offline mode) are still returned — with Registered false — so the UI can
+// installed version, and readiness. Unregistered entries (adapters missing
+// from this runtime's registry) are still returned — with Registered false — so the UI can
 // show the complete capability inventory instead of an undercount.
 type AnalyzerStatus struct {
 	analyzers.Capability

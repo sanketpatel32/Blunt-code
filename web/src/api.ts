@@ -129,7 +129,8 @@ export const api = {
   },
   /** Cross-workspace overview for the dashboard: counters plus the latest-completed-per-workspace severity rollup. */
   stats: () => request<GlobalStats>('/stats'),
-  startScan: (id: string, profile?: string) => request<Scan>(`/workspaces/${encodeURIComponent(id)}/scans`, { method: 'POST', body: JSON.stringify(profile ? { profile } : {}) }),
+  /** `targetUrl` (pentest profile only) is the running app the dast-probe analyzer requests; omitted keeps the scan static-only. */
+  startScan: (id: string, profile?: string, targetUrl?: string) => request<Scan>(`/workspaces/${encodeURIComponent(id)}/scans`, { method: 'POST', body: JSON.stringify({ ...(profile ? { profile } : {}), ...(targetUrl ? { target_url: targetUrl } : {}) }) }),
   scan: async (id: string) => {
     const response = await request<Scan | { scan: Scan; analyzer_runs?: Scan['analyzer_runs'] } | null>(`/scans/${encodeURIComponent(id)}`);
     return response && typeof response === 'object' && 'scan' in response ? { ...response.scan, analyzer_runs: response.analyzer_runs ?? [] } : response;

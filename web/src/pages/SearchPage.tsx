@@ -42,6 +42,7 @@ const SEARCH_DEBOUNCE_MS = 250;
 const SEVERITIES = ['critical', 'high', 'medium', 'low', 'info'] as const satisfies readonly Severity[];
 const ANALYZERS = [
   'pentest',
+  'dast-probe',
   'semgrep',
   'secrets',
   'gitleaks-secrets',

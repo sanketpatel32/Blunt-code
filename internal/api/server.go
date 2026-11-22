@@ -1607,7 +1607,8 @@ func (s *Server) startScan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		Profile string `json:"profile"`
+		Profile   string `json:"profile"`
+		TargetURL string `json:"target_url"`
 	}
 	if err := decode(r, &input); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, io.EOF) {
 		fail(w, 400, "INVALID_JSON", "Invalid scan request.")
@@ -1615,6 +1616,11 @@ func (s *Server) startScan(w http.ResponseWriter, r *http.Request) {
 	}
 	if input.Profile != "" && input.Profile != "quick" && input.Profile != "standard" && input.Profile != "deep" && input.Profile != "pentest" {
 		fail(w, 400, "INVALID_PROFILE", "profile must be quick, standard, deep, or pentest.")
+		return
+	}
+	targetURL, err := scans.NormalizeScanTarget(input.Profile, strings.TrimSpace(input.TargetURL))
+	if err != nil {
+		fail(w, 400, "INVALID_TARGET", err.Error())
 		return
 	}
 	recent, err := s.db.Scans(r.Context(), work.ID)
@@ -1633,7 +1639,7 @@ func (s *Server) startScan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	patterns, _ := s.userExcludes(r.Context(), work.ID)
-	scan, err := s.scans.DiscoverAndStart(r.Context(), work, input.Profile, patterns)
+	scan, err := s.scans.DiscoverAndStartWithOptions(r.Context(), work, input.Profile, patterns, scans.ScanOptions{TargetURL: targetURL})
 	if err != nil {
 		if errors.Is(err, scans.ErrTooManyScans) {
 			fail(w, 503, "SCAN_CAPACITY", "Too many scans are already running. Wait for one to finish.")

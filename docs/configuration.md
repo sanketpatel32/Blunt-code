@@ -84,10 +84,11 @@ UI. With it on, scans run entirely from local assets:
   fails that analyzer with a local-dependency message (for example, `semgrep
   is not installed and offline mode is enabled`) instead of reaching the
   network.
-- The built-in in-process analyzers (secrets, TODO) are deliberately held
-  back in offline mode as well: an offline scan with no available analyzers
-  keeps failing honestly instead of being rescued by the built-ins. If you
-  need the built-ins, run with offline mode off.
+- The built-in in-process analyzers (secrets, TODO, license, static pentest
+  patterns) never touch the network, so they keep running offline.
+- Network-dependent analyzers are disabled instead of dialing out: OSV and
+  Trivy fail readiness without their local databases, and a pentest scan's
+  DAST probe only accepts loopback targets (`localhost`, `127.0.0.1`, `::1`).
 - Everything else — discovery, scans over already-installed tools, reports,
   the CLI — behaves identically.
 

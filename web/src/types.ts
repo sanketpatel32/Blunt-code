@@ -52,6 +52,8 @@ export interface ScanSnapshot {
   exclusions?: string[];
   enabled_analyzers?: string[];
   skip_counts?: Record<string, number>;
+  /** Live endpoint a pentest scan's dast-probe analyzer requested; absent on static-only scans. */
+  target_url?: string;
 }
 
 export interface AnalyzerRun {
