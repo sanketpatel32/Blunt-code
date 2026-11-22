@@ -8,7 +8,7 @@ Your code flows through one local executable — `bluntcode.exe` — to twelve b
 
 - **Analyzers bundled:** Ruff (Python), Biome (JS/TS + React), Semgrep (25-rule security pack), SonarQube (polyglot, managed runtime), Secrets (8 credential families), TODO/FIXME (40+ file types), gitleaks (repo-wide secrets), OSV Scanner + Trivy (dependency CVEs, deep scans), Checkov (infrastructure-as-code, deep scans), License Scanner (copyleft/conflict detection), Pentest Suite (static OWASP Top 10 pass, plus opt-in probes of a URL you name).
 - **Two ways to scan:** Blunt Code scans locally — code, analyzers, and the report never leave your disk. Cloud scanners require uploading your source to someone else's server.
-- **Numbers:** 12 analyzers · 0 bytes of telemetry · 40+ file types scanned · current release 0.49.1.
+- **Numbers:** 12 analyzers · 0 bytes of telemetry · 40+ file types scanned · current release 0.50.0.
 - **Statement:** Scan everything. Send nothing.
 
 ## Install in 30 seconds
