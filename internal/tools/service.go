@@ -2,7 +2,6 @@ package tools
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -24,14 +23,11 @@ type Service struct {
 	Manager Manager
 	mu      sync.RWMutex
 	offline bool
-	// locks serializes installs per managed tool: two workspaces (or a scan
-	// racing the tools page) may request the same missing tool, and
-	// unserialized installs interleave staging renames and rules extraction on
-	// the same files. Different tools install concurrently; uv-managed tools
-	// additionally share uvToolMu because they share the managed uv bootstrap.
-	locksMu  sync.Mutex
-	locks    map[string]*sync.Mutex
-	uvToolMu sync.Mutex
+	// installMu serializes installs into the shared tools directory: two
+	// workspaces scanning concurrently (or a scan racing the tools page) may
+	// request the same missing tool, and unserialized installs interleave
+	// staging renames and rules extraction on the same files.
+	installMu sync.Mutex
 }
 
 func NewService(root string, manifest Manifest, offline bool) *Service {
@@ -41,89 +37,6 @@ func (s *Service) Offline() bool             { s.mu.RLock(); defer s.mu.RUnlock(
 func (s *Service) SetOffline(value bool)     { s.mu.Lock(); s.offline = value; s.mu.Unlock() }
 func (s *Service) SetDataDir(dataDir string) { s.Manager.DataDir = dataDir }
 func (s *Service) DiskUsage(id string) int64 { return s.Manager.DiskUsage(id) }
-
-// InstallEstimate is the pinned-download size needed to make one or more
-// managed tools ready. Bytes sums only the manifest-pinned archives that are
-// still missing; Estimated is false only when every needed artifact has a
-// pinned size and no uv-managed dependency resolution is involved.
-type InstallEstimate struct {
-	Bytes     int64 `json:"bytes"`
-	Estimated bool  `json:"estimated"`
-}
-
-// InstallEstimates sums the missing pinned downloads for the given managed
-// tool ids (analyzer or tools ids; aliases are canonicalized). Shared
-// dependencies such as managed uv are counted once.
-func (s *Service) InstallEstimates(ids []string) InstallEstimate {
-	var estimate InstallEstimate
-	seen := map[string]struct{}{}
-	complete := true
-	add := func(a Artifact) {
-		key := a.ToolID + "|" + a.Version + "|" + a.Platform
-		if _, ok := seen[key]; ok {
-			return
-		}
-		seen[key] = struct{}{}
-		if a.DownloadBytes > 0 {
-			estimate.Bytes += a.DownloadBytes
-		} else {
-			complete = false
-		}
-	}
-	for _, raw := range ids {
-		id := CanonicalToolID(raw)
-		if id == "sonarqube" {
-			artifacts, err := s.sonarQubeArtifacts()
-			if err != nil {
-				complete = false
-				continue
-			}
-			for _, artifact := range artifacts {
-				if !s.Manager.IsReady(artifact) {
-					add(artifact)
-				}
-			}
-			continue
-		}
-		artifact, ok := s.Manager.Manifest.Find(id, platform())
-		if !ok {
-			complete = false
-			continue
-		}
-		if artifact.InstallKind == "uv_tool" {
-			paths := s.Manager.UvToolPaths(artifact)
-			if _, err := os.Stat(paths.Executable); err == nil {
-				continue
-			}
-			if !uvWheelCached(artifact, paths) {
-				add(artifact)
-			}
-			// uv resolves the managed Python and wheel dependencies beyond the
-			// pinned wheel, so its total download is not pinned in the manifest.
-			complete = false
-			if uv, ok := s.Manager.Manifest.Find("uv", platform()); ok && !s.Manager.IsReady(uv) {
-				add(uv)
-			}
-			continue
-		}
-		if !s.Manager.IsReady(artifact) {
-			add(artifact)
-		}
-	}
-	estimate.Estimated = !complete
-	return estimate
-}
-
-// uvWheelCached reports whether the verified wheel is already on disk, in which
-// case InstallUvTool reuses it instead of downloading it again.
-func uvWheelCached(artifact Artifact, paths UvToolPaths) bool {
-	filename, err := wheelFilename(artifact.SourceURL)
-	if err != nil {
-		return false
-	}
-	wheel := filepath.Join(paths.Root, "downloads", filename)
-	return VerifySHA256(wheel, artifact.SHA256) == nil
-}
 
 // SweepStaging recovers the tools directory from interrupted updates (see
 // Manager.SweepStaging); run once at startup.
@@ -198,64 +111,49 @@ type NotInstallableError struct {
 
 func (e *NotInstallableError) Error() string { return toolName(e.ID) + ": " + e.Detail }
 
-func (s *Service) Ensure(ctx context.Context, id string) error {
-	lock := s.lockFor(id)
-	lock.Lock()
-	defer lock.Unlock()
-	return s.ensure(ctx, id)
-}
-
-func (s *Service) lockFor(id string) *sync.Mutex {
-	key := CanonicalToolID(id)
-	s.locksMu.Lock()
-	defer s.locksMu.Unlock()
-	if s.locks == nil {
-		s.locks = map[string]*sync.Mutex{}
-	}
-	lock, ok := s.locks[key]
-	if !ok {
-		lock = &sync.Mutex{}
-		s.locks[key] = lock
-	}
-	return lock
-}
-
-// EnsureMany installs missing managed tools concurrently. Per-tool locks keep
-// same-tool installs serialized, and uv-managed tools serialize on the shared
-// uv bootstrap inside installUvTool, so independent downloads (for example
-// Semgrep and the SonarQube bundle) no longer queue behind each other.
-func (s *Service) EnsureMany(ctx context.Context, ids []string) error {
-	unique := make([]string, 0, len(ids))
-	seen := map[string]bool{}
-	for _, raw := range ids {
-		id := CanonicalToolID(raw)
-		if id == "" || seen[id] {
-			continue
+// PendingDownloadBytes estimates how many bytes Ensure(id) would download on
+// this platform right now: composite tools (SonarQube's server + scanner +
+// Java bundle) sum only their missing artifacts, and a uv_tool install adds
+// the managed uv bootstrap when it is not ready yet. The number comes from
+// each artifact's approximate manifest download_bytes — a progress hint for
+// "Preparing X (~N MB)" stages, never an integrity or capacity check.
+func (s *Service) PendingDownloadBytes(id string) int64 {
+	var total int64
+	if id == "sonarqube" {
+		artifacts, err := s.sonarQubeArtifacts()
+		if err != nil {
+			return 0
 		}
-		seen[id] = true
-		unique = append(unique, id)
+		for _, artifact := range artifacts {
+			if !s.Manager.IsReady(artifact) {
+				total += artifact.DownloadBytes
+			}
+		}
+		return total
 	}
-	if len(unique) == 0 {
-		return nil
+	artifact, ok := s.Manager.Manifest.Find(id, platform())
+	if !ok {
+		return 0
 	}
-	const maxParallelInstalls = 4
-	sem := make(chan struct{}, maxParallelInstalls)
-	var wg sync.WaitGroup
-	errs := make([]error, len(unique))
-	for i, id := range unique {
-		wg.Add(1)
-		go func(i int, id string) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			errs[i] = s.Ensure(ctx, id)
-		}(i, id)
+	if artifact.InstallKind == "uv_tool" {
+		if _, err := os.Stat(s.Manager.UvToolPaths(artifact).Executable); err == nil {
+			return 0
+		}
+		total = artifact.DownloadBytes
+		if uv, ok := s.Manager.Manifest.Find("uv", platform()); ok && !s.Manager.IsReady(uv) {
+			total += uv.DownloadBytes
+		}
+		return total
 	}
-	wg.Wait()
-	return errors.Join(errs...)
+	if s.Manager.IsReady(artifact) {
+		return 0
+	}
+	return artifact.DownloadBytes
 }
 
-func (s *Service) ensure(ctx context.Context, id string) error {
+func (s *Service) Ensure(ctx context.Context, id string) error {
+	s.installMu.Lock()
+	defer s.installMu.Unlock()
 	if id == "sonarqube" {
 		return s.ensureSonarQube(ctx)
 	}
@@ -282,13 +180,6 @@ func (s *Service) ensure(ctx context.Context, id string) error {
 	if artifact.InstallKind == "uv_tool" {
 		return s.installUvTool(ctx, artifact)
 	}
-	if artifact.ToolID == "uv" {
-		s.uvToolMu.Lock()
-		defer s.uvToolMu.Unlock()
-		if s.Manager.IsReady(artifact) {
-			return nil
-		}
-	}
 	return s.Manager.InstallExecutable(ctx, artifact)
 }
 
@@ -296,9 +187,8 @@ func (s *Service) ensure(ctx context.Context, id string) error {
 // For sonarqube, it cleans up all sonarqube-related tool directories (sonarqube,
 // sonarqube-server, sonar-scanner, java) as well as the sonarqube runtime/data directory in DataDir.
 func (s *Service) Uninstall(ctx context.Context, id string) error {
-	lock := s.lockFor(id)
-	lock.Lock()
-	defer lock.Unlock()
+	s.installMu.Lock()
+	defer s.installMu.Unlock()
 	return s.Manager.Uninstall(ctx, id)
 }
 
@@ -328,34 +218,15 @@ func (s *Service) ensureSonarQube(ctx context.Context) error {
 		}
 		return nil
 	}
-	missing := make([]Artifact, 0, len(artifacts))
 	for _, artifact := range artifacts {
-		if !s.Manager.IsReady(artifact) {
-			missing = append(missing, artifact)
+		if s.Manager.IsReady(artifact) {
+			continue
+		}
+		if err := s.Manager.InstallExecutable(ctx, artifact); err != nil {
+			return fmt.Errorf("install managed %s: %w", artifact.ToolID, err)
 		}
 	}
-	// The SonarQube bundle's server, scanner, and JDK archives are independent
-	// downloads; installing them together removes the serial wait without
-	// sharing any staging path.
-	if len(missing) == 1 {
-		if err := s.Manager.InstallExecutable(ctx, missing[0]); err != nil {
-			return fmt.Errorf("install managed %s: %w", missing[0].ToolID, err)
-		}
-		return nil
-	}
-	var wg sync.WaitGroup
-	errs := make([]error, len(missing))
-	for i, artifact := range missing {
-		wg.Add(1)
-		go func(i int, artifact Artifact) {
-			defer wg.Done()
-			if err := s.Manager.InstallExecutable(ctx, artifact); err != nil {
-				errs[i] = fmt.Errorf("install managed %s: %w", artifact.ToolID, err)
-			}
-		}(i, artifact)
-	}
-	wg.Wait()
-	return errors.Join(errs...)
+	return nil
 }
 
 func (s *Service) sonarQubeArtifacts() ([]Artifact, error) {
@@ -392,8 +263,6 @@ func (s *Service) semgrepStatus(semgrep Artifact) Status {
 // installUvTool installs any uv_tool artifact (semgrep, checkov) through the
 // managed uv; semgrep additionally re-extracts its bundled local rules.
 func (s *Service) installUvTool(ctx context.Context, artifact Artifact) error {
-	s.uvToolMu.Lock()
-	defer s.uvToolMu.Unlock()
 	uv, ok := s.Manager.Manifest.Find("uv", platform())
 	if !ok {
 		return fmt.Errorf("%s requires a pinned managed uv artifact", artifact.ToolID)

@@ -338,9 +338,6 @@ func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, 
 			routing = scanRouting{files: incremental.changedByLanguage, full: filesByLanguage, incremental: true, anyChange: incremental.changedCount > 0}
 		}
 	}
-	// First runs install missing managed tools together before analyzer
-	// execution; the per-analyzer checks below still enforce readiness.
-	s.prepareManagedTools(ctx, scan, routing)
 	// Analyzers run either sequentially (the historical default, jobs < 1) or
 	// with at most jobs runs in flight (jobs >= 1). Both drivers share the
 	// same per-analyzer pipeline in executeAnalyzer, so events, persistence,

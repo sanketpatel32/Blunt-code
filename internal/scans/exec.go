@@ -161,70 +161,6 @@ func (r scanRouting) forAnalyzer(analyzerID string) map[analyzers.Language][]str
 	return r.files
 }
 
-// plannedSetupIDs lists the managed tools the scan's applicable analyzers will
-// need but do not have installed yet. It mirrors executeAnalyzer's gating so a
-// first run can download independent tools concurrently instead of discovering
-// each missing tool only when its analyzer is reached.
-func (s *Service) plannedSetupIDs(ctx context.Context, scan core.Scan, routing scanRouting) []string {
-	if s.tools == nil {
-		return nil
-	}
-	targetURL := scanTargetURL(scan)
-	dependencyInputs := scanDependencyInputs(scan)
-	seen := map[string]bool{}
-	ids := []string{}
-	for _, adapter := range s.registry.All() {
-		id := adapter.ID()
-		capability, ok := analyzers.CapabilityFor(id)
-		if !ok || capability.ManagedTool == "" || seen[capability.ManagedTool] || !analyzers.InstallableTool(id) {
-			continue
-		}
-		adapterFiles := filesForLanguages(routing.forAnalyzer(id), adapter.SupportedLanguages()...)
-		if analyzers.RequiresTarget(id) {
-			if targetURL == "" || !analyzers.ProfileAllows(scan.Profile, id) {
-				continue
-			}
-		} else {
-			if !analyzers.ProfileAllows(scan.Profile, id) {
-				continue
-			}
-			if len(adapterFiles) == 0 && !(analyzers.TakesDependencyInputs(id) && len(dependencyInputs) > 0) {
-				continue
-			}
-		}
-		if adapter.Check(ctx, analyzers.ToolEnvironment{ToolsDir: s.toolsDir}).Ready {
-			continue
-		}
-		seen[capability.ManagedTool] = true
-		ids = append(ids, capability.ManagedTool)
-	}
-	return ids
-}
-
-// prepareManagedTools installs the scan's missing managed tools together before
-// analyzer execution. executeAnalyzer still verifies readiness per analyzer and
-// keeps its own install fallback, so a failed parallel install degrades exactly
-// like the historical lazy path.
-func (s *Service) prepareManagedTools(ctx context.Context, scan core.Scan, routing scanRouting) {
-	setupIDs := s.plannedSetupIDs(ctx, scan, routing)
-	if len(setupIDs) == 0 {
-		return
-	}
-	stage := "Preparing managed tools"
-	if estimate := s.tools.InstallEstimates(setupIDs); estimate.Bytes > 0 {
-		size := cleaner.FormatBytes(estimate.Bytes)
-		if estimate.Estimated {
-			stage += fmt.Sprintf(" (about %s)", size)
-		} else {
-			stage += fmt.Sprintf(" (%s)", size)
-		}
-	}
-	s.emit(scan.ID, "scan.stage", map[string]any{"stage": stage})
-	if err := s.tools.EnsureMany(ctx, setupIDs); err != nil && ctx.Err() == nil {
-		log.Printf("scan %s: parallel managed-tool setup incomplete: %v", scan.ID, err)
-	}
-}
-
 // executeAnalyzer runs the full pipeline for one adapter: language gating,
 // profile filtering, tool readiness (with managed installation), planning,
 // execution, normalization, persistence, and events. It is the exact body the
@@ -293,16 +229,16 @@ func (s *Service) executeAnalyzer(ctx context.Context, scan core.Scan, work core
 	}
 	status := adapter.Check(ctx, analyzers.ToolEnvironment{ToolsDir: s.toolsDir})
 	if !status.Ready && s.tools != nil && analyzers.InstallableTool(adapter.ID()) {
+		// First-run installs can pull close to a gigabyte (SonarQube's bundle
+		// alone is ~0.9 GB); an unqualified "Preparing" stage reads as a hang
+		// for minutes. Naming the download size sets the right expectation.
 		stage := "Preparing " + adapter.DisplayName()
-		if estimate := s.tools.InstallEstimates([]string{adapter.ID()}); estimate.Bytes > 0 {
-			size := cleaner.FormatBytes(estimate.Bytes)
-			if estimate.Estimated {
-				stage += fmt.Sprintf(" (about %s)", size)
-			} else {
-				stage += fmt.Sprintf(" (%s)", size)
-			}
+		var downloadBytes int64
+		if pending := s.tools.PendingDownloadBytes(adapter.ID()); pending > 0 {
+			downloadBytes = pending
+			stage += fmt.Sprintf(" (downloading ~%s, first run only)", cleaner.FormatBytes(pending))
 		}
-		s.emit(scan.ID, "scan.stage", map[string]any{"stage": stage})
+		s.emit(scan.ID, "scan.stage", map[string]any{"stage": stage, "download_bytes": downloadBytes})
 		if installErr := s.tools.Ensure(ctx, adapter.ID()); installErr == nil {
 			status = adapter.Check(ctx, analyzers.ToolEnvironment{ToolsDir: s.toolsDir})
 		} else if notInstallable := (*tools.NotInstallableError)(nil); errors.As(installErr, &notInstallable) {

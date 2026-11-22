@@ -19,6 +19,19 @@ records differ for older versions:
   0.21.2.
 - **0.3.0, 0.4.0** are tagged but have no GitHub release page.
 
+## [Unreleased]
+
+### Fixed
+- **CLI flag order.** `bluntcode <path> --no-browser --port N` now works as documented: the default command accepts flags before, after, or interleaved with the workspace path instead of rejecting them as extra arguments (#49).
+- **`workspaces.git_repository`** is actually populated — via a migration, detection at workspace add/discover, and a startup refresh — so the API no longer reports `false` for real git working trees (#50).
+- **`workspaces.last_scan_at`** is stamped on every terminal scan state (completed, warnings, failed, cancelled, interrupted), so the workspace list stops showing `-` for scanned workspaces and last-scanned sorting works (#51).
+- **Flaky tool installs.** The post-install smoke probe retries once after a short backoff, so a virus scanner or rename-visibility lag no longer fails a freshly installed analyzer mid-scan (#52).
+- **Scan while the app is open.** `bluntcode scan` drives the running app's scan API instead of refusing: same progress output, summary, document formats, gate, and exit codes. Flags the API cannot express (`--watch`, `--incremental`, `--jobs`, `--baseline`, `--format github`) still refuse, naming what cannot be proxied (#53).
+- **`--format` stdout corruption.** `scan --format json|sarif|csv|jsonl|markdown` no longer appends the human summary after the document on stdout; with `--output` the summary still prints (#56).
+
+### Changed
+- **Install progress names the download.** The "Preparing X" scan stage now reads "Preparing X (downloading ~N MB, first run only)" from per-artifact manifest sizes, so a first pentest/deep run installing ~1.5 GB of tools no longer looks hung (#54).
+
 ## [0.50.0] - 2026-11-22
 
 ### Added

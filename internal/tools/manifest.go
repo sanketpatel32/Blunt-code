@@ -53,15 +53,17 @@ type Artifact struct {
 	ArchiveType string `json:"archive_type"` // exe, zip, or uv_tool wheel
 	// Executable is relative to this artifact's private version directory.
 	// It may point into an archive's top-level directory.
-	Executable  string `json:"executable"`
-	LicenseURL  string `json:"license_url"`
-	ChecksumURL string `json:"checksum_url,omitempty"`
-	// DownloadBytes is the pinned source archive's size in bytes, used only
-	// for first-run setup estimates; installation still verifies SHA256.
-	DownloadBytes int64      `json:"download_bytes,omitempty"`
-	InstallKind   string     `json:"install_kind,omitempty"` // artifact or uv_tool
-	Package       string     `json:"package,omitempty"`
-	Smoke         *SmokeTest `json:"smoke,omitempty"`
+	Executable  string     `json:"executable"`
+	LicenseURL  string     `json:"license_url"`
+	ChecksumURL string     `json:"checksum_url,omitempty"`
+	InstallKind string     `json:"install_kind,omitempty"` // artifact or uv_tool
+	Package     string     `json:"package,omitempty"`
+	Smoke       *SmokeTest `json:"smoke,omitempty"`
+	// DownloadBytes is the artifact's approximate download size (the pinned
+	// URL's Content-Length), used only to show "downloading ~N MB" in scan
+	// progress so a first-run install never looks hung. It never feeds
+	// verification — the SHA-256 above stays the integrity gate.
+	DownloadBytes int64 `json:"download_bytes,omitempty"`
 }
 
 func (a Artifact) Validate() error {
@@ -90,9 +92,6 @@ func (a Artifact) Validate() error {
 	}
 	if a.Smoke != nil && len(a.Smoke.Args) == 0 {
 		return fmt.Errorf("tool %s declares a smoke test without arguments", a.ToolID)
-	}
-	if a.DownloadBytes < 0 {
-		return fmt.Errorf("tool %s has a negative download size", a.ToolID)
 	}
 	if err := validateRelativeArchivePath(a.Executable); err != nil {
 		return fmt.Errorf("tool %s executable: %w", a.ToolID, err)
