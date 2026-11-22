@@ -45,6 +45,11 @@ func inputDigest(hashes map[string]string) string {
 	return hex.EncodeToString(digest.Sum(nil))
 }
 
+const (
+	analyzerConfigPinned      = "pinned-v1"
+	analyzerConfigRepoTrusted = "repo-trusted-v1"
+)
+
 // configDigest digests the workspace configuration that shaped the scan:
 // ignore/exclude rules, discovery exclusions, and path overrides. Order is
 // canonicalized so semantically identical configurations digest equally.
@@ -75,16 +80,21 @@ func configDigest(rules []core.WorkspaceRule, exclusions []string, overrides []c
 		}
 		return sortedOverrides[i].Mode < sortedOverrides[j].Mode
 	})
-	// The trust fields are omitted when false so untrusted scans keep the
-	// digest they always had; trusting in-repo analyzer config (or editing a
-	// trusted config file) changes the digest and blocks incremental reuse.
+	// AnalyzerConfig is always present so results from before analyzer
+	// config was pinned (which honored in-repo config) never match a pinned
+	// scan; trusting in-repo config, or editing a trusted config file, also
+	// changes the digest and blocks incremental reuse.
+	analyzerConfig := analyzerConfigPinned
+	if trustRepoConfig {
+		analyzerConfig = analyzerConfigRepoTrusted
+	}
 	payload, err := json.Marshal(struct {
 		Rules            []ruleView          `json:"rules"`
 		Exclusions       []string            `json:"exclusions"`
 		Overrides        []core.PathOverride `json:"overrides"`
-		TrustRepoConfig  bool                `json:"trust_repo_analyzer_config,omitempty"`
+		AnalyzerConfig   string              `json:"analyzer_config"`
 		RepoConfigDigest string              `json:"repo_analyzer_config_digest,omitempty"`
-	}{Rules: ruleViews, Exclusions: sortedExclusions, Overrides: sortedOverrides, TrustRepoConfig: trustRepoConfig, RepoConfigDigest: repoConfigDigest})
+	}{Rules: ruleViews, Exclusions: sortedExclusions, Overrides: sortedOverrides, AnalyzerConfig: analyzerConfig, RepoConfigDigest: repoConfigDigest})
 	if err != nil {
 		return ""
 	}
