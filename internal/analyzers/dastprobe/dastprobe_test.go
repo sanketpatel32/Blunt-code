@@ -124,3 +124,21 @@ func contains(list []string, want string) bool {
 	}
 	return false
 }
+
+func TestFingerprintsDifferAcrossTargets(t *testing.T) {
+	a := New()
+	fingerprint := func(target string) string {
+		payload := `{"target_url":"` + target + `","findings":[{"id":"dast.headers.missing-csp","severity":"medium","message":"Missing CSP."}]}`
+		findings, _, err := a.Normalize(context.Background(), analyzers.AnalyzerResult{Stdout: []byte(payload)})
+		if err != nil || len(findings) != 1 {
+			t.Fatalf("normalize: %v %v", findings, err)
+		}
+		return findings[0].Fingerprint
+	}
+	if fingerprint("http://localhost:3000") == fingerprint("http://localhost:4000") {
+		t.Error("the same issue on two targets must have distinct fingerprints")
+	}
+	if fingerprint("http://localhost:3000") != fingerprint("http://localhost:3000") {
+		t.Error("fingerprints must be stable for one target")
+	}
+}

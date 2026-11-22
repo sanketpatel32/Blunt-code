@@ -6,6 +6,8 @@ package dastprobe
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -135,6 +137,13 @@ func (a *Adapter) Normalize(_ context.Context, result analyzers.AnalyzerResult) 
 		findings = append(findings, f)
 	}
 	analyzers.SetFingerprints(findings)
+	// Project-level findings carry no path, so the base fingerprint is the
+	// same for every target; fold the target in so a suppression or baseline
+	// for one app never hides the same issue on another.
+	for i := range findings {
+		sum := sha256.Sum256([]byte(findings[i].Fingerprint + "\x00" + resp.TargetURL))
+		findings[i].Fingerprint = hex.EncodeToString(sum[:])
+	}
 	metrics := []analyzers.Metric{
 		{AnalyzerID: ID, Key: "dast_risk_score", Label: "DAST risk score", Value: float64(resp.RiskScore)},
 		{AnalyzerID: ID, Key: "dast_response_time", Label: "Target response time", Value: float64(resp.ResponseTimeMS), Unit: "ms"},
