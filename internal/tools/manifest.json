@@ -8,7 +8,7 @@
       "sha256": "c5d1185c47261f86361d03b547da25be79120226a6f1721d623b2aba9d27668b",
       "archive_type": "zip",
       "executable": "ruff.exe",
-      "license_url": "https://github.com/astral-sh/ruff/blob/0.16.0/LICENSE-APACHE",
+      "license_url": "https://github.com/astral-sh/ruff/blob/0.16.0/LICENSE",
       "smoke": {
         "args": [
           "--version"
@@ -56,7 +56,7 @@
       "sha256": "25e42f5ef6711fd8c0fb45390972205891dd44c6bd02ac93f0f63e8e98d9bfb6",
       "archive_type": "exe",
       "executable": "osv-scanner.exe",
-      "license_url": "https://github.com/google/osv-scanner/blob/main/LICENSE",
+      "license_url": "https://github.com/google/osv-scanner/blob/v2.5.1/LICENSE",
       "smoke": {
         "args": [
           "--version"
@@ -134,7 +134,7 @@
       "sha256": "ea1c5c1932f9c25350eafc4cdb1a839527c117e5d98b5fcf222a715b6b50a1f2",
       "archive_type": "zip",
       "executable": "sonarqube-26.8.0.126808/bin/windows-x86-64/StartSonar.bat",
-      "license_url": "https://www.sonarsource.com/open-source-editions/sonarqube-community-build/"
+      "license_url": "https://github.com/SonarSource/sonarqube/blob/26.8.0.126808/LICENSE.txt"
     },
     {
       "tool_id": "sonar-scanner",
@@ -144,7 +144,7 @@
       "sha256": "76d66269943d503381d9f5e273e5d7a90d6e5001c90615e63008ed1fc0b76921",
       "archive_type": "zip",
       "executable": "sonar-scanner-7.3.0.5189-windows-x64/bin/sonar-scanner.bat",
-      "license_url": "https://github.com/SonarSource/sonar-scanner-cli/blob/master/LICENSE"
+      "license_url": "https://github.com/SonarSource/sonar-scanner-cli/blob/7.3.0.5189/LICENSE.txt"
     },
     {
       "tool_id": "java",
@@ -154,7 +154,7 @@
       "sha256": "9ba963ee2371874a74185d18bc7bb2ab9407df7683300855ed7606e0662321d0",
       "archive_type": "zip",
       "executable": "jdk-21.0.12+8/bin/java.exe",
-      "license_url": "https://adoptium.net/about/",
+      "license_url": "https://github.com/openjdk/jdk21u/blob/jdk-21.0.12%2B8/LICENSE",
       "smoke": {
         "args": [
           "-version"
