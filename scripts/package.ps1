@@ -68,6 +68,8 @@ Set-Content -LiteralPath "$archive.sha256" -Value "$hash  $(Split-Path -Leaf $ar
 $keySource = Get-Content -LiteralPath (Join-Path $root 'internal\selfupdate\signing_key.go') -Raw
 $pinnedKey = if ($keySource -match 'ReleaseSigningKey = "([^"]*)"') { $Matches[1] } else { '' }
 if ($SigningKeyFile) {
+  # Resolve before Push-Location so a relative path means the caller's cwd.
+  $SigningKeyFile = (Resolve-Path -LiteralPath $SigningKeyFile).Path
   Push-Location $root
   try {
     go run ./cmd/releasesign sign -key $SigningKeyFile -in "$archive.sha256" -out "$archive.sha256.sig"
