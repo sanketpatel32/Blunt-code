@@ -61,6 +61,36 @@ func TestNormalizeRealReport(t *testing.T) {
 	}
 }
 
+// TestFindingRelativePath pins the report-path regression: gitleaks emits
+// paths relative to its isolated working directory, and findings must be
+// re-anchored to the workspace source instead of leaking "../.." runs.
+func TestFindingRelativePath(t *testing.T) {
+	source := t.TempDir()
+	cmdDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(source, ".mimosa"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	reportRel, err := filepath.Rel(cmdDir, filepath.Join(source, ".mimosa", "state.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := findingRelativePath(source, cmdDir, reportRel); got != ".mimosa/state.txt" {
+		t.Fatalf("relative report path resolved to %q, want .mimosa/state.txt", got)
+	}
+	// Absolute report paths resolve directly; outside-root paths keep the
+	// honest relative form.
+	if got := findingRelativePath(source, cmdDir, filepath.Join(source, "a.py")); got != "a.py" {
+		t.Fatalf("absolute report path resolved to %q, want a.py", got)
+	}
+	outside, err := filepath.Rel(cmdDir, filepath.Join(t.TempDir(), "x.py"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := findingRelativePath(source, cmdDir, outside); !strings.Contains(got, "..") {
+		t.Fatalf("outside-root path = %q, want it left as the honest relative form", got)
+	}
+}
+
 func TestPlanScansWorkspaceRootWithJSONReport(t *testing.T) {
 	adapter := New(`C:\BluntCode\tools\gitleaks\8.30.1\gitleaks.exe`, "8.30.1")
 	req := analyzers.ScanRequest{

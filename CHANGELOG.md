@@ -44,6 +44,7 @@ records differ for older versions:
 - **Install progress names the download.** The "Preparing X" scan stage now reads "Preparing X (downloading ~N MB, first run only)" from per-artifact manifest sizes, so a first pentest/deep run installing ~1.5 GB of tools no longer looks hung (#54).
 
 ### Fixed
+- **Gitleaks finding paths are workspace-relative again.** When repo config is untrusted gitleaks runs from an isolated working directory and reports paths like `../../../../OneDrive/...`; findings now resolve those back to clean workspace-relative paths.
 - **Bare exclude patterns now match at any depth.** `.bluntcodeignore` and workspace exclude rules like `*.tmp` or `coverage` previously only matched at the workspace root despite documented basename semantics; they now match like gitignore everywhere (and `/name` stays root-anchored).
 - **Windows device-name files no longer kill scans.** Discovery skips `nul`/`con`/`aux`/`comN`/`lptN` (with or without extension) — junk files creatable only via `\\?\` tricks or shell redirects that crash analyzers they reach; a stray `nul` in the repo root was failing every sonar-scanner run.
 
