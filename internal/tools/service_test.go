@@ -176,6 +176,44 @@ func TestConcurrentEnsureSerializesInstalls(t *testing.T) {
 	}
 }
 
+// EnsureMany downloads independent tools at the same time; the same-tool lock
+// still serializes retries of one tool.
+func TestEnsureManyInstallsIndependentToolsConcurrently(t *testing.T) {
+	payload := []byte("tool bytes")
+	sum := sha256.Sum256(payload)
+	var mu sync.Mutex
+	active, peak := 0, 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		active++
+		if active > peak {
+			peak = active
+		}
+		mu.Unlock()
+		time.Sleep(120 * time.Millisecond)
+		_, _ = w.Write(payload)
+		mu.Lock()
+		active--
+		mu.Unlock()
+	}))
+	defer server.Close()
+	artifact := func(id, executable string) Artifact {
+		return Artifact{ToolID: id, Version: "1", Platform: platform(), SourceURL: server.URL + "/" + id, SHA256: hex.EncodeToString(sum[:]), ArchiveType: "exe", Executable: executable}
+	}
+	service := NewService(t.TempDir(), Manifest{Artifacts: []Artifact{artifact("ruff", "ruff.exe"), artifact("biome", "biome.exe")}}, false)
+	if err := service.EnsureMany(context.Background(), []string{"ruff", "biome"}); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if peak != 2 {
+		t.Fatalf("independent downloads peak concurrency = %d, want 2", peak)
+	}
+	if !service.Status("ruff").Ready || !service.Status("biome").Ready {
+		t.Fatal("EnsureMany did not leave both tools ready")
+	}
+}
+
 func TestUninstallStandardTool(t *testing.T) {
 	root := t.TempDir()
 	manifest := Manifest{
@@ -372,5 +410,51 @@ func TestDiskUsageAndCanonicalToolID(t *testing.T) {
 	}
 	if usage := unconfiguredMgr.DiskUsage("ruff"); usage != 0 {
 		t.Fatalf("expected 0 disk usage for unconfigured manager, got %d", usage)
+	}
+}
+
+func pinnedArtifact(toolID string, archiveType, executable string, downloadBytes int64) Artifact {
+	sum := sha256.Sum256([]byte(toolID))
+	return Artifact{ToolID: toolID, Version: "1", Platform: platform(), SourceURL: "https://example.test/" + toolID, SHA256: hex.EncodeToString(sum[:]), ArchiveType: archiveType, Executable: executable, DownloadBytes: downloadBytes}
+}
+
+func TestInstallEstimatesSumsMissingPinnedDownloadsOnce(t *testing.T) {
+	root := t.TempDir()
+	ruff := pinnedArtifact("ruff", "exe", "ruff.exe", 100)
+	biome := pinnedArtifact("biome", "exe", "biome.exe", 200)
+	uv := pinnedArtifact("uv", "zip", "uv.exe", 50)
+	semgrep := pinnedArtifact("semgrep", "wheel", "semgrep.exe", 300)
+	semgrep.InstallKind = "uv_tool"
+	semgrep.Package = "semgrep==1"
+	checkov := pinnedArtifact("iac-checkov", "wheel", "env/checkov/Scripts/python.exe", 400)
+	checkov.InstallKind = "uv_tool"
+	checkov.Package = "checkov==1"
+	server := pinnedArtifact("sonarqube-server", "zip", "bin/Run.bat", 1000)
+	scanner := pinnedArtifact("sonar-scanner", "zip", "bin/sonar-scanner.bat", 2000)
+	java := pinnedArtifact("java", "zip", "bin/java.exe", 3000)
+	service := NewService(root, Manifest{Artifacts: []Artifact{ruff, biome, uv, semgrep, checkov, server, scanner, java}}, false)
+
+	// Biome is already installed, so only ruff plus the uv-managed Semgrep and
+	// Checkov wheels count; shared uv is counted once.
+	biomePath := service.Manager.Executable(biome)
+	if err := os.MkdirAll(filepath.Dir(biomePath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(biomePath, []byte("biome"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := service.InstallEstimates([]string{"ruff", "biome", "semgrep", "iac-checkov"})
+	if got.Bytes != 850 {
+		t.Fatalf("uv estimate bytes = %d, want 850", got.Bytes)
+	}
+	if !got.Estimated {
+		t.Fatal("uv tool installs must stay marked as estimates")
+	}
+
+	// The SonarQube bundle sums its three pinned archives and is exact when all
+	// sizes are known.
+	got = service.InstallEstimates([]string{"sonarqube"})
+	if got.Bytes != 6000 || got.Estimated {
+		t.Fatalf("sonarqube estimate = %+v, want 6000 bytes exact", got)
 	}
 }

@@ -209,10 +209,17 @@ func (m Manager) IsReady(a Artifact) bool {
 	return err == nil
 }
 
+// smokeRetryDelay spaces the single automatic smoke-test retry: first-run
+// probes can race antivirus scans or filesystem settling right after a large
+// install, and an immediate manual retry has been observed to succeed.
+var smokeRetryDelay = 2 * time.Second
+
 // smokeProbe runs the artifact's post-activation smoke test: the installed
 // executable must exit 0 (and, when Expect is set, print the pinned version).
 // A failing probe means the activated bytes are not trustworthy even though
-// their digest matched — the caller rolls the previous version back.
+// their digest matched — the caller rolls the previous version back. Transient
+// first-run failures get one retry before the install is declared failed, and
+// captured probe output is kept in the error so the cause is diagnosable.
 func (m Manager) smokeProbe(ctx context.Context, executable string, s *SmokeTest) error {
 	if s == nil || len(s.Args) == 0 {
 		return nil
@@ -221,14 +228,52 @@ func (m Manager) smokeProbe(ctx context.Context, executable string, s *SmokeTest
 	if runner == nil {
 		runner = realSmokeRunner
 	}
-	output, err := runner(ctx, executable, s.Args)
-	if err != nil {
-		return fmt.Errorf("smoke test failed: %w", err)
+	var lastErr error
+	for attempt := 0; attempt < 2; attempt++ {
+		if attempt > 0 {
+			if ctx.Err() != nil {
+				return lastErr
+			}
+			timer := time.NewTimer(smokeRetryDelay)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return lastErr
+			case <-timer.C:
+			}
+		}
+		output, err := runner(ctx, executable, s.Args)
+		var probeErr error
+		if err != nil {
+			probeErr = fmt.Errorf("smoke test failed: %w", err)
+			if detail := smokeOutputDetail(output); detail != "" {
+				probeErr = fmt.Errorf("%w: %s", probeErr, detail)
+			}
+		} else if s.Expect != "" && !strings.Contains(strings.ToLower(output), strings.ToLower(s.Expect)) {
+			detail := smokeOutputDetail(output)
+			if detail == "" {
+				detail = "(no output)"
+			}
+			probeErr = fmt.Errorf("smoke test output did not mention %q: %s", s.Expect, detail)
+		}
+		if probeErr == nil {
+			return nil
+		}
+		lastErr = probeErr
 	}
-	if s.Expect != "" && !strings.Contains(strings.ToLower(output), strings.ToLower(s.Expect)) {
-		return fmt.Errorf("smoke test output did not mention %q: %s", s.Expect, strings.TrimSpace(output))
+	return lastErr
+}
+
+func smokeOutputDetail(output string) string {
+	text := strings.TrimSpace(output)
+	if text == "" {
+		return ""
 	}
-	return nil
+	const maxSmokeOutput = 512
+	if len(text) > maxSmokeOutput {
+		text = text[:maxSmokeOutput] + "… (truncated)"
+	}
+	return text
 }
 
 // realSmokeRunner runs the probe as a child process with its own deadline and

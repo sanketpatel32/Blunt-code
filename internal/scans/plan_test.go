@@ -6,9 +6,11 @@ import (
 	"bluntcode/internal/core"
 	"bluntcode/internal/database"
 	"bluntcode/internal/events"
+	"bluntcode/internal/tools"
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -78,5 +80,50 @@ func TestPlanUsesDiscoveryOverridesAndProfileWithoutCreatingScan(t *testing.T) {
 		if row.Planned {
 			t.Fatalf("empty source plan contains %+v", row)
 		}
+	}
+}
+
+type planSemgrep struct{ fakeAnalyzer }
+
+func (planSemgrep) ID() string          { return "semgrep" }
+func (planSemgrep) DisplayName() string { return "Semgrep" }
+func (planSemgrep) Check(context.Context, analyzers.ToolEnvironment) analyzers.ToolStatus {
+	return analyzers.ToolStatus{Ready: false, Detail: "missing"}
+}
+
+func TestPlanReportsFirstRunSetupEstimate(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "keep.py"), []byte("x=1"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	paths, err := config.NewPaths(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := database.Open(ctx, paths.DBPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	work, err := db.CreateWorkspace(ctx, core.Workspace{Name: "Setup estimate", RootPath: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := analyzers.NewRegistry()
+	if err := registry.Register(planSemgrep{}); err != nil {
+		t.Fatal(err)
+	}
+	toolService := tools.NewService(paths.ToolsDir, tools.Manifest{Artifacts: []tools.Artifact{
+		{ToolID: "uv", Version: "1", Platform: runtime.GOOS + "-" + runtime.GOARCH, SourceURL: "https://example.test/uv", ArchiveType: "zip", Executable: "uv.exe", DownloadBytes: 50},
+		{ToolID: "semgrep", Version: "1", Platform: runtime.GOOS + "-" + runtime.GOARCH, SourceURL: "https://example.test/semgrep", ArchiveType: "wheel", Executable: "semgrep.exe", InstallKind: "uv_tool", Package: "semgrep==1", DownloadBytes: 300},
+	}}, false)
+	service := New(db, registry, events.New(), paths.ReportsDir, paths.ToolsDir, toolService)
+	plan, err := service.Plan(ctx, work, "standard", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Setup == nil || plan.Setup.Tools != 1 || plan.Setup.DownloadBytes != 350 || !plan.Setup.Estimated {
+		t.Fatalf("setup estimate = %+v", plan.Setup)
 	}
 }
