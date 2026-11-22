@@ -70,7 +70,7 @@ async function renderElement(ui: ReactElement) {
 
 async function openLanguagesTab(host: HTMLElement) {
   const tab = [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((button) => button.textContent === 'Languages');
-  expect(tab).toBeDefined();
+  expect(tab).toBeInstanceOf(HTMLElement);
   // Radix tabs activate on mousedown, which jsdom's click() does not synthesize.
   await act(async () => {
     tab!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
@@ -229,5 +229,27 @@ describe('RiskCard trend words (C8, D2 audit: grade owns the color)', () => {
     expect(host.querySelector('.risk-explain')?.textContent).toContain('B means moderate risk. The score of 12 comes mostly from 2 high and 2 low findings');
     expect(host.querySelector('.risk-explain')?.textContent).toContain('treat this grade as provisional');
     expect(host.querySelector('.grade-provisional')).not.toBeNull();
+  });
+
+});
+
+describe('WorkspacePage copy path', () => {
+  it('clears the "Copied" feedback timer when the page unmounts', async () => {
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText: vi.fn(() => Promise.resolve()) }, configurable: true });
+    const host = await render(detailFetchMock({ items: [scanRow()], total: 1 }));
+    const setTimeoutSpy = vi.spyOn(window, 'setTimeout');
+    const copy = host.querySelector<HTMLButtonElement>('button[aria-label="Copy path"]');
+    expect(copy).toBeInstanceOf(HTMLElement);
+    await act(async () => { copy!.click(); await Promise.resolve(); await Promise.resolve(); });
+    expect(copy!.title).toBe('Copied');
+    const timerIndex = setTimeoutSpy.mock.calls.findIndex(([, delay]) => delay === 1400);
+    expect(timerIndex).toBeGreaterThanOrEqual(0);
+    const timerId = setTimeoutSpy.mock.results[timerIndex].value;
+    const clearTimeoutSpy = vi.spyOn(window, 'clearTimeout');
+    await act(async () => { root.unmount(); });
+    expect(clearTimeoutSpy).toHaveBeenCalledWith(timerId);
+    setTimeoutSpy.mockRestore();
+    clearTimeoutSpy.mockRestore();
+    Reflect.deleteProperty(navigator, 'clipboard');
   });
 });

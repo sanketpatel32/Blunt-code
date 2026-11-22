@@ -106,7 +106,7 @@ describe('AboutPage updates card', () => {
 
   async function clickButton(host: HTMLElement, label: string) {
     const button = [...host.querySelectorAll('button')].find((candidate) => candidate.textContent === label);
-    expect(button).toBeDefined();
+    expect(button).toBeInstanceOf(HTMLElement);
     await act(async () => { button!.click(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
   }
 

@@ -21,7 +21,7 @@ All tests are in `web/src` (`npx vitest run`).
 |---|---|
 | Skip link + main landmark | `src/App.navigation.test.tsx` — skip link is the first link in the app, targets `#main-content`; `<main id="main-content" tabIndex={-1}>` |
 | Keyboard journey through the core flow | `src/App.keyboard-journey.test.tsx` — workspace → start scan → incomplete result (badge, failure reason, engine tally) → finding row via ArrowDown/Enter → source pane → Escape → back out, no focus trap |
-| Dialog semantics: modal role, labelling, initial focus, Tab wrap trap, Escape, focus restore, backdrop close, busy guard | `src/components/dialogs.test.tsx` (add-workspace, confirmation, suppress, source-preview dialogs; shared `hooks/useDialogA11y`) |
+| Dialog semantics: opened with `showModal()` (top layer, inert page behind, no background scroll), labelling, initial focus, Tab wrap trap, Escape, focus restore, backdrop close, busy guard, stacked dialogs | `src/components/dialogs.test.tsx` (add-workspace, confirmation, suppress, source-preview dialogs; shared `hooks/useDialogA11y`) |
 | Command palette keyboard model | `src/components/CommandPalette.test.tsx` — arrows + `aria-activedescendant`, live empty message, focus in/out |
 | Global shortcuts suspend while a dialog is open; ignored while typing; SR modifier combos excluded | `src/App.shortcuts.test.tsx`, `src/lib/shortcuts.test.ts` |
 | Findings rows keyboard-walkable; pane Escape | `src/pages/report/ReportView.test.tsx` (ArrowDown focus, Enter opens pane, Escape closes) |

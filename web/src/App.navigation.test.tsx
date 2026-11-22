@@ -51,7 +51,7 @@ describe('navigation resilience', () => {
     expect(host.textContent).toContain('Nothing here');
     expect(host.textContent).not.toContain('Recent projects');
     const home = [...host.querySelectorAll('button')].find((button) => button.textContent === 'Go to Home');
-    expect(home).toBeDefined();
+    expect(home).toBeInstanceOf(HTMLElement);
     await act(async () => { home!.click(); await Promise.resolve(); await Promise.resolve(); });
     expect(window.location.pathname).toBe('/');
     expect(host.textContent).toContain('Point Blunt Code at a project');
@@ -161,7 +161,7 @@ describe('browser history and hostile URLs', () => {
   it('follows back and forward navigation (popstate) without remounting the app', async () => {
     const host = await renderApp();
     const aboutItem = host.querySelector<HTMLAnchorElement>('.app-rail a[href="/about"]')!;
-    expect(aboutItem).toBeDefined();
+    expect(aboutItem).toBeInstanceOf(HTMLElement);
     await act(async () => { aboutItem.click(); await Promise.resolve(); await Promise.resolve(); });
     expect(window.location.pathname).toBe('/about');
     expect(host.textContent).toContain('Local by default');

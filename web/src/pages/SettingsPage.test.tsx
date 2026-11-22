@@ -53,7 +53,7 @@ describe('SettingsPage data folders', () => {
     expect(host.textContent).toContain('Data folders');
     expect(host.textContent).toContain('Everything Blunt Code keeps');
     expect(host.textContent).toContain('C:\\Users\\you\\BluntCode');
-    for (const label of ['Reports', 'Logs', 'Tools', 'App data']) expect(button(host, label)).toBeDefined();
+    for (const label of ['Reports', 'Logs', 'Tools', 'App data']) expect(button(host, label)).toBeInstanceOf(HTMLElement);
   });
 
   /* Loop 148. The path printed twice — once as a read-only "Data directory"
@@ -142,7 +142,7 @@ describe('SettingsPage storage cleanup', () => {
     const { host, notify } = await renderPage(fetchMock);
     expect(host.textContent).toContain('Storage & Cleanup');
     const cleanBtn = button(host, 'Clean & reclaim space')!;
-    expect(cleanBtn).toBeDefined();
+    expect(cleanBtn).toBeInstanceOf(HTMLElement);
     await act(async () => { cleanBtn.click(); });
     const dialog = host.querySelector('dialog[open]')!;
     expect(dialog).not.toBeNull();

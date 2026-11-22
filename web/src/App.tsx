@@ -158,6 +158,8 @@ export function App() {
   // so Escape (via its dialog hook) and the other keys keep working over it.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      // Escape always ends an armed sequence, even when a dialog consumed it to close itself.
+      if (event.key === 'Escape' && seqTimer.current) disarmSequence();
       if (isTextEntryTarget(event.target)) return;
       if (event.defaultPrevented) return;
       if (document.querySelector('dialog[open]:not([data-shortcuts-dialog])')) return;
@@ -182,7 +184,8 @@ export function App() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [go, armSequence, disarmSequence]);
-  const paletteCommands: Command[] = [
+  // Memoized so the palette's filtered results only recompute when a command actually changes.
+  const paletteCommands = useMemo<Command[]>(() => [
     { id: 'nav-home', label: 'Go to Home', keywords: 'dashboard start', hint: 'g h', group: 'Navigation', run: () => go({ page: 'home' }) },
     { id: 'nav-workspaces', label: 'Go to Workspaces', keywords: 'projects', hint: 'g w', group: 'Navigation', run: () => go({ page: 'workspaces' }) },
     { id: 'nav-tools', label: 'Go to Tools', keywords: 'analyzers ruff biome semgrep sonar', hint: 'g t', group: 'Navigation', run: () => go({ page: 'tools' }) },
@@ -191,12 +194,11 @@ export function App() {
     { id: 'nav-about', label: 'Go to About', keywords: 'version info', hint: 'g a', group: 'Navigation', run: () => go({ page: 'about' }) },
     { id: 'nav-search', label: 'Go to findings', keywords: 'search findings', group: 'Navigation', run: () => go({ page: 'search' }) },
     { id: 'nav-pentest', label: 'Go to Pentest', keywords: FEATURES.pentestTemplateLibraries ? 'pentest zap nuclei burp hacking' : 'pentest dast owasp hacking', group: 'Navigation', run: () => go({ page: 'pentest' }) },
-    { id: 'filter-critical', label: 'Filter critical', keywords: 'severity critical', group: 'Filters', run: () => go({ page: 'search', q: 'severity=critical' }) },
-    { id: 'filter-findings', label: 'Go to findings', keywords: 'findings', group: 'Filters', run: () => go({ page: 'search', q: 'severity=critical' }) },
+    { id: 'filter-critical', label: 'Filter critical findings', keywords: 'severity critical', group: 'Filters', run: () => go({ page: 'search', q: 'severity=critical' }) },
     { id: 'action-add-workspace', label: 'Add workspace', keywords: 'new project folder scan', hint: 'N', group: 'Navigation', run: () => setAddOpen(true) },
     { id: 'action-theme', label: theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme', keywords: 'dark light mode appearance', group: 'Navigation', run: toggleTheme },
     { id: 'action-shortcuts', label: 'Show keyboard shortcuts', keywords: 'help keys', hint: '?', group: 'Navigation', run: () => setShortcutsOpen(true) },
-  ];
+  ], [go, theme, toggleTheme]);
   // Dynamic workspace entries load lazily the first time the palette opens;
   // failures degrade to the static list silently (the palette is navigation
   // sugar, not a report), and no request fires on routes that never open it.
@@ -207,13 +209,13 @@ export function App() {
     api.workspaces().then((items) => { if (!cancelled) setWorkspacesForPalette(items); }).catch(() => { });
     return () => { cancelled = true; };
   }, [paletteOpen, workspacesForPalette.length]);
-  const workspaceCommands: Command[] = workspacesForPalette.map((workspace) => ({
+  const workspaceCommands = useMemo<Command[]>(() => workspacesForPalette.map((workspace) => ({
     id: `nav-workspace-${workspace.id}`,
     label: `Go to ${workspace.name || 'Untitled workspace'}`,
     keywords: `${workspace.name} project open`,
     group: 'Workspaces',
     run: () => go({ page: 'workspace', id: workspace.id }),
-  }));
+  })), [workspacesForPalette, go]);
   const allPaletteCommands = useMemo(() => [...paletteCommands, ...workspaceCommands], [paletteCommands, workspaceCommands]);
   // The backend is gone once the farewell screen shows; render it instead of
   // the app frame so no dead buttons or error states can be clicked.

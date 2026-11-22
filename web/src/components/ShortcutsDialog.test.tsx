@@ -2,6 +2,7 @@ import { act, useState, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ShortcutsDialog } from './ShortcutsDialog';
+import { isShownModal } from '../testDialogPolyfill';
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
@@ -17,6 +18,15 @@ function press(target: Element, key: string, shiftKey = false) {
 
 function pressBackdrop(target: Element) {
   target.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+}
+
+/** A modal dialog's ::backdrop click targets the dialog itself; only the
+ *  coordinates tell it apart from a press on the dialog's own box (its
+ *  scrollbar, say). jsdom has no layout, so give the dialog a box first. */
+function pressDialogAt(dialog: HTMLDialogElement, where: 'inside' | 'outside') {
+  dialog.getBoundingClientRect = () => ({ left: 100, top: 100, right: 400, bottom: 300, width: 300, height: 200, x: 100, y: 100, toJSON: () => ({}) });
+  const [clientX, clientY] = where === 'inside' ? [200, 200] : [20, 20];
+  dialog.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX, clientY }));
 }
 
 /** Renders a trigger button plus the dialog, so focus restore has a real trigger. */
@@ -50,7 +60,7 @@ describe('shortcuts help dialog', () => {
     await openDialog(host);
     const dialog = host.querySelector('dialog')!;
     expect(dialog).not.toBeNull();
-    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    expect(isShownModal(dialog)).toBe(true); // opened with showModal(): top layer, inert page
     expect(dialog.getAttribute('aria-labelledby')).toBe('shortcuts-title');
     expect(document.getElementById('shortcuts-title')?.textContent).toBe('Keyboard shortcuts');
     expect([...dialog.querySelectorAll('.shortcut-group h3')].map((heading) => heading.textContent)).toEqual(['Navigation', 'Actions', 'Search']);
@@ -89,7 +99,7 @@ describe('shortcuts help dialog', () => {
     await act(async () => { press(document.activeElement!, 'Escape'); });
     expect(host.querySelector('dialog')).toBeNull();
     await openDialog(host);
-    await act(async () => { pressBackdrop(host.querySelector('.dialog-backdrop')!); }); // re-queried: reopen remounts the backdrop
+    await act(async () => { pressDialogAt(host.querySelector('dialog')!, 'outside'); }); // re-queried: reopen mounts a new dialog
     expect(host.querySelector('dialog')).toBeNull();
   });
 });

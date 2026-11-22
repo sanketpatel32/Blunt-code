@@ -149,7 +149,7 @@ describe('FilesPage tree search', () => {
     await act(async () => { toggle(host, 'Expand src')!.click(); await flush(); });
     expect(host.textContent).toContain('Could not load');
     const retry = [...host.querySelectorAll('button')].find((button) => button.textContent === 'Retry');
-    expect(retry).toBeDefined();
+    expect(retry).toBeInstanceOf(HTMLElement);
 
     enqueueChild('src', { items: [{ path: 'src/main.py', name: 'main.py', type: 'file', included: true }] });
     await act(async () => { retry!.click(); await flush(); });

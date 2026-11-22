@@ -1,9 +1,10 @@
-import { act, useState, type ReactNode } from 'react';
+import { act, StrictMode, useState, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AddWorkspaceDialog, folderPathProblem, ConfirmationDialog, FindingPreviewDialog, SuppressFindingDialog, SUPPRESSION_REASON_MAX } from './dialogs';
 import type { Finding } from '../types';
 import type { Notice } from '../lib/notice';
+import { isShownModal } from '../testDialogPolyfill';
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
@@ -19,6 +20,15 @@ function press(target: Element, key: string, shiftKey = false) {
 
 function pressBackdrop(target: Element) {
   target.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+}
+
+/** A modal dialog's ::backdrop click targets the dialog itself; only the
+ *  coordinates tell it apart from a press on the dialog's own box (its
+ *  scrollbar, say). jsdom has no layout, so give the dialog a box first. */
+function pressDialogAt(dialog: HTMLDialogElement, where: 'inside' | 'outside') {
+  dialog.getBoundingClientRect = () => ({ left: 100, top: 100, right: 400, bottom: 300, width: 300, height: 200, x: 100, y: 100, toJSON: () => ({}) });
+  const [clientX, clientY] = where === 'inside' ? [200, 200] : [20, 20];
+  dialog.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX, clientY }));
 }
 
 /** Renders a trigger button plus the dialog built by `dialog`, so focus restore has a real trigger. */
@@ -69,7 +79,7 @@ describe('dialog accessibility', () => {
     await openDialog(host);
     const dialog = host.querySelector('dialog')!;
     expect(dialog).not.toBeNull();
-    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    expect(isShownModal(dialog)).toBe(true); // opened with showModal(): top layer, inert page
     expect(dialog.getAttribute('aria-labelledby')).toBe('confirmation-title');
     expect(document.getElementById('confirmation-title')).not.toBeNull();
     const cancel = [...dialog.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === 'Cancel')!;
@@ -102,21 +112,20 @@ describe('dialog accessibility', () => {
   it('closes on backdrop mousedown but not on mousedown inside the dialog', async () => {
     const host = await renderHarness(confirmation);
     await openDialog(host);
-    const backdrop = host.querySelector('.dialog-backdrop')!;
     const dialog = host.querySelector('dialog')!;
     const heading = dialog.querySelector('h2')!;
     const cancel = [...dialog.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === 'Cancel')!;
-    await act(async () => { pressBackdrop(cancel); pressBackdrop(heading); pressBackdrop(dialog); });
+    await act(async () => { pressBackdrop(cancel); pressBackdrop(heading); pressDialogAt(dialog, 'inside'); });
     expect(host.querySelector('dialog')).not.toBeNull();
-    await act(async () => { pressBackdrop(backdrop); });
+    await act(async () => { pressDialogAt(dialog, 'outside'); });
     expect(host.querySelector('dialog')).toBeNull();
   });
 
   it('ignores Escape and backdrop mousedown while the confirmation dialog is busy', async () => {
     const host = await renderHarness((close) => confirmation(close, true));
     await openDialog(host);
-    const backdrop = host.querySelector('.dialog-backdrop')!;
-    await act(async () => { press(document.body, 'Escape'); pressBackdrop(backdrop); });
+    const dialog = host.querySelector('dialog')!;
+    await act(async () => { press(dialog, 'Escape'); pressDialogAt(dialog, 'outside'); dialog.dispatchEvent(new Event('cancel', { cancelable: true })); });
     expect(host.querySelector('dialog')).not.toBeNull();
     expect(host.textContent).toContain('Remove this workspace?');
   });
@@ -125,7 +134,7 @@ describe('dialog accessibility', () => {
     const host = await renderHarness((close) => <AddWorkspaceDialog onClose={close} onCreated={() => {}} notify={() => {}} />);
     await openDialog(host);
     const dialog = host.querySelector('dialog')!;
-    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    expect(isShownModal(dialog)).toBe(true); // opened with showModal(): top layer, inert page
     expect(dialog.getAttribute('aria-labelledby')).toBe('add-workspace-title');
     expect(document.getElementById('add-workspace-title')).not.toBeNull();
     const pathInput = host.querySelector<HTMLInputElement>('input[required]')!;
@@ -138,7 +147,7 @@ describe('dialog accessibility', () => {
     expect(document.activeElement).toBe(last);
     await act(async () => { last.focus(); press(last, 'Tab'); });
     expect(document.activeElement).toBe(first);
-    await act(async () => { pressBackdrop(host.querySelector('.dialog-backdrop')!); });
+    await act(async () => { pressDialogAt(host.querySelector('dialog')!, 'outside'); });
     expect(host.querySelector('dialog')).toBeNull();
     await openDialog(host);
     await act(async () => { press(document.activeElement!, 'Escape'); });
@@ -150,7 +159,7 @@ describe('dialog accessibility', () => {
     const host = await renderHarness((close) => <FindingPreviewDialog scanId="scan-1" finding={finding} onClose={close} />);
     await openDialog(host);
     const dialog = host.querySelector('dialog')!;
-    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    expect(isShownModal(dialog)).toBe(true); // opened with showModal(): top layer, inert page
     expect(dialog.getAttribute('aria-labelledby')).toBe('source-preview-title');
     expect(document.getElementById('source-preview-title')).not.toBeNull();
     const headerClose = dialog.querySelector<HTMLButtonElement>('header button')!;
@@ -158,7 +167,7 @@ describe('dialog accessibility', () => {
     const footerClose = [...dialog.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === 'Close')!;
     await act(async () => { footerClose.focus(); press(footerClose, 'Tab'); });
     expect(document.activeElement).toBe(headerClose);
-    await act(async () => { pressBackdrop(host.querySelector('.dialog-backdrop')!); });
+    await act(async () => { pressDialogAt(host.querySelector('dialog')!, 'outside'); });
     expect(host.querySelector('dialog')).toBeNull();
     await openDialog(host);
     await act(async () => { press(document.activeElement!, 'Escape'); });
@@ -186,7 +195,7 @@ describe('suppress finding dialog', () => {
     const host = await renderHarness(suppressDialog);
     await openDialog(host);
     const dialog = host.querySelector('dialog')!;
-    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    expect(isShownModal(dialog)).toBe(true); // opened with showModal(): top layer, inert page
     expect(dialog.getAttribute('aria-labelledby')).toBe('suppress-finding-title');
     expect(document.getElementById('suppress-finding-title')).not.toBeNull();
     const textarea = dialog.querySelector<HTMLTextAreaElement>('#suppress-finding-reason')!;
@@ -311,5 +320,69 @@ describe('add workspace path errors', () => {
     expect(notify).not.toHaveBeenCalled();
     expect(host.querySelector('#add-workspace-path-error')?.textContent).toBe('That folder does not exist. Check the spelling, or use Browse to pick it.');
     expect(host.querySelector('dialog')).not.toBeNull();
+  });
+});
+
+describe('native modal behaviour', () => {
+  it('routes a native cancel through the busy guard and reopens a dialog the browser force-closes while busy', async () => {
+    const onCancel = vi.fn();
+    const host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+    await act(async () => { root.render(<ConfirmationDialog title="Remove?" description="Gone." confirmLabel="Remove" busy onCancel={onCancel} onConfirm={() => {}} />); });
+    const dialog = host.querySelector('dialog')!;
+    const cancel = new Event('cancel', { cancelable: true });
+    await act(async () => { dialog.dispatchEvent(cancel); });
+    expect(cancel.defaultPrevented).toBe(true); // the browser must not close it
+    await act(async () => { dialog.close(); }); // a close request the browser would not let us cancel
+    expect(isShownModal(dialog)).toBe(true);
+    expect(onCancel).not.toHaveBeenCalled();
+    await act(async () => { root.render(<ConfirmationDialog title="Remove?" description="Gone." confirmLabel="Remove" busy={false} onCancel={onCancel} onConfirm={() => {}} />); });
+    await act(async () => { dialog.dispatchEvent(new Event('cancel', { cancelable: true })); });
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets only the top dialog of a stack handle Escape and Tab', async () => {
+    function Stack() {
+      const [outer, setOuter] = useState(true);
+      const [inner, setInner] = useState(true);
+      return <>
+        {outer && <ConfirmationDialog title="Outer" description="Underneath" confirmLabel="Outer go" busy={false} onCancel={() => setOuter(false)} onConfirm={() => {}} />}
+        {inner && <ConfirmationDialog title="Inner" description="Stacked on top" confirmLabel="Inner go" busy={false} onCancel={() => setInner(false)} onConfirm={() => {}} />}
+      </>;
+    }
+    const host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+    await act(async () => { root.render(<Stack />); });
+    const [outer, inner] = [...host.querySelectorAll('dialog')];
+    expect(isShownModal(outer) && isShownModal(inner)).toBe(true);
+    expect(inner.contains(document.activeElement)).toBe(true); // the newest dialog takes focus
+    const innerButtons = [...inner.querySelectorAll<HTMLButtonElement>('button')];
+    await act(async () => { innerButtons.at(-1)!.focus(); press(innerButtons.at(-1)!, 'Tab'); });
+    expect(document.activeElement).toBe(innerButtons[0]); // Tab wraps inside the top dialog only
+    await act(async () => { press(document.activeElement!, 'Escape'); });
+    expect(host.textContent).not.toContain('Stacked on top');
+    expect(host.textContent).toContain('Underneath'); // one Escape never tears down both layers
+  });
+
+  it('stays open through StrictMode\'s mount/cleanup/remount despite the queued close event', async () => {
+    const onCancel = vi.fn();
+    const host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+    await act(async () => { root.render(<StrictMode><ConfirmationDialog title="Remove?" description="Gone." confirmLabel="Remove" busy={false} onCancel={onCancel} onConfirm={() => {}} /></StrictMode>); });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(isShownModal(host.querySelector('dialog')!)).toBe(true);
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it('renders without the open attribute so the hook opens it with showModal()', async () => {
+    const host = await renderHarness(confirmation);
+    await openDialog(host);
+    const dialog = host.querySelector('dialog')!;
+    expect(isShownModal(dialog)).toBe(true);
+    await act(async () => { press(dialog.querySelector('button')!, 'Escape'); });
+    expect(host.querySelector('dialog')).toBeNull();
   });
 });

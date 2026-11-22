@@ -69,7 +69,7 @@ async function confirmVisibleAction(host: HTMLElement, id: string, operation: st
  *  is the kebab beside the row's single contextual control). */
 async function openToolMenu(host: HTMLElement, id: string) {
   const trigger = row(host, id).querySelector<HTMLButtonElement>('button[aria-label^="Actions for"]');
-  expect(trigger, 'row exposes an actions menu').toBeDefined();
+  expect(trigger, 'row exposes an actions menu').toBeInstanceOf(HTMLElement);
   await act(async () => {
     trigger!.dispatchEvent(new MouseEvent('pointerdown', { button: 0, bubbles: true, cancelable: true }));
   });
@@ -81,7 +81,7 @@ async function openToolMenu(host: HTMLElement, id: string) {
 async function confirmMenuAction(host: HTMLElement, id: string, operation: string) {
   await openToolMenu(host, id);
   const item = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((candidate) => candidate.textContent === operation);
-  expect(item, `no "${operation}" menu item`).toBeDefined();
+  expect(item, `no "${operation}" menu item`).toBeInstanceOf(HTMLElement);
   await act(async () => {
     item!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     item!.click();
@@ -279,7 +279,7 @@ describe('ToolsPage actions', () => {
     const { host } = await renderPage(fetchMock);
     await openToolMenu(host, 'Semgrep');
     const item = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((candidate) => candidate.textContent === 'Repair');
-    expect(item, 'no "Repair" menu item').toBeDefined();
+    expect(item, 'no "Repair" menu item').toBeInstanceOf(HTMLElement);
     await act(async () => {
       item!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
       item!.click();
