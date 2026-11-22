@@ -29,7 +29,7 @@ func TestPlanRequiresPentestProfileAndTarget(t *testing.T) {
 
 func TestOfflinePlanAllowsLoopbackOnly(t *testing.T) {
 	a := New()
-	a.Offline = true
+	a.Offline = func() bool { return true }
 	if _, err := a.Plan(context.Background(), analyzers.ScanRequest{Profile: analyzers.ProfilePentest, TargetURL: "https://example.com"}); err == nil || !strings.Contains(err.Error(), "offline") {
 		t.Errorf("offline plan for an external host = %v, want an offline refusal", err)
 	}

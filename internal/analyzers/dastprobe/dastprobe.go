@@ -25,12 +25,16 @@ const (
 )
 
 type Adapter struct {
-	// Offline restricts probing to loopback targets so offline mode never
-	// sends a request off the machine.
-	Offline bool
+	// Offline reports the live offline-mode setting; when it returns true
+	// probing is restricted to loopback targets so offline mode never sends
+	// a request off the machine. Read per plan, so toggling offline mode in
+	// Settings applies without a restart. Nil means online.
+	Offline func() bool
 }
 
 func New() *Adapter { return &Adapter{} }
+
+func (a *Adapter) offline() bool { return a.Offline != nil && a.Offline() }
 
 func (a *Adapter) ID() string          { return ID }
 func (a *Adapter) DisplayName() string { return "DAST Probe" }
@@ -41,7 +45,7 @@ func (a *Adapter) SupportedLanguages() []analyzers.Language { return analyzers.A
 
 func (a *Adapter) Check(context.Context, analyzers.ToolEnvironment) analyzers.ToolStatus {
 	detail := "built-in HTTP probe; runs on pentest scans given a target URL"
-	if a.Offline {
+	if a.offline() {
 		detail = "built-in HTTP probe; offline mode allows loopback targets only"
 	}
 	return analyzers.ToolStatus{Ready: true, Version: version, Detail: detail}
@@ -57,7 +61,7 @@ func (a *Adapter) Plan(_ context.Context, req analyzers.ScanRequest) (analyzers.
 	if err != nil {
 		return analyzers.AnalyzerPlan{}, fmt.Errorf("dast-probe: %w", err)
 	}
-	if a.Offline && !dast.IsLoopbackTarget(target.String()) {
+	if a.offline() && !dast.IsLoopbackTarget(target.String()) {
 		return analyzers.AnalyzerPlan{}, fmt.Errorf("offline mode: dast-probe only probes loopback targets (localhost, 127.0.0.1, ::1); %s would leave this machine", target.Host)
 	}
 	return analyzers.AnalyzerPlan{

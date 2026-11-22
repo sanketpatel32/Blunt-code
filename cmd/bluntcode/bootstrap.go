@@ -144,7 +144,7 @@ func openCore() (core *appCore, release func(), err error) {
 	_ = registry.Register(analyzerscheckov.New(filepath.Join(paths.ToolsDir, "iac-checkov", "3.3.16", "env", "checkov", "Scripts", "python.exe"), "3.3.16"))
 	_ = registry.Register(semgrep.New(semgrepExecutable, semgrepVersion, semgrepRules))
 	_ = registry.Register(managedSonar)
-	registerBuiltinAnalyzers(registry, appSettings.Offline)
+	registerBuiltinAnalyzers(registry, toolService.Offline)
 	scanService := scans.New(db, registry, bus, paths.ReportsDir, paths.ToolsDir, toolService)
 	app := &appCore{
 		paths:       paths,
@@ -207,9 +207,10 @@ func ensureWorkspace(ctx context.Context, db *database.DB, pathArg string) (core
 // checks that are guaranteed local and withhold only network-dependent work.
 // The DAST probe is the one outbound built-in; offline mode keeps it but
 // narrows it to loopback targets, so it fails honestly instead of dialing
-// out. Managed-tool analyzers keep failing honestly when their tool was never
+// out. offline is read live (the tool service's setting, which Settings
+// updates), so toggling offline mode needs no restart. Managed-tool analyzers keep failing honestly when their tool was never
 // downloaded (offline mode refuses downloads).
-func registerBuiltinAnalyzers(registry *analyzers.Registry, offline bool) {
+func registerBuiltinAnalyzers(registry *analyzers.Registry, offline func() bool) {
 	_ = registry.Register(pentest.New())
 	_ = registry.Register(secrets.New())
 	_ = registry.Register(todo.New())

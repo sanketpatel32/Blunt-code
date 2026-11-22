@@ -13,7 +13,8 @@ import (
 func TestOfflineKeepsLocalOnlyBuiltins(t *testing.T) {
 	for _, offline := range []bool{false, true} {
 		registry := analyzers.NewRegistry()
-		registerBuiltinAnalyzers(registry, offline)
+		current := offline
+		registerBuiltinAnalyzers(registry, func() bool { return current })
 		for _, id := range []string{"pentest", "secrets", "todo", "license-scan", dastprobe.ID} {
 			adapter, ok := registry.Get(id)
 			if !ok {
@@ -23,8 +24,15 @@ func TestOfflineKeepsLocalOnlyBuiltins(t *testing.T) {
 			if id != dastprobe.ID && !analyzers.AllowedOffline(id) {
 				t.Errorf("%s is local-only and must be allowed offline", id)
 			}
-			if probe, isProbe := adapter.(*dastprobe.Adapter); isProbe && probe.Offline != offline {
-				t.Errorf("dast-probe Offline = %v, want %v", probe.Offline, offline)
+			if probe, isProbe := adapter.(*dastprobe.Adapter); isProbe {
+				if probe.Offline == nil || probe.Offline() != offline {
+					t.Errorf("dast-probe must follow the live offline setting (want %v)", offline)
+				}
+				current = !offline
+				if probe.Offline() == offline {
+					t.Error("dast-probe cached the offline setting instead of reading it live")
+				}
+				current = offline
 			}
 		}
 	}
