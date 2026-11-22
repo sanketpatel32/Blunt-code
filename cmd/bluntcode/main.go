@@ -447,7 +447,7 @@ func removeServerToken() {
 
 // signInURL is the UI address carrying the token in the fragment, which the
 // browser keeps out of requests, server logs, and Referer headers; the UI
-// exchanges it for an HttpOnly session cookie and strips it from the URL.
+// stores it in origin-scoped localStorage and strips it from the URL.
 func signInURL(base, token string) string {
 	if token == "" {
 		return base
@@ -495,6 +495,9 @@ func handoffToPort(port int, noBrowser bool) bool {
 		return false
 	}
 	fmt.Println("Blunt Code already running on " + url)
+	if token != "" {
+		fmt.Println("Sign in: " + signInURL(url, token))
+	}
 	if !noBrowser {
 		openBrowser(signInURL(url, token), slog.New(slog.NewTextHandler(io.Discard, nil)))
 	}
