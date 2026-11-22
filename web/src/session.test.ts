@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { authHeaders, establishSession, signedUrl, STORAGE_KEY, takeFragmentToken } from './session';
+import { authHeaders, establishSession, openSigned, STORAGE_KEY, streamEvents, takeFragmentToken } from './session';
 
 function fakeLocation(hash: string): Location {
   return { hash, pathname: '/', search: '' } as Location;
@@ -68,20 +68,53 @@ describe('establishSession', () => {
   });
 });
 
-describe('signedUrl', () => {
-  it('mints a ticket cookie for the path and returns the bare URL', async () => {
+describe('streamEvents', () => {
+  it('sends the bearer header and dispatches parsed frames', async () => {
     window.localStorage.setItem(STORAGE_KEY, 'tok');
-    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ticket: 't/1', expires_in: 60 }), { status: 200 }));
-    expect(await signedUrl('/api/v1/scans/s/findings.csv?severity=high', fetcher)).toBe('/api/v1/scans/s/findings.csv?severity=high');
+    const frames = 'event: connected\ndata: {}\n\nevent: scan.stage\ndata: {"stage":"scan"}\n\n: ping\n\n';
+    const fetcher = vi.fn().mockResolvedValue(new Response(frames, { status: 200 }));
+    const seen: Array<[string, string]> = [];
+    await streamEvents('/api/v1/scans/s/events', (type, data) => seen.push([type, data]), new AbortController().signal, fetcher);
+    expect(seen).toEqual([['connected', '{}'], ['scan.stage', '{"stage":"scan"}']]);
     const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe('/api/v1/session/tickets');
-    expect(init.method).toBe('POST');
-    expect(init.headers).toEqual({ 'Content-Type': 'application/json', Authorization: 'Bearer tok' });
-    expect(JSON.parse(init.body as string)).toEqual({ path: '/api/v1/scans/s/findings.csv' });
+    expect(url).toBe('/api/v1/scans/s/events');
+    expect(init.headers).toEqual({ Authorization: 'Bearer tok' });
   });
 
-  it('falls back to the bare URL when minting fails', async () => {
+  it('rejects when the endpoint refuses the stream', async () => {
     const fetcher = vi.fn().mockResolvedValue(new Response(null, { status: 401 }));
-    expect(await signedUrl('/api/v1/scans/s/events', fetcher)).toBe('/api/v1/scans/s/events');
+    await expect(streamEvents('/api/v1/scans/s/events', () => {}, new AbortController().signal, fetcher)).rejects.toThrow('401');
+  });
+});
+
+describe('openSigned', () => {
+  it('fetches with the bearer header and downloads a blob URL', async () => {
+    window.localStorage.setItem(STORAGE_KEY, 'tok');
+    const fetcher = vi.fn().mockResolvedValue(new Response('csv,body', { status: 200 }));
+    const created = vi.fn().mockReturnValue('blob:mock');
+    const revoked = vi.fn();
+    (URL as unknown as { createObjectURL: typeof URL.createObjectURL; revokeObjectURL: typeof URL.revokeObjectURL }).createObjectURL = created;
+    (URL as unknown as { createObjectURL: typeof URL.createObjectURL; revokeObjectURL: typeof URL.revokeObjectURL }).revokeObjectURL = revoked;
+    const click = vi.fn();
+    const anchor = { href: '', download: '', click, remove: vi.fn() } as unknown as HTMLAnchorElement;
+    vi.spyOn(document, 'createElement').mockReturnValue(anchor);
+    await openSigned('/api/v1/scans/s/findings.csv?severity=high', 'download', fetcher);
+    const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/v1/scans/s/findings.csv?severity=high');
+    expect(init.headers).toEqual({ Authorization: 'Bearer tok' });
+    expect(anchor.href).toBe('blob:mock');
+    expect(anchor.download).toBe('findings.csv');
+    expect(click).toHaveBeenCalled();
+    expect(revoked).toHaveBeenCalledWith('blob:mock');
+    delete (URL as unknown as { createObjectURL?: unknown }).createObjectURL;
+    delete (URL as unknown as { revokeObjectURL?: unknown }).revokeObjectURL;
+  });
+
+  it('opens an unsigned tab rather than fabricating a download on failure', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(null, { status: 401 }));
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    await openSigned('/api/v1/scans/s/findings.csv', 'download', fetcher);
+    expect(open).toHaveBeenCalledWith('/api/v1/scans/s/findings.csv', '_blank', 'noopener,noreferrer');
+    open.mockRestore();
   });
 });

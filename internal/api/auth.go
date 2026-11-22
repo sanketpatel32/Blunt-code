@@ -9,8 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
-	"time"
 )
 
 // TokenFragmentKey is the URL fragment key the launcher passes the token in
@@ -57,64 +55,8 @@ func (s *Server) SetToken(token string) error {
 	return nil
 }
 
-// TicketCookie carries a ticket on the one GET it authorizes. The mint
-// response sets it HttpOnly + SameSite=Strict + Path-scoped + Max-Age-bound,
-// so the credential never appears in a URL, history, or Referer. It rides a
-// cookie because navigations and EventSource cannot set headers; unlike the
-// API token (localStorage, port-isolated) a ticket is single-use and dies
-// with its first redemption or the TTL, so the cross-port exposure a
-// localhost cookie has is spent-credential exposure.
-const TicketCookie = "bluntcode_ticket"
-
-const ticketTTL = time.Minute
-
-// ticketStore holds single-use tickets, each valid for one GET of one API
-// path for ticketTTL. A cookie rides on ambient requests to this host —
-// including other ports — so a ticket must be worthless once used or expired,
-// and useless for any other path.
-type ticketStore struct {
-	mu      sync.Mutex
-	tickets map[string]ticket
-}
-
-type ticket struct {
-	path    string
-	expires time.Time
-}
-
-func (t *ticketStore) mint(path string, now time.Time) (string, error) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if t.tickets == nil {
-		t.tickets = map[string]ticket{}
-	}
-	for id, existing := range t.tickets {
-		if !now.Before(existing.expires) {
-			delete(t.tickets, id)
-		}
-	}
-	id, err := NewToken()
-	if err != nil {
-		return "", err
-	}
-	t.tickets[id] = ticket{path: path, expires: now.Add(ticketTTL)}
-	return id, nil
-}
-
-func (t *ticketStore) redeem(id, path string, now time.Time) bool {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	found, ok := t.tickets[id]
-	if !ok {
-		return false
-	}
-	delete(t.tickets, id)
-	return found.path == path && now.Before(found.expires)
-}
-
 // authenticate reports whether r carries the server token as a bearer
-// header. A present but wrong Authorization header is never rescued by a
-// ticket.
+// header.
 func (s *Server) authenticate(r *http.Request) bool {
 	header := r.Header.Get("Authorization")
 	if header == "" {
@@ -122,33 +64,6 @@ func (s *Server) authenticate(r *http.Request) bool {
 	}
 	scheme, value, ok := strings.Cut(header, " ")
 	return ok && strings.EqualFold(scheme, "Bearer") && s.tokenMatches(strings.TrimSpace(value))
-}
-
-// redeemTicket authenticates a header-less GET by its single-use ticket
-// cookie. A query-string ticket never authenticates: credentials do not
-// belong in URLs.
-func (s *Server) redeemTicket(r *http.Request) bool {
-	if r.Method != http.MethodGet || r.Header.Get("Authorization") != "" {
-		return false
-	}
-	cookie, err := r.Cookie(TicketCookie)
-	if err != nil || cookie.Value == "" {
-		return false
-	}
-	return s.tickets.redeem(cookie.Value, r.URL.Path, time.Now())
-}
-
-// ticketCookie builds the minted cookie, or with an empty value the expired
-// one written after redemption so a burned ticket stops being replayed.
-func ticketCookie(path, value string, maxAge int) *http.Cookie {
-	return &http.Cookie{
-		Name:     TicketCookie,
-		Value:    value,
-		Path:     path,
-		HttpOnly: true,
-		SameSite: http.SameSiteStrictMode,
-		MaxAge:   maxAge,
-	}
 }
 
 func (s *Server) tokenMatches(candidate string) bool {
@@ -179,14 +94,9 @@ func (s *Server) apiGuard(next http.Handler) http.Handler {
 			return
 		}
 		if !s.authenticate(r) {
-			if !s.redeemTicket(r) {
-				w.Header().Set("WWW-Authenticate", `Bearer realm="bluntcode"`)
-				fail(w, http.StatusUnauthorized, "UNAUTHORIZED", "This Blunt Code session is not signed in. Reopen Blunt Code from its launcher, or open the sign-in URL it printed.")
-				return
-			}
-			// The ticket is spent; drop the cookie so the browser stops
-			// replaying a dead credential on every matching navigation.
-			http.SetCookie(w, ticketCookie(r.URL.Path, "", -1))
+			w.Header().Set("WWW-Authenticate", `Bearer realm="bluntcode"`)
+			fail(w, http.StatusUnauthorized, "UNAUTHORIZED", "This Blunt Code session is not signed in. Reopen Blunt Code from its launcher, or open the sign-in URL it printed.")
+			return
 		}
 		// A text/plain or form body is what a no-preflight cross-origin
 		// write looks like; only JSON is ever a legitimate body here.
@@ -232,35 +142,4 @@ func jsonContentType(r *http.Request) bool {
 // answered 401 otherwise.
 func (s *Server) session(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
-}
-
-// sessionTicket mints a single-use ticket for one GET of one API path, for
-// navigations that cannot send the Authorization header. Only the bearer
-// token can mint; a ticket cannot mint another.
-func (s *Server) sessionTicket(w http.ResponseWriter, r *http.Request) {
-	if !s.authenticate(r) {
-		fail(w, http.StatusUnauthorized, "UNAUTHORIZED", "Tickets require the API token.")
-		return
-	}
-	var input struct {
-		Path string `json:"path"`
-	}
-	// Same strict decode every other endpoint uses: unknown fields are
-	// rejected, not silently ignored.
-	if err := decode(r, &input); err != nil {
-		fail(w, http.StatusBadRequest, "INVALID_REQUEST", "Send {\"path\": \"/api/v1/...\"}.")
-		return
-	}
-	prefix := "/api/" + APIVersion + "/"
-	if !strings.HasPrefix(input.Path, prefix) || strings.ContainsAny(input.Path, "?#") || strings.HasPrefix(input.Path, prefix+"session") {
-		fail(w, http.StatusBadRequest, "INVALID_REQUEST", "Tickets are issued for a single /api/"+APIVersion+"/ path.")
-		return
-	}
-	ticket, err := s.tickets.mint(input.Path, time.Now())
-	if err != nil {
-		fail(w, http.StatusInternalServerError, "TICKET_FAILED", "Could not issue a session ticket.")
-		return
-	}
-	http.SetCookie(w, ticketCookie(input.Path, ticket, int(ticketTTL.Seconds())))
-	writeJSON(w, http.StatusOK, map[string]any{"ticket": ticket, "expires_in": int(ticketTTL.Seconds())})
 }

@@ -5,15 +5,14 @@
  * screenshots. The token is kept in localStorage, which is isolated per
  * origin including the port, and sent as `Authorization: Bearer`. A cookie
  * would be sent to every port on 127.0.0.1, i.e. to any other local server
- * the browser visits. Navigations that cannot carry a header (EventSource,
- * downloads, new tabs) use a single-use, path-bound ticket from `signedUrl`,
- * delivered as an HttpOnly cookie so the credential never touches a URL,
- * browser history, or a Referer header.
+ * the browser visits. Downloads and event streams therefore go through
+ * `fetch` with the bearer header (`openSigned`, `streamEvents`) instead of
+ * URL tickets or cookies — no credential ever touches a URL, browser
+ * history, a Referer header, or an ambient cookie.
  */
 export type SessionState = 'signed-in' | 'signed-out' | 'unknown';
 
 const SESSION_URL = '/api/v1/session';
-const TICKETS_URL = '/api/v1/session/tickets';
 const TOKEN_KEY = 'token';
 export const STORAGE_KEY = 'bluntcode.apiToken';
 
@@ -63,31 +62,66 @@ export async function establishSession(fetcher: typeof fetch = fetch, loc: Locat
 }
 
 /**
- * Mints a single-use, path-bound ticket cookie for `url` (an /api/v1 path,
- * optionally with a query) valid for about a minute, then returns the bare
- * URL — the cookie authenticates the navigation, so the credential never
- * appears in the URL. If minting fails the URL still comes back unsigned, so
- * the request fails visibly with 401 rather than silently.
+ * Fetches `url` with the bearer token and delivers the body as a download or
+ * a new tab via an object URL. Unlike an `<a href>` navigation, the request
+ * carries `Authorization`, so no credential is exposed in a URL, cookie, or
+ * Referer.
  */
-export async function signedUrl(url: string, fetcher: typeof fetch = fetch): Promise<string> {
-  const path = url.split(/[?#]/, 1)[0]!;
-  try {
-    const response = await fetcher(TICKETS_URL, { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ path }) });
-    if (!response.ok) return url;
-  } catch {
-    // The URL goes back unsigned and the navigation fails visibly.
+export async function openSigned(url: string, mode: 'download' | 'tab' = 'download', fetcher: typeof fetch = fetch): Promise<void> {
+  const response = await fetcher(url, { headers: authHeaders() });
+  if (!response.ok) {
+    // Fail visibly: an unsigned navigation would 401 anyway, so surface it.
+    window.open(url, '_blank', 'noopener,noreferrer');
+    return;
   }
-  return url;
+  const objectUrl = URL.createObjectURL(await response.blob());
+  try {
+    if (mode === 'tab') {
+      window.open(objectUrl, '_blank', 'noopener,noreferrer');
+      // The new tab owns the blob now; revoking at timeout frees it once the
+      // document has loaded without a dangling per-tab reference.
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+      return;
+    }
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = url.split('/').pop()?.split('?')[0] ?? 'download';
+    document.body.append(link);
+    link.click();
+    link.remove();
+  } finally {
+    if (mode === 'download') URL.revokeObjectURL(objectUrl);
+  }
 }
 
-/** Follows an API link (download or new tab) with a fresh ticket. */
-export async function openSigned(url: string, mode: 'download' | 'tab' = 'download'): Promise<void> {
-  const link = document.createElement('a');
-  link.href = await signedUrl(url);
-  link.rel = 'noopener noreferrer';
-  if (mode === 'download') link.download = '';
-  else link.target = '_blank';
-  document.body.append(link);
-  link.click();
-  link.remove();
+/**
+ * Reads a text/event-stream endpoint via fetch — unlike EventSource it can
+ * carry the Authorization header, so live progress needs no URL or cookie
+ * credential. Parses `event:`/`data:` frames and heartbeat comments
+ * (`: ping`). Resolves when the server ends the stream; rejects on HTTP or
+ * network failure and on abort (signal-triggered AbortError).
+ */
+export async function streamEvents(url: string, onEvent: (type: string, data: string) => void, signal: AbortSignal, fetcher: typeof fetch = fetch): Promise<void> {
+  const response = await fetcher(url, { headers: authHeaders(), signal });
+  if (!response.ok || !response.body) throw new Error(`events stream failed: ${response.status}`);
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) return;
+    buffer += decoder.decode(value, { stream: true });
+    let cut: number;
+    while ((cut = buffer.indexOf('\n\n')) >= 0) {
+      const frame = buffer.slice(0, cut);
+      buffer = buffer.slice(cut + 2);
+      let type = 'message';
+      const data: string[] = [];
+      for (const line of frame.split('\n')) {
+        if (line.startsWith('data:')) data.push(line.slice(5).replace(/^ /, ''));
+        else if (line.startsWith('event:')) type = line.slice(6).trim();
+      }
+      if (data.length > 0) onEvent(type, data.join('\n'));
+    }
+  }
 }

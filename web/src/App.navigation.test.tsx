@@ -30,6 +30,8 @@ const emptyStats = {
 async function renderApp(fetchMock?: ReturnType<typeof vi.fn>) {
   vi.stubGlobal('fetch', fetchMock ?? vi.fn((input: string) => {
     if (input === '/api/v1/stats') return Promise.resolve(json(emptyStats));
+    // Live scans stream over fetch: hold the connection open inertly.
+    if (input.endsWith('/events')) return Promise.resolve(new Response(new ReadableStream({ start() {} }), { status: 200, headers: { 'Content-Type': 'text/event-stream' } }));
     return Promise.resolve(json({ items: [] }));
   }));
   const host = document.createElement('div');
@@ -178,7 +180,6 @@ describe('browser history and hostile URLs', () => {
 
   it('shows the error panel for an unknown scan id and never executes the id as markup', async () => {
     window.history.replaceState({}, '', '/scans/zzz%3Cscript%3Ealert(1)%3C%2Fscript%3E');
-    vi.stubGlobal('EventSource', class { addEventListener() {} close() {} }); // jsdom has no SSE; the page must still render its error state
     const fetchMock = vi.fn(() => Promise.resolve(json({}, 404)));
     const host = await renderApp(fetchMock);
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });

@@ -138,10 +138,7 @@ func ResetRateLimiter() {
 // handler runs.
 func rateLimitMiddleware(mux *http.ServeMux, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Ticket minting precedes every download and live-progress
-		// (re)connect; it changes no state, so it must not drain the
-		// mutation budget.
-		if isStateChanging(r.Method) && r.URL.Path != "/api/"+APIVersion+"/session/tickets" {
+		if isStateChanging(r.Method) {
 			if ok, retryAfter := bucketFor(mux, r).take(time.Now()); !ok {
 				w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
 				fail(w, http.StatusTooManyRequests, "RATE_LIMITED", "Too many requests; retry shortly.")

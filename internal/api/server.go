@@ -42,7 +42,6 @@ type Server struct {
 	openFolder func(dir string) error
 	cache      *workspaceCaches
 	token      string
-	tickets    ticketStore
 	// wsLocks serializes per-workspace check-and-act sequences (active-scan
 	// probe then delete, active-scan probe then start) that are otherwise a
 	// read-then-act race on the scans table.
@@ -136,7 +135,6 @@ func (s *Server) SetShutdown(fn func()) { s.shutdown = fn }
 func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/health", s.health)
 	s.mux.HandleFunc("GET /api/v1/session", s.session)
-	s.mux.HandleFunc("POST /api/v1/session/tickets", s.sessionTicket)
 	s.mux.HandleFunc("GET /api/v1/meta", s.meta)
 	s.mux.HandleFunc("GET /api/v1/stats", s.globalStats)
 	s.mux.HandleFunc("GET /api/v1/settings", s.getSettings)
