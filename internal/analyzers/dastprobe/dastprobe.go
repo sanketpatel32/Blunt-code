@@ -97,7 +97,9 @@ func (a *Adapter) Run(ctx context.Context, p analyzers.AnalyzerPlan, _ analyzers
 	if err != nil {
 		return fail(fmt.Errorf("marshal dast-probe results: %w", err))
 	}
-	return analyzers.AnalyzerResult{Plan: p, Stdout: payload, StartedAt: started, FinishedAt: time.Now()}, nil
+	// Follow-up checks that got no answer leave coverage partial: the run
+	// succeeds with warnings rather than claiming a full probe.
+	return analyzers.AnalyzerResult{Plan: p, Stdout: payload, StartedAt: started, FinishedAt: time.Now(), Warnings: resp.Warnings}, nil
 }
 
 func (a *Adapter) Normalize(_ context.Context, result analyzers.AnalyzerResult) ([]analyzers.Finding, []analyzers.Metric, error) {

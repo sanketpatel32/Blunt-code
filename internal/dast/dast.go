@@ -52,7 +52,10 @@ type ProbeResponse struct {
 	HeadersFound   []string  `json:"headers_found"`
 	HeadersMissing []string  `json:"headers_missing"`
 	Findings       []Finding `json:"findings"`
-	ProbedAt       string    `json:"probed_at"`
+	// Warnings lists follow-up checks (CORS preflight, sensitive paths) that
+	// got no answer, so their absence of findings is not a clean result.
+	Warnings []string `json:"warnings,omitempty"`
+	ProbedAt string   `json:"probed_at"`
 }
 
 // Run performs dynamic security probing against input.TargetURL.
@@ -270,12 +273,23 @@ func Run(ctx context.Context, input ProbeRequest) (ProbeResponse, error) {
 		})
 	}
 
+	var warnings []string
+	checkDo := func(req *http.Request, check string) (*http.Response, error) {
+		resp, err := client.Do(req)
+		// A refused cross-host redirect means the resource is not served on
+		// the named host: a real answer, not a missed check.
+		if err != nil && !errors.Is(err, errCrossHostRedirect) {
+			warnings = append(warnings, fmt.Sprintf("%s did not complete: %v", check, err))
+		}
+		return resp, err
+	}
+
 	// 6. CORS Wildcard Check
 	corsReq, _ := http.NewRequestWithContext(reqCtx, "OPTIONS", target, nil)
 	if corsReq != nil {
 		corsReq.Header.Set("Origin", "https://evil-attacker.com")
 		corsReq.Header.Set("Access-Control-Request-Method", "POST")
-		if corsResp, err := client.Do(corsReq); err == nil {
+		if corsResp, err := checkDo(corsReq, "CORS preflight"); err == nil {
 			allowOrigin := corsResp.Header.Get("Access-Control-Allow-Origin")
 			allowCreds := corsResp.Header.Get("Access-Control-Allow-Credentials")
 			corsResp.Body.Close()
@@ -324,7 +338,7 @@ func Run(ctx context.Context, input ProbeRequest) (ProbeResponse, error) {
 		for _, p := range probePaths {
 			probeURL := baseURL + p.path
 			if pReq, err := http.NewRequestWithContext(reqCtx, "GET", probeURL, nil); err == nil {
-				if pResp, err := client.Do(pReq); err == nil {
+				if pResp, err := checkDo(pReq, "GET "+p.path); err == nil {
 					pBody, _ := io.ReadAll(io.LimitReader(pResp.Body, 1024))
 					pResp.Body.Close()
 					if pResp.StatusCode == 200 && (p.match == "" || strings.Contains(string(pBody), p.match)) {
@@ -385,6 +399,7 @@ func Run(ctx context.Context, input ProbeRequest) (ProbeResponse, error) {
 		HeadersFound:   headersFound,
 		HeadersMissing: headersMissing,
 		Findings:       findings,
+		Warnings:       warnings,
 		ProbedAt:       time.Now().UTC().Format(time.RFC3339),
 	}, nil
 }

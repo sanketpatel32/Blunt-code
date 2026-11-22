@@ -142,3 +142,33 @@ func TestFingerprintsDifferAcrossTargets(t *testing.T) {
 		t.Error("fingerprints must be stable for one target")
 	}
 }
+
+// TestRunWarnsWhenFollowUpChecksFail: a target that answers the first GET
+// but drops later requests must not be reported as a complete probe.
+func TestRunWarnsWhenFollowUpChecksFail(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/" {
+			_, _ = w.Write([]byte("ok"))
+			return
+		}
+		hijacker, ok := w.(http.Hijacker)
+		if !ok {
+			t.Fatal("hijack unsupported")
+		}
+		conn, _, _ := hijacker.Hijack()
+		_ = conn.Close()
+	}))
+	defer server.Close()
+	a := New()
+	plan, err := a.Plan(context.Background(), analyzers.ScanRequest{Profile: analyzers.ProfilePentest, TargetURL: server.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := a.Run(context.Background(), plan, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Warnings) == 0 {
+		t.Error("dropped CORS/path checks must surface as run warnings")
+	}
+}
