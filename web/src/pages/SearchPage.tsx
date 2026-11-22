@@ -420,24 +420,6 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
     }
   };
 
-  // One shared scale for the facet meters, computed once per render: the
-  // sqrt of every band's count, normalised against their total. Per-row
-  // flex-grow cannot express "these are comparable" - each row would fill its
-  // own track and every bar would read as 100%.
-  const facetTotal = severityCounts
-    ? SEVERITIES.reduce((sum, sev) => sum + Math.sqrt(severityCounts[sev] ?? 0), 0)
-    : 0;
-  const facetPct = (sev: string) => {
-    if (!severityCounts || facetTotal <= 0) return '0%';
-    const value = Math.sqrt(severityCounts[sev] ?? 0);
-    return value > 0 ? `${Math.max((value / facetTotal) * 100, 1.5)}%` : '0%';
-  };
-  /* A meter that renders five identical bars encodes nothing — when every
-     band's count is the same, the shape IS flat and the bars read as
-     decoration. Only draw the meter when it can actually discriminate. */
-  const facetDiscriminates = severityCounts
-    ? SEVERITIES.some((sev) => (severityCounts[sev] ?? 0) !== (severityCounts[SEVERITIES[0]] ?? 0))
-    : false;
 
   const facets = (
     <div className="search-facets space-y-5">
@@ -478,26 +460,6 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                   />
                   <span className="capitalize facet-sev-label">{sev}</span>
                 </div>
-                {/* A proportion bar, so the facet shows the SHAPE of the result
-                    set and not just five numbers. Widths are explicit percentages
-                    of ONE shared scale (sqrt of each count, normalised across all
-                    bands) rather than flex-grow: each row has its own track, so a
-                    flex fill would always reach 100% and the bar would say
-                    nothing at all. Sqrt for the same reason as the board's bar —
-                    proportionally, 40 criticals against 55k highs draws critical
-                    as an invisible sliver, and that is the band a security user
-                    most needs to see. The exact count stays on the right.
-                    Loop 142 · the label and count are fixed-width, so this
-                    percentage is now rendered against an identical track on all
-                    five rows instead of five different leftovers. */}
-                {facetDiscriminates && (
-                  <span className="facet-meter" aria-hidden="true">
-                    <span
-                      className={`facet-meter-fill sev-${sev}`}
-                      style={{ width: facetPct(sev) }}
-                    />
-                  </span>
-                )}
                 {severityCounts && (
                   <Badge variant={isSelected ? 'outline' : 'secondary'} className="facet-count-slot text-xs tabular-nums px-1.5 py-0">
                     {severityCounts[sev] ?? 0}
@@ -948,9 +910,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                     {visibleCols.location && <th scope="col">Location</th>}
                     {visibleCols.severity && <th scope="col" className="search-cell-severity">Severity</th>}
                     {visibleCols.actions && (
-                      <th scope="col" className="search-cell-action">
-                        <span className="sr-only">Actions</span>
-                      </th>
+                      <th scope="col" className="search-cell-action">Actions</th>
                     )}
                   </tr>
                 </thead>
@@ -1063,7 +1023,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                                     title={stripMessagePrefix(finding)}
                                     onClick={(event) => { event.stopPropagation(); setSelectedFinding(finding); }}
                                   >
-                                    {finding.start_line ? `Line ${finding.start_line}` : findingLocation(finding)}
+                                    {finding.start_line ? `Line ${finding.start_line}` : findingLocationParts(finding).file}
                                   </button>
                                 ))}
                               </span>

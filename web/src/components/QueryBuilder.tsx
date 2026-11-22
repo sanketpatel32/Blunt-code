@@ -140,7 +140,7 @@ export function QueryBuilder({ group, onChange, onApply, facetCounts, analyzers 
             const opts = optionsForField(row.field, analyzers, rules, counts);
             const isFreeText = opts.length === 0;
             return (
-              <div key={row.id} role="listitem" className="group/row flex items-center gap-1.5 rounded-[var(--radius-lg)] border border-[var(--color-rule-faint)] bg-[var(--color-surface)] p-2 focus-within:border-[var(--color-rule-strong)] focus-within:shadow-xs">
+              <div key={row.id} role="listitem" className="group/row flex flex-wrap items-center gap-1.5 rounded-[var(--radius-lg)] border border-[var(--color-rule-faint)] bg-[var(--color-surface)] p-2 focus-within:border-[var(--color-rule-strong)] focus-within:shadow-xs">
                 <button
                   type="button"
                   aria-label={`Drag to reorder condition ${idx + 1}`}
@@ -178,7 +178,7 @@ export function QueryBuilder({ group, onChange, onApply, facetCounts, analyzers 
                   </SelectContent>
                 </Select>
 
-                <div className="min-w-0 flex-1">
+                <div className="min-w-[10rem] flex-1">
                   {isFreeText ? (
                     <input
                       value={row.value}

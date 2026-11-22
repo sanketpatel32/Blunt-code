@@ -36,7 +36,7 @@ function groupByDay(items: AppNotification[]): Map<string, AppNotification[]> {
 
 type Tab = 'all' | 'unread' | 'scans';
 
-export function NotificationsCenter({ routeKey = '', side = 'bottom' }: { routeKey?: string; side?: 'top' | 'right' | 'bottom' | 'left' }) {
+export function NotificationsCenter({ routeKey = '', side = 'bottom', align = 'end' }: { routeKey?: string; side?: 'top' | 'right' | 'bottom' | 'left'; align?: 'start' | 'center' | 'end' }) {
   const [items, setItems] = useState<AppNotification[]>(() => getNotifications());
   const [tab, setTab] = useState<Tab>('all');
   const [soundOn, setSoundOn] = useState(false);
@@ -101,7 +101,7 @@ export function NotificationsCenter({ routeKey = '', side = 'bottom' }: { routeK
           )}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent side={side} sideOffset={8} align="end" className="w-80 p-0 shadow-xl rounded-[var(--radius-lg)] overflow-hidden">
+      <DropdownMenuContent side={side} sideOffset={8} align={align} className="w-80 p-0 shadow-xl rounded-[var(--radius-lg)] overflow-hidden">
         <div className="flex items-center justify-between px-3 py-2">
           <DropdownMenuLabel className="p-0 text-sm font-semibold">Notifications</DropdownMenuLabel>
           <div className="flex items-center gap-1.5">

@@ -5,6 +5,7 @@ import { useLoad } from '../hooks/useLoad';
 import { LanguageCoverage } from '../components/LanguageCoverage';
 import { PageHeader } from '../components/PageHeader';
 import { Badge } from '../components/ui/badge';
+import { Button } from '../components/ui/button';
 
 /**
  * Privacy point icons drawn inline (AboutPage gets no stylesheet of its own) so
@@ -70,9 +71,9 @@ function EyeOffIcon(props: SVGProps<SVGSVGElement>) {
           <dt>Platform</dt><dd>{platform || 'Unknown'}</dd>
         </dl>
         <p aria-live="polite" style={{ margin: 'var(--space-xl) 0 0' }}>
-          <button type="button" className="button secondary" onClick={() => void copyVersionInfo()}>
+          <Button variant="outline" size="sm" onClick={() => void copyVersionInfo()}>
             {copied ? 'Copied' : 'Copy version info'}
-          </button>
+          </Button>
         </p>
       </section>
       <UpdateCard version={meta.data?.version ?? ''} onUpdateHandoff={onUpdateHandoff} />
@@ -130,19 +131,19 @@ function UpdateCard({ version, onUpdateHandoff }: { version: string; onUpdateHan
   return <section className="about-card" aria-label="Updates" style={{ marginTop: 'var(--space-lg)' }}>
     <h2>Updates {version ? <span className="badge">v{version} installed</span> : null}</h2>
     <div aria-live="polite">
-      {state.phase === 'idle' && <p style={{ margin: 'var(--space-md) 0 0' }}><button type="button" className="button" onClick={() => void check()} disabled={!version}>Check for updates</button></p>}
+      {state.phase === 'idle' && <p style={{ margin: 'var(--space-md) 0 0' }}><Button onClick={() => void check()} disabled={!version}>Check for updates</Button></p>}
       {state.phase === 'checking' && <p className="muted" style={{ margin: 'var(--space-md) 0 0' }}>Checking GitHub releases…</p>}
-      {state.phase === 'current' && <p style={{ margin: 'var(--space-md) 0 0' }}>You are on the latest release ({state.latest}). <button type="button" className="button secondary" onClick={() => void check()}>Check again</button></p>}
+      {state.phase === 'current' && <p style={{ margin: 'var(--space-md) 0 0' }}>You are on the latest release ({state.latest}). <Button variant="outline" size="sm" onClick={() => void check()}>Check again</Button></p>}
       {(state.phase === 'available' || state.phase === 'applying') && <div style={{ margin: 'var(--space-md) 0 0', display: 'grid', gap: 'var(--space-sm)' }}>
         <p><strong>v{state.latest} is available.</strong>{state.notes ? <span className="muted"> {state.notes.split(NEWLINE).find((line: string) => line.trim()) ?? ''}</span> : null}</p>
         {state.phase === 'available'
           ? <p style={{ display: 'flex', gap: 'var(--space-sm)', flexWrap: 'wrap' }}>
-            <button type="button" className="button" onClick={() => void apply()}>Update now</button>
-            <a className="button secondary" href={state.releaseUrl} target="_blank" rel="noreferrer">Release notes</a>
+            <Button onClick={() => void apply()}>Update now</Button>
+            <Button variant="outline" asChild><a href={state.releaseUrl} target="_blank" rel="noreferrer">Release notes</a></Button>
           </p>
           : <p className="muted">Installer launched. Blunt Code closes, installs the update, and reopens on its own.</p>}
       </div>}
-      {state.phase === 'error' && <p style={{ margin: 'var(--space-md) 0 0' }} role="alert">{state.message} <button type="button" className="button secondary" onClick={() => void check()}>Try again</button></p>}
+      {state.phase === 'error' && <p style={{ margin: 'var(--space-md) 0 0' }} role="alert">{state.message} <Button variant="outline" size="sm" onClick={() => void check()}>Try again</Button></p>}
     </div>
   </section>;
 }
