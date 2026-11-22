@@ -42,7 +42,11 @@ func (s *Server) reportModel(ctx context.Context, scan core.Scan, work core.Work
 		selectedPaths = scan.Snapshot.SelectedFiles
 	}
 	if previousID, previousErr := s.db.PreviousCompletedScanID(ctx, scan.WorkspaceID, scan.ID); previousErr == nil {
-		previous, previousFindingsErr := s.db.Findings(ctx, previousID)
+		// The comparison only reads fingerprint + analyzer + path of the
+		// previous scan's findings; loading full rows doubled the decode
+		// (metadata_json unmarshal and ORDER BY included) for fields the
+		// renderers never touch.
+		previous, previousFindingsErr := s.db.FindingIdentities(ctx, previousID)
 		succeeded, succeededErr := s.db.SuccessfulAnalyzerIDs(ctx, scan.ID)
 		if previousFindingsErr == nil && succeededErr == nil {
 			comparison = scans.Compare(findings, scans.FilterSuppressed(previous, suppressed), scans.NewComparisonCoverage(succeeded, selectedPaths))
