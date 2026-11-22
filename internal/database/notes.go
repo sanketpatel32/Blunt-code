@@ -12,7 +12,7 @@ type FindingNote struct {
 }
 
 func (d *DB) FindingNotes(ctx context.Context, workspaceID, fingerprint string) ([]FindingNote, error) {
-	rows, err := d.SQL.QueryContext(ctx, "SELECT id,text,created_at FROM finding_notes WHERE workspace_id=? AND fingerprint=? ORDER BY created_at,id", workspaceID, fingerprint)
+	rows, err := d.SQL.QueryContext(ctx, "SELECT id,text,created_at FROM finding_notes WHERE workspace_id=? AND fingerprint=? ORDER BY created_at,rowid", workspaceID, fingerprint)
 	if err != nil {
 		return nil, err
 	}
