@@ -213,6 +213,11 @@ func (a *Adapter) Normalize(_ context.Context, result analyzers.AnalyzerResult) 
 	if err := json.Unmarshal(result.Stdout, &raw); err != nil {
 		return nil, nil, fmt.Errorf("parse gitleaks JSON: %w", err)
 	}
+	source, _ := result.Plan.Metadata[planKeySource].(string)
+	cmdDir := ""
+	if len(result.Plan.Commands) > 0 {
+		cmdDir = result.Plan.Commands[0].Dir
+	}
 	out := make([]analyzers.Finding, 0, len(raw))
 	for _, d := range raw {
 		f := analyzers.Finding{
@@ -222,7 +227,7 @@ func (a *Adapter) Normalize(_ context.Context, result analyzers.AnalyzerResult) 
 			Category:     analyzers.CategorySecurity,
 			Title:        d.RuleID,
 			Message:      messageFor(d),
-			RelativePath: analyzers.PlanRelativePath(result.Plan, d.File),
+			RelativePath: findingRelativePath(source, cmdDir, d.File),
 			StartLine:    d.StartLine,
 			StartColumn:  d.StartColumn,
 			EndLine:      d.EndLine,
@@ -240,6 +245,34 @@ func (a *Adapter) Normalize(_ context.Context, result analyzers.AnalyzerResult) 
 		out = append(out, f)
 	}
 	return out, nil, nil
+}
+
+// findingRelativePath maps a gitleaks report path back to a workspace-
+// relative path. Report paths are absolute or relative to the command's
+// working directory — which is an isolated scratch dir when repo config is
+// untrusted, producing "../.." runs that used to land verbatim in findings.
+// Resolve against the command dir first, then re-anchor to the source root;
+// paths that genuinely escape the root keep the honest "../.." form.
+func findingRelativePath(source, cmdDir, reportPath string) string {
+	// Rel resolves absolute paths and same-form relative paths directly —
+	// this also handles reports serialized on another OS where IsAbs is a
+	// platform-local judgement.
+	for _, base := range []string{source, cmdDir} {
+		if base == "" {
+			continue
+		}
+		if rel, err := filepath.Rel(base, filepath.Clean(reportPath)); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return filepath.ToSlash(rel)
+		}
+	}
+	// Genuinely relative to the command's working directory (the isolated
+	// scratch dir when repo config is untrusted): join, then re-anchor.
+	if cmdDir != "" && !filepath.IsAbs(reportPath) {
+		if rel, err := filepath.Rel(source, filepath.Join(cmdDir, reportPath)); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return filepath.ToSlash(rel)
+		}
+	}
+	return filepath.ToSlash(reportPath)
 }
 
 // severityFor maps rule ids to Blunt Code severities. gitleaks 8.30 reports

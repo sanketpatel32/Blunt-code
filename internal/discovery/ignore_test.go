@@ -112,6 +112,38 @@ func TestWorkspaceExcludesMerge(t *testing.T) {
 	})
 }
 
+// TestWorkspaceExcludesGitIgnore pins the .gitignore merge: bare names become
+// any-depth **/name patterns (git semantics), anchored patterns keep their
+// root-relative form, trailing dir markers drop, and negations are skipped.
+func TestWorkspaceExcludesGitIgnore(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte("coverage/\n/build.log\n*.tmp\ndocs/*.gen\n!keep.tmp\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := WorkspaceExcludes(root, nil)
+	want := []string{"coverage", "/build.log", "*.tmp", "docs/*.gen"}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("merged = %#v, want %#v", got, want)
+	}
+	// And the translated patterns actually exclude what git would — bare
+	// dir names prune at any depth, anchored names only at the root.
+	for _, rel := range []string{"coverage", "nested/coverage", "build.log", "a/b.tmp", `docs/a.gen`} {
+		if !excludedByUser(rel, got) {
+			t.Fatalf("%q should be excluded by .gitignore patterns %v", rel, got)
+		}
+	}
+	for _, rel := range []string{"src/app.ts", "nested/build.log"} {
+		if excludedByUser(rel, got) {
+			t.Fatalf("%q must not be excluded by .gitignore patterns %v", rel, got)
+		}
+	}
+	// Negation is unsupported: git un-ignores keep.tmp via !keep.tmp, we
+	// conservatively still exclude it — pinned so the limitation is visible.
+	if !excludedByUser("keep.tmp", got) {
+		t.Fatal("keep.tmp should remain excluded: '!' negation is unsupported")
+	}
+}
+
 // TestDiscoverHonorsIgnoreFile drives the full walk with a workspace that
 // commits a .bluntcodeignore next to DB-provided user excludes: both sources
 // must apply, using the same pattern forms and case-insensitive matching the

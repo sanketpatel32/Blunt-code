@@ -67,7 +67,9 @@ var defaultDirectories = map[string]struct{}{
 	// Infrastructure tooling caches.
 	".terraform": {}, ".terragrunt-cache": {},
 	// Test and coverage reports (pure outputs).
-	"coverage": {}, ".cache": {}, ".nyc_output": {}, "playwright-report": {}, "test-results": {},
+	"coverage": {}, "htmlcov": {}, ".cache": {}, ".nyc_output": {}, "playwright-report": {}, "test-results": {},
+	// Tool working/output directories (agent CLIs, analyzers, e2e drivers).
+	".playwright-cli": {}, ".scannerwork": {}, ".stryker-tmp": {},
 	// Elixir/Erlang release builds.
 	"_build": {},
 	// Log directories: their *.txt members are otherwise scan candidates.

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -282,15 +283,22 @@ var manifestFileNames = map[string]struct{}{
 // to the device). Only meaningful on Windows; elsewhere these are ordinary
 // filenames.
 func isReservedDeviceName(base string) bool {
-	name := strings.ToUpper(base)
-	if i := strings.IndexByte(name, '.'); i >= 0 {
-		name = name[:i]
+	stem := base
+	if i := strings.IndexByte(stem, '.'); i >= 0 {
+		stem = stem[:i]
 	}
-	switch name {
-	case "CON", "PRN", "AUX", "NUL",
+	// Reserved stems are 3-4 runes; longer names bail without allocating.
+	if len(stem) < 3 || len(stem) > 4 {
+		return false
+	}
+	for _, name := range [...]string{
+		"CON", "PRN", "AUX", "NUL",
 		"COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
-		"LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9":
-		return true
+		"LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+	} {
+		if strings.EqualFold(stem, name) {
+			return true
+		}
 	}
 	return false
 }
@@ -373,9 +381,25 @@ func ExcludedByUser(rel string, patterns []string) bool {
 
 func excludedByUser(rel string, patterns []string) bool {
 	rel = strings.ToLower(filepath.ToSlash(rel))
+	base := path.Base(rel)
 	for _, pattern := range patterns {
 		pattern = strings.ToLower(strings.ReplaceAll(strings.TrimSpace(pattern), `\`, "/"))
 		if pattern == "" {
+			continue
+		}
+		if strings.HasPrefix(pattern, "/") {
+			// Root-anchored: matches rel verbatim, never the basename.
+			if matched, err := filepath.Match(pattern[1:], rel); err == nil && matched {
+				return true
+			}
+			continue
+		}
+		if !strings.Contains(pattern, "/") {
+			// Bare name: gitignore-style basename match at any depth — the
+			// semantics the ignore-file format documents and users expect.
+			if matched, err := filepath.Match(pattern, base); err == nil && matched {
+				return true
+			}
 			continue
 		}
 		matched, err := filepath.Match(pattern, rel)
