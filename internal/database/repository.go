@@ -85,7 +85,17 @@ func (d *DB) WorkspaceByRoot(ctx context.Context, root string) (core.Workspace, 
 	return scanWorkspace(d.SQL.QueryRowContext(ctx, `SELECT `+workspaceFields+` FROM workspaces WHERE root_path=?`, root))
 }
 func (d *DB) Workspaces(ctx context.Context) ([]core.Workspace, error) {
-	rows, err := d.SQL.QueryContext(ctx, `SELECT `+workspaceFields+` FROM workspaces ORDER BY COALESCE(last_opened_at, created_at) DESC`)
+	return d.queryWorkspaces(ctx, `SELECT `+workspaceFields+` FROM workspaces ORDER BY COALESCE(last_opened_at, created_at) DESC`)
+}
+
+// UnscannedWorkspaces lists workspaces with no scan rows, whose languages are
+// known only from filesystem discovery.
+func (d *DB) UnscannedWorkspaces(ctx context.Context) ([]core.Workspace, error) {
+	return d.queryWorkspaces(ctx, `SELECT `+workspaceFields+` FROM workspaces w WHERE NOT EXISTS (SELECT 1 FROM scans s WHERE s.workspace_id = w.id) ORDER BY w.id`)
+}
+
+func (d *DB) queryWorkspaces(ctx context.Context, query string) ([]core.Workspace, error) {
+	rows, err := d.SQL.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}

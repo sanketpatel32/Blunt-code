@@ -71,8 +71,10 @@ func (c *workspaceCaches) storeLanguages(id, key string, names []string) {
 	c.languages[id] = languageEntry{key: key, names: names, at: time.Now()}
 }
 
-// languageMatches lists workspaces whose fresh cached language names contain
-// needle (case-insensitive), so list search covers never-scanned workspaces.
+// languageMatches lists workspaces whose cached language names contain needle
+// (case-insensitive), so list search covers never-scanned workspaces. Entries
+// past their TTL still count: a folder's language mix rarely changes, and the
+// search refreshes them (warmUnscannedLanguages).
 func (c *workspaceCaches) languageMatches(needle string) []string {
 	needle = strings.ToLower(strings.TrimSpace(needle))
 	if needle == "" {
@@ -82,9 +84,6 @@ func (c *workspaceCaches) languageMatches(needle string) []string {
 	defer c.mu.Unlock()
 	var ids []string
 	for id, entry := range c.languages {
-		if time.Since(entry.at) > languageCacheTTL {
-			continue
-		}
 		for _, name := range entry.names {
 			if strings.Contains(strings.ToLower(name), needle) {
 				ids = append(ids, id)
@@ -186,4 +185,17 @@ func (s *Server) cachedComparisonCounts(ctx context.Context, scan core.Scan) (in
 	}
 	s.cache.storeComparison(scan.ID, previousID, comparisonEntry{workspaceID: scan.WorkspaceID, newCount: newCount, fixedCount: fixedCount})
 	return newCount, fixedCount, nil
+}
+
+// warmUnscannedLanguages starts background discovery for never-scanned
+// workspaces whose language cache is missing or stale, so a language search
+// that misses one now finds it once the walk lands.
+func (s *Server) warmUnscannedLanguages(ctx context.Context) {
+	works, err := s.db.UnscannedWorkspaces(ctx)
+	if err != nil {
+		return
+	}
+	for _, work := range works {
+		s.workspaceLanguages(context.WithoutCancel(ctx), work, false)
+	}
 }
