@@ -21,6 +21,13 @@
 /* First column stays put while the rest scrolls horizontally on narrow windows. */
 .page-workspaces .ws-table thead th:first-child,
 .page-workspaces .ws-table tbody td:first-child { position: sticky; left: 0; border-right: var(--rule) solid var(--color-rule-faint); }
+/* The actions column is the first thing a horizontal scroll hides. Pin it to
+   the right edge like the name column is pinned left, so Scan/⋯ stay reachable
+   no matter how far the middle columns overflow. */
+.page-workspaces .ws-table thead th:last-child,
+.page-workspaces .ws-table tbody td:last-child { position: sticky; right: 0; border-left: var(--rule) solid var(--color-rule-faint); background: var(--color-surface); }
+.page-workspaces .ws-table thead th:last-child { z-index: 2; background: var(--color-surface-muted); }
+.page-workspaces .ws-table tbody td:last-child { z-index: 1; }
 .page-workspaces .ws-table thead th:first-child { z-index: 2; }
 .page-workspaces .ws-table tbody td:first-child { z-index: 1; background: var(--color-surface); }
 /* Sticky cell needs its own hover tint — the shared row-hover rule loses to this specificity otherwise. */
@@ -1510,10 +1517,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .local-signal i, .stream-state i, .dot { display: inline-block; width: .45rem; height: .42rem; border-radius: 50%; background: var(--color-success); box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-success) 18%, transparent); }
 .seq-hint { padding: 0 var(--space-xs); border: var(--rule) solid var(--color-accent); border-radius: var(--radius-xs); color: var(--color-accent-strong); font: 500 var(--text-xs)/1.5 var(--font-mono); background: var(--color-accent-soft); }
 
-/* ── Footer ────────────────────────────────────────────────────── */
-.app-footer { display: flex; align-items: center; justify-content: space-between; gap: var(--space-lg); width: 100%; max-width: none; margin: 0; border-top: var(--rule) solid var(--color-rule-faint); font-size: var(--text-xs); }
-.app-footer span:first-child { font-weight: 600; color: var(--color-ink-faint); }
-
 /* ── L1 · Page & Typography ────────────────────────────────────── */
 .page { view-transition-name: page; width: 100%; animation: page-enter var(--dur-slow) var(--ease-out-quart); }
 .workspace-page-body { min-width: 0; }
@@ -2118,7 +2121,9 @@ dialog.modal-dialog.code-preview-dialog { width: min(58rem, calc(100% - 2 * var(
 .command-palette { padding: var(--space-sm); overflow: visible; border: var(--rule) solid var(--color-rule-strong); outline: var(--rule) solid var(--color-rule-faint); outline-offset: -5px; border-radius: var(--radius-xl); background: var(--color-surface); color: var(--color-ink); box-shadow: var(--shadow-xl); }
 .command-palette input { min-height: 2.75rem; padding: 0 var(--space-md); border: var(--rule) solid var(--color-field-edge); border-radius: var(--radius-md); background: var(--color-surface-muted); color: var(--color-ink); font-size: var(--text-md); letter-spacing: -.01em; transition: background var(--dur-fast) var(--ease-out); }
 .command-palette input:focus { outline: 2px solid var(--color-focus); outline-offset: -2px; background: var(--color-surface); }
-.command-palette [role='listbox'] { max-height: min(50dvh, 22rem); margin: var(--space-sm) 0 0; padding: 0; overflow-y: auto; overscroll-behavior: contain; }
+/* scroll-padding keeps the last option from landing half-clipped under the
+   listbox edge when the results exactly fill the 50dvh cap. */
+.command-palette [role='listbox'] { max-height: min(50dvh, 22rem); margin: var(--space-sm) 0 0; padding: 0 0 var(--space-3xs); overflow-y: auto; overscroll-behavior: contain; scroll-padding-block: var(--space-sm); }
 .command-palette .palette-option { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); width: 100%; padding: var(--space-sm) var(--space-md); border: 0; border-radius: var(--radius-md); background: transparent; color: var(--color-ink-soft); font-size: var(--text-sm); text-align: left; transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out); }
 .command-palette .palette-option + .palette-option { margin-top: var(--space-3xs); }
 :root[data-theme='dark'] .command-palette .palette-option[data-active='true'] { color: var(--color-ink); }
@@ -2409,7 +2414,6 @@ dialog.modal-dialog.code-preview-dialog { width: min(58rem, calc(100% - 2 * var(
   .local-signal { display: none; }
   .theme-toggle { padding: 0 .6rem; }
   .page { padding-block: var(--space-xl); }
-  .app-footer { width: 100%; padding-left: var(--page-gutter); padding-right: var(--page-gutter); }
   .workspace-page { grid-template-columns: 1fr; }
   .workspace-context { position: static; }
   .file-layout, .progress-layout, .split-section { grid-template-columns: 1fr; }
@@ -2432,7 +2436,7 @@ dialog.modal-dialog.code-preview-dialog { width: min(58rem, calc(100% - 2 * var(
   .summary-grid { grid-template-columns: repeat(2, 1fr); }
   .filters { grid-template-columns: 1fr; }
   .filters .filter-search { grid-column: span 1; }
-  .app-footer, .setting, .privacy { display: grid; gap: var(--space-sm); }
+  .setting, .privacy { display: grid; gap: var(--space-sm); }
   .toast-stack { right: var(--space-sm); bottom: var(--space-sm); left: var(--space-sm); width: auto; align-items: stretch; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -2547,7 +2551,7 @@ dialog.modal-dialog, .code-preview { scrollbar-width: thin; scrollbar-color: var
     --color-rule-faint: oklch(95% 0.003 260);
   }
   .command-palette, .skip-link, .toast-dismiss, .filter-chip-remove { display: none !important; }
-  .app-footer, .toast-stack, .filters, .filter-chips, .severity-pills, .findings-pagination { display: none; }
+  .toast-stack, .filters, .filter-chips, .severity-pills, .findings-pagination { display: none; }
   .table-wrap tr, .workspace-card, .summary-card { break-inside: avoid; }
   .table-wrap thead { display: table-header-group; }
   .page-heading, .section-head { break-after: avoid; }
@@ -4702,6 +4706,11 @@ dialog.modal-dialog, .code-preview { scrollbar-width: thin; scrollbar-color: var
   padding: var(--space-sm) 0 0;
   border-top: var(--rule) solid var(--color-rule-faint);
 }
+.rail-ws-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .rail-link {
   display: flex;
   align-items: center;
@@ -4805,11 +4814,10 @@ dialog.modal-dialog, .code-preview { scrollbar-width: thin; scrollbar-color: var
    plus breathing room rather than a fixed band height. --nav-h stays for the
    mobile bar, which is the only thing still pinned to the top. */
 .page { padding-inline: var(--space-xl) var(--page-gutter); }
-.app-footer { padding-inline: var(--space-xl) var(--page-gutter); }
 .search-sidebar { top: var(--space-md); }
 [id] { scroll-margin-top: var(--space-lg); }
 @media (max-width: 700px) {
-  .page, .app-footer { padding-inline: var(--page-gutter); }
+  .page { padding-inline: var(--page-gutter); }
   [id] { scroll-margin-top: calc(var(--nav-h) + var(--space-lg)); }
 }
 
@@ -5331,7 +5339,7 @@ input, select, textarea { color: var(--color-ink); }
 .design-topbar .topbar-search { display: flex; align-items: center; gap: 12px; color: var(--color-ink-soft); border: 1px solid var(--color-rule); border-radius: var(--radius-button); padding: var(--space-xs) var(--space-md); }
 .export-inline { flex-wrap: wrap; }
 .export-item small { display: block; font-size: var(--text-2xs); color: var(--color-ink-soft); }
-.app-footer { padding: 16px 32px; color: var(--color-ink-soft); }
+
 :focus-visible { outline: 2px solid var(--color-focus, var(--color-accent)); outline-offset: 3px; }
 @media (max-width: 950px) {
   .board-columns, .split-section { grid-template-columns: minmax(0, 1fr); }
@@ -5349,7 +5357,7 @@ input, select, textarea { color: var(--color-ink); }
   .verdict-head { flex-wrap: wrap; }
   .verdict-hero-num { font-size: 2.25rem; }
   .verdict-rail { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
-  .app-footer { padding: 16px; }
+
   [role='dialog'] { max-width: calc(100vw - 32px); max-height: 90dvh; overflow-y: auto; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -5437,7 +5445,9 @@ tbody tr:hover > td { background: color-mix(in oklch, var(--color-accent) 5%, tr
 .grade-tile-sm, .ledger-grade.grade-tile { --tile: 1.875rem; border-width: 1.5px; }
 .grade-tile-md { --tile: 2.75rem; }
 .grade-tile-lg, .scan-grade.grade-tile, .risk-hero .risk-grade.grade-tile { --tile: 4rem; }
-.grade-tile-xl, .verdict-letter.grade-tile { --tile: 6.5rem; }
+/* 6.5rem turned the verdict letter into a billboard that dwarfed the numbers
+   it was grading. 4.75rem keeps it a clear hero without owning the board. */
+.grade-tile-xl, .verdict-letter.grade-tile { --tile: 4.75rem; }
 .grade-tile .grade-flap { font-size: inherit; gap: 0; }
 .grade-tile .grade-flap-tile { width: 0.8em; height: 1.1em; background: transparent; color: inherit; }
 .ledger-grade.grade-tile::after { background: var(--grade-ink); height: 3px; opacity: .55; }
@@ -5450,8 +5460,8 @@ tbody tr:hover > td { background: color-mix(in oklch, var(--color-accent) 5%, tr
 .state.success, .state.succeeded, .state.completed, .state-tag.state-success { color: var(--color-success-text); }
 @media (max-width: 700px) {
   .page-header .page-title { font-size: 1.625rem; }
-  .grade-tile-xl, .verdict-letter.grade-tile { --tile: 4.75rem; }
-  .grade-tile-lg, .scan-grade.grade-tile { --tile: 3.5rem; }
+  .grade-tile-xl, .verdict-letter.grade-tile { --tile: 3.75rem; }
+  .grade-tile-lg, .scan-grade.grade-tile { --tile: 3rem; }
 }
 /* Grade letter never inherits a host card's span sizing (risk-hero styles
    every span as a caption). */
@@ -5501,6 +5511,12 @@ tbody tr:hover > td { background: color-mix(in oklch, var(--color-accent) 5%, tr
   .rtable td.rtable-actions, .rtable td.ws-cell-actions {
     margin-top: 6px; padding-top: 10px !important; border-top: 1px solid var(--color-rule-faint) !important;
   }
+  /* Severity chips in a right-aligned data-label row must wrap under each
+     other — nowrap pushes the whole summary out of the card and clips it. */
+  .rtable td[data-label] .ws-findings { flex-wrap: wrap; justify-content: flex-end; row-gap: 2px; white-space: normal; }
+  /* A flex location line right-aligned in the card row read as a detached bar;
+     let it wrap to full width under its label instead. */
+  .rtable td[data-label] .search-location { flex-wrap: wrap; justify-content: flex-end; white-space: normal; overflow-wrap: anywhere; }
   .rtable td.rtable-actions .table-actions, .rtable td.ws-cell-actions .table-actions { justify-content: flex-start; flex-wrap: wrap; }
   .rtable .history-band-row th { padding: var(--space-md) 2px var(--space-xs); background: transparent; border: 0; }
   .rtable .rtable-sub { margin: -6px 0 var(--space-sm); }
@@ -5605,7 +5621,7 @@ tbody tr:hover > td { background: color-mix(in oklch, var(--color-accent) 5%, tr
   .rail-search { justify-content: center; padding: 0; min-height: 40px; }
   .rail-util { flex-direction: column; padding-left: 0; gap: 4px; }
   .rail-util-btn, .rail-util .nav-bell { width: 40px; height: 40px; }
-  .page, .app-footer { padding-inline: 24px; }
+  .page { padding-inline: 24px; }
 }
 @media (max-width: 700px) {
   :root { --rail-w: 0rem; }
@@ -5667,7 +5683,10 @@ a.stat-tile:hover { border-color: var(--color-rule-strong); }
 .stat-tile[data-tone='danger'] .stat-tile-icon { background: color-mix(in oklab, var(--sev-fill-critical) 18%, transparent); color: var(--color-sev-critical); }
 .stat-tile[data-tone='warn'] .stat-tile-icon { background: color-mix(in oklab, var(--sev-fill-medium) 24%, transparent); color: var(--color-sev-medium); }
 .stat-tile[data-tone='ok'] .stat-tile-icon { background: color-mix(in oklab, var(--grade-a) 30%, transparent); color: var(--color-success); }
-.stat-tile-value { font: 700 1.5rem/1.1 var(--font-display); color: var(--color-ink); font-variant-numeric: tabular-nums; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Wrap, never ellipsize mid-word: a relative time like "3 minutes ago" cut to
+   "3 minu…" carries almost nothing. The tile is already min-width:0 so the
+   value can take a second line on narrow columns. */
+.stat-tile-value { font: 700 1.5rem/1.15 var(--font-display); color: var(--color-ink); font-variant-numeric: tabular-nums; min-width: 0; overflow-wrap: break-word; }
 .stat-tile-label { font-size: var(--text-2xs); font-weight: 600; color: var(--color-ink-soft); }
 .stat-tile-extra { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); }
 
@@ -5758,6 +5777,10 @@ a.stat-tile:hover { border-color: var(--color-rule-strong); }
 @media (max-width: 700px) { .owasp-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .owasp-tile { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "id count" "title title" "checks checks"; gap: 2px 8px; min-width: 0; padding: 12px; border: 1px solid var(--color-rule-faint); border-radius: var(--radius-card); background: var(--color-surface); }
 .owasp-tile[data-hit] { border-color: color-mix(in oklab, var(--sev-fill-critical) 45%, var(--color-rule)); background: color-mix(in oklab, var(--sev-fill-critical) 7%, var(--color-surface)); }
+/* A category with zero checks is informational only — mute it so it stops
+   looking like a live control begging for a click. */
+.owasp-tile[data-empty] { border-style: dashed; opacity: .55; }
+.owasp-tile[data-empty] .owasp-tile-count { font-size: var(--text-sm); }
 .owasp-tile-id { grid-area: id; font: 700 var(--text-xs) var(--font-mono, monospace); color: var(--color-ink-soft); }
 .owasp-tile-count { grid-area: count; font: 700 1.25rem/1 var(--font-display); color: var(--color-ink-faint); }
 .owasp-tile[data-hit] .owasp-tile-count { color: var(--color-sev-critical); }

@@ -530,7 +530,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
               value={`${readyTools}/${totalTools}`}
               label="Tools ready"
               tone={totalTools && readyTools === totalTools ? 'ok' : undefined}
-              extra={<Ring value={readyTools} max={totalTools} size={36} stroke={4} tone="var(--color-success)" label={`${readyTools} of ${totalTools} optional tools ready`}><span /></Ring>}
+              extra={readyTools > 0 ? <Ring value={readyTools} max={totalTools} size={36} stroke={4} tone="var(--color-success)" label={`${readyTools} of ${totalTools} optional tools ready`}><span /></Ring> : undefined}
             />
           </div>}
         </section>
@@ -558,7 +558,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
               <span className="sr-only">Filter workspaces by name, path, or language</span>
               <input
                 type="search"
-                placeholder="Filter by name or path…"
+                placeholder="Filter workspaces…"
                 value={ledgerFilter}
                 onChange={(e) => setLedgerFilter(e.target.value)}
               />
@@ -856,11 +856,12 @@ function FeedRow({ scan, go }: { scan: RecentScanItem; go: (r: Route) => void })
         {scan.profile && <span className="feed-profile">{scan.profile}</span>}
         <span className="feed-findings">
           <SeverityDots scan={scan} />
-          {findings !== null && (
-            <span className="feed-findings-text">
-              {findings} {findings === 1 ? 'finding' : 'findings'}
-            </span>
-          )}
+          {/* A failed/interrupted scan has no count — render the dash so the
+              column still reads as data and the timestamp column never
+              visually drifts between rows. */}
+          <span className="feed-findings-text">
+            {findings === null ? '—' : `${findings} ${findings === 1 ? 'finding' : 'findings'}`}
+          </span>
         </span>
         <span className="feed-time" title={timestamp ? date(timestamp) : undefined}>
           {relativeTime(timestamp)}

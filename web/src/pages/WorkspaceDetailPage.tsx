@@ -423,7 +423,7 @@ export function AnalyzerStatuses({ runs, go }: { runs?: AnalyzerRun[]; go?: (r: 
   const failed = runs.filter((run) => run.status === 'failed' && !isMissingToolMessage(run.message));
   const ran = runs.filter((run) => ['completed', 'succeeded', 'success'].includes(run.status));
   const skipped = runs.filter((run) => run.status === 'skipped');
-  const parts = [`${ran.length} of ${runs.length - skipped.length} ${runs.length - skipped.length === 1 ? 'analyzer' : 'analyzers'} ran`];
+  const parts = [`${ran.length} of ${runs.length - skipped.length} analyzers ran`];
   if (missing.length) parts.push(`${missing.length} not installed`);
   if (failed.length) parts.push(`${failed.length} failed`);
   if (skipped.length) parts.push(`${skipped.length} not needed`);

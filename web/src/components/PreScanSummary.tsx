@@ -17,7 +17,9 @@ export function PreScanSummary({ profile, languages, analyzers, exclusionCount }
   const allReady = ready.length === sourceMatches.length && sourceMatches.length > 0;
   return <div className="pre-scan-summary" data-tone={allReady ? 'ok' : 'warning'}>
     <div className="pre-scan-head">
-      <Ring value={ready.length} max={sourceMatches.length} size={44} stroke={5} tone={allReady ? 'var(--color-success)' : 'var(--sev-fill-medium)'} label={`${ready.length} of ${sourceMatches.length} analyzers ready`} />
+      {/* No eligible analyzers → no fraction: a 0/0 ring reads as a stuck
+          spinner, not "nothing to run". */}
+      {sourceMatches.length > 0 && <Ring value={ready.length} max={sourceMatches.length} size={44} stroke={5} tone={allReady ? 'var(--color-success)' : 'var(--sev-fill-medium)'} label={`${ready.length} of ${sourceMatches.length} analyzers ready`} />}
       <p className="pre-scan-headline"><span className="sr-only">{ready.length} of {sourceMatches.length} analyzers ready</span><strong aria-hidden="true">Analyzers</strong></p>
       <span className="pre-scan-chips">
         <span className="viz-card-chip" title="Scan profile"><Gauge className="h-3 w-3" aria-hidden="true" />{profile}</span>

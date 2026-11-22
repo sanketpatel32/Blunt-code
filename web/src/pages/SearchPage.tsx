@@ -432,6 +432,12 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
     const value = Math.sqrt(severityCounts[sev] ?? 0);
     return value > 0 ? `${Math.max((value / facetTotal) * 100, 1.5)}%` : '0%';
   };
+  /* A meter that renders five identical bars encodes nothing — when every
+     band's count is the same, the shape IS flat and the bars read as
+     decoration. Only draw the meter when it can actually discriminate. */
+  const facetDiscriminates = severityCounts
+    ? SEVERITIES.some((sev) => (severityCounts[sev] ?? 0) !== (severityCounts[SEVERITIES[0]] ?? 0))
+    : false;
 
   const facets = (
     <div className="search-facets space-y-5">
@@ -484,7 +490,7 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                     Loop 142 · the label and count are fixed-width, so this
                     percentage is now rendered against an identical track on all
                     five rows instead of five different leftovers. */}
-                {severityCounts && (
+                {facetDiscriminates && (
                   <span className="facet-meter" aria-hidden="true">
                     <span
                       className={`facet-meter-fill sev-${sev}`}
@@ -1007,20 +1013,37 @@ export function SearchPage({ go }: { go: (route: Route) => void }) {
                           onClick={() => setSelectedFinding(head)}
                           onKeyDown={(event) => openFromKeyboard(event, head)}
                         >
-                          <td colSpan={visibleColCount}>
-                            <span className="search-group-line">
-                              <span className={`search-group-dot sev-${head.severity}`} aria-hidden="true" />
-                              <span className="search-group-title">{title}</span>
-                              {ruleTagFor(head, title)}
-                              <span className="tag">
-                                <span title={head.relative_path ?? undefined}>{head.relative_path ?? 'Project-level'}</span>
+                          {/* One real cell per column: the old colspan row floated
+                              "N occurrences" + the Open link under the Severity
+                              header, so the column lied about its contents, and
+                              it repeated the path the Location cell already
+                              prints. The group shares one rule, hence one
+                              severity — the pill is honest here. */}
+                          {visibleCols.finding && (
+                            <td className="search-cell-finding">
+                              <span className="search-group-line">
+                                <span className={`search-group-dot sev-${head.severity}`} aria-hidden="true" />
+                                <span className="search-group-title">{title}</span>
+                                {ruleTagFor(head, title)}
+                                <span className="search-group-count">
+                                  {row.occurrences.length} occurrence{row.occurrences.length === 1 ? '' : 's'}
+                                </span>
                               </span>
-                              <span className="search-group-count">
-                                {row.occurrences.length} occurrence{row.occurrences.length === 1 ? '' : 's'}
+                            </td>
+                          )}
+                          {visibleCols.location && (
+                            <td className="search-cell-location" data-label="Location">
+                              <LocationCell finding={head} />
+                            </td>
+                          )}
+                          {visibleCols.severity && (
+                            <td className="search-cell-severity" data-label="Severity">
+                              <span className={`severity ${head.severity} text-xs px-2 py-0.5 rounded font-semibold`}>
+                                {head.severity}
                               </span>
-                              {openLink(head)}
-                            </span>
-                          </td>
+                            </td>
+                          )}
+                          {visibleCols.actions && <td className="search-cell-action rtable-actions">{openLink(head)}</td>}
                         </tr>
                         {/* Every occurrence of one rule in one file used to be its
                             own full-width table row holding nothing but "Line 34",

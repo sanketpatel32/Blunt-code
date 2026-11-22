@@ -128,7 +128,7 @@ export function coveragePartial(coverage: CoverageCounts | undefined): boolean {
 
 /** The one coverage sentence every surface prints: "7 of 9 analyzers ran". */
 export function coverageText(coverage: CoverageCounts): string {
-  const parts = [`${coverage.succeeded} of ${coverage.total} ${coverage.total === 1 ? 'analyzer' : 'analyzers'} ran`];
+  const parts = [`${coverage.succeeded} of ${coverage.total} analyzers ran`];
   if (coverage.failed > 0) parts.push(`${coverage.failed} didn't run`);
   if (coverage.warned > 0) parts.push(`${coverage.warned} with warnings`);
   return parts.join(' · ');

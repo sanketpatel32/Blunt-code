@@ -195,6 +195,7 @@ export function QueryBuilder({ group, onChange, onApply, facetCounts, analyzers 
                       placeholder="Select…"
                       searchPlaceholder="Search…"
                       triggerClassName="h-8 text-xs"
+                      allowCustom={row.field === 'analyzer' || row.field === 'rule'}
                     />
                   )}
                 </div>

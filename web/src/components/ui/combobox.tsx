@@ -15,9 +15,12 @@ type ComboboxProps = {
   className?: string;
   triggerClassName?: string;
   disabled?: boolean;
+  /** When the curated list is incomplete (e.g. a rule id not yet indexed),
+   *  let the user commit the raw typed text as the value. */
+  allowCustom?: boolean;
 };
 
-export function Combobox({ options, value, onValueChange, placeholder = 'Select…', searchPlaceholder = 'Search…', emptyLabel = 'No results.', className, triggerClassName, disabled }: ComboboxProps) {
+export function Combobox({ options, value, onValueChange, placeholder = 'Select…', searchPlaceholder = 'Search…', emptyLabel = 'No results.', className, triggerClassName, disabled, allowCustom }: ComboboxProps) {
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState('');
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -28,7 +31,17 @@ export function Combobox({ options, value, onValueChange, placeholder = 'Select�
     return options.filter((o) => o.label.toLowerCase().includes(q) || o.value.toLowerCase().includes(q));
   }, [options, query]);
 
-  const selectedLabel = React.useMemo(() => options.find((o) => o.value === value)?.label ?? '', [options, value]);
+  const selectedLabel = React.useMemo(() => options.find((o) => o.value === value)?.label ?? (allowCustom ? (value ?? '') : ''), [options, value, allowCustom]);
+
+  const trimmed = query.trim();
+  const exactMatch = options.some((o) => o.value === trimmed);
+  const showCustom = allowCustom && trimmed.length > 0 && !exactMatch;
+  const commitCustom = () => {
+    if (!showCustom) return false;
+    onValueChange?.(trimmed === value ? '' : trimmed);
+    setOpen(false);
+    return true;
+  };
 
   React.useEffect(() => {
     if (open) requestAnimationFrame(() => inputRef.current?.focus());
@@ -62,16 +75,30 @@ export function Combobox({ options, value, onValueChange, placeholder = 'Select�
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitCustom(); } }}
             placeholder={searchPlaceholder}
             aria-label="Search options"
             className="h-7 w-full bg-transparent text-sm text-[var(--color-ink)] placeholder:text-[var(--color-ink-faint)] focus:outline-none"
           />
         </div>
         <div role="listbox" aria-label="Options" className="max-h-64 overflow-auto p-1">
-          {filtered.length === 0 ? (
+          {filtered.length === 0 && !showCustom ? (
             <p className="px-3 py-6 text-center text-sm text-[var(--color-ink-faint)]">{emptyLabel}</p>
           ) : (
-            filtered.map((opt) => {
+            <>
+            {showCustom && (
+              <button
+                type="button"
+                role="option"
+                aria-selected={false}
+                onClick={commitCustom}
+                className="flex w-full items-center gap-2 rounded-[var(--radius-sm)] px-2 py-2 text-left text-sm text-[var(--color-ink)] hover:bg-[var(--color-surface-muted)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus)]"
+              >
+                <Check className="h-4 w-4 shrink-0 opacity-0" />
+                <span className="truncate">Use “{trimmed}”</span>
+              </button>
+            )}
+            {filtered.map((opt) => {
               const active = opt.value === value;
               return (
                 <button
@@ -92,7 +119,8 @@ export function Combobox({ options, value, onValueChange, placeholder = 'Select�
                   <span className="truncate">{opt.label}</span>
                 </button>
               );
-            })
+            })}
+            </>
           )}
         </div>
       </PopoverContent>
