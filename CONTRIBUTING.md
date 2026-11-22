@@ -1,6 +1,7 @@
 # Contributing
 
-Use supported Go and Node versions documented by the release. Run
+Use Go 1.26.3 or newer (the `go` line in `go.mod`) and Node.js 20.19+ or
+22.12+ (the engine range Vite 7 declares in `web/package-lock.json`). Run
 `powershell -File scripts\verify.ps1` before submitting changes — it is the
 whole local gate (gofmt, go vet, go build, go test, web typecheck, web tests,
 contrast audit), and because this repo has no CI, green there is the only

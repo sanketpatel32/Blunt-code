@@ -5,6 +5,20 @@ All notable changes to Blunt Code are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+Releases are published as git tags `vX.Y.Z` and
+[GitHub releases](https://github.com/sanketpatel32/Blunt-code/releases); the
+current release is the one `internal/build/version.go` names. Where the three
+records differ for older versions:
+
+- **0.2.0, 0.2.1, 0.38.0, 0.39.0** have entries here but were never tagged or
+  released. Their changes first shipped in the next tagged release (0.3.0 for
+  0.2.x, 0.39.1 for 0.38.0 and 0.39.0).
+- **0.16.19 and 0.16.20** were tagged and released with their own entries,
+  which were later merged into the 0.16.21 entry. **0.21.1** was tagged and
+  released; its entry was later relabeled, so its changes are listed under
+  0.21.2.
+- **0.3.0, 0.4.0** are tagged but have no GitHub release page.
+
 ## [0.49.1] - 2026-11-06
 
 ### Fixed
@@ -287,6 +301,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.39.0] - 2026-10-03
 
+_Not tagged or released; these changes first shipped in 0.39.1._
+
 The UI had a good palette and a good type ramp and still read as flat, because
 **every object on every page was painted with the same recipe**. The measure
 pass (`scripts/ui-loops/measure.mjs`, a new gate) found **2 distinct
@@ -400,6 +416,8 @@ way to it.
 - **Build and tool detritus, 800 MB → 395 MB**: the `bluntcode.exe~` editor backup, release zips 0.24.0–0.36.0 (0.37.0 kept), the `.playwright-cli` capture sweep and prior-session audit scripts, and the `.delta` / `.ruff_cache` / `.workbuddy-ai` / `.mimosa` / `.scannerwork` scratch directories. Nothing here is tracked or regenerable-only-with-effort.
 
 ## [0.38.0] - 2026-10-03
+
+_Not tagged or released; these changes first shipped in 0.39.1._
 
 Thirteen loops, all found by measuring the rendered app in a real browser against
 a real corpus (10 workspaces, 2,899 findings, 13 scans) rather than by reading the
@@ -1336,6 +1354,8 @@ source. Full write-up, with before/after numbers and a reproduction script, in
 
 ## [0.2.1] - 2026-08-22
 
+_Not tagged or released; these changes first shipped in 0.3.0._
+
 A batch of 10 QA loops: fuzzing, hostile-payload round-trips, a live-browser
 audit, a security pass, lifecycle/concurrency stress tests, and scale
 benchmarks. Every fix below ships with a regression test.
@@ -1361,6 +1381,8 @@ benchmarks. Every fix below ships with a regression test.
 - Frontend: `Intl.DateTimeFormat` instances hoisted to module level (~45× faster date rendering); hostile finding messages and long paths are line-clamped instead of stretching the table.
 
 ## [0.2.0] - 2026-08-22
+
+_Not tagged or released; these changes first shipped in 0.3.0._
 
 A batch of 25 improvement loops focused on automation, exports, and UI polish.
 

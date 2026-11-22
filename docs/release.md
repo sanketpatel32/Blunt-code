@@ -4,6 +4,7 @@
   embedded Windows resources with `scripts\embed-windows-resources.ps1` and rebuild, so the exe's
   icon and its Properties-sheet version stamp stay current.
 - Verify each Windows artifact URL, SHA-256, version, license, and notice.
+  Update the matching row in `THIRD_PARTY_NOTICES.md` whenever a manifest pin changes.
 - Re-test Ruff, Biome, Semgrep local rules, SonarQube bootstrap/scanner/API, and managed Java together.
 - For Semgrep, verify the official uv 0.11.16 archive SHA-256, the exact
   `semgrep==1.172.0` dependency resolution, private uv directories, a

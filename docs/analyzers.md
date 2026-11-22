@@ -42,16 +42,19 @@ disconnected Windows verification after setup and a transitive package
 dependency integrity review; unit tests deliberately use a fake uv process and
 do not download Semgrep.
 
-SonarQube is managed as a loopback-only child dependency. Its adapter has
-explicit installer, runtime, server, and API-client interfaces. The shipping
-release must pin, checksum, and compatibility-test its SonarQube, scanner, and
-Java artifacts before enabling installation.
+## Managed SonarQube
 
-The current implementation creates scanner properties only under Blunt Code
-application data and deletes them after the scanner exits. It fails with a
-specific readiness error until the release-owned SonarQube artifacts and a
-securely bootstrapped token are present; it does not substitute global PATH,
-the user's Java installation, or placeholder credentials.
+SonarQube is managed as a loopback-only child dependency. The manifest pins
+SonarQube Community Build 26.8.0.126808, SonarScanner CLI 7.3.0.5189 and
+Eclipse Temurin 21.0.12+8, each with a SHA-256, and all three install under
+`%LOCALAPPDATA%\BluntCode\tools`. Licensing for these (LGPL-3.0 platform with
+SSALv1 analyzers) is in [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
+
+Scanner properties are created only under Blunt Code application data and are
+deleted after the scanner exits. The analyzer fails with a specific readiness
+error until the managed artifacts and a securely bootstrapped token are
+present; it does not substitute global PATH, the user's Java installation, or
+placeholder credentials.
 
 ## Network use
 
@@ -65,12 +68,12 @@ network class also ships machine-readable from `GET /api/v1/analyzers`
 | Tool installs (ruff, biome, gitleaks, semgrep, osv-scanner, trivy, checkov, SonarQube) | Outbound, explicit | Only when you press Install/Repair/Update on the Tools page, or a managed tool is missing and auto-install is allowed |
 | OSV Scanner | Outbound | Deep scans query the OSV.dev API unless offline vulnerability databases were provisioned; offline mode fails readiness instead of dialing out |
 | Trivy | Outbound, cold cache only | Downloads its vulnerability database the first time; warm caches scan locally, and offline mode refuses cold-cache scans instead of downloading |
-| Update check | Outbound, explicit | `GET /api/v1/update/check` reads `api.github.com/repos/.../releases/latest` when the About page asks; never automatic in the background |
+| Update check | Outbound, automatic once per UI session | `GET /api/v1/update/check` reads `api.github.com/repos/sanketpatel32/Blunt-code/releases/latest`. The web UI calls it once each time it is opened (a newer release shows a toast), the About page calls it on demand, and `bluntcode update check` calls it from the CLI. Only the current version is compared locally; nothing about your workspaces is sent. Offline mode refuses the check |
 | SonarQube | Loopback only | Talks to the managed server it starts on a dynamic loopback port; never an external host |
 | Pentest probe | Explicit target only | Probes exactly the URL you enter. Redirects to any other host are refused and reported as a finding (CWE-601), so the probe cannot be pivoted to third parties or internal endpoints you did not name |
 
 Offline mode (Settings) closes the outbound column: tool installs and the
-update check are refused, the built-in in-process analyzers are withheld so
+update check (including the automatic one when the UI opens) are refused, the built-in in-process analyzers are withheld so
 an offline scan cannot silently "succeed" on reduced coverage, osv/trivy fail
 readiness without their local databases, and the UI ships no webfont or other
 third-party asset requests.
