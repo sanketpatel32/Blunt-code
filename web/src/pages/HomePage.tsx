@@ -16,6 +16,7 @@ import { PageHeader } from '../components/PageHeader';
 import { PathCopy } from '../components/PathCopy';
 import { ScanActionDropdown } from '../components/ScanActionDropdown';
 import { RowMenu } from '../components/RowMenu';
+import { RootMissingBadge, rootProblemDescription } from '../components/RootMissingBadge';
 import { FolderIcon, ScanIcon } from '../components/icons';
 import { Activity, AlertTriangle, CalendarDays, ChevronRight, Clock3, FolderCheck, FolderOpen, FolderPlus, Wrench } from 'lucide-react';
 import { StatTile } from '../components/viz/StatTile';
@@ -1016,7 +1017,7 @@ function LedgerRow({
   const partialCoverage = !!current && !!coverage && (coverage.failed > 0 || coverage.warned > 0);
 
   return (
-    <li className="ledger-row" data-workspace-id={workspace.id} data-scored={score !== null || undefined}>
+    <li className="ledger-row" data-workspace-id={workspace.id} data-scored={score !== null || undefined} data-root-missing={workspace.root_missing || undefined}>
       {/* The grade tile and its score are one object: the letter answers "how
           bad", the number under it answers "how much of it". They used to live
           at opposite ends of the row (tile left, "6489 risk" chip right), so
@@ -1052,6 +1053,7 @@ function LedgerRow({
         >
           {workspace.name}
         </button>
+        <RootMissingBadge workspace={workspace} className="ledger-missing" />
         <span className="ledger-sub">
           <PathCopy path={workspace.root_path} />
           <LedgerLanguages languages={workspace.languages} />
@@ -1138,6 +1140,8 @@ function LedgerRow({
           go={go}
           notify={notify}
           onScanStarted={onRemoved}
+          disabled={workspace.root_missing === true}
+          disabledReason={workspace.root_missing ? rootProblemDescription(workspace) : undefined}
         />
         <RowMenu
           label={`More actions for ${workspace.name}`}

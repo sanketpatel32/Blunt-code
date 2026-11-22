@@ -56,6 +56,11 @@ type Server struct {
 	cache      *workspaceCaches
 	token      string
 	tickets    ticketStore
+	// checkRoot and rootTimeout back the root_missing probe on workspace
+	// views; tests swap them to simulate missing or hanging folders.
+	checkRoot   func(root string) string
+	rootTimeout time.Duration
+	probes      rootProber
 }
 
 // scanDetail is a scan payload enriched for single-scan views: the analyzer
@@ -88,13 +93,18 @@ type workspaceView struct {
 	// Trend is total_findings of the newest completed scans, oldest first
 	// (list endpoint only), for the card sparkline.
 	Trend []int `json:"trend,omitempty"`
+	// RootMissing is true when the registered folder is gone, is no longer a
+	// directory, or cannot be read; RootProblem names which ("missing",
+	// "not_directory", "unreadable"). Probed on every list/GET response.
+	RootMissing bool   `json:"root_missing"`
+	RootProblem string `json:"root_problem,omitempty"`
 }
 
 func New(db *database.DB, bus *events.Bus, scanService *scans.Service, toolService *tools.Service, paths config.Paths, version string, logger *slog.Logger) *Server {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	s := &Server{db: db, bus: bus, scans: scanService, tools: toolService, paths: paths, version: version, log: logger, mux: http.NewServeMux(), openFolder: openFolderInExplorer, cache: newWorkspaceCaches(), token: NewToken()}
+	s := &Server{db: db, bus: bus, scans: scanService, tools: toolService, paths: paths, version: version, log: logger, mux: http.NewServeMux(), openFolder: openFolderInExplorer, cache: newWorkspaceCaches(), token: NewToken(), checkRoot: checkWorkspaceRoot, rootTimeout: rootCheckTimeout}
 	s.routes()
 	return s
 }
@@ -420,9 +430,14 @@ func (s *Server) buildWorkspaceListViews(ctx context.Context, items []core.Works
 	if err != nil {
 		return nil, err
 	}
+	roots := make([]string, len(items))
+	for i, item := range items {
+		roots[i] = item.RootPath
+	}
+	problems := s.rootProblems(roots)
 	views := make([]workspaceView, 0, len(items))
 	for i, item := range items {
-		view, err := s.buildWorkspaceView(ctx, item, pairs[i].latest, pairs[i].lastCompleted, &viewPrefetch{runs: runsByScan, list: true})
+		view, err := s.buildWorkspaceView(ctx, item, pairs[i].latest, pairs[i].lastCompleted, &viewPrefetch{runs: runsByScan, list: true}, problems[i])
 		if err != nil {
 			return nil, err
 		}
@@ -530,11 +545,11 @@ type viewPrefetch struct {
 }
 
 func (s *Server) workspaceView(ctx context.Context, workspace core.Workspace, latest *core.Scan, lastCompleted *core.Scan) (workspaceView, error) {
-	return s.buildWorkspaceView(ctx, workspace, latest, lastCompleted, nil)
+	return s.buildWorkspaceView(ctx, workspace, latest, lastCompleted, nil, s.rootProblem(workspace.RootPath))
 }
 
-func (s *Server) buildWorkspaceView(ctx context.Context, workspace core.Workspace, latest *core.Scan, lastCompleted *core.Scan, pre *viewPrefetch) (workspaceView, error) {
-	view := workspaceView{Workspace: workspace}
+func (s *Server) buildWorkspaceView(ctx context.Context, workspace core.Workspace, latest *core.Scan, lastCompleted *core.Scan, pre *viewPrefetch, rootProblem string) (workspaceView, error) {
+	view := workspaceView{Workspace: workspace, RootMissing: rootProblem != "", RootProblem: rootProblem}
 	attach := func(scan *core.Scan) (*scanDetail, error) {
 		if scan == nil {
 			return nil, nil
@@ -586,7 +601,9 @@ func (s *Server) buildWorkspaceView(ctx context.Context, workspace core.Workspac
 		}
 		view.AssessmentCoverage = &coverage
 	}
-	if len(view.Languages) == 0 {
+	// A missing root has nothing to walk; the snapshot languages above still
+	// describe what the folder held when it was last scanned.
+	if len(view.Languages) == 0 && !view.RootMissing {
 		view.Languages = s.workspaceLanguages(ctx, workspace, pre == nil || !pre.list)
 	}
 	return view, nil
@@ -874,6 +891,9 @@ func (s *Server) discoverWorkspace(w http.ResponseWriter, r *http.Request) {
 		fail(w, 404, "WORKSPACE_NOT_FOUND", "Workspace was not found.")
 		return
 	}
+	if s.failRootUnavailable(w, work) {
+		return
+	}
 	patterns, err := s.userExcludes(r.Context(), work.ID)
 	if err != nil {
 		fail(w, 500, "DATABASE_ERROR", "Could not load rules.")
@@ -903,8 +923,7 @@ func (s *Server) tree(w http.ResponseWriter, r *http.Request) {
 	// A workspace whose root directory was deleted (or moved) would otherwise
 	// surface as a 500 DISCOVERY_FAILED on the empty path while subpaths 400
 	// through path validation; report the real condition instead.
-	if info, err := os.Stat(work.RootPath); err != nil || !info.IsDir() {
-		fail(w, http.StatusUnprocessableEntity, "WORKSPACE_ROOT_MISSING", "workspace root no longer exists on disk")
+	if s.failRootUnavailable(w, work) {
 		return
 	}
 	if _, err := workspace.ValidateRelativePath(work.RootPath, relative); err != nil {
@@ -1450,6 +1469,9 @@ func (s *Server) startScan(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if s.failRootUnavailable(w, work) {
+		return
+	}
 	if s.scans == nil {
 		fail(w, 503, "SCAN_ENGINE_UNAVAILABLE", "The scan engine is unavailable.")
 		return
@@ -1461,7 +1483,7 @@ func (s *Server) startScan(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, scans.ErrTooManyScans):
 			fail(w, 503, "SCAN_CAPACITY", "Too many scans are already running. Wait for one to finish.")
 		case errors.Is(err, scans.ErrWorkspaceRootMissing):
-			fail(w, 404, "WORKSPACE_ROOT_MISSING", err.Error())
+			fail(w, http.StatusUnprocessableEntity, "WORKSPACE_ROOT_MISSING", err.Error())
 		default:
 			fail(w, 500, "DATABASE_ERROR", "Could not create scan.")
 		}
@@ -2129,6 +2151,9 @@ func (s *Server) findingPreview(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, "DATABASE_ERROR", "Could not load workspace.")
 		return
 	}
+	if s.failRootUnavailable(w, work) {
+		return
+	}
 	relative, err := workspace.ValidateRelativePath(work.RootPath, filepath.FromSlash(finding.RelativePath))
 	if err != nil {
 		fail(w, 422, "SOURCE_PATH_UNAVAILABLE", "The finding path is no longer available inside this workspace.")
@@ -2446,6 +2471,9 @@ func (s *Server) scanPlan(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "INVALID_PROFILE", "Choose quick, standard, deep, or pentest.")
 		return
 	}
+	if s.failRootUnavailable(w, work) {
+		return
+	}
 	if s.scans == nil {
 		fail(w, 503, "SCAN_UNAVAILABLE", "Scan service is unavailable.")
 		return
@@ -2458,7 +2486,7 @@ func (s *Server) scanPlan(w http.ResponseWriter, r *http.Request) {
 	plan, err := s.scans.Plan(r.Context(), work, profile, patterns)
 	if err != nil {
 		if errors.Is(err, scans.ErrWorkspaceRootMissing) {
-			fail(w, 404, "WORKSPACE_ROOT_MISSING", err.Error())
+			fail(w, http.StatusUnprocessableEntity, "WORKSPACE_ROOT_MISSING", err.Error())
 			return
 		}
 		fail(w, 500, "DISCOVERY_FAILED", "Could not review workspace inputs.")

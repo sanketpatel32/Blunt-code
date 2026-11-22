@@ -22,6 +22,10 @@ export interface Workspace {
   assessment_coverage?: ScanCoverage;
   /** total_findings of the newest completed scans, oldest first (list endpoint only); failed scans are gaps, never zeros. */
   trend?: number[];
+  /** True when the registered folder is gone, no longer a directory, or unreadable; scans and file views cannot run until it is restored. */
+  root_missing?: boolean;
+  /** Which root problem the server found: 'missing' | 'not_directory' | 'unreadable'. */
+  root_problem?: string;
 }
 
 export interface Scan {

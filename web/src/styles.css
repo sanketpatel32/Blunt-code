@@ -5892,3 +5892,13 @@ a.stat-tile:hover { border-color: var(--color-rule-strong); }
   .rail-link.active { font-weight: 600; }
   .rail-link.active::before { content: ''; position: absolute; left: 0; top: 28%; bottom: 28%; width: 3px; border-radius: 0 3px 3px 0; background: var(--color-accent); }
 }
+
+/* Issue #62 · a workspace whose folder was deleted, moved, or locked */
+.root-missing-badge { display: inline-flex; flex: none; align-items: center; padding: 0 var(--space-xs); border: var(--rule) solid color-mix(in oklab, var(--color-warning) 55%, var(--color-rule)); border-radius: var(--radius-pill); background: var(--color-warning-soft); color: var(--color-warning-text); font: 600 var(--text-2xs) var(--font-body); white-space: nowrap; }
+.ledger-identity .root-missing-badge { align-self: flex-start; }
+.page-workspaces .ws-row-missing .ws-path { text-decoration: line-through; }
+.root-missing-panel { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-block: 16px; padding: 16px 18px; border: 1px solid color-mix(in oklab, var(--color-warning) 45%, var(--color-rule)); border-radius: var(--radius-card); background: color-mix(in oklab, var(--color-warning) 10%, var(--color-surface)); }
+.root-missing-icon { width: 24px; height: 24px; flex: none; color: var(--color-warning-text); }
+.root-missing-copy { flex: 1 1 240px; min-width: 0; }
+.root-missing-copy h2 { margin: 0; font: 600 var(--text-base) var(--font-display); color: var(--color-ink); }
+.root-missing-copy p { margin: 2px 0 0; color: var(--color-ink-soft); font-size: var(--text-sm); overflow-wrap: anywhere; }

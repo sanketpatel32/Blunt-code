@@ -29,6 +29,7 @@ import { PreScanSummary } from '../components/PreScanSummary';
 import { PageHeader } from '../components/PageHeader';
 import { GradeTile } from '../components/GradeTile';
 import { FEATURES } from '../lib/features';
+import { RootMissingBadge, rootProblemDescription, rootProblemLabel } from '../components/RootMissingBadge';
 
 const AnalyticsCharts = lazy(() => import('../components/AnalyticsCharts').then((m) => ({ default: m.AnalyticsCharts })));
 const DependencyGraph = lazy(() => import('../components/DependencyGraph').then((m) => ({ default: m.DependencyGraph })) );
@@ -177,6 +178,7 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
           <code className="workspace-path min-w-0 flex-1 break-all text-left text-[var(--color-ink-faint)]" title={item.root_path}>
             {item.root_path || 'No root path configured'}
           </code>
+          <RootMissingBadge workspace={item} />
           {item.root_path && (
             <button type="button" className="workspace-copy-btn shrink-0" onClick={copyPath} aria-label="Copy path" title={copied ? 'Copied' : 'Copy path'}>
               {copied ? <Check className="h-3.5 w-3.5 text-[var(--color-success)]" /> : <Copy className="h-3.5 w-3.5" />}
@@ -190,12 +192,24 @@ export function WorkspacePage({ id, go, notify }: { id: string; go: (r: Route) =
           {/* The accent-filled default variant is the design system's primary —
               the shared Button has no 'primary' variant, and passing one
               rendered the run control unstyled. */}
-          <ScanActionDropdown workspaceId={id} workspaceName={item.name} defaultProfile={profile} size="default" go={go} notify={notify} />
+          <ScanActionDropdown workspaceId={id} workspaceName={item.name} defaultProfile={profile} size="default" go={go} notify={notify} disabled={item.root_missing === true} disabledReason={item.root_missing ? rootProblemDescription(item) : undefined} />
           <RowMenu label={`Actions for ${item.name}`} items={workspaceMenu} align="end" />
         </div>
       }
     >
     </PageHeader>
+    {/* A deleted or moved folder cannot be scanned or browsed: say so up front
+        and offer the way out, instead of letting the first scan fail. History
+        and reports stay readable. */}
+    {item.root_missing && <section className="root-missing-panel" role="alert" aria-label={rootProblemLabel(item)}>
+      <AlertTriangle className="root-missing-icon" aria-hidden="true" />
+      <div className="root-missing-copy">
+        <h2>{rootProblemLabel(item)}</h2>
+        <p>{rootProblemDescription(item)} Scans and file selection are unavailable until then; past scans and reports stay readable.</p>
+      </div>
+      <button type="button" className="button secondary" onClick={() => void workspace.reload()}>Check again</button>
+      <button type="button" className="button danger" onClick={() => setDeleteOpen(true)}>Remove workspace</button>
+    </section>}
     {/* Pre-flight: what this profile will run before it runs (IMP-14). */}
     <PreScanSummary
       profile={profile}

@@ -253,3 +253,27 @@ describe('WorkspacePage copy path', () => {
     Reflect.deleteProperty(navigator, 'clipboard');
   });
 });
+
+describe('WorkspacePage missing workspace folder (#62)', () => {
+  it('explains the missing folder, blocks scanning, and offers removal', async () => {
+    const host = await render(detailFetchMock({ items: [scanRow()], total: 1 }, workspacePayload({ root_missing: true, root_problem: 'missing' })));
+    const panel = host.querySelector('.root-missing-panel');
+    expect(panel?.getAttribute('role')).toBe('alert');
+    expect(panel?.textContent).toContain('Folder missing');
+    expect(panel?.textContent).toContain('C:\\code\\claire-frontend no longer exists');
+    const runScan = [...host.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.includes('Run scan'))!;
+    expect(runScan.disabled).toBe(true);
+    expect(host.querySelector<HTMLButtonElement>('button[aria-label="Scan options"]')!.disabled).toBe(true);
+    const remove = [...panel!.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === 'Remove workspace')!;
+    await act(async () => { remove.click(); });
+    expect(document.body.textContent).toContain('Remove this workspace?');
+  });
+
+  it('shows no missing-folder state for a healthy workspace', async () => {
+    const host = await render(detailFetchMock({ items: [scanRow()], total: 1 }, workspacePayload({ root_missing: false })));
+    expect(host.querySelector('.root-missing-panel')).toBeNull();
+    expect(host.querySelector('.root-missing-badge')).toBeNull();
+    const runScan = [...host.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.includes('Run scan'))!;
+    expect(runScan.disabled).toBe(false);
+  });
+});

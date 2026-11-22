@@ -26,6 +26,9 @@ export interface ScanActionDropdownProps {
   notify?: (n: Notice) => void;
   onScanStarted?: (scanId: string) => void;
   className?: string;
+  /** Blocks every scan entry (e.g. the workspace folder is missing); `disabledReason` becomes the tooltip. */
+  disabled?: boolean;
+  disabledReason?: string;
 }
 
 export function ScanActionDropdown({
@@ -38,6 +41,8 @@ export function ScanActionDropdown({
   notify,
   onScanStarted,
   className = '',
+  disabled = false,
+  disabledReason,
 }: ScanActionDropdownProps) {
   const [running, setRunning] = useState(false);
   // Profile picked but not yet confirmed: a scan takes minutes, so one misclick
@@ -81,12 +86,12 @@ export function ScanActionDropdown({
       <Button
         size={size}
         variant={variant as never}
-        disabled={running}
+        disabled={running || disabled}
         onClick={() => setPendingProfile(defaultProfile)}
         className={`rounded-r-none border-r border-black/15 dark:border-white/20 gap-1.5 focus-visible:z-10 focus-visible:ring-1 focus-visible:ring-offset-0 active:scale-100 ${
           isFullWidth ? 'flex-1 justify-center' : ''
         }`}
-        title={`Run ${defaultProfile} scan`}
+        title={disabled && disabledReason ? disabledReason : `Run ${defaultProfile} scan`}
       >
         {running ? (
           <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent motion-reduce:animate-none" aria-hidden="true" />
@@ -103,10 +108,10 @@ export function ScanActionDropdown({
           <Button
             size={size}
             variant={variant as never}
-            disabled={running}
+            disabled={running || disabled}
             className="scan-options-trigger rounded-l-none px-2 focus-visible:z-10 focus-visible:ring-1 focus-visible:ring-offset-0 active:scale-100 shrink-0"
             aria-label="Scan options"
-            title="Choose scan profile or open pentest"
+            title={disabled && disabledReason ? disabledReason : 'Choose scan profile or open pentest'}
           >
             <ChevronDown className="h-3.5 w-3.5" />
           </Button>
