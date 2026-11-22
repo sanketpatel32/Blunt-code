@@ -38,7 +38,7 @@ const (
 	scanStatePollInterval = 2 * time.Second
 )
 
-const scanUsage = "usage: bluntcode scan <path> [--profile quick|standard|deep|pentest] [--format text|json|github|sarif|csv|jsonl|markdown] [--json] [--output <file>] [--timeout 30m] [--quiet] [--fail-on high+] [--max-findings N] [--baseline <scan-id-or-sarif>] [--save-baseline <file>] [--gate-analyzer <ids>] [--gate-category <categories>] [--jobs N] [--incremental] [--github-cap N] [--watch] [--watch-poll <interval>] [--watch-quiet <window>]"
+const scanUsage = "usage: bluntcode scan <path> [--profile quick|standard|deep|pentest] [--target <url>] [--format text|json|github|sarif|csv|jsonl|markdown] [--json] [--output <file>] [--timeout 30m] [--quiet] [--fail-on high+] [--max-findings N] [--baseline <scan-id-or-sarif>] [--save-baseline <file>] [--gate-analyzer <ids>] [--gate-category <categories>] [--jobs N] [--incremental] [--github-cap N] [--watch] [--watch-poll <interval>] [--watch-quiet <window>]"
 
 // The stdout report formats of `bluntcode scan`. text (the default) keeps the
 // historical human summary; json prints the full versioned JSON report
@@ -65,7 +65,10 @@ const (
 type scanConfig struct {
 	path    string
 	profile string
-	json    bool
+	// target is the live endpoint the pentest profile's DAST probe requests
+	// (--target); empty keeps the scan static-only.
+	target string
+	json   bool
 	// format selects the stdout report: the human summary (text, the
 	// historical default), the full JSON report document (json), the GitHub
 	// Actions annotation stream (github), or the SARIF 2.1.0 code-scanning
@@ -123,6 +126,7 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	flags := flag.NewFlagSet("scan", flag.ContinueOnError)
 	flags.SetOutput(errOut)
 	profile := flags.String("profile", "standard", "scan profile: quick, standard, deep, or pentest")
+	target := flags.String("target", "", "pentest profile only: URL of the running app the DAST probe requests (security headers, CSP, CORS reflection, exposed sensitive paths); same host only, loopback only in offline mode")
 	format := flags.String("format", "", "stdout report format: text (human summary, the default), json (the full JSON report document), github (GitHub Actions annotations), sarif (the SARIF 2.1.0 code-scanning document), csv, jsonl, or markdown")
 	jsonOut := flags.Bool("json", false, "print a machine-readable JSON summary instead of human text")
 	timeout := flags.Duration("timeout", scanDefaultTimeout, "abort the scan when it exceeds this duration (for example 5m or 90s)")
@@ -203,6 +207,13 @@ func parseScanFlags(args []string, errOut io.Writer) (scanConfig, error) {
 	if cfg.profile != analyzers.ProfileQuick && cfg.profile != analyzers.ProfileStandard && cfg.profile != analyzers.ProfileDeep && cfg.profile != analyzers.ProfilePentest {
 		return usageError("profile must be quick, standard, deep, or pentest")
 	}
+	normalizedTarget, targetErr := scans.NormalizeScanTarget(cfg.profile, strings.TrimSpace(*target))
+	if errors.Is(targetErr, scans.ErrTargetNeedsPentest) {
+		return usageError("--target requires --profile pentest (the only profile that runs the DAST probe)")
+	} else if targetErr != nil {
+		return usageError("--target: " + targetErr.Error())
+	}
+	cfg.target = normalizedTarget
 	if cfg.format != "" && cfg.format != scanFormatText && cfg.format != scanFormatJSON && cfg.format != scanFormatGitHub && cfg.format != scanFormatSARIF && cfg.format != scanFormatCSV && cfg.format != scanFormatJSONL && cfg.format != scanFormatMarkdown {
 		return usageError("format must be text, json, github, sarif, csv, jsonl, or markdown")
 	}
@@ -508,7 +519,7 @@ type scanRunResult struct {
 // can keep watching after a failed scan.
 func runSingleScan(app *appCore, cfg scanConfig, work core.Workspace, baseline scans.Baseline, stdout, stderr io.Writer, interrupts <-chan os.Signal) scanRunResult {
 	ctx := context.Background()
-	scan, err := app.scans.DiscoverAndStartWithOptions(ctx, work, cfg.profile, userExcludePatterns(ctx, app.db, work.ID), scans.ScanOptions{Jobs: cfg.jobs, Incremental: cfg.incremental})
+	scan, err := app.scans.DiscoverAndStartWithOptions(ctx, work, cfg.profile, userExcludePatterns(ctx, app.db, work.ID), scans.ScanOptions{Jobs: cfg.jobs, Incremental: cfg.incremental, TargetURL: cfg.target})
 	if err != nil {
 		fmt.Fprintf(stderr, "bluntcode scan: could not start scan: %v\n", err)
 		return scanRunResult{code: 3}

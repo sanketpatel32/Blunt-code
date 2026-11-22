@@ -107,6 +107,9 @@ type ScanSnapshot struct {
 	// lockfiles discovery saw (lockfiles included even though smart-skip
 	// keeps them out of SelectedFiles). Capped; empty means none were found.
 	DependencyInputs []string `json:"dependency_inputs,omitempty"`
+	// TargetURL is the live endpoint a pentest scan was asked to probe
+	// dynamically (dast-probe). Empty means the scan was static-only.
+	TargetURL string `json:"target_url,omitempty"`
 	// InputDigest digests the content hashes of every analyzed file, recorded
 	// before analyzers start: it identifies the bytes a scan actually
 	// describes. A recomputation at completion that disagrees means the

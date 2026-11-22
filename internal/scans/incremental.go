@@ -168,7 +168,7 @@ func (s *Service) selectedAnalyzerIdentity(scan core.Scan, filesByLanguage map[a
 		identity.FingerprintVersion = scan.Snapshot.FingerprintVersion
 	}
 	for _, adapter := range s.registry.All() {
-		if !profileAllowsAnalyzer(scan.Profile, adapter.ID()) {
+		if !profileAllowsAnalyzer(scan.Profile, adapter.ID()) || analyzers.RequiresTarget(adapter.ID()) {
 			continue
 		}
 		if len(filesForLanguages(filesByLanguage, adapter.SupportedLanguages()...)) == 0 {
@@ -204,6 +204,12 @@ func (s *Service) analyzerIdentityJSON(scan core.Scan, filesByLanguage map[analy
 // identity, any lookup error) logs the reason and returns nil so the caller
 // runs a full scan.
 func (s *Service) prepareIncremental(ctx context.Context, scan core.Scan, work core.Workspace, files []core.FileEntry, fileHashes map[string]string, filesByLanguage map[analyzers.Language][]string) *incrementalState {
+	// A DAST probe describes a live server, which file hashes cannot vouch
+	// for; a scan with a target always runs in full.
+	if scanTargetURL(scan) != "" {
+		log.Printf("incremental: scan %s probes a live target; running a full scan", scan.ID)
+		return nil
+	}
 	previousID, err := s.db.PreviousCompletedScanID(ctx, work.ID, scan.ID)
 	if errors.Is(err, sql.ErrNoRows) {
 		log.Printf("incremental: no previous completed scan for workspace %s; running a full scan", work.ID)

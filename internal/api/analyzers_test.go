@@ -87,8 +87,8 @@ func TestListAnalyzersServesCapabilityInventory(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if len(payload.Items) != 12 {
-		t.Fatalf("inventory served %d analyzers, want the 12 shipped entries", len(payload.Items))
+	if len(payload.Items) != 13 {
+		t.Fatalf("inventory served %d analyzers, want the 13 shipped entries", len(payload.Items))
 	}
 	byID := map[string]int{}
 	for i, item := range payload.Items {
@@ -104,8 +104,8 @@ func TestListAnalyzersServesCapabilityInventory(t *testing.T) {
 	if len(payload.Items[ruff].Languages) != 1 || payload.Items[ruff].Languages[0] != "python" {
 		t.Errorf("ruff languages = %v, want [python] from the adapter", payload.Items[ruff].Languages)
 	}
-	// The pentest analyzer is withheld in offline mode (not registered here);
-	// the inventory must still list it so the UI cannot undercount.
+	// This server registers only ruff; the inventory must still list the
+	// unregistered pentest analyzer so the UI cannot undercount.
 	pentest, ok := byID["pentest"]
 	if !ok {
 		t.Fatal("pentest missing from inventory")

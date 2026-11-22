@@ -39,6 +39,7 @@ const COMMANDS: CLICommand[] = [
     badge: 'Core / CI Gate',
     flags: [
       { flag: '--profile', type: 'string', desc: 'Profile: quick, standard, deep, or pentest', def: 'standard' },
+      { flag: '--target', type: 'string', desc: 'Pentest profile only: URL of the running app the DAST probe requests (loopback only in offline mode)' },
       { flag: '--fail-on', type: 'severity+', desc: 'Exit 1 if findings remain at or above severity (e.g. high+, critical, medium+)' },
       { flag: '--max-findings', type: 'int', desc: 'Exit 1 if total findings exceed N' },
       { flag: '--baseline', type: 'id|sarif', desc: 'Baseline scan ID or SARIF file; only trip gate on NEW findings (CLI only — not yet in the web app)' },
@@ -631,7 +632,7 @@ export function CLIPage() {
                 <code>quick</code> linters only, under a minute.{' '}
                 <code>standard</code> adds secrets, security patterns and SonarQube (default).{' '}
                 <code>deep</code> adds dependencies, containers and infrastructure, 10+ min.{' '}
-                <code>pentest</code> is standard plus OWASP checks.
+                <code>pentest</code> is deep plus a live DAST probe of <code>--target &lt;url&gt;</code>.
               </p>
             </section>
           )}
@@ -996,7 +997,7 @@ export function CLIPage() {
                 <option value="quick">Quick (fastest, lightweight lints)</option>
                 <option value="standard">Standard (recommended, full analyzers)</option>
                 <option value="deep">Deep (exhaustive static rules)</option>
-                <option value="pentest">Pentest (adds active DAST probing)</option>
+                <option value="pentest">Pentest (deep + DAST probe with --target)</option>
               </select>
             </div>
 
@@ -1094,7 +1095,7 @@ export function CLIPage() {
                   {builderProfile === 'quick' && 'Fast linters only, < 1 min'}
                   {builderProfile === 'standard' && 'Linters, secrets, security & SonarQube'}
                   {builderProfile === 'deep' && 'Exhaustive static rules & dependencies'}
-                  {builderProfile === 'pentest' && 'Standard analyzers plus DAST prober'}
+                  {builderProfile === 'pentest' && 'Deep analyzers plus DAST probe of --target'}
                   )
                 </span>
               </div>

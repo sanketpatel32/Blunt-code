@@ -129,7 +129,7 @@ export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => vo
     if (!current?.workspace_id || rerunning) return;
     setRerunning(true);
     try {
-      const next = await api.startScan(current.workspace_id, current.profile);
+      const next = await api.startScan(current.workspace_id, current.profile, current.snapshot?.target_url);
       if (go && next?.id) go({ page: 'scan', id: next.id });
     } catch (e) { notify({ kind: 'error', text: message(e) }); } finally { setRerunning(false); }
   }

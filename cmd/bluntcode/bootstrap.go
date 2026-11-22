@@ -17,6 +17,7 @@ import (
 	"bluntcode/internal/analyzers"
 	"bluntcode/internal/analyzers/biome"
 	analyzerscheckov "bluntcode/internal/analyzers/checkov"
+	"bluntcode/internal/analyzers/dastprobe"
 	"bluntcode/internal/analyzers/gitleaks"
 	"bluntcode/internal/analyzers/license"
 	analyzersosv "bluntcode/internal/analyzers/osv"
@@ -143,17 +144,7 @@ func openCore() (core *appCore, release func(), err error) {
 	_ = registry.Register(analyzerscheckov.New(filepath.Join(paths.ToolsDir, "iac-checkov", "3.3.16", "env", "checkov", "Scripts", "python.exe"), "3.3.16"))
 	_ = registry.Register(semgrep.New(semgrepExecutable, semgrepVersion, semgrepRules))
 	_ = registry.Register(managedSonar)
-	// bluntcode:ignore
-	// Built-in in-process analyzers (secrets detector, TODO/FIXME tracker): no
-	// managed tool, so registration needs no tool service. They are held back
-	// in offline mode on purpose: an offline scan with no available analyzers
-	// must keep failing honestly instead of being rescued by the built-ins.
-	if !appSettings.Offline {
-		_ = registry.Register(pentest.New())
-		_ = registry.Register(secrets.New())
-		_ = registry.Register(todo.New())
-		_ = registry.Register(license.New())
-	}
+	registerBuiltinAnalyzers(registry, toolService.Offline)
 	scanService := scans.New(db, registry, bus, paths.ReportsDir, paths.ToolsDir, toolService)
 	app := &appCore{
 		paths:       paths,
@@ -226,4 +217,23 @@ func ensureWorkspace(ctx context.Context, db *database.DB, pathArg string) (core
 		}
 	}
 	return db.CreateWorkspace(ctx, core.Workspace{Name: filepath.Base(root), RootPath: root})
+}
+
+// registerBuiltinAnalyzers adds the in-process analyzers. The four static
+// built-ins (pentest patterns, secrets, TODO markers, licenses) never touch
+// the network, so they register in offline mode too: offline must keep the
+// checks that are guaranteed local and withhold only network-dependent work.
+// The DAST probe is the one outbound built-in; offline mode keeps it but
+// narrows it to loopback targets, so it fails honestly instead of dialing
+// out. offline is read live (the tool service's setting, which Settings
+// updates), so toggling offline mode needs no restart. Managed-tool analyzers keep failing honestly when their tool was never
+// downloaded (offline mode refuses downloads).
+func registerBuiltinAnalyzers(registry *analyzers.Registry, offline func() bool) {
+	_ = registry.Register(pentest.New())
+	_ = registry.Register(secrets.New())
+	_ = registry.Register(todo.New())
+	_ = registry.Register(license.New())
+	probe := dastprobe.New()
+	probe.Offline = offline
+	_ = registry.Register(probe)
 }

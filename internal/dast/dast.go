@@ -1,4 +1,9 @@
-package api
+// Package dast implements Blunt Code's dynamic HTTP probe: one GET plus a
+// CORS preflight against a user-named target (and, at full/spider scope, a
+// handful of sensitive-path GETs on the same host), graded into findings.
+// It backs `bluntcode pentest probe`, POST /api/v1/pentest/probe, and the
+// dast-probe analyzer the pentest scan profile runs when given a target.
+package dast
 
 import (
 	"context"
@@ -10,7 +15,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 )
@@ -24,7 +28,7 @@ var errCrossHostRedirect = errors.New("cross-host redirect refused")
 // credentials in cleartext.
 var errCredentialDowngrade = errors.New("redirect to cleartext http refused while credentials are attached")
 
-type PentestProbeRequest struct {
+type ProbeRequest struct {
 	TargetURL string `json:"target_url"`
 	AuthMode  string `json:"auth_mode,omitempty"`
 	AuthToken string `json:"auth_token,omitempty"`
@@ -38,7 +42,7 @@ type PentestProbeRequest struct {
 	AllowPrivate bool `json:"-"`
 }
 
-type PentestFinding struct {
+type Finding struct {
 	ID          string `json:"id"`
 	Title       string `json:"title"`
 	Severity    string `json:"severity"`
@@ -50,50 +54,24 @@ type PentestFinding struct {
 	Evidence    string `json:"evidence,omitempty"`
 }
 
-type PentestProbeResponse struct {
-	TargetURL      string           `json:"target_url"`
-	StatusCode     int              `json:"status_code"`
-	ResponseTimeMS int64            `json:"response_time_ms"`
-	Server         string           `json:"server,omitempty"`
-	PoweredBy      string           `json:"powered_by,omitempty"`
-	Grade          string           `json:"grade"`
-	RiskScore      int              `json:"risk_score"`
-	HeadersFound   []string         `json:"headers_found"`
-	HeadersMissing []string         `json:"headers_missing"`
-	Findings       []PentestFinding `json:"findings"`
-	ProbedAt       string           `json:"probed_at"`
+type ProbeResponse struct {
+	TargetURL      string    `json:"target_url"`
+	StatusCode     int       `json:"status_code"`
+	ResponseTimeMS int64     `json:"response_time_ms"`
+	Server         string    `json:"server,omitempty"`
+	PoweredBy      string    `json:"powered_by,omitempty"`
+	Grade          string    `json:"grade"`
+	RiskScore      int       `json:"risk_score"`
+	HeadersFound   []string  `json:"headers_found"`
+	HeadersMissing []string  `json:"headers_missing"`
+	Findings       []Finding `json:"findings"`
+	// Warnings lists follow-up checks (CORS preflight, sensitive paths) that
+	// did not complete, so the caller knows the probe's coverage was partial.
+	Warnings []string `json:"warnings,omitempty"`
+	ProbedAt string   `json:"probed_at"`
 }
 
-func (s *Server) pentestProbe(w http.ResponseWriter, r *http.Request) {
-	var input PentestProbeRequest
-	if err := decode(r, &input); err != nil {
-		fail(w, 400, "INVALID_JSON", "Invalid probe request payload.")
-		return
-	}
-
-	target := strings.TrimSpace(input.TargetURL)
-	if target == "" {
-		fail(w, 400, "MISSING_TARGET", "target_url is required.")
-		return
-	}
-
-	input.AllowPrivate = PentestAllowPrivateFromEnv(os.Getenv)
-	resp, err := RunPentestProbe(r.Context(), input)
-	if err != nil {
-		switch {
-		case errors.Is(err, ErrProbeTargetBlocked):
-			fail(w, 403, "TARGET_BLOCKED", err.Error())
-		case errors.Is(err, ErrCleartextCredentials):
-			fail(w, 400, "INSECURE_CREDENTIALS", err.Error())
-		default:
-			fail(w, 400, "INVALID_URL", err.Error())
-		}
-		return
-	}
-	writeJSON(w, 200, resp)
-}
-
-func pentestHasCredentials(input PentestProbeRequest) bool {
+func pentestHasCredentials(input ProbeRequest) bool {
 	if input.AuthToken == "" {
 		return false
 	}
@@ -104,8 +82,8 @@ func pentestHasCredentials(input PentestProbeRequest) bool {
 	return false
 }
 
-func pentestSingleFinding(target string, duration int64, grade string, risk int, finding PentestFinding) PentestProbeResponse {
-	return PentestProbeResponse{
+func pentestSingleFinding(target string, duration int64, grade string, risk int, finding Finding) ProbeResponse {
+	return ProbeResponse{
 		TargetURL:      target,
 		StatusCode:     0,
 		ResponseTimeMS: duration,
@@ -113,7 +91,7 @@ func pentestSingleFinding(target string, duration int64, grade string, risk int,
 		RiskScore:      risk,
 		HeadersFound:   []string{},
 		HeadersMissing: []string{},
-		Findings:       []PentestFinding{finding},
+		Findings:       []Finding{finding},
 		ProbedAt:       time.Now().UTC().Format(time.RFC3339),
 	}
 }
@@ -126,7 +104,7 @@ func isCertificateError(err error) bool {
 	return errors.As(err, &verifyErr) || errors.As(err, &unknownAuthority) || errors.As(err, &hostname) || errors.As(err, &invalid)
 }
 
-// RunPentestProbe performs dynamic security probing against targetURL.
+// Run performs dynamic security probing against targetURL.
 //
 // Network policy: public and loopback targets are probed; private-network
 // and link-local targets require input.AllowPrivate; cloud metadata,
@@ -134,10 +112,10 @@ func isCertificateError(err error) bool {
 // policy is enforced on every connection's resolved address, not just the
 // URL. TLS certificates are verified unless input.InsecureSkipTLSVerify, and
 // credentials are only ever sent over https://.
-func RunPentestProbe(ctx context.Context, input PentestProbeRequest) (PentestProbeResponse, error) {
+func Run(ctx context.Context, input ProbeRequest) (ProbeResponse, error) {
 	target := strings.TrimSpace(input.TargetURL)
 	if target == "" {
-		return PentestProbeResponse{}, fmt.Errorf("target_url is required")
+		return ProbeResponse{}, fmt.Errorf("target_url is required")
 	}
 
 	if !strings.HasPrefix(target, "http://") && !strings.HasPrefix(target, "https://") {
@@ -146,18 +124,18 @@ func RunPentestProbe(ctx context.Context, input PentestProbeRequest) (PentestPro
 
 	parsedURL, err := url.Parse(target)
 	if err != nil || parsedURL.Hostname() == "" || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
-		return PentestProbeResponse{}, fmt.Errorf("invalid target URL format")
+		return ProbeResponse{}, fmt.Errorf("invalid target URL format")
 	}
 	if parsedURL.User != nil {
-		return PentestProbeResponse{}, fmt.Errorf("%w: credentials embedded in the target URL are not accepted; use auth_mode/auth_token over https://", ErrCleartextCredentials)
+		return ProbeResponse{}, fmt.Errorf("%w: credentials embedded in the target URL are not accepted; use auth_mode/auth_token over https://", ErrCleartextCredentials)
 	}
 
 	hasCreds := pentestHasCredentials(input)
 	if hasCreds && parsedURL.Scheme != "https" {
-		return PentestProbeResponse{}, fmt.Errorf("%w: auth_token is only sent to https:// targets, refusing to send it to %s", ErrCleartextCredentials, target)
+		return ProbeResponse{}, fmt.Errorf("%w: auth_token is only sent to https:// targets, refusing to send it to %s", ErrCleartextCredentials, target)
 	}
 	if err := preflightProbeHost(ctx, parsedURL.Hostname(), input.AllowPrivate); err != nil {
-		return PentestProbeResponse{}, err
+		return ProbeResponse{}, err
 	}
 
 	dialer := &net.Dialer{
@@ -202,7 +180,7 @@ func RunPentestProbe(ctx context.Context, input PentestProbeRequest) (PentestPro
 	start := time.Now()
 	req, err := http.NewRequestWithContext(reqCtx, "GET", target, nil)
 	if err != nil {
-		return PentestProbeResponse{}, fmt.Errorf("could not create request: %w", err)
+		return ProbeResponse{}, fmt.Errorf("could not create request: %w", err)
 	}
 
 	req.Header.Set("User-Agent", "BluntCode-Pentest/1.0 (Security Audit Probe)")
@@ -218,10 +196,10 @@ func RunPentestProbe(ctx context.Context, input PentestProbeRequest) (PentestPro
 	duration := time.Since(start).Milliseconds()
 	if err != nil {
 		if errors.Is(err, ErrProbeTargetBlocked) {
-			return PentestProbeResponse{}, err
+			return ProbeResponse{}, err
 		}
 		if errors.Is(err, errCredentialDowngrade) {
-			return pentestSingleFinding(target, duration, "C", 45, PentestFinding{
+			return pentestSingleFinding(target, duration, "C", 45, Finding{
 				ID:          "dast.redirect.credential-downgrade",
 				Title:       "HTTPS Endpoint Redirects To Cleartext HTTP",
 				Severity:    "medium",
@@ -234,7 +212,7 @@ func RunPentestProbe(ctx context.Context, input PentestProbeRequest) (PentestPro
 			}), nil
 		}
 		if isCertificateError(err) {
-			return pentestSingleFinding(target, duration, "C", 45, PentestFinding{
+			return pentestSingleFinding(target, duration, "C", 45, Finding{
 				ID:          "dast.tls.untrusted-certificate",
 				Title:       "TLS Certificate Could Not Be Verified",
 				Severity:    "medium",
@@ -250,13 +228,13 @@ func RunPentestProbe(ctx context.Context, input PentestProbeRequest) (PentestPro
 			// The target answered, but pointed somewhere the user did not
 			// name. That is a security observation about the target, not a
 			// connectivity failure, so it gets its own finding.
-			return PentestProbeResponse{
+			return ProbeResponse{
 				TargetURL:      target,
 				StatusCode:     0,
 				ResponseTimeMS: duration,
 				Grade:          "C",
 				RiskScore:      45,
-				Findings: []PentestFinding{{
+				Findings: []Finding{{
 					ID:          "dast.redirect.cross-host",
 					Title:       "Target Redirects To A Different Host",
 					Severity:    "medium",
@@ -270,14 +248,14 @@ func RunPentestProbe(ctx context.Context, input PentestProbeRequest) (PentestPro
 				ProbedAt: time.Now().UTC().Format(time.RFC3339),
 			}, nil
 		}
-		return PentestProbeResponse{
+		return ProbeResponse{
 			TargetURL:      target,
 			StatusCode:     0,
 			ResponseTimeMS: duration,
 			Grade:          "F",
 			RiskScore:      90,
 			HeadersMissing: []string{"Strict-Transport-Security", "Content-Security-Policy", "X-Frame-Options", "X-Content-Type-Options"},
-			Findings: []PentestFinding{
+			Findings: []Finding{
 				{
 					ID:          "dast.endpoint.unreachable",
 					Title:       "Target Endpoint Unreachable",
@@ -298,9 +276,9 @@ func RunPentestProbe(ctx context.Context, input PentestProbeRequest) (PentestPro
 	// Drain a small amount of body safely
 	_, _ = io.CopyN(io.Discard, resp.Body, 32*1024)
 
-	var findings []PentestFinding
+	var findings []Finding
 	if input.InsecureSkipTLSVerify && (parsedURL.Scheme == "https" || resp.TLS != nil) {
-		findings = append(findings, PentestFinding{
+		findings = append(findings, Finding{
 			ID:          "dast.tls.verification-disabled",
 			Title:       "TLS Verification Disabled For This Probe",
 			Severity:    "info",
@@ -320,7 +298,7 @@ func RunPentestProbe(ctx context.Context, input PentestProbeRequest) (PentestPro
 			headersFound = append(headersFound, "Strict-Transport-Security")
 		} else {
 			headersMissing = append(headersMissing, "Strict-Transport-Security")
-			findings = append(findings, PentestFinding{
+			findings = append(findings, Finding{
 				ID:          "dast.headers.missing-hsts",
 				Title:       "Missing HTTP Strict Transport Security (HSTS)",
 				Severity:    "medium",
@@ -338,7 +316,7 @@ func RunPentestProbe(ctx context.Context, input PentestProbeRequest) (PentestPro
 	if csp := resp.Header.Get("Content-Security-Policy"); csp != "" {
 		headersFound = append(headersFound, "Content-Security-Policy")
 		if strings.Contains(csp, "'unsafe-inline'") || strings.Contains(csp, "'unsafe-eval'") {
-			findings = append(findings, PentestFinding{
+			findings = append(findings, Finding{
 				ID:          "dast.csp.unsafe-directive",
 				Title:       "Weak Content Security Policy (unsafe-inline / unsafe-eval)",
 				Severity:    "medium",
@@ -352,7 +330,7 @@ func RunPentestProbe(ctx context.Context, input PentestProbeRequest) (PentestPro
 		}
 	} else {
 		headersMissing = append(headersMissing, "Content-Security-Policy")
-		findings = append(findings, PentestFinding{
+		findings = append(findings, Finding{
 			ID:          "dast.headers.missing-csp",
 			Title:       "Missing Content Security Policy (CSP)",
 			Severity:    "medium",
@@ -369,7 +347,7 @@ func RunPentestProbe(ctx context.Context, input PentestProbeRequest) (PentestPro
 		headersFound = append(headersFound, "X-Frame-Options")
 	} else {
 		headersMissing = append(headersMissing, "X-Frame-Options")
-		findings = append(findings, PentestFinding{
+		findings = append(findings, Finding{
 			ID:          "dast.headers.missing-xfo",
 			Title:       "Missing Anti-Clickjacking Header (X-Frame-Options)",
 			Severity:    "medium",
@@ -386,7 +364,7 @@ func RunPentestProbe(ctx context.Context, input PentestProbeRequest) (PentestPro
 		headersFound = append(headersFound, "X-Content-Type-Options")
 	} else {
 		headersMissing = append(headersMissing, "X-Content-Type-Options")
-		findings = append(findings, PentestFinding{
+		findings = append(findings, Finding{
 			ID:          "dast.headers.missing-xcto",
 			Title:       "Missing MIME-Sniffing Protection (X-Content-Type-Options)",
 			Severity:    "low",
@@ -410,7 +388,7 @@ func RunPentestProbe(ctx context.Context, input PentestProbeRequest) (PentestPro
 				leak = poweredBy
 			}
 		}
-		findings = append(findings, PentestFinding{
+		findings = append(findings, Finding{
 			ID:          "dast.info.server-banner-leak",
 			Title:       "Server Information Disclosure (Banner Leak)",
 			Severity:    "info",
@@ -423,17 +401,28 @@ func RunPentestProbe(ctx context.Context, input PentestProbeRequest) (PentestPro
 		})
 	}
 
+	var warnings []string
+	checkDo := func(req *http.Request, check string) (*http.Response, error) {
+		resp, err := client.Do(req)
+		// A refused cross-host redirect means the resource is not served on
+		// the named host: a real answer, not a missed check.
+		if err != nil && !errors.Is(err, errCrossHostRedirect) {
+			warnings = append(warnings, fmt.Sprintf("%s did not complete: %v", check, err))
+		}
+		return resp, err
+	}
+
 	// 6. CORS Wildcard Check
 	corsReq, _ := http.NewRequestWithContext(reqCtx, "OPTIONS", target, nil)
 	if corsReq != nil {
 		corsReq.Header.Set("Origin", "https://evil-attacker.com")
 		corsReq.Header.Set("Access-Control-Request-Method", "POST")
-		if corsResp, err := client.Do(corsReq); err == nil {
+		if corsResp, err := checkDo(corsReq, "CORS preflight"); err == nil {
 			allowOrigin := corsResp.Header.Get("Access-Control-Allow-Origin")
 			allowCreds := corsResp.Header.Get("Access-Control-Allow-Credentials")
 			corsResp.Body.Close()
 			if allowOrigin == "*" && allowCreds == "true" {
-				findings = append(findings, PentestFinding{
+				findings = append(findings, Finding{
 					ID:          "dast.cors.wildcard-credentials",
 					Title:       "CORS Wildcard with Credentials Enabled",
 					Severity:    "high",
@@ -445,7 +434,7 @@ func RunPentestProbe(ctx context.Context, input PentestProbeRequest) (PentestPro
 					Evidence:    "Access-Control-Allow-Origin: * with Access-Control-Allow-Credentials: true",
 				})
 			} else if allowOrigin == "https://evil-attacker.com" && allowCreds == "true" {
-				findings = append(findings, PentestFinding{
+				findings = append(findings, Finding{
 					ID:          "dast.cors.arbitrary-origin-reflection",
 					Title:       "Arbitrary CORS Origin Reflection with Credentials",
 					Severity:    "critical",
@@ -477,11 +466,11 @@ func RunPentestProbe(ctx context.Context, input PentestProbeRequest) (PentestPro
 		for _, p := range probePaths {
 			probeURL := baseURL + p.path
 			if pReq, err := http.NewRequestWithContext(reqCtx, "GET", probeURL, nil); err == nil {
-				if pResp, err := client.Do(pReq); err == nil {
+				if pResp, err := checkDo(pReq, "GET "+p.path); err == nil {
 					pBody, _ := io.ReadAll(io.LimitReader(pResp.Body, 1024))
 					pResp.Body.Close()
 					if pResp.StatusCode == 200 && (p.match == "" || strings.Contains(string(pBody), p.match)) {
-						findings = append(findings, PentestFinding{
+						findings = append(findings, Finding{
 							ID:          "dast.path.exposed-" + strings.TrimPrefix(p.path, "/"),
 							Title:       p.title,
 							Severity:    "critical",
@@ -527,7 +516,7 @@ func RunPentestProbe(ctx context.Context, input PentestProbeRequest) (PentestPro
 		grade = "B"
 	}
 
-	return PentestProbeResponse{
+	return ProbeResponse{
 		TargetURL:      target,
 		StatusCode:     resp.StatusCode,
 		ResponseTimeMS: duration,
@@ -538,6 +527,48 @@ func RunPentestProbe(ctx context.Context, input PentestProbeRequest) (PentestPro
 		HeadersFound:   headersFound,
 		HeadersMissing: headersMissing,
 		Findings:       findings,
+		Warnings:       warnings,
 		ProbedAt:       time.Now().UTC().Format(time.RFC3339),
 	}, nil
+}
+
+// NormalizeTarget applies the probe's URL rules (an http:// default scheme,
+// a non-empty host) without contacting anything, so callers can reject a bad
+// target before a scan starts.
+func NormalizeTarget(raw string) (*url.URL, error) {
+	target := strings.TrimSpace(raw)
+	if target == "" {
+		return nil, fmt.Errorf("target_url is required")
+	}
+	lower := strings.ToLower(target)
+	if !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "https://") {
+		if strings.Contains(target, "://") {
+			return nil, fmt.Errorf("target URL must use http or https")
+		}
+		target = "http://" + target
+	}
+	parsed, err := url.Parse(target)
+	if err != nil || parsed.Hostname() == "" {
+		return nil, fmt.Errorf("invalid target URL format")
+	}
+	return parsed, nil
+}
+
+// IsLoopbackTarget reports whether the target's host is this machine
+// (localhost or a loopback IP literal). Offline mode only probes such
+// targets: the request never leaves the host. Redirects stay on the named
+// host (see Run), so a loopback target cannot be bounced off-machine.
+func IsLoopbackTarget(raw string) bool {
+	parsed, err := NormalizeTarget(raw)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	// Only the literal name: *.localhost subdomains may be handed to a DNS
+	// resolver on some platforms, which is a network request offline forbids.
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }

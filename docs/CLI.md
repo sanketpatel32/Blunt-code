@@ -51,9 +51,10 @@ bluntcode scan <path> [options]
 ### Flags
 - `--profile quick|standard|deep|pentest`: Analyzer depth (default: `standard`).
   - `quick`: Fast lint pass only (Ruff, Biome).
-  - `standard`: Adds Semgrep, Gitleaks, SonarQube, the pentest probe suite, license-scan, and the built-in secrets/todo scans.
+  - `standard`: Adds Semgrep, Gitleaks, SonarQube, the static pentest pattern pass, license-scan, and the built-in secrets/todo scans.
   - `deep`: The full catalog — everything in standard plus OSV (dependency CVEs), Trivy (containers), Checkov (IaC), and Ruff's extended rule sets.
-  - `pentest`: Same catalog as standard, oriented around the probe suite.
+  - `pentest`: Everything in deep, plus the `dast-probe` analyzer: a live HTTP probe (security headers, CSP, CORS origin reflection, banner leaks, exposed sensitive paths) of the URL given with `--target`. Without `--target` the probe is skipped and the scan is static-only.
+- `--target <url>`: Pentest profile only. The running app the DAST probe requests; only that host is contacted (cross-host redirects are refused), and offline mode accepts loopback targets only.
 - `--fail-on <severity+>`: Trips exit code 1 if findings remain at or above severity (e.g. `critical`, `high+`, `medium+`, `low+`).
 - `--max-findings N`: Trips exit code 1 if total non-suppressed findings exceed N.
 - `--baseline <id-or-sarif>`: Compares findings against a baseline scan ID or SARIF file; only trips gate on **new** findings.
