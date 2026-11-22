@@ -4,9 +4,9 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Blunt Code — your code has problems. Here they are.</title>
-<meta name="description" content="Eleven analyzers, one honest report, zero uploads. Ruff · Biome · Semgrep · SonarQube · gitleaks · Trivy · OSV · Checkov · secrets · TODO · licenses in one loopback app for Windows. No cloud, no account, no telemetry." />
+<meta name="description" content="Twelve analyzers, one honest report, zero uploads. Ruff · Biome · Semgrep · SonarQube · gitleaks · Trivy · OSV · Checkov · secrets · TODO · licenses · pentest suite in one loopback app for Windows. No cloud, no account, no telemetry." />
 <meta property="og:title" content="Blunt Code — your code has problems. Here they are." />
-<meta property="og:description" content="Eleven analyzers. One honest report. Zero uploads. Free, local-first code scanning for Windows." />
+<meta property="og:description" content="Twelve analyzers. One honest report. Zero uploads. Free, local-first code scanning for Windows." />
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://sanketpatel32.github.io/Blunt-code/" />
 <meta property="og:image" content="https://sanketpatel32.github.io/Blunt-code/og-image.png" />
@@ -27,7 +27,7 @@
   "description": "Local code quality & security for Windows: Ruff, Biome, Semgrep, SonarQube, gitleaks, OSV, Trivy, Checkov, license, secrets and TODO tracking in one loopback desktop app. No cloud, no account, no telemetry.",
   "applicationCategory": "DeveloperApplication",
   "operatingSystem": "Windows 10, Windows 11",
-  "softwareVersion": "0.16.21",
+  "softwareVersion": "0.49.1",
   "downloadUrl": "https://github.com/sanketpatel32/Blunt-code/releases/latest",
   "isAccessibleForFree": true,
   "license": "https://github.com/sanketpatel32/Blunt-code/blob/main/LICENSE",
@@ -741,7 +741,7 @@
       <a href="#cli">CLI</a>
       <a href="#why">Why local</a>
     </div>
-    <span class="nav-ver" data-ver>v0.16.21</span>
+    <span class="nav-ver" data-ver>v0.49.1</span>
     <a class="nav-cta" href="https://github.com/sanketpatel32/Blunt-code/releases/latest">Get it</a>
   </div>
 </nav>
@@ -753,13 +753,13 @@
     <div>
       <p class="kicker" style="margin:0"><span class="sq" aria-hidden="true"></span>Local-first code scanner for Windows</p>
       <h1>Your code has <span class="red">problems.</span><br /><span class="stamp">Here they are.</span></h1>
-      <p class="hero-sub"><b>Eleven analyzers. One honest report. Zero uploads.</b> Blunt Code runs Ruff, Biome, Semgrep and SonarQube — plus gitleaks, Trivy, OSV, Checkov, license, secrets and TODO checks — on your machine, and tells you exactly what's wrong, to your face.</p>
+      <p class="hero-sub"><b>Twelve analyzers. One honest report. Zero uploads.</b> Blunt Code runs Ruff, Biome, Semgrep and SonarQube — plus gitleaks, Trivy, OSV, Checkov, license, secrets, TODO and pentest checks — on your machine, and tells you exactly what's wrong, to your face.</p>
       <div class="cta-row">
         <a class="btn btn-red" href="#install">Install in 30s ↓</a>
         <a class="btn" href="https://github.com/sanketpatel32/Blunt-code/releases/latest">Portable ZIP</a>
         <a class="btn" href="https://github.com/sanketpatel32/Blunt-code">★&nbsp;Star on GitHub</a>
       </div>
-      <p class="trust"><b>free</b> · MIT · no admin · Windows 10/11 · 726 automated tests</p>
+      <p class="trust"><b>free</b> · MIT · no admin · Windows 10/11</p>
     </div>
 
     <section class="term" aria-label="Illustrative findings feed, recreated from a real scan">
@@ -770,7 +770,7 @@
       </div>
       <div class="term-count">
         <span><b>516</b> findings</span>
-        <span>11 analyzers</span>
+        <span>12 analyzers</span>
         <span class="up">0 bytes uploaded</span>
       </div>
       <div class="feed">
@@ -849,7 +849,7 @@
       <span class="rule" aria-hidden="true"></span>
     </div>
 
-    <figure class="pipe" role="img" aria-label="Diagram: your folder flows through bluntcode.exe on loopback 127.0.0.1, fans out to eleven analyzers — Ruff, Biome, Semgrep, SonarQube, Secrets, TODO, plus gitleaks, OSV, Trivy, Checkov and license scanning — then findings are deduplicated and fingerprinted into a local SQLite database and exported as Markdown, HTML, SARIF, CSV or JSON, or gated in CI.">
+    <figure class="pipe" role="img" aria-label="Diagram: your folder flows through bluntcode.exe on loopback 127.0.0.1, fans out to twelve analyzers — Ruff, Biome, Semgrep, SonarQube, Secrets, TODO, plus gitleaks, OSV, Trivy, Checkov, license scanning and the pentest suite — then findings are deduplicated and fingerprinted into a local SQLite database and exported as Markdown, HTML, SARIF, CSV or JSON, or gated in CI.">
       <div class="flow">
         <div class="node"><b>Your folder</b><span>39 languages classified</span></div>
         <span class="link" aria-hidden="true"></span>
@@ -881,7 +881,7 @@
     <div class="profiles" aria-label="Scan profiles">
       <div class="profile"><b>Quick</b><span>Ruff + Biome · seconds, pre-commit friendly</span></div>
       <div class="profile"><b>Standard</b><span>+ Semgrep + SonarQube · the default sweep</span></div>
-      <div class="profile"><b>Deep</b><span>all eleven + extended rule sets · the full interrogation</span></div>
+      <div class="profile"><b>Deep</b><span>all twelve + extended rule sets · the full interrogation</span></div>
     </div>
 
     <p class="caption">Every analyzer runs sandboxed under <b>%LOCALAPPDATA%\BluntCode\tools</b> — your PATH is never touched, and nothing is ever uploaded.</p>
@@ -961,7 +961,7 @@
         <div class="diagram" aria-hidden="true">
           <span class="box">your disk</span><span class="arr">→</span><span class="box box-em">127.0.0.1</span><span class="arr">→</span><span class="box">browser</span><span class="arr">·</span><span class="box dead">cloud ✕</span>
         </div>
-        <p>Loopback-only server. SQLite, reports and logs stay in %LOCALAPPDATA%. No account, no telemetry, works offline after first run.</p>
+        <p>Loopback-only server. SQLite, reports and logs stay in %LOCALAPPDATA%. No account, no telemetry, no source upload. Offline mode blocks every outbound request.</p>
       </div>
       <div class="card">
         <h3><span class="no">/02</span> Ignore at source</h3>
@@ -1083,7 +1083,7 @@
   <section class="final" aria-label="Get Blunt Code">
     <h2>Scan everything.<br />Send nothing.</h2>
     <a class="btn" href="#install">Get Blunt Code — free ↓</a>
-    <p>MIT · Windows 10/11 · <span data-ver>v0.16.21</span> · your code never leaves the machine</p>
+    <p>MIT · Windows 10/11 · <span data-ver>v0.49.1</span> · your code never leaves the machine</p>
   </section>
 
 </main>
