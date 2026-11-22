@@ -194,7 +194,6 @@ export function AppShell({ workspace, route, onNavigate, onClose, theme, onToggl
           >
             <Search className="rail-search-icon" aria-hidden="true" />
             <span>{t('nav.search')}</span>
-            <kbd className="kbd-hint">Ctrl K</kbd>
           </button>
 
           {/* Settings and About only. The theme toggle used to sit in this list
