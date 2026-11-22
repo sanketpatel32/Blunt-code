@@ -218,6 +218,14 @@ func TestAwaitScanTerminalPollFallback(t *testing.T) {
 	}
 }
 
+func TestPrintScanEventCompletedJSONFindings(t *testing.T) {
+	var errOut bytes.Buffer
+	printScanEvent(&errOut, events.Event{Type: "analyzer.completed", Data: map[string]any{"analyzer_id": "ruff", "findings": float64(3)}})
+	if !strings.Contains(errOut.String(), "[ruff] completed: 3 findings") {
+		t.Fatalf("progress = %q", errOut.String())
+	}
+}
+
 // TestAwaitScanTerminalTimeoutCancels uses a closed (permanently ready)
 // timeout channel plus grace expiry so the timeout branch must run before any
 // terminal state, deterministically.

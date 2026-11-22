@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -46,7 +47,7 @@ func TestRunScanThroughServerProxiesToRunningApp(t *testing.T) {
 		var body struct {
 			RootPath string `json:"root_path"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.RootPath != "/tmp/demo" {
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.RootPath == "" || !filepath.IsAbs(body.RootPath) {
 			http.Error(w, "bad workspace", http.StatusBadRequest)
 			return
 		}
@@ -125,9 +126,11 @@ func TestRunScanThroughServerProxiesToRunningApp(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	workspaceDir := t.TempDir()
+	t.Chdir(workspaceDir)
 	var stdout, stderr bytes.Buffer
 	cfg := scanConfig{
-		path:        "/tmp/demo",
+		path:        ".",
 		profile:     "quick",
 		format:      scanFormatText,
 		timeout:     5 * time.Second,

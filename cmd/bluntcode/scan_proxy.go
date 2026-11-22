@@ -20,6 +20,7 @@ import (
 	"bluntcode/internal/events"
 	"bluntcode/internal/reports"
 	"bluntcode/internal/scans"
+	"bluntcode/internal/workspace"
 )
 
 // runScanThroughServer handles `bluntcode scan` when the data-directory lock
@@ -34,10 +35,27 @@ func runScanThroughServer(cfg scanConfig, stdout, stderr io.Writer) (int, bool) 
 		fmt.Fprintln(stderr, "bluntcode scan: --watch cannot run while the Blunt Code app holds the data directory; close the app or run without --watch")
 		return 2, true
 	}
-	work, err := server.ensureWorkspace(cfg.path)
+	root, err := workspace.NormalizeRoot(cfg.path)
+	if err != nil {
+		fmt.Fprintf(stderr, "bluntcode scan: %v\n", err)
+		return 3, true
+	}
+	work, err := server.ensureWorkspace(root)
 	if err != nil {
 		fmt.Fprintf(stderr, "bluntcode scan: could not register workspace with the running app: %v\n", err)
 		return 3, true
+	}
+	// Resolve the baseline before the scan starts, mirroring the local path:
+	// --save-baseline must not be able to overwrite the reference this scan
+	// is compared against.
+	var baseline scans.Baseline
+	if cfg.baseline != "" {
+		baseline, err = server.loadBaseline(cfg.baseline, work)
+		if err != nil {
+			fmt.Fprintf(stderr, "bluntcode scan: %v\n", err)
+			fmt.Fprintln(stderr, scanUsage)
+			return 2, true
+		}
 	}
 	scan, err := server.startScan(work.ID, cfg)
 	if err != nil {
@@ -125,11 +143,6 @@ func runScanThroughServer(cfg scanConfig, stdout, stderr io.Writer) (int, bool) 
 	}
 	var gatedFindings []analyzers.Finding
 	if cfg.baseline != "" {
-		baseline, err := server.loadBaseline(cfg.baseline, work)
-		if err != nil {
-			fmt.Fprintf(stderr, "bluntcode scan: %v\n", err)
-			return 2, true
-		}
 		known, fresh := baseline.Split(summary.findings)
 		gatedFindings = fresh
 		fmt.Fprintf(stderr, "baseline: %d known finding(s) excluded from gate, %d new finding(s)\n", len(known), len(fresh))

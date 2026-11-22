@@ -804,6 +804,7 @@ type scanWaitOutcome struct {
 func awaitScanTerminal(in scanWaitInput) scanWaitOutcome {
 	ticker := time.NewTicker(in.pollEvery)
 	defer ticker.Stop()
+	events := in.events
 	var (
 		outcome         scanWaitOutcome
 		cancelRequested bool
@@ -811,7 +812,13 @@ func awaitScanTerminal(in scanWaitInput) scanWaitOutcome {
 	)
 	for outcome.finalState == "" && !outcome.exitNow {
 		select {
-		case event := <-in.events:
+		case event, ok := <-events:
+			if !ok {
+				// A proxied SSE stream can close before the terminal state;
+				// stop selecting it and let the poll fallback finish the wait.
+				events = nil
+				continue
+			}
 			if !in.quiet {
 				printScanEvent(in.errOut, event)
 			}
@@ -920,6 +927,21 @@ func scanEventData(event events.Event) map[string]any {
 	return data
 }
 
+// scanEventInt reads a numeric event payload field. In-process events carry
+// Go ints, while events decoded from the loopback SSE JSON carry float64.
+func scanEventInt(value any) int {
+	switch n := value.(type) {
+	case int:
+		return n
+	case int64:
+		return int(n)
+	case float64:
+		return int(n)
+	default:
+		return 0
+	}
+}
+
 // terminalSafe strips control characters from analyzer-derived text before it
 // is written to the terminal. Analyzer error summaries embed untrusted tool
 // output from the scanned workspace (for example `ruff exited 1: <stderr>`),
@@ -956,8 +978,7 @@ func printScanEvent(w io.Writer, event events.Event) {
 			fmt.Fprintf(w, "[%s] started\n", terminalSafe(id))
 		}
 	case "analyzer.completed":
-		count, _ := data["findings"].(int)
-		fmt.Fprintf(w, "[%s] completed: %d findings\n", terminalSafe(id), count)
+		fmt.Fprintf(w, "[%s] completed: %d findings\n", terminalSafe(id), scanEventInt(data["findings"]))
 	case "analyzer.failed":
 		message, _ := data["error"].(string)
 		if message == "" {
