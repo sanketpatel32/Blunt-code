@@ -79,6 +79,197 @@ func TestCreateScanPersistsImmutableSnapshotAndFileManifest(t *testing.T) {
 	}
 }
 
+func TestWorkspaceLastScanAtStampsTerminalScanStates(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "bluntcode.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	work, err := db.CreateWorkspace(ctx, core.Workspace{Name: "Sample", RootPath: "C:/sample"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	completed, err := db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: "queued", Profile: "standard"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CompleteScan(ctx, completed.ID, "completed", ""); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := db.Workspace(ctx, work.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if workspace.LastScanAt == nil {
+		t.Fatal("last_scan_at was not stamped for a completed scan")
+	}
+	finishedScan, err := db.Scan(ctx, completed.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if finishedScan.FinishedAt == nil || !workspace.LastScanAt.Equal(*finishedScan.FinishedAt) {
+		t.Fatalf("last_scan_at=%v, finished_at=%v", workspace.LastScanAt, finishedScan.FinishedAt)
+	}
+
+	running, err := db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: "running", Profile: "standard"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpdateScanState(ctx, running.ID, "running", ""); err != nil {
+		t.Fatal(err)
+	}
+	beforeCancel, err := db.Workspace(ctx, work.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if beforeCancel.LastScanAt == nil || !beforeCancel.LastScanAt.Equal(*workspace.LastScanAt) {
+		t.Fatalf("nonterminal scan changed last_scan_at: before=%v after=%v", workspace.LastScanAt, beforeCancel.LastScanAt)
+	}
+	if err := db.UpdateScanState(ctx, running.ID, "cancelled", "Cancelled by user."); err != nil {
+		t.Fatal(err)
+	}
+	afterCancel, err := db.Workspace(ctx, work.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancelledScan, err := db.Scan(ctx, running.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterCancel.LastScanAt == nil || cancelledScan.FinishedAt == nil || !afterCancel.LastScanAt.Equal(*cancelledScan.FinishedAt) {
+		t.Fatalf("last_scan_at=%v, cancelled finished_at=%v", afterCancel.LastScanAt, cancelledScan.FinishedAt)
+	}
+}
+
+func TestMarkInterruptedScansStampsWorkspaceLastScanAt(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "bluntcode.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	work, err := db.CreateWorkspace(ctx, core.Workspace{Name: "Sample", RootPath: "C:/sample"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scan, err := db.CreateScan(ctx, core.Scan{WorkspaceID: work.ID, State: "running", Profile: "standard"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.MarkInterruptedScans(ctx); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := db.Workspace(ctx, work.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if workspace.LastScanAt == nil {
+		t.Fatal("last_scan_at was not stamped for an interrupted scan")
+	}
+	interrupted, err := db.Scan(ctx, scan.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if interrupted.State != "interrupted" || interrupted.FinishedAt == nil || !workspace.LastScanAt.Equal(*interrupted.FinishedAt) {
+		t.Fatalf("unexpected interrupted scan: state=%q finished_at=%v last_scan_at=%v", interrupted.State, interrupted.FinishedAt, workspace.LastScanAt)
+	}
+}
+
+func TestWorkspaceLastScanAtMigrationBackfillsTerminalScans(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "bluntcode.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	work, err := db.CreateWorkspace(ctx, core.Workspace{Name: "Scanned", RootPath: "C:/scanned"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runningWork, err := db.CreateWorkspace(ctx, core.Workspace{Name: "Running", RootPath: "C:/running"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	started := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	finished := started.Add(4 * time.Minute)
+	if _, err := db.SQL.ExecContext(ctx, `INSERT INTO scans(id,workspace_id,state,profile,started_at,finished_at) VALUES(?,?,?,?,?,?)`, "legacy-completed", work.ID, "completed", "standard", dbTime(started), dbTime(finished)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.SQL.ExecContext(ctx, `INSERT INTO scans(id,workspace_id,state,profile,started_at) VALUES(?,?,?,?,?)`, "legacy-running", runningWork.ID, "running", "standard", dbTime(started.Add(time.Hour))); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.SQL.ExecContext(ctx, `DELETE FROM schema_migrations WHERE version=9`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	got, err := db.Workspace(ctx, work.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.LastScanAt == nil || !got.LastScanAt.Equal(finished) {
+		t.Fatalf("backfilled last_scan_at=%v, want %v", got.LastScanAt, finished)
+	}
+	runningGot, err := db.Workspace(ctx, runningWork.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runningGot.LastScanAt != nil {
+		t.Fatalf("nonterminal scan backfilled last_scan_at=%v", runningGot.LastScanAt)
+	}
+}
+
+func TestDeletingLatestScanRecomputesWorkspaceLastScanAt(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "bluntcode.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	work, err := db.CreateWorkspace(ctx, core.Workspace{Name: "Retention", RootPath: "C:/retention"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := time.Date(2026, 2, 3, 4, 5, 6, 0, time.UTC)
+	olderStart := base
+	olderFinish := base.Add(time.Minute)
+	newerStart := base.Add(10 * time.Minute)
+	newerFinish := base.Add(11 * time.Minute)
+	if _, err := db.SQL.ExecContext(ctx, `INSERT INTO scans(id,workspace_id,state,profile,started_at,finished_at) VALUES(?,?,?,?,?,?)`, "older-scan", work.ID, "completed", "standard", dbTime(olderStart), dbTime(olderFinish)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.SQL.ExecContext(ctx, `INSERT INTO scans(id,workspace_id,state,profile,started_at,finished_at) VALUES(?,?,?,?,?,?)`, "newer-scan", work.ID, "completed", "standard", dbTime(newerStart), dbTime(newerFinish)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.SQL.ExecContext(ctx, `UPDATE workspaces SET last_scan_at=? WHERE id=?`, dbTime(newerFinish), work.ID); err != nil {
+		t.Fatal(err)
+	}
+	ok, _, err := db.DeleteScan(ctx, "newer-scan")
+	if err != nil || !ok {
+		t.Fatalf("DeleteScan = %v %v, want deleted", ok, err)
+	}
+	got, err := db.Workspace(ctx, work.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.LastScanAt == nil || !got.LastScanAt.Equal(olderFinish) {
+		t.Fatalf("last_scan_at=%v after deleting newest scan, want %v", got.LastScanAt, olderFinish)
+	}
+	ok, _, err = db.DeleteScan(ctx, "older-scan")
+	if err != nil || !ok {
+		t.Fatalf("DeleteScan = %v %v, want deleted", ok, err)
+	}
+	got, err = db.Workspace(ctx, work.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.LastScanAt != nil {
+		t.Fatalf("last_scan_at=%v after deleting every scan, want nil", got.LastScanAt)
+	}
+}
+
 func TestReplacePathOverrides(t *testing.T) {
 	db, err := Open(context.Background(), filepath.Join(t.TempDir(), "bluntcode.db"))
 	if err != nil {

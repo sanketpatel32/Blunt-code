@@ -927,31 +927,58 @@ func hydrateScanSnapshot(scan *core.Scan) {
 		scan.Snapshot = &snapshot
 	}
 }
-func (d *DB) UpdateScanState(ctx context.Context, id, state, errorSummary string) error {
-	now := time.Now()
-	_, err := d.SQL.ExecContext(ctx, `UPDATE scans SET state=?,finished_at=CASE WHEN ? IN ('completed','completed_with_warnings','failed','cancelled','interrupted') THEN ? ELSE finished_at END,error_summary=? WHERE id=?`, state, state, dbTime(now), errorSummary, id)
-	if err != nil {
-		return err
-	}
-	// A scan that reaches a terminal state is the workspace's most recent
-	// scan activity: stamp last_scan_at so the list and its sort stop
-	// showing "-"/NULL for workspaces that have actually been scanned.
+func isTerminalScanState(state string) bool {
 	switch state {
 	case "completed", "completed_with_warnings", "failed", "cancelled", "interrupted":
-		_, err = d.SQL.ExecContext(ctx, `UPDATE workspaces SET last_scan_at=? WHERE id=(SELECT workspace_id FROM scans WHERE id=?)`, dbTime(now), id)
+		return true
 	}
+	return false
+}
+
+func stampWorkspaceLastScan(ctx context.Context, tx *sql.Tx, scanID, finishedAt string) error {
+	_, err := tx.ExecContext(ctx, `UPDATE workspaces SET last_scan_at=? WHERE id=(SELECT workspace_id FROM scans WHERE id=?)`, finishedAt, scanID)
 	return err
 }
-func (d *DB) MarkInterruptedScans(ctx context.Context) error {
-	now := dbTime(time.Now())
-	_, err := d.SQL.ExecContext(ctx, `UPDATE scans SET state='interrupted',finished_at=?,error_summary='Previous application process exited before scan completion.' WHERE state IN ('queued','preparing','installing_tools','discovering','running','normalizing','generating_report')`, now)
+
+func recomputeWorkspaceLastScan(ctx context.Context, tx *sql.Tx, workspaceID string) error {
+	_, err := tx.ExecContext(ctx, `UPDATE workspaces SET last_scan_at=(SELECT MAX(COALESCE(finished_at, started_at)) FROM scans WHERE workspace_id=? AND state IN `+terminalScanStates+`) WHERE id=?`, workspaceID, workspaceID)
+	return err
+}
+
+func (d *DB) UpdateScanState(ctx context.Context, id, state, errorSummary string) error {
+	now := time.Now()
+	finishedAt := dbTime(now)
+	tx, err := d.SQL.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
-	// The same finish time stamps the workspaces those orphaned scans
-	// belonged to; binding `now` twice keeps the subquery exact.
-	_, err = d.SQL.ExecContext(ctx, `UPDATE workspaces SET last_scan_at=? WHERE id IN (SELECT workspace_id FROM scans WHERE state='interrupted' AND finished_at=?)`, now, now)
-	return err
+	if _, err = tx.ExecContext(ctx, `UPDATE scans SET state=?,finished_at=CASE WHEN ? IN ('completed','completed_with_warnings','failed','cancelled','interrupted') THEN ? ELSE finished_at END,error_summary=? WHERE id=?`, state, state, finishedAt, errorSummary, id); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if isTerminalScanState(state) {
+		if err = stampWorkspaceLastScan(ctx, tx, id, finishedAt); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
+}
+func (d *DB) MarkInterruptedScans(ctx context.Context) error {
+	finishedAt := dbTime(time.Now())
+	tx, err := d.SQL.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE workspaces SET last_scan_at=? WHERE id IN (SELECT workspace_id FROM scans WHERE state IN ('queued','preparing','installing_tools','discovering','running','normalizing','generating_report'))`, finishedAt); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE scans SET state='interrupted',finished_at=?,error_summary='Previous application process exited before scan completion.' WHERE state IN ('queued','preparing','installing_tools','discovering','running','normalizing','generating_report')`, finishedAt); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
 }
 
 // RecentScan is a scan row joined with its workspace name for the global
@@ -1476,12 +1503,12 @@ func (d *DB) CompleteScan(ctx context.Context, scanID, state, reportPath string)
 		}
 		rows.Close()
 	}
+	finishedAt := dbTime(time.Now())
 	if err == nil {
-		now := dbTime(time.Now())
-		_, err = tx.ExecContext(ctx, `UPDATE scans SET state=?,finished_at=?,total_findings=?,critical_count=?,high_count=?,medium_count=?,low_count=?,info_count=?,report_markdown_path=? WHERE id=?`, state, now, counts["critical"]+counts["high"]+counts["medium"]+counts["low"]+counts["info"], counts["critical"], counts["high"], counts["medium"], counts["low"], counts["info"], reportPath, scanID)
-		if err == nil {
-			_, err = tx.ExecContext(ctx, `UPDATE workspaces SET last_scan_at=? WHERE id=(SELECT workspace_id FROM scans WHERE id=?)`, now, scanID)
-		}
+		_, err = tx.ExecContext(ctx, `UPDATE scans SET state=?,finished_at=?,total_findings=?,critical_count=?,high_count=?,medium_count=?,low_count=?,info_count=?,report_markdown_path=? WHERE id=?`, state, finishedAt, counts["critical"]+counts["high"]+counts["medium"]+counts["low"]+counts["info"], counts["critical"], counts["high"], counts["medium"], counts["low"], counts["info"], reportPath, scanID)
+	}
+	if err == nil && isTerminalScanState(state) {
+		err = stampWorkspaceLastScan(ctx, tx, scanID, finishedAt)
 	}
 	if err != nil {
 		_ = tx.Rollback()
@@ -2474,6 +2501,9 @@ func (d *DB) PruneOldScans(ctx context.Context, workspaceID string, keep int) (i
 	if _, err = tx.ExecContext(ctx, `DELETE FROM scans WHERE id IN (`+strings.Join(placeholders, ",")+`)`, args...); err != nil {
 		return nil, nil, err
 	}
+	if err = recomputeWorkspaceLastScan(ctx, tx, workspaceID); err != nil {
+		return nil, nil, err
+	}
 	if orphanedReports, err = unreferencedReports(ctx, tx, reportPaths); err != nil {
 		return nil, nil, err
 	}
@@ -2499,8 +2529,8 @@ func (d *DB) DeleteScan(ctx context.Context, id string) (deleted bool, orphanedR
 			_ = tx.Rollback()
 		}
 	}()
-	var reportPath string
-	err = tx.QueryRowContext(ctx, `SELECT COALESCE(report_markdown_path,'') FROM scans WHERE id=? AND state IN `+terminalScanStates, id).Scan(&reportPath)
+	var workspaceID, reportPath string
+	err = tx.QueryRowContext(ctx, `SELECT workspace_id,COALESCE(report_markdown_path,'') FROM scans WHERE id=? AND state IN `+terminalScanStates, id).Scan(&workspaceID, &reportPath)
 	if errors.Is(err, sql.ErrNoRows) {
 		err = nil
 		return false, "", tx.Rollback()
@@ -2509,6 +2539,9 @@ func (d *DB) DeleteScan(ctx context.Context, id string) (deleted bool, orphanedR
 		return false, "", err
 	}
 	if _, err = tx.ExecContext(ctx, `DELETE FROM scans WHERE id=?`, id); err != nil {
+		return false, "", err
+	}
+	if err = recomputeWorkspaceLastScan(ctx, tx, workspaceID); err != nil {
 		return false, "", err
 	}
 	orphaned, err := unreferencedReports(ctx, tx, []string{reportPath})
