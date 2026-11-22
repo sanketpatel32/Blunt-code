@@ -1,32 +1,44 @@
 # Privacy
 
 Blunt Code analyzes source locally. It has no account, telemetry, analytics,
-crash reporting, AI provider, or Blunt Code cloud backend. Source code,
-findings, and reports are never uploaded. The server binds only to
-`127.0.0.1`, and all data lives under `%LOCALAPPDATA%\BluntCode`.
+AI provider, or Blunt Code cloud backend. Source, findings, reports, and your
+dependency inventory are never uploaded.
 
 ## Outbound network requests
 
-These are the only requests Blunt Code makes to hosts other than loopback. The
-full table, with when each one happens, is in
-[analyzers.md → Network use](analyzers.md#network-use).
+Blunt Code does make a small number of outbound requests. All of them are
+listed here; anything not on this list is a bug.
 
-| Request | Host | What is sent | When |
+| Request | Destination | When | What it reveals |
 | :--- | :--- | :--- | :--- |
-| Managed tool downloads | `github.com` / `objects.githubusercontent.com`, `files.pythonhosted.org` / `pypi.org`, `binaries.sonarsource.com`, plus the Python runtime and packages uv fetches for Semgrep and Checkov | Plain HTTPS downloads of the pinned artifacts in `internal/tools/manifest.json` | On Install/Repair/Update in Tools, or when a scan needs a missing tool |
-| OSV vulnerability lookups | `api.osv.dev` (OSV-Scanner) | Package names and versions from your lockfiles, never source code | Deep scans, unless offline databases are provided |
-| Trivy vulnerability database | Trivy's default database registry (`mirror.gcr.io`, falling back to `ghcr.io`) | A database download; nothing from your project | First deep scan with a cold Trivy cache |
-| Update check | `api.github.com` | A request for the latest Blunt Code release; the version comparison happens locally | Once each time the web UI is opened, on the About page, and with `bluntcode update check` |
-| Update apply | `api.github.com`, `raw.githubusercontent.com`, `github.com` | Download of the release's `install-latest.ps1`, ZIP and checksum | Only when you choose to apply an update |
-| Pentest probe | The URL you enter | HTTP requests to that target only | Only when you run a probe |
+| Tool install / repair / update | `github.com`, `pypi.org` / `files.pythonhosted.org`, `binaries.sonarsource.com` (pinned versions) | You press Install/Repair/Update on the Tools page, or a scan needs a managed tool that is not installed yet | Your IP address and which tool you are installing |
+| Trivy vulnerability database | `mirror.gcr.io` / `ghcr.io` | First deep scan only (cold cache); later scans reuse the cached DB | Your IP address |
+| OSV vulnerability databases | `osv-vulnerabilities.storage.googleapis.com` | Deep scans (not in offline mode) refresh the public per-ecosystem archives, e.g. `npm/all.zip` | Your IP address and which ecosystems (npm, PyPI, Go, ...) your project uses — never package names or versions |
+| Update check | `api.github.com/repos/sanketpatel32/Blunt-code/releases/latest` | Only when you click **Check for updates** on the About page, run `bluntcode update check`, or turn on **Settings → Check for updates automatically** (off by default) | Your IP address, the `BluntCode-Updater` user agent, and when you launched the app |
+| Update apply | `api.github.com`, `github.com` / `objects.githubusercontent.com` | Only when you click **Update** | Same as the update check |
 
-Semgrep runs with `--metrics=off`, `--disable-version-check` and an empty app
-token, so it does not report to Semgrep's servers.
+Bundled analyzers run with their own phone-home features switched off:
+
+- **Trivy** — `--disable-telemetry --skip-version-check --skip-check-update
+  --offline-scan`: no usage data to Aqua, no version/announcement check, no
+  checks-bundle download (the misconfiguration checks embedded in the pinned
+  Trivy binary are used), and no package-registry lookups. The only remaining
+  request is the cold-cache database download above.
+- **Checkov** — `--skip-download`, `BC_SKIP_MAPPING=TRUE`,
+  `CKV_SKIP_PACKAGE_UPDATE_CHECK=true`, Prisma Cloud credentials cleared: no
+  Prisma Cloud metadata download and no PyPI version check. Checkov findings
+  therefore carry Blunt Code's default severities and no guideline link.
+- **OSV Scanner** — `--offline --offline-vulnerabilities`: matching happens
+  against the local databases, so the dependency inventory is never sent to
+  the OSV.dev query API, deps.dev, or package registries (transitive
+  resolution of manifests without a lockfile is off).
+- **Semgrep** — bundled local rules, metrics off. **SonarQube** — loopback
+  only, telemetry and update center off. **Ruff, Biome, Gitleaks** and the
+  built-in analyzers make no network requests.
 
 ## Offline mode
 
-Turn on **Settings → Offline mode** to refuse every request above: tool
-installs, the update check, OSV lookups without a local database, and
-cold-cache Trivy scans fail with a clear message instead of reaching the
-network. Scans with already-installed tools keep working offline. See
-[configuration.md → Offline mode](configuration.md#offline-mode).
+**Settings → Offline mode** blocks every request in the table above: no tool
+installs, no database downloads, no update checks. Deep scans then need the
+Trivy and OSV databases from an earlier online deep scan and report "not
+ready" instead of dialing out. See [configuration.md](configuration.md#offline-mode).

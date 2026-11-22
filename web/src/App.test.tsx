@@ -408,8 +408,31 @@ describe('update awareness', () => {
   beforeEach(() => { window.history.replaceState({}, '', '/'); });
   afterEach(async () => { await act(async () => { root?.unmount(); }); document.body.replaceChildren(); vi.unstubAllGlobals(); });
 
+  it('never calls the update check unless the user opted in', async () => {
+    const fetchMock = vi.fn((input: string) => {
+      if (input.endsWith('/settings')) return Promise.resolve(json({ offline: false, open_browser: true, update_check: false }));
+      if (input.endsWith('/update/check')) return Promise.resolve(json({ current: '0.16.23', latest: '0.17.0', available: true, release_url: '', release_notes: '' }));
+      return Promise.resolve(json({ items: [] }));
+    });
+    const host = await render(fetchMock);
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith('/update/check'))).toHaveLength(0);
+    expect(host.textContent).not.toContain('is available.');
+  });
+
+  it('skips the opted-in check while offline mode is on', async () => {
+    const fetchMock = vi.fn((input: string) => {
+      if (input.endsWith('/settings')) return Promise.resolve(json({ offline: true, open_browser: true, update_check: true }));
+      return Promise.resolve(json({ items: [] }));
+    });
+    await render(fetchMock);
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith('/update/check'))).toHaveLength(0);
+  });
+
   it('toasts once about a newer release with a link to the updater', async () => {
     const fetchMock = vi.fn((input: string) => {
+      if (input.endsWith('/settings')) return Promise.resolve(json({ offline: false, open_browser: true, update_check: true }));
       if (input.endsWith('/update/check')) return Promise.resolve(json({ current: '0.16.23', latest: '0.17.0', available: true, release_url: 'https://example.com/r', release_notes: 'Notes' }));
       return Promise.resolve(json({ items: [] }));
     });
@@ -424,6 +447,7 @@ describe('update awareness', () => {
 
   it('stays silent when the release matches', async () => {
     const fetchMock = vi.fn((input: string) => {
+      if (input.endsWith('/settings')) return Promise.resolve(json({ offline: false, open_browser: true, update_check: true }));
       if (input.endsWith('/update/check')) return Promise.resolve(json({ current: '0.16.23', latest: '0.16.23', available: false, release_url: '', release_notes: '' }));
       return Promise.resolve(json({ items: [] }));
     });

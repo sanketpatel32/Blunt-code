@@ -120,15 +120,20 @@ export function App() {
     }).catch(() => { if (!cancelled) setActiveScanWorkspaces([]); });
     return () => { cancelled = true; };
   }, [closeOpen]);
-  // One silent update check per tab session: a newer release surfaces as a
-  // toast that jumps straight to the updater. Failures — offline mode, no
-  // network — stay quiet; this must never nag.
+  // Automatic update check, opt-in only (Settings → Check for updates
+  // automatically): it calls GitHub, so nothing leaves the machine until the
+  // user asks for it. When enabled, one silent check per tab session; a newer
+  // release surfaces as a toast that jumps straight to the updater. Failures
+  // — offline mode, no network — stay quiet; this must never nag.
   useEffect(() => {
     if (updateChecked.current) return;
     updateChecked.current = true;
     let cancelled = false;
-    api.checkUpdate().then((result) => {
-      if (cancelled || !result.available) return;
+    api.settings().then((settings) => {
+      if (cancelled || settings?.update_check !== true || settings.offline) return undefined;
+      return api.checkUpdate();
+    }).then((result) => {
+      if (cancelled || !result?.available) return;
       notify({ kind: 'info', text: `Blunt Code ${result.latest} is available.`, action: { label: 'Review update', onClick: () => go({ page: 'about' }) } });
     }).catch(() => { });
     return () => { cancelled = true; };

@@ -170,6 +170,7 @@ type appSettingsInfo struct {
 	Source      string `json:"source"` // database, defaults, or unavailable
 	Offline     bool   `json:"offline"`
 	OpenBrowser bool   `json:"open_browser"`
+	UpdateCheck bool   `json:"update_check"`
 	Note        string `json:"note,omitempty"`
 }
 
@@ -203,7 +204,7 @@ func appSettingsReport(ctx context.Context, dbPath string, open dbOpener) appSet
 	if err != nil {
 		return appSettingsInfo{Source: "unavailable", Note: "app is running"}
 	}
-	return appSettingsInfo{Available: true, Source: "database", Offline: settings.Offline, OpenBrowser: settings.OpenBrowser}
+	return appSettingsInfo{Available: true, Source: "database", Offline: settings.Offline, OpenBrowser: settings.OpenBrowser, UpdateCheck: settings.UpdateCheck}
 }
 
 // toolInfo is one managed tool's pinned version and whether that version is
@@ -364,6 +365,7 @@ func (a appSettingsInfo) writeHuman(w io.Writer) {
 	}
 	fmt.Fprintf(w, "  offline mode: %s\n", onOff(a.Offline))
 	fmt.Fprintf(w, "  open browser on start: %s\n", onOff(a.OpenBrowser))
+	fmt.Fprintf(w, "  automatic update check: %s\n", onOff(a.UpdateCheck))
 }
 
 func (m managedToolsInfo) writeHuman(w io.Writer) {

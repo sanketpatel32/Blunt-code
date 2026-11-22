@@ -67,6 +67,9 @@ function list<T>(value: T[] | { items?: T[]; workspaces?: T[]; scans?: T[]; find
 export type CreatedWorkspace = Workspace & { existing: boolean };
 
 export type FindingNote = { id: string; text: string; createdAt: string };
+/** Persisted app settings. update_check is the opt-in for the automatic release check on load. */
+export type AppSettings = { offline: boolean; open_browser: boolean; update_check?: boolean };
+
 export const api = {
   findingNotes: async (id: string, fingerprint: string, opts?: ReadOptions) => list<FindingNote>(await request<{ items: FindingNote[] }>(`/workspaces/${encodeURIComponent(id)}/notes/${encodeURIComponent(fingerprint)}`, opts)),
   addFindingNote: (id: string, fingerprint: string, text: string, importKey?: string) => request<FindingNote>(`/workspaces/${encodeURIComponent(id)}/notes/${encodeURIComponent(fingerprint)}`, { method: 'POST', body: JSON.stringify({ text, import_key: importKey }) }),
@@ -82,8 +85,8 @@ export const api = {
     demo_seed_env_enabled?: boolean;
     demo_seed_requires_token?: boolean;
   }>('/meta'),
-  settings: () => request<{ offline: boolean; open_browser: boolean }>('/settings'),
-  saveSettings: (input: Partial<{ offline: boolean; open_browser: boolean }>) => request<{ offline: boolean; open_browser: boolean }>('/settings', { method: 'PATCH', body: JSON.stringify(input) }),
+  settings: () => request<AppSettings>('/settings'),
+  saveSettings: (input: Partial<AppSettings>) => request<AppSettings>('/settings', { method: 'PATCH', body: JSON.stringify(input) }),
   workspaces: async () => list<Workspace>(await request<Workspace[] | { workspaces?: Workspace[] }>('/workspaces')),
   /** Server-paged workspace list; sort key: name | last_opened | last_scan | findings */
   workspacesPage: (params: { page: number; page_size?: number; sort?: string; order?: 'asc' | 'desc'; search?: string; tag?: string }, opts?: ReadOptions) => {

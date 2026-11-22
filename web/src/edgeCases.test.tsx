@@ -270,10 +270,11 @@ describe('hostile API fixtures', () => {
     const host = await renderAt('/definitely/not/here', fetchMock);
     expectClean(host);
     expect(host.textContent).toContain('Page not found');
-    // The once-per-session update check is app chrome and still fires; no
-    // page-level data was requested for an unknown route.
+    // The app chrome reads settings once (to see whether the automatic
+    // update check is opted in); no page-level data was requested for an
+    // unknown route, and the update check itself stays off by default.
     const requested = fetchMock.mock.calls.map(([input]) => String(input));
-    expect(requested.filter((url) => !url.endsWith('/update/check'))).toEqual([]);
+    expect(requested.filter((url) => !url.endsWith('/settings'))).toEqual([]);
   });
 });
 

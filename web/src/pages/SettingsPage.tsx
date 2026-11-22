@@ -51,7 +51,7 @@ export function SettingsPage({ notify }: { notify: (n: Notice) => void }) {
     }
   }
 
-  async function save(input: { offline?: boolean; open_browser?: boolean }) {
+  async function save(input: { offline?: boolean; open_browser?: boolean; update_check?: boolean }) {
     setSaving(true);
     try {
       await api.saveSettings(input);
@@ -121,7 +121,7 @@ export function SettingsPage({ notify }: { notify: (n: Notice) => void }) {
           <div className="setting">
             <div>
               <h3>Offline mode</h3>
-              <p>Do not download tools or check for updates. Installed tools can still scan local workspaces.</p>
+              <p>No network at all: no tool or vulnerability-database downloads and no update checks. Installed tools can still scan local workspaces.</p>
             </div>
             {settings.data ? (
               <Toggle
@@ -129,6 +129,22 @@ export function SettingsPage({ notify }: { notify: (n: Notice) => void }) {
                 disabled={saving}
                 label="Offline mode"
                 onToggle={() => void save({ offline: !(settings.data?.offline ?? false) })}
+              />
+            ) : (
+              <span className="muted" role="status">{settings.loading ? 'Loading…' : 'Unavailable'}</span>
+            )}
+          </div>
+          <div className="setting">
+            <div>
+              <h3>Check for updates automatically</h3>
+              <p>Off by default. When on, each launch asks api.github.com for the latest release, which shares your IP address and app version with GitHub. You can always check manually on the About page.</p>
+            </div>
+            {settings.data ? (
+              <Toggle
+                on={settings.data.update_check === true}
+                disabled={saving}
+                label="Check for updates automatically"
+                onToggle={() => void save({ update_check: !(settings.data?.update_check ?? false) })}
               />
             ) : (
               <span className="muted" role="status">{settings.loading ? 'Loading…' : 'Unavailable'}</span>
@@ -172,7 +188,7 @@ export function SettingsPage({ notify }: { notify: (n: Notice) => void }) {
           <h2><ShieldCheck className="settings-h2-icon" aria-hidden="true" />Privacy</h2>
           <Setting
             label="Telemetry"
-            description="Blunt Code does not send usage analytics or repository data to a cloud service."
+            description="Blunt Code does not send usage analytics or repository data to a cloud service. Bundled analyzers run with their own telemetry and version checks disabled."
             value="Disabled"
           />
         </section>

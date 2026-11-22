@@ -42,7 +42,7 @@
 ## 🔍 What is this?
 
 - **Twelve analyzers, one app.** Ruff, Biome, Gitleaks, Semgrep, SonarQube, OSV Scanner (deep), Trivy (deep), Checkov (deep), the Pentest & Vulnerability Suite, plus built-in secrets, TODO/FIXME, and license detectors — one installer, zero `PATH` fights, no global Python/Java/Node.
-- **Everything stays on your machine.** Loopback-only server (`127.0.0.1`), findings in local SQLite, reports on disk. Source code is never uploaded; the few outbound requests (tool downloads, OSV/Trivy vulnerability data, the update check) are listed in [docs/privacy.md](docs/privacy.md), and offline mode turns all of them off.
+- **Everything stays on your machine.** Loopback-only server (`127.0.0.1`), findings in local SQLite, reports on disk. Offline after the first tool download.
 - **Built for real workflows.** Suppress at the source line, gate CI on `--fail-on high+`, diff against a baseline, export SARIF — then get back to writing code.
 
 ```mermaid
@@ -60,7 +60,6 @@ flowchart LR
     C --> D9["Checkov"]
     C --> D10["License"]
     C --> D11["TODO"]
-    C --> D12["Pentest Suite"]
     D1 --> E["Dedup + fingerprint"]
     D2 --> E
     D3 --> E
@@ -72,7 +71,6 @@ flowchart LR
     D9 --> E
     D10 --> E
     D11 --> E
-    D12 --> E
     E --> F[("SQLite<br>local db")]
     F --> G["Reports<br>MD · HTML · SARIF · CSV · JSON"]
     F --> H["CI gate<br>exit 0 · 1 · 2 · 3 · 4 · 130"]
@@ -94,20 +92,20 @@ curl -fsSL -o "%TEMP%\install-bluntcode.cmd" https://github.com/sanketpatel32/Bl
 ```
 Installs to `%LOCALAPPDATA%\Programs\BluntCode`, verifies SHA-256, creates Start Menu shortcut, launches app. No admin.
 
-**Options** `install-latest.ps1 -Version <x.y.z> -Silent -DesktopShortcut -WhatIf -WaitForCloseSeconds 30`
+**Options** `install-latest.ps1 -Version 0.38.0 -Silent -DesktopShortcut -WhatIf -WaitForCloseSeconds 30`
 
 **Portable ZIP**
 
-1. Download `BluntCode-<version>-windows-amd64.zip` + `.sha256` from the [latest release](https://github.com/sanketpatel32/Blunt-code/releases/latest)
-2. Verify & run (from the download folder):
+1. Download `BluntCode-0.38.0-windows-amd64.zip` + `.sha256` from [Releases](https://github.com/sanketpatel32/Blunt-code/releases/latest)
+2. Verify & run:
 ```powershell
-$pkg=(Get-ChildItem .\BluntCode-*-windows-amd64.zip | Sort-Object LastWriteTime | Select-Object -Last 1).FullName
+$pkg='.\BluntCode-0.38.0-windows-amd64.zip'
 if((Get-FileHash $pkg -Algorithm SHA256).Hash -ne (Get-Content "$pkg.sha256").Split()[0]){throw 'checksum mismatch'}
 Expand-Archive $pkg -DestinationPath .\BluntCode -Force; .\BluntCode\BluntCode*\bluntcode.exe
 ```
 > `irm | iex` never saves a `.ps1`, so ExecutionPolicy doesn't apply. For a saved `uninstall.ps1`: `powershell -ExecutionPolicy Bypass -File .\uninstall.ps1`.
 
-**From source** — Go 1.26.3+ (per `go.mod`) and Node.js 20.19+ or 22.12+ (required by Vite 7):
+**From source** — Go 1.26+ and Node 18+:
 ```powershell
 git clone https://github.com/sanketpatel32/Blunt-code.git; cd Blunt-code
 .\scripts\build.ps1; .\bluntcode.exe
@@ -132,7 +130,7 @@ Keyboard: `g h/w/t/s/a` navigate · `n` add workspace · `/` search · `?` help 
 
 | | |
 |---|---|
-| **Private by design** | Loopback server, zero telemetry, SQLite at `%LOCALAPPDATA%\BluntCode\bluntcode.db` |
+| **Private by design** | Loopback server, zero telemetry (bundled analyzers' telemetry off too), update check opt-in, SQLite at `%LOCALAPPDATA%\BluntCode\bluntcode.db` |
 | **Batteries included** | Ruff (Python), Biome (JS/TS + React auto-domain), Gitleaks (directory-wide secrets), Semgrep (25-rule security pack), SonarQube (polyglot), OSV Scanner (dependency CVEs, deep), Trivy (CVEs + secrets + Dockerfile/IaC misconfigs, deep), Checkov (Terraform/K8s/CloudFormation policies, deep), in-binary **secrets** (AWS, GitHub, Slack, JWT, Stripe, OpenAI, Anthropic, Azure) + **TODO/FIXME** trackers across 40+ file types + **license** detector (copyleft, conflicts, undeclared) |
 | **Dashboard that helps** | Overview cards, activity feed with severity dots, risk grades `A–D` (critical×10/high×5/med×2/low×1) with trend, severity bars, stacked history, suppressions panel |
 | **Workspaces that scale** | Tag chips with `+N` overflow, debounced tag filter, sort by Name / Last scan / Findings, 51→2 queries at 50 workspaces |
@@ -257,7 +255,7 @@ bluntcode agent scan "C:\my-app" --profile quick --fail-on high+  # forces --jso
 | **Ruff** | Python | Lint, style, bugbear, `SIM/C4/RET/ARG/PLR` in Deep |
 | **Biome** 2.5.6 | JS/TS, React auto-domain | Format, correctness, React hooks |
 | **Semgrep** | Python, JS/TS | 25-rule security pack (injection, deserialization, secrets, `postMessage`) |
-| **Gitleaks** 8.30.1 | All file types, directory-wide | External secrets scan; Blunt Code-owned config — in-repo `.gitleaks.toml` / `.gitleaksignore` ignored unless the workspace trusts repo config ([docs/analyzers.md](docs/analyzers.md)) |
+| **Gitleaks** 8.30.1 | All file types, directory-wide | External secrets scan; honors workspace `.gitleaks.toml` / `.gitleaksignore` |
 | **OSV Scanner** 2.5.1 | npm/PyPI/Go/Maven/NuGet/Composer/RubyGems/cargo lockfiles | Known CVEs per pinned dependency (deep profile) |
 | **Trivy** 0.74.0 | Dockerfile, YAML, JSON, TOML | Dependency CVEs + secrets + misconfigurations (deep; first run downloads its vuln DB) |
 | **Checkov** 3.3.16 | Terraform, Dockerfile, K8s, CloudFormation | IaC misconfigurations against 1000+ built-in policies (deep) |
@@ -291,7 +289,7 @@ Ignore at source: `// bluntcode:ignore` or `// bluntcode:ignore secrets.aws-acce
 └── tools\            # ruff, biome, semgrep, sonarqube (manifest-hashed)
 ```
 
-Loopback only (`127.0.0.1`), no account, no telemetry, no source upload. Outbound requests are limited to tool downloads, OSV.dev / Trivy vulnerability data on deep scans, and a release check against GitHub when the UI opens — all refused in offline mode. Open folders from **Settings → Data folders**. Full layout: [docs/configuration.md](docs/configuration.md) · policy: [docs/privacy.md](docs/privacy.md).
+Loopback only (`127.0.0.1`), no account, no telemetry. The only outbound requests are tool installs, the Trivy/OSV vulnerability-database downloads on deep scans, and update checks you ask for (automatic checks are opt-in) — every one is listed in [docs/privacy.md](docs/privacy.md), and **Settings → Offline mode** blocks them all. Open folders from **Settings → Data folders**. Full layout: [docs/configuration.md](docs/configuration.md) · policy: [docs/privacy.md](docs/privacy.md).
 
 ---
 
@@ -301,7 +299,7 @@ Loopback only (`127.0.0.1`), no account, no telemetry, no source upload. Outboun
 |---|---|
 | **OS** | Windows 10 / 11 64-bit (amd64) |
 | **Rights** | Standard user — no admin |
-| **Network** | Needed for the first tool download and for deep-scan vulnerability data (OSV, Trivy). Everything else runs offline; see [privacy](docs/privacy.md) |
+| **Network** | Online only first run (tools download). Offline after |
 | **Deps** | None — no global Python/Java/Node required |
 
 Cross-building or running pieces on Linux/macOS is possible for development, but **full scans, managed analyzers, and the official verify script target Windows** — see [CONTRIBUTING.md](CONTRIBUTING.md#linux-and-non-windows-development) for what to run where and how to interpret Linux `go test` vs. Windows verification.
@@ -342,7 +340,7 @@ Installer auto-cleans Start Menu shortcut and refuses while app is running.
 
 ```powershell
 .\scripts\verify.ps1          # gofmt + vet + build + tests + web gates
-.\scripts\package.ps1             # -Version defaults to the current release
+.\scripts\package.ps1 -Version 0.38.0
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) · [docs/architecture.md](docs/architecture.md) — shadcn tokens live in `web/src/tokens.css` (`--color-paper/ink/accent`, `--radius-*`, `--shadow-*`), components in `web/src/components/ui/*`.

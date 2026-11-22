@@ -42,19 +42,16 @@ disconnected Windows verification after setup and a transitive package
 dependency integrity review; unit tests deliberately use a fake uv process and
 do not download Semgrep.
 
-## Managed SonarQube
+SonarQube is managed as a loopback-only child dependency. Its adapter has
+explicit installer, runtime, server, and API-client interfaces. The shipping
+release must pin, checksum, and compatibility-test its SonarQube, scanner, and
+Java artifacts before enabling installation.
 
-SonarQube is managed as a loopback-only child dependency. The manifest pins
-SonarQube Community Build 26.8.0.126808, SonarScanner CLI 7.3.0.5189 and
-Eclipse Temurin 21.0.12+8, each with a SHA-256, and all three install under
-`%LOCALAPPDATA%\BluntCode\tools`. Licensing for these (LGPL-3.0 platform with
-SSALv1 analyzers) is in [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
-
-Scanner properties are created only under Blunt Code application data and are
-deleted after the scanner exits. The analyzer fails with a specific readiness
-error until the managed artifacts and a securely bootstrapped token are
-present; it does not substitute global PATH, the user's Java installation, or
-placeholder credentials.
+The current implementation creates scanner properties only under Blunt Code
+application data and deletes them after the scanner exits. It fails with a
+specific readiness error until the release-owned SonarQube artifacts and a
+securely bootstrapped token are present; it does not substitute global PATH,
+the user's Java installation, or placeholder credentials.
 
 ## Network use
 
@@ -66,14 +63,15 @@ network class also ships machine-readable from `GET /api/v1/analyzers`
 | Touchpoint | Class | When it talks |
 | :--- | :--- | :--- |
 | Tool installs (ruff, biome, gitleaks, semgrep, osv-scanner, trivy, checkov, SonarQube) | Outbound, explicit | Only when you press Install/Repair/Update on the Tools page, or a managed tool is missing and auto-install is allowed |
-| OSV Scanner | Outbound | Deep scans query the OSV.dev API unless offline vulnerability databases were provisioned; offline mode fails readiness instead of dialing out |
-| Trivy | Outbound, cold cache only | Downloads its vulnerability database the first time; warm caches scan locally, and offline mode refuses cold-cache scans instead of downloading |
-| Update check | Outbound, automatic once per UI session | `GET /api/v1/update/check` reads `api.github.com/repos/sanketpatel32/Blunt-code/releases/latest`. The web UI calls it once each time it is opened (a newer release shows a toast), the About page calls it on demand, and `bluntcode update check` calls it from the CLI. Only the current version is compared locally; nothing about your workspaces is sent. Offline mode refuses the check |
+| OSV Scanner | Outbound, database download only | Deep scans match against local OSV databases (`--offline --offline-vulnerabilities`) and refresh the public per-ecosystem archives from `osv-vulnerabilities.storage.googleapis.com`; the dependency inventory is never sent to the OSV.dev API, deps.dev, or registries. Offline mode skips the download and fails readiness when the databases were never fetched |
+| Trivy | Outbound, cold cache only | Downloads its vulnerability database the first time; telemetry, version checks, checks-bundle updates, and registry lookups are always disabled (`--disable-telemetry --skip-version-check --skip-check-update --offline-scan`), so warm-cache scans make no requests. Offline mode refuses cold-cache scans instead of downloading |
+| Checkov | None | Runs with `--skip-download` and its PyPI update check off: no Prisma Cloud metadata or version requests (findings use default severities, no guideline links) |
+| Update check | Outbound, explicit or opt-in | `GET /api/v1/update/check` reads `api.github.com/repos/.../releases/latest` only when you click **Check for updates** on the About page, run `bluntcode update check`, or enable **Settings → Check for updates automatically** (off by default; then once per UI session) |
 | SonarQube | Loopback only | Talks to the managed server it starts on a dynamic loopback port; never an external host |
-| Pentest probe | Explicit target only | Probes exactly the URL you enter. Redirects to any other host are refused and reported as a finding (CWE-601), so the probe cannot be pivoted to third parties or internal endpoints you did not name. Private/link-local targets need `BLUNTCODE_PENTEST_ALLOW_PRIVATE=1` (or `--allow-private`); cloud metadata endpoints are always refused; TLS is verified by default; credentials are only sent over `https://` |
+| Pentest probe | Explicit target only | Probes exactly the URL you enter. Redirects to any other host are refused and reported as a finding (CWE-601), so the probe cannot be pivoted to third parties or internal endpoints you did not name |
 
-Offline mode (Settings) closes the outbound column: tool installs and the
-update check (including the automatic one when the UI opens) are refused, the built-in in-process analyzers are withheld so
+Offline mode (Settings) closes the outbound column: tool installs, analyzer
+database downloads, and the update check are refused, the built-in in-process analyzers are withheld so
 an offline scan cannot silently "succeed" on reduced coverage, osv/trivy fail
 readiness without their local databases, and the UI ships no webfont or other
 third-party asset requests.
@@ -106,27 +104,3 @@ contract, not an OS-enforced sandbox — Blunt Code does not restrict analyzer
 filesystem access at the operating-system level, and repository
 configuration an analyzer honors (for example a `.editorconfig`) is read, not
 executed. Repository hooks and build scripts are never run by a scan.
-
-## In-repo analyzer configuration (trust boundary)
-
-A repository under audit must not configure its own audit. By default every external
-analyzer runs with Blunt Code-owned configuration, and config files inside the scanned
-tree are ignored:
-
-| Analyzer | In-repo files ignored | How |
-| --- | --- | --- |
-| Gitleaks | `.gitleaks.toml`, `.gitleaksignore` | pinned `--config`, isolated working directory; files named by the root `.gitleaksignore` are re-scanned from a Blunt Code staging copy |
-| Trivy | `trivy.yaml`, `.trivyignore`, `trivy-secret.yaml` | explicit `--config` / `--ignorefile` / `--secret-config`, isolated working directory |
-| Checkov | `.checkov.yaml`, `.checkov.yml` | `--directory=<root>` form (skips checkov's per-directory config lookup), isolated working directory |
-| OSV-Scanner | `osv-scanner.toml` | pinned `--config` |
-| Ruff | `ruff.toml`, `.ruff.toml`, `pyproject.toml` | `--isolated` |
-| Biome | `biome.json`, `biome.jsonc` (root and nested) | pinned `--config-path` |
-| Semgrep, SonarQube | — | already pinned (`--config <bundled rules>`, `-Dproject.settings=<app-data file>`) |
-
-Trusting in-repo config is an explicit, per-workspace trust decision
-(`bluntcode workspace trust-config <id|path> on`, the workspace settings checkbox, or
-`PATCH /api/v1/workspaces/{id}` with `"trust_repo_analyzer_config": true`). Each scan
-snapshot records `trust_repo_analyzer_config` and the in-repo config files discovery saw
-(`repo_analyzer_configs`); trusting config, or editing a trusted config file, changes the
-scan's `config_digest`. Inline suppressions in source (`gitleaks:allow`, `# noqa`,
-`#checkov:skip`, `nosemgrep`) are outside this boundary.

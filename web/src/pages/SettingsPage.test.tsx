@@ -117,6 +117,16 @@ describe('SettingsPage toggles', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/settings', expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ open_browser: false }) }));
   });
 
+  it('keeps the automatic update check off by default and saves the opt-in', async () => {
+    const fetchMock = settingsMock();
+    const { host } = await renderPage(fetchMock);
+    const updateSwitch = host.querySelector('button[role="switch"][aria-label="Check for updates automatically"]')!;
+    expect(updateSwitch.getAttribute('aria-checked')).toBe('false');
+    expect(host.textContent).toContain('api.github.com');
+    await act(async () => { (updateSwitch as HTMLButtonElement).click(); });
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/settings', expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ update_check: true }) }));
+  });
+
   it('reflects offline mode as on when the backend reports it', async () => {
     const mock = vi.fn((input: string) => {
       if (input.endsWith('/meta')) return Promise.resolve(json({ data_directory: 'C:\\Users\\you\\BluntCode' }));

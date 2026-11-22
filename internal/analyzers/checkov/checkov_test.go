@@ -92,9 +92,13 @@ func TestPlanScansWorkspaceDirectoryOnce(t *testing.T) {
 		"--output-file-path", outputDir,
 		"--framework", frameworks,
 		"--quiet",
+		"--skip-download",
 	}
 	if !reflect.DeepEqual(command.Args, want) {
 		t.Fatalf("args = %#v, want %#v", command.Args, want)
+	}
+	if command.Env["CKV_SKIP_PACKAGE_UPDATE_CHECK"] != "true" || command.Env["BC_SKIP_MAPPING"] != "TRUE" {
+		t.Fatalf("checkov must skip its PyPI update check and Prisma mapping download: %#v", command.Env)
 	}
 	for _, key := range []string{"PYTHONPATH", "PYTHONHOME", "CKV_API_TOKEN", "BC_API_KEY"} {
 		if value, ok := command.Env[key]; !ok || value != "" {

@@ -274,6 +274,7 @@ func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Offline     *bool `json:"offline"`
 		OpenBrowser *bool `json:"open_browser"`
+		UpdateCheck *bool `json:"update_check"`
 	}
 	if err := decode(r, &input); err != nil {
 		var syntax *json.SyntaxError
@@ -281,11 +282,11 @@ func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
 			fail(w, 400, "INVALID_JSON", invalidJSONMessage)
 			return
 		}
-		fail(w, 400, "INVALID_SETTINGS", "Provide offline or open_browser as a boolean.")
+		fail(w, 400, "INVALID_SETTINGS", "Provide offline, open_browser, or update_check as a boolean.")
 		return
 	}
-	if input.Offline == nil && input.OpenBrowser == nil {
-		fail(w, 400, "INVALID_SETTINGS", "Provide offline or open_browser as a boolean.")
+	if input.Offline == nil && input.OpenBrowser == nil && input.UpdateCheck == nil {
+		fail(w, 400, "INVALID_SETTINGS", "Provide offline, open_browser, or update_check as a boolean.")
 		return
 	}
 	value, err := s.db.AppSettings(r.Context())
@@ -298,6 +299,9 @@ func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if input.OpenBrowser != nil {
 		value.OpenBrowser = *input.OpenBrowser
+	}
+	if input.UpdateCheck != nil {
+		value.UpdateCheck = *input.UpdateCheck
 	}
 	if err := s.db.SaveAppSettings(r.Context(), value); err != nil {
 		fail(w, 500, "DATABASE_ERROR", "Could not save application settings.")

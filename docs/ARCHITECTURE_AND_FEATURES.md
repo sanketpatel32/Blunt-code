@@ -157,7 +157,7 @@ Persistence uses SQLite with WAL (Write-Ahead Logging) mode enabled for high-con
 - **`scan_runs`**: Execution telemetry per analyzer (status, exit code, duration in milliseconds, error summary).
 - **`findings`**: Normalized issue records (rule ID, category, severity, file path, line/column span, message, remediation advice, fingerprint, suppression status).
 - **`suppressions`**: Fingerprint-based suppression registry with human audit reasons and timestamps.
-- **`app_settings`**: User preferences (theme, UI defaults, language locale, auto-update checks).
+- **`app_settings`**: User preferences (theme, UI defaults, language locale, opt-in automatic update check).
 
 ---
 
@@ -270,7 +270,7 @@ bluntcode scan . --profile quick --jobs 4 --incremental
 
 - **Loopback Isolation**: The web server binds strictly to `127.0.0.1`. Requests originating from any other network interface are rejected at the TCP socket layer.
 - **Single-Instance Enforcement**: A Windows session-level mutex prevents concurrent access to the SQLite database, preventing data corruption.
-- **No Cloud Telemetry**: Zero analytics SDKs, zero crash-reporting pings, zero phone-home beacons.
+- **No Cloud Telemetry**: Zero analytics SDKs, zero crash-reporting pings, zero phone-home beacons. Bundled analyzers run with their telemetry and version checks disabled, the automatic update check is opt-in, and the remaining outbound requests (tool installs, vulnerability-database downloads) are enumerated in [privacy.md](privacy.md).
 - **Isolated Analyzer Execution**: Analyzers run under the user's local security context with read-only access to source trees, never modifying project files.
 - **Sanitized HTML Rendering**: All finding messages, code snippets, and analyzer outputs undergo strict HTML-escaping and sanitization to prevent stored XSS attacks when viewing untrusted codebases.
 

@@ -1589,6 +1589,24 @@ func TestSettingsPersistOfflineMode(t *testing.T) {
 	}
 }
 
+// TestSettingsUpdateCheckIsOptIn pins issue #21: the automatic update check
+// is off until the user explicitly turns it on.
+func TestSettingsUpdateCheckIsOptIn(t *testing.T) {
+	s := testServer(t)
+	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/settings", nil)
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"update_check":false`) {
+		t.Fatalf("default settings must keep the update check off: %d %s", response.Code, response.Body.String())
+	}
+	request = httptest.NewRequest(http.MethodPatch, "http://127.0.0.1/api/v1/settings", strings.NewReader(`{"update_check":true}`))
+	response = httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"update_check":true`) {
+		t.Fatalf("opt-in got %d: %s", response.Code, response.Body.String())
+	}
+}
+
 func TestStopServerRequestsGracefulShutdown(t *testing.T) {
 	s := testServer(t)
 	stopped := make(chan struct{}, 1)

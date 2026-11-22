@@ -312,6 +312,9 @@ func (d *DB) TouchWorkspace(ctx context.Context, id string) error {
 type AppSettings struct {
 	Offline     bool `json:"offline"`
 	OpenBrowser bool `json:"open_browser"`
+	// UpdateCheck opts in to the UI's automatic release check on load (a GET
+	// to api.github.com). Off by default; manual checks stay explicit.
+	UpdateCheck bool `json:"update_check"`
 }
 
 func (d *DB) AppSettings(ctx context.Context) (AppSettings, error) {

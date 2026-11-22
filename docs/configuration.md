@@ -40,7 +40,7 @@ What each section means:
 - **Environment overrides** — `BLUNTCODE_SONAR_STARTUP_TIMEOUT` in effect,
   including an invalid-value note (below).
 - **App settings** — the persisted settings when the database is readable
-  (offline mode, open-browser-on-start); the effective defaults when no
+  (offline mode, open-browser-on-start, automatic update check); the effective defaults when no
   database exists yet; or an explicit "app is running" note when the
   database cannot be opened — the one realistic cause while a live app
   holds SQLite.
@@ -80,6 +80,10 @@ last observed status.
 Offline mode is a persisted app setting toggled from **Settings** in the web
 UI. With it on, scans run entirely from local assets:
 
+- Analyzer databases are never downloaded: Trivy refuses a cold cache, and
+  OSV Scanner reports not ready until an earlier online deep scan fetched its
+  local databases.
+- The update check is refused, including the opt-in automatic check.
 - Managed tools are never downloaded. A scan needing an uninstalled tool
   fails that analyzer with a local-dependency message (for example, `semgrep
   is not installed and offline mode is enabled`) instead of reaching the
@@ -91,8 +95,10 @@ UI. With it on, scans run entirely from local assets:
 - Everything else — discovery, scans over already-installed tools, reports,
   the CLI — behaves identically.
 
-The practical sequence is: run one scan online per machine so the managed
-tools download, then toggle offline mode on.
+The practical sequence is: run one deep scan online per machine so the
+managed tools and vulnerability databases download, then toggle offline mode
+on. Outside offline mode, the full list of outbound requests is in
+[privacy.md](privacy.md).
 
 ## Scan profiles
 

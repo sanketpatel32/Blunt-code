@@ -97,7 +97,9 @@ func TestPlanIsDeepOnly(t *testing.T) {
 	if command.Executable != adapter.Executable || command.Dir != `C:\ws` {
 		t.Fatalf("unexpected process: %#v", command)
 	}
-	want := []string{"scan", "source", "--format", "json", "--recursive", "--no-ignore", "--allow-no-lockfiles", "."}
+	// Online scans still never query the OSV.dev API with the dependency
+	// inventory: they match locally and only download the public databases.
+	want := []string{"scan", "source", "--format", "json", "--recursive", "--no-ignore", "--allow-no-lockfiles", "--offline", "--offline-vulnerabilities", "--download-offline-databases", "."}
 	if !reflect.DeepEqual(command.Args, want) {
 		t.Fatalf("deep args = %#v, want %#v", command.Args, want)
 	}
@@ -153,8 +155,15 @@ func TestCheckOfflineRequiresDatabases(t *testing.T) {
 		t.Fatalf("detail should explain the offline refusal: %q", status.Detail)
 	}
 
-	cache := cold.DBCacheDir
-	if err := os.WriteFile(filepath.Join(cache, "maven.zip"), []byte("zip"), 0o644); err != nil {
+	// osv-scanner 2.x layout: <cache>/osv-scalibr/<ecosystem>/all.zip.
+	nested := filepath.Join(cold.DBCacheDir, "osv-scalibr", "npm")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if status := cold.Check(context.Background(), analyzers.ToolEnvironment{}); status.Ready {
+		t.Fatalf("offline + empty ecosystem dir must not be ready: %#v", status)
+	}
+	if err := os.WriteFile(filepath.Join(nested, "all.zip"), []byte("zip"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if status := cold.Check(context.Background(), analyzers.ToolEnvironment{}); !status.Ready {
