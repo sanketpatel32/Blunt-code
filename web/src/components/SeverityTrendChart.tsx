@@ -106,7 +106,7 @@ export function SeverityTrendChart({ points }: { points: SeverityTrendPoint[] })
 /** Loads the workspace trend series and renders the whole section: skeleton while loading, a quiet inline message on error (never blocking the page), and nothing at all before the first completed scan. The range control picks how many scans the server includes (10/20/50/100). */
 export function SeverityTrendSection({ workspaceId }: { workspaceId: string }) {
   const [range, setRange] = useState(20);
-  const trends = useLoad(() => api.trends(workspaceId, range), [workspaceId, range]);
+  const trends = useLoad((signal) => api.trends(workspaceId, range, { signal }), [workspaceId, range]);
   if (trends.loading) {
     return <section className="trend-section" aria-busy="true"><div className="section-head"><div><h2>Severity trend</h2><p>Findings by severity over recent scans.</p></div></div><SkeletonLines lines={3} /></section>;
   }

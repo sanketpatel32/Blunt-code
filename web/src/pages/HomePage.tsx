@@ -32,6 +32,17 @@ const FEED_LIMIT = 12;
 const LEDGER_PAGE_SIZE = 25;
 const LEDGER_STORAGE_KEY = 'bluntcode.homeLedgerPage';
 
+/** The ledger page the user last viewed, or 1 when storage is empty, unreadable, or garbage. */
+function readStoredLedgerPage(): number {
+  try {
+    const raw = localStorage.getItem(LEDGER_STORAGE_KEY);
+    const n = raw ? Number(raw) : 1;
+    return Number.isInteger(n) && n >= 1 ? n : 1;
+  } catch {
+    return 1;
+  }
+}
+
 /** Short date for the cancelled-scan fallback note ("showing 15 Sep 2026 results"). */
 const shortDateFmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
 
@@ -75,25 +86,25 @@ function feedFilterLabel(filter: FeedFilter): string {
 }
 
 export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd: () => void; notify: (n: Notice) => void }) {
-  const [ledgerPage, setLedgerPage] = useState(1);
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(LEDGER_STORAGE_KEY);
-      const n = raw ? parseInt(raw, 10) : 1;
-      if (Number.isInteger(n) && n >= 1) setLedgerPage(n);
-    } catch { /* ignore */ }
-  }, []);
+  const [ledgerPage, setLedgerPage] = useState(readStoredLedgerPage);
   const [ledgerFilter, setLedgerFilter] = useState('');
   const debouncedLedgerSearch = useDebouncedValue(ledgerFilter.trim(), 280);
+  // A new (settled) search starts from page 1. Adjusted during render rather
+  // than in an effect so it never fires on mount and clobbers the restored page.
+  const [ledgerSearchBasis, setLedgerSearchBasis] = useState(debouncedLedgerSearch);
+  if (ledgerSearchBasis !== debouncedLedgerSearch) {
+    setLedgerSearchBasis(debouncedLedgerSearch);
+    setLedgerPage(1);
+  }
   const loadWorkspacesPage = useCallback(
-    () =>
+    (signal: AbortSignal) =>
       api.workspacesPage({
         page: ledgerPage,
         page_size: LEDGER_PAGE_SIZE,
         sort: 'findings',
         order: 'desc',
         search: debouncedLedgerSearch || undefined,
-      }),
+      }, { signal }),
     [ledgerPage, debouncedLedgerSearch],
   );
   const workspaces = useLoad(loadWorkspacesPage, [loadWorkspacesPage]);
@@ -107,7 +118,7 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
   const ledgerHasNext = workspaces.data?.has_next === true;
   const tools = useLoad(api.tools, []);
   const [feedOffset, setFeedOffset] = useState(0);
-  const loadRecent = useCallback(() => api.recentScans({ limit: FEED_LIMIT, offset: feedOffset }), [feedOffset]);
+  const loadRecent = useCallback((signal: AbortSignal) => api.recentScans({ limit: FEED_LIMIT, offset: feedOffset }, { signal }), [feedOffset]);
   const recent = useLoad(loadRecent, [loadRecent]);
   const stats = useLoad(api.stats, []);
   const byDay = stats.data?.scans_by_day ?? [];
@@ -127,10 +138,6 @@ export function HomePage({ go, onAdd, notify }: { go: (r: Route) => void; onAdd:
       setLedgerPage(maxPage);
     }
   }, [ledgerPage, workspaceTotal]);
-
-  useEffect(() => {
-    setLedgerPage(1);
-  }, [debouncedLedgerSearch]);
 
   useEffect(() => {
     try {

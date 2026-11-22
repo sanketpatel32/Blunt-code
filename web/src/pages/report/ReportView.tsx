@@ -179,7 +179,7 @@ function rowTitleFor(finding: Finding): string {
 }
 
 export function ReportView({ scanId, notify, runs: runsProp, go, onCountsChanged }: { scanId: string; notify?: (n: Notice) => void; runs?: AnalyzerRun[]; /** Navigation callback from the hosting page; present, the suppress toast gains a "View suppressions" jump to the workspace. */ go?: (r: Route) => void; /** Called after a suppress/restore changed the scan's persisted counts, so the host can refresh its header and grade. */ onCountsChanged?: () => void }) {
-  const report = useLoad(() => api.report(scanId), [scanId]);
+  const report = useLoad((signal) => api.report(scanId, { signal }), [scanId]);
   // Read the shareable URL state exactly once per mount so all three slices
   // stay mutually consistent even if the address changes mid-render.
   const [initialUrlState] = useState(readUrlState);
@@ -242,7 +242,7 @@ export function ReportView({ scanId, notify, runs: runsProp, go, onCountsChanged
   const params = useMemo(() => ({ ...filters, q: debouncedQ, page: String(pages), page_size: String(pageSize), sort: sort.key, order: sort.dir }), [filters, debouncedQ, pages, pageSize, sort]);
   /** CSV export query: the on-screen filters + sort minus paging, built exactly like the findings request so the file mirrors the list. */
   const csvParams = useMemo(() => Object.fromEntries(Object.entries(params).filter(([key]) => key !== 'page' && key !== 'page_size')), [params]);
-  const findings = useLoad(() => api.findings(scanId, params), [scanId, ...Object.values(params)]);
+  const findings = useLoad((signal) => api.findings(scanId, params, { signal }), [scanId, ...Object.values(params)]);
   /** Rows accumulate across "Show more" windows instead of paginating away. Page 1 always
    *  replaces (every filter/sort change resets there); later windows merge by key so a
    *  refresh never duplicates a row and status flips land where the user can see them. */
@@ -300,7 +300,7 @@ export function ReportView({ scanId, notify, runs: runsProp, go, onCountsChanged
   // fingerprint; bumping the version refetches it after suppress/restore.
   const [suppressionVersion, setSuppressionVersion] = useState(0);
   const reportWorkspaceId = report.data?.scan?.workspace_id ?? '';
-  const suppressions = useLoad(() => (reportWorkspaceId ? api.suppressions(reportWorkspaceId) : Promise.resolve([])), [reportWorkspaceId, suppressionVersion]);
+  const suppressions = useLoad((signal) => (reportWorkspaceId ? api.suppressions(reportWorkspaceId, { signal }) : Promise.resolve([])), [reportWorkspaceId, suppressionVersion]);
   /** After a suppression change the server has already recounted the scan:
    *  refresh the severity chips (report), the status chips, and the host's
    *  header/grade without a loading flash. */

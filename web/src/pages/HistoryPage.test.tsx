@@ -543,7 +543,7 @@ describe('HistoryPage', () => {
     mockPages([Array.from({ length: 6 }, (_, i) => offRange(`a${i}`, 10 + i)), Array.from({ length: 6 }, (_, i) => offRange(`b${i}`, 20 + i)), [offRange('c0', 28)]], 13);
     window.history.replaceState(null, '', '/workspaces/ws-1/scans?page=3&sort=asc');
     const host = await renderPage();
-    expect(api.scansPage).toHaveBeenCalledWith('ws-1', 3, 6, undefined);
+    expect(api.scansPage).toHaveBeenCalledWith('ws-1', 3, 6, { signal: expect.any(AbortSignal) });
     expect(host.querySelector('output')!.textContent).toBe('Page 3 of 3');
     const [previous] = [...host.querySelectorAll<HTMLButtonElement>('.history-pagination button')];
     await act(async () => { previous!.click(); });
@@ -568,7 +568,7 @@ describe('HistoryPage', () => {
     });
     await act(async () => {});
 
-    expect(api.scansPage).toHaveBeenCalledWith('ws-1', 1, 6, { date_from: '2026-08-29' });
+    expect(api.scansPage).toHaveBeenCalledWith('ws-1', 1, 6, { date_from: '2026-08-29', signal: expect.any(AbortSignal) });
     expect(dataRows(host)).toHaveLength(3);
     expect(host.querySelector('.history-count')!.textContent).toBe('3 of 8 scans');
     expect(host.querySelector('output')!.textContent).toBe('Page 1 of 1');

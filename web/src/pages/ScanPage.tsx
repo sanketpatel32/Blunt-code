@@ -36,7 +36,7 @@ function announceCompleted(current?: Scan | null) {
 }
 
 export function ScanPage({ id, go, notify }: { id: string; go?: (r: Route) => void; notify: (n: Notice) => void }) {
-  const scan = useLoad(() => api.scan(id), [id]);
+  const scan = useLoad((signal) => api.scan(id, { signal }), [id]);
   const [events, setEvents] = useState<ScanEvent[]>([]);
   const eventSeq = useRef(0);
   const [streamState, setStreamState] = useState<'connecting' | 'live' | 'reconnecting'>('connecting');
@@ -420,7 +420,7 @@ const VERDICT_TRIO_TOOLTIP = 'New = found for the first time in this scan · Fix
 const RISK_SCORE_TOOLTIP = 'Weighted: critical ×10, high ×5, medium ×2, low ×1 · A 0–4, B 5–19, C 20–49, D 50+';
 
 function WhatChanged({ scanId, fixedCount }: { scanId: string; fixedCount: number }) {
-  const fixed = useLoad(() => api.fixedFindings(scanId), [scanId]);
+  const fixed = useLoad((signal) => api.fixedFindings(scanId, { signal }), [scanId]);
   const header = <header className="what-changed-header"><div><h2>What changed</h2><p>Fixed since the previous scan</p></div></header>;
   if (fixed.loading) return <section className="what-changed what-changed-loading" aria-busy="true">{header}<SkeletonLines lines={2} /></section>;
   if (fixed.error || !fixed.data?.comparison_available) return null;
@@ -466,7 +466,7 @@ function ScanStageList({ scan, events }: { scan: Scan; events: ScanEvent[] }) {
 /** Where the findings cluster: category and tool bars from the findings
  *  endpoint's facets. Clicking a bar applies that filter to the report below. */
 function ScanFacets({ scanId }: { scanId: string }) {
-  const facets = useLoad(() => api.findings(scanId, { page: '1', page_size: '1' }).then((page) => page.facets ?? null), [scanId]);
+  const facets = useLoad((signal) => api.findings(scanId, { page: '1', page_size: '1' }, { signal }).then((page) => page.facets ?? null), [scanId]);
   const toRows = (map?: Record<string, number>, label?: (key: string) => string) => Object.entries(map ?? {}).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([name, value]) => ({ name: label ? label(name) : name, key: name, value }));
   const categories = toRows(facets.data?.category, (key) => FINDING_CATEGORY_LABELS[key] ?? key);
   const tools = toRows(facets.data?.analyzer, analyzerName);

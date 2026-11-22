@@ -41,7 +41,7 @@ export function suppressionsCsv(rows: Suppression[]): string {
  * blocks the rest of the page.
  */
 export function SuppressionsSection({ workspaceId, notify }: { workspaceId: string; notify: (n: Notice) => void }) {
-  const suppressions = useLoad(() => api.suppressions(workspaceId), [workspaceId]);
+  const suppressions = useLoad((signal) => api.suppressions(workspaceId, { signal }), [workspaceId]);
   const [query, setQuery] = useState('');
   // Clearing applies immediately (delay 0); typing settles before the list re-filters.
   const debouncedQuery = useDebouncedValue(query, query ? SEARCH_DEBOUNCE_MS : 0);

@@ -16,7 +16,7 @@ function legacyNotes(fingerprint: string): FindingComment[] {
 }
 
 export function CommentsPanel({ workspaceId, fingerprint, title }: { workspaceId?: string; fingerprint: string; title?: string }) {
-  const notes = useLoad(() => workspaceId ? api.findingNotes(workspaceId, fingerprint) : Promise.resolve([]), [workspaceId, fingerprint]);
+  const notes = useLoad((signal) => workspaceId ? api.findingNotes(workspaceId, fingerprint, { signal }) : Promise.resolve([]), [workspaceId, fingerprint]);
   const [text, setText] = useState('');
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);

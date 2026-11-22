@@ -249,6 +249,7 @@ afterEach(async () => {
   await act(async () => { root?.unmount(); });
   document.body.replaceChildren();
   vi.unstubAllGlobals();
+  localStorage.clear();
   go.mockClear();
   notify.mockClear();
 });
@@ -447,6 +448,49 @@ describe('HomePage risk board — verdict', () => {
 });
 
 describe('HomePage risk board — ledger', () => {
+  const sixtyWorkspaces = () => Array.from({ length: 60 }, (_, i) =>
+    workspaceItem({ id: `p-${i}`, name: `Paged ${i}`, latest_scan: latestScan({ id: `scan-p-${i}`, total_findings: 100 - i }) }));
+  /** Ledger requests only (the riskiest-workspace probe asks for page_size=1). */
+  const ledgerCalls = (fetchMock: ReturnType<typeof vi.fn>) => fetchMock.mock.calls
+    .map(([input]) => String(input))
+    .filter((input) => input.startsWith('/api/v1/workspaces?') && input.includes('page_size=25'));
+
+  it('restores the stored ledger page on mount instead of resetting it to page 1', async () => {
+    localStorage.setItem('bluntcode.homeLedgerPage', '3');
+    const fetchMock = homeFetchMock({ scans: [], total: 0, summary }, workspacesPage(sixtyWorkspaces(), 60));
+    const host = await render(fetchMock);
+    const calls = ledgerCalls(fetchMock);
+    expect(calls.length).toBeGreaterThan(0);
+    expect(calls.every((input) => new URL(input, 'http://x').searchParams.get('page') === '3')).toBe(true);
+    expect(localStorage.getItem('bluntcode.homeLedgerPage')).toBe('3');
+    expect(host.textContent).toContain('Showing 51–60 of 60 by risk');
+  });
+
+  it('ignores a garbage stored page', async () => {
+    localStorage.setItem('bluntcode.homeLedgerPage', '2abc');
+    const fetchMock = homeFetchMock({ scans: [], total: 0, summary }, workspacesPage(sixtyWorkspaces(), 60));
+    await render(fetchMock);
+    expect(ledgerCalls(fetchMock)[0]).toContain('page=1&');
+  });
+
+  it('resets the restored page to 1 once a new search settles', async () => {
+    localStorage.setItem('bluntcode.homeLedgerPage', '2');
+    const fetchMock = homeFetchMock({ scans: [], total: 0, summary }, workspacesPage(sixtyWorkspaces(), 60));
+    const host = await render(fetchMock);
+    expect(ledgerCalls(fetchMock).at(-1)).toContain('page=2&');
+    const input = host.querySelector<HTMLInputElement>('.board-filter input')!;
+    const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    await act(async () => {
+      nativeSetter.call(input, 'Paged');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 350)); });
+    const last = new URL(ledgerCalls(fetchMock).at(-1)!, 'http://x').searchParams;
+    expect(last.get('search')).toBe('Paged');
+    expect(last.get('page')).toBe('1');
+    expect(localStorage.getItem('bluntcode.homeLedgerPage')).toBe('1');
+  });
+
   it('ranks workspaces by weighted risk and pushes never-scanned to the bottom', async () => {
     const risky = workspaceItem({ id: 'ws-risky', name: 'Risky Core', latest_scan: latestScan({ critical_count: 1, high_count: 1, medium_count: 0, low_count: 0, total_findings: 2 }) }); // 10+5 = 15 → B
     const mild = workspaceItem({ id: 'ws-mild', name: 'Mild Web', latest_scan: latestScan({ critical_count: 0, high_count: 0, medium_count: 0, low_count: 2, total_findings: 2 }) }); // 2 → A

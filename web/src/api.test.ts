@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { api, ApiError } from './api';
+import { api, ApiError, READ_TIMEOUT_MS } from './api';
 
 describe('API client', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -79,5 +79,59 @@ describe('API client', () => {
 
     await expect(api.removeSuppression('ws-1', fingerprint)).resolves.toBeUndefined();
     expect(fetchMock).toHaveBeenNthCalledWith(3, `/api/v1/workspaces/ws-1/suppressions/${fingerprint}`, expect.objectContaining({ method: 'DELETE' }));
+  });
+
+  it('reads an empty 200 body as null instead of throwing a JSON parse error', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 200 })));
+    await expect(api.workspace('ws-1')).resolves.toBeNull();
+  });
+
+  it('encodes every path parameter', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+    await api.deleteFindingNote('ws/1', 'fp?x', 'note/../2');
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/workspaces/ws%2F1/notes/fp%3Fx/note%2F..%2F2', expect.objectContaining({ method: 'DELETE' }));
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({}), { status: 200 }));
+    await api.scanPlan('ws#1', 'deep');
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/workspaces/ws%231/scan-plan?profile=deep', expect.anything());
+  });
+
+  it('cancels a read when the caller aborts its signal', async () => {
+    const fetchMock = vi.fn((_: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init.signal!.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const controller = new AbortController();
+    const pending = api.searchFindings({ q: 'x' }, { signal: controller.signal });
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('times out a hung read with a TIMEOUT ApiError', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal('fetch', vi.fn((_: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
+        init.signal!.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+      })));
+      const pending = api.stats();
+      const assertion = expect(pending).rejects.toMatchObject({ code: 'TIMEOUT' });
+      await vi.advanceTimersByTimeAsync(READ_TIMEOUT_MS);
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not put a timeout on mutations', async () => {
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal('fetch', vi.fn((_: string, init: RequestInit) => { signal = init.signal ?? undefined; return Promise.resolve(new Response(JSON.stringify({ cancelled: true }), { status: 200 })); }));
+    vi.useFakeTimers();
+    try {
+      await api.selectFolder();
+      await vi.advanceTimersByTimeAsync(READ_TIMEOUT_MS * 2);
+      expect(signal?.aborted).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

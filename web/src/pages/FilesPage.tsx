@@ -126,7 +126,7 @@ function languageIcon(lang?: string) {
 }
 
 export function FilesPage({ id, go, notify }: { id: string; go?: (r: Route) => void; notify: (n: Notice) => void }) {
-  const workspace = useLoad(() => api.workspace(id), [id]);
+  const workspace = useLoad((signal) => api.workspace(id, { signal }), [id]);
   // The address bar owns the language filter (?lang=<lang>): the workspace
   // page's donut drills through with it. The search string is re-read every
   // render — the app re-renders this page on pushState navigation and popstate —

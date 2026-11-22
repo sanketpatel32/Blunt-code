@@ -8,17 +8,47 @@ export class ApiError extends Error {
   }
 }
 
+/** Reads (GET) give up after this long so a wedged backend surfaces as an error instead of an endless skeleton. Mutations run unbounded: installs, scans and the native folder picker legitimately take minutes. */
+export const READ_TIMEOUT_MS = 30_000;
+
+/** Caller-supplied cancellation for reads, typically the AbortSignal useLoad hands to its loader. */
+export type ReadOptions = { signal?: AbortSignal };
+
 async function requestWithStatus<T>(path: string, init?: RequestInit): Promise<{ data: T; status: number }> {
-  const response = await fetch(`${PREFIX}${path}`, {
-    ...init,
-    headers: { Accept: 'application/json', ...(init?.body ? { 'Content-Type': 'application/json' } : {}), ...init?.headers },
-  });
-  if (!response.ok) {
-    const body = await response.json().catch(() => null) as { error?: { code?: string; message?: string; details?: Record<string, unknown> } } | null;
-    throw new ApiError(body?.error?.code ?? 'REQUEST_FAILED', body?.error?.message ?? `Request failed (${response.status})`, response.status, body?.error?.details);
+  const method = (init?.method ?? 'GET').toUpperCase();
+  const timeoutMs = method === 'GET' ? READ_TIMEOUT_MS : 0;
+  const controller = new AbortController();
+  const callerSignal = init?.signal ?? undefined;
+  let timedOut = false;
+  const onCallerAbort = () => controller.abort(callerSignal?.reason);
+  if (callerSignal?.aborted) controller.abort(callerSignal.reason);
+  else callerSignal?.addEventListener('abort', onCallerAbort, { once: true });
+  const timer = timeoutMs > 0 ? setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs) : undefined;
+  try {
+    let response: Response;
+    try {
+      response = await fetch(`${PREFIX}${path}`, {
+        ...init,
+        signal: controller.signal,
+        headers: { Accept: 'application/json', ...(init?.body ? { 'Content-Type': 'application/json' } : {}), ...init?.headers },
+      });
+    } catch (e) {
+      if (timedOut) throw new ApiError('TIMEOUT', `Request timed out after ${Math.round(timeoutMs / 1000)}s`);
+      throw e;
+    }
+    if (!response.ok) {
+      const body = await response.json().catch(() => null) as { error?: { code?: string; message?: string; details?: Record<string, unknown> } } | null;
+      throw new ApiError(body?.error?.code ?? 'REQUEST_FAILED', body?.error?.message ?? `Request failed (${response.status})`, response.status, body?.error?.details);
+    }
+    if (response.status === 204) return { data: undefined as T, status: response.status };
+    // An empty 200/201/202 body is "no payload", not a JSON parse crash.
+    const text = await response.text();
+    const data = (text.trim() ? JSON.parse(text) : null) as T;
+    return { data, status: response.status };
+  } finally {
+    if (timer) clearTimeout(timer);
+    callerSignal?.removeEventListener('abort', onCallerAbort);
   }
-  const data = response.status === 204 ? undefined as T : ((await response.json()) as T);
-  return { data, status: response.status };
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -39,10 +69,10 @@ export type CreatedWorkspace = Workspace & { existing: boolean };
 
 export type FindingNote = { id: string; text: string; createdAt: string };
 export const api = {
-  findingNotes: async (id: string, fingerprint: string) => list<FindingNote>(await request<{ items: FindingNote[] }>(`/workspaces/${id}/notes/${encodeURIComponent(fingerprint)}`)),
-  addFindingNote: (id: string, fingerprint: string, text: string, importKey?: string) => request<FindingNote>(`/workspaces/${id}/notes/${encodeURIComponent(fingerprint)}`, { method: 'POST', body: JSON.stringify({ text, import_key: importKey }) }),
-  deleteFindingNote: (id: string, fingerprint: string, note: string) => request<void>(`/workspaces/${id}/notes/${encodeURIComponent(fingerprint)}/${note}`, { method: 'DELETE' }),
-  scanPlan: (id: string, profile: string) => request<ScanPlan>(`/workspaces/${id}/scan-plan?profile=${encodeURIComponent(profile)}`),
+  findingNotes: async (id: string, fingerprint: string, opts?: ReadOptions) => list<FindingNote>(await request<{ items: FindingNote[] }>(`/workspaces/${encodeURIComponent(id)}/notes/${encodeURIComponent(fingerprint)}`, opts)),
+  addFindingNote: (id: string, fingerprint: string, text: string, importKey?: string) => request<FindingNote>(`/workspaces/${encodeURIComponent(id)}/notes/${encodeURIComponent(fingerprint)}`, { method: 'POST', body: JSON.stringify({ text, import_key: importKey }) }),
+  deleteFindingNote: (id: string, fingerprint: string, note: string) => request<void>(`/workspaces/${encodeURIComponent(id)}/notes/${encodeURIComponent(fingerprint)}/${encodeURIComponent(note)}`, { method: 'DELETE' }),
+  scanPlan: (id: string, profile: string, opts?: ReadOptions) => request<ScanPlan>(`/workspaces/${encodeURIComponent(id)}/scan-plan?profile=${encodeURIComponent(profile)}`, opts),
   health: () => request<{ status?: string }>('/health'),
   meta: () => request<{
     version: string;
@@ -57,7 +87,7 @@ export const api = {
   saveSettings: (input: Partial<{ offline: boolean; open_browser: boolean }>) => request<{ offline: boolean; open_browser: boolean }>('/settings', { method: 'PATCH', body: JSON.stringify(input) }),
   workspaces: async () => list<Workspace>(await request<Workspace[] | { workspaces?: Workspace[] }>('/workspaces')),
   /** Server-paged workspace list; sort key: name | last_opened | last_scan | findings */
-  workspacesPage: (params: { page: number; page_size?: number; sort?: string; order?: 'asc' | 'desc'; search?: string; tag?: string }) => {
+  workspacesPage: (params: { page: number; page_size?: number; sort?: string; order?: 'asc' | 'desc'; search?: string; tag?: string }, opts?: ReadOptions) => {
     const q = new URLSearchParams();
     q.set('page', String(params.page));
     if (params.page_size) q.set('page_size', String(params.page_size));
@@ -65,9 +95,9 @@ export const api = {
     if (params.order) q.set('order', params.order);
     if (params.search) q.set('search', params.search);
     if (params.tag) q.set('tag', params.tag);
-    return request<WorkspaceListPage>(`/workspaces?${q}`);
+    return request<WorkspaceListPage>(`/workspaces?${q}`, opts);
   },
-  workspace: (id: string) => request<Workspace>(`/workspaces/${encodeURIComponent(id)}`),
+  workspace: (id: string, opts?: ReadOptions) => request<Workspace>(`/workspaces/${encodeURIComponent(id)}`, opts),
   selectFolder: () => request<{ cancelled: boolean; path?: string }>('/system/select-folder', { method: 'POST' }),
   createWorkspace: async (input: { root_path: string; name?: string }): Promise<CreatedWorkspace> => {
     const { data, status } = await requestWithStatus<Workspace>('/workspaces', { method: 'POST', body: JSON.stringify(input) });
@@ -82,73 +112,73 @@ export const api = {
     const value = await request<TreeNode[] | { items?: TreeNode[]; children?: TreeNode[] } | null>(`/workspaces/${encodeURIComponent(id)}/tree${query}`);
     return Array.isArray(value) ? value : value?.items ?? value?.children ?? [];
   },
-  pathOverrides: async (id: string) => list<PathOverride>(await request<PathOverride[] | { items?: PathOverride[] }>(`/workspaces/${encodeURIComponent(id)}/path-overrides`)),
+  pathOverrides: async (id: string, opts?: ReadOptions) => list<PathOverride>(await request<PathOverride[] | { items?: PathOverride[] }>(`/workspaces/${encodeURIComponent(id)}/path-overrides`, opts)),
   /** Fingerprints dismissed for this workspace; suppressed findings stay stored but drop out of future scan totals, reports, and the CI gate. */
-  suppressions: async (id: string) => list<Suppression>(await request<Suppression[] | { items?: Suppression[] }>(`/workspaces/${encodeURIComponent(id)}/suppressions`)),
+  suppressions: async (id: string, opts?: ReadOptions) => list<Suppression>(await request<Suppression[] | { items?: Suppression[] }>(`/workspaces/${encodeURIComponent(id)}/suppressions`, opts)),
   addSuppression: (id: string, fingerprint: string, reason?: string) => request<Suppression>(`/workspaces/${encodeURIComponent(id)}/suppressions`, { method: 'POST', body: JSON.stringify({ fingerprint, reason: reason ?? '' }) }),
   removeSuppression: (id: string, fingerprint: string) => request<void>(`/workspaces/${encodeURIComponent(id)}/suppressions/${encodeURIComponent(fingerprint)}`, { method: 'DELETE' }),
   savePathOverrides: (id: string, overrides: PathOverride[]) => request<{ items: PathOverride[] }>(`/workspaces/${encodeURIComponent(id)}/path-overrides`, { method: 'PUT', body: JSON.stringify({ overrides }) }),
-  rules: async (id: string) => {
-    const value = await request<{ items?: unknown[]; rules?: unknown[] } | null>(`/workspaces/${encodeURIComponent(id)}/rules`);
+  rules: async (id: string, opts?: ReadOptions) => {
+    const value = await request<{ items?: unknown[]; rules?: unknown[] } | null>(`/workspaces/${encodeURIComponent(id)}/rules`, opts);
     return { rules: value?.rules ?? value?.items ?? [] };
   },
   saveRules: (id: string, rules: unknown) => request(`/workspaces/${encodeURIComponent(id)}/rules`, { method: 'PUT', body: JSON.stringify({ rules }) }),
-  scans: async (id: string) => list<Scan>(await request<Scan[] | { scans?: Scan[] }>(`/workspaces/${encodeURIComponent(id)}/scans`)),
+  scans: async (id: string, opts?: ReadOptions) => list<Scan>(await request<Scan[] | { scans?: Scan[] }>(`/workspaces/${encodeURIComponent(id)}/scans`, opts)),
   /** Server-paged scan history for one workspace; `page` is 1-based and capped at page_size 100 by the API. */
-  scansPage: (id: string, page: number, pageSize: number, opts?: { date_from?: string; date_to?: string }) => {
+  scansPage: (id: string, page: number, pageSize: number, opts?: { date_from?: string; date_to?: string; signal?: AbortSignal }) => {
     const q = new URLSearchParams();
     q.set('page', String(page));
     q.set('page_size', String(pageSize));
     if (opts?.date_from) q.set('date_from', opts.date_from);
     if (opts?.date_to) q.set('date_to', opts.date_to);
-    return request<ScanPage>(`/workspaces/${encodeURIComponent(id)}/scans?${q}`);
+    return request<ScanPage>(`/workspaces/${encodeURIComponent(id)}/scans?${q}`, { signal: opts?.signal });
   },
   /** Cross-workspace findings search; empty param values are dropped exactly like the per-scan findings query. */
-  searchFindings: (params: FindingsQuery) => {
+  searchFindings: (params: FindingsQuery, opts?: ReadOptions) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, v]) => v));
-    return request<SearchFindingsPage>(`/findings/search?${query}`);
+    return request<SearchFindingsPage>(`/findings/search?${query}`, opts);
   },
   /** Weighted risk profile for one workspace from its latest completed scans. */
-  risk: (id: string) => request<RiskProfile>(`/workspaces/${encodeURIComponent(id)}/risk`),
+  risk: (id: string, opts?: ReadOptions) => request<RiskProfile>(`/workspaces/${encodeURIComponent(id)}/risk`, opts),
   /** Delete every terminal scan beyond the newest `keep` (1..100). Running scans are never touched. */
   pruneScans: (id: string, keep: number) => request<{ deleted: number; kept: number }>(`/workspaces/${encodeURIComponent(id)}/scans?keep=${keep}`, { method: 'DELETE' }),
   /** Severity trend over completed scan history, oldest first; limit defaults to 20 on the server. */
-  trends: async (id: string, limit?: number) => {
+  trends: async (id: string, limit?: number, opts?: ReadOptions) => {
     const query = limit ? `?limit=${limit}` : '';
-    return list<SeverityTrendPoint>(await request<SeverityTrendPoint[] | { items?: SeverityTrendPoint[] }>(`/workspaces/${encodeURIComponent(id)}/trends${query}`));
+    return list<SeverityTrendPoint>(await request<SeverityTrendPoint[] | { items?: SeverityTrendPoint[] }>(`/workspaces/${encodeURIComponent(id)}/trends${query}`, opts));
   },
-  recentScans: (params?: { limit?: number; offset?: number; state?: string; workspace_id?: string }) => {
-    if (!params) return request<RecentScansResponse>('/scans');
+  recentScans: (params?: { limit?: number; offset?: number; state?: string; workspace_id?: string }, opts?: ReadOptions) => {
+    if (!params) return request<RecentScansResponse>('/scans', opts);
     const q = new URLSearchParams();
     if (params.limit != null) q.set('limit', String(params.limit));
     if (params.offset != null) q.set('offset', String(params.offset));
     if (params.state) q.set('state', params.state);
     if (params.workspace_id) q.set('workspace_id', params.workspace_id);
     const s = q.toString();
-    return request<RecentScansResponse>(`/scans${s ? `?${s}` : ''}`);
+    return request<RecentScansResponse>(`/scans${s ? `?${s}` : ''}`, opts);
   },
   /** Cross-workspace overview for the dashboard: counters plus the latest-completed-per-workspace severity rollup. */
   stats: () => request<GlobalStats>('/stats'),
   startScan: (id: string, profile?: string) => request<Scan>(`/workspaces/${encodeURIComponent(id)}/scans`, { method: 'POST', body: JSON.stringify(profile ? { profile } : {}) }),
-  scan: async (id: string) => {
-    const response = await request<Scan | { scan: Scan; analyzer_runs?: Scan['analyzer_runs'] } | null>(`/scans/${encodeURIComponent(id)}`);
+  scan: async (id: string, opts?: ReadOptions) => {
+    const response = await request<Scan | { scan: Scan; analyzer_runs?: Scan['analyzer_runs'] } | null>(`/scans/${encodeURIComponent(id)}`, opts);
     return response && typeof response === 'object' && 'scan' in response ? { ...response.scan, analyzer_runs: response.analyzer_runs ?? [] } : response;
   },
   cancelScan: (id: string) => request<Scan>(`/scans/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
   /** Filtered/sorted/paged findings for a scan; empty values are dropped from the query (see FindingsQuery for the param contract). */
-  findings: (id: string, params: FindingsQuery) => {
+  findings: (id: string, params: FindingsQuery, opts?: ReadOptions) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, v]) => v));
-    return request<FindingPage>(`/scans/${encodeURIComponent(id)}/findings?${query}`);
+    return request<FindingPage>(`/scans/${encodeURIComponent(id)}/findings?${query}`, opts);
   },
-  findingPreview: (scanId: string, findingId: string) => request<SourcePreview>(`/scans/${encodeURIComponent(scanId)}/findings/${encodeURIComponent(findingId)}/preview`),
-  report: (id: string) => request<Report>(`/scans/${encodeURIComponent(id)}/report`),
-  fixedFindings: (scanId: string) => request<FixedFindingsResponse>(`/scans/${encodeURIComponent(scanId)}/fixed`),
+  findingPreview: (scanId: string, findingId: string, opts?: ReadOptions) => request<SourcePreview>(`/scans/${encodeURIComponent(scanId)}/findings/${encodeURIComponent(findingId)}/preview`, opts),
+  report: (id: string, opts?: ReadOptions) => request<Report>(`/scans/${encodeURIComponent(id)}/report`, opts),
+  fixedFindings: (scanId: string, opts?: ReadOptions) => request<FixedFindingsResponse>(`/scans/${encodeURIComponent(scanId)}/fixed`, opts),
   /** Diff one scan against another; pass (newer, older) so "new"/"fixed" read correctly. `available:false` means no diff could be computed. */
   compareScans: (id: string, withId: string) => request<CompareResult>(`/scans/${encodeURIComponent(id)}/compare?with=${encodeURIComponent(withId)}`),
   tools: async () => list<Tool>(await request<Tool[] | { tools?: Tool[] }>('/tools')),
   /** Backend capability inventory: every analyzer with category, profiles, network use, and readiness. */
   analyzers: async () => list<AnalyzerStatus>(await request<AnalyzerStatus[] | { items?: AnalyzerStatus[] }>('/analyzers')),
-  toolAction: (id: string, action: 'install' | 'repair' | 'update') => request<Tool>(`/tools/${encodeURIComponent(id)}/${action}`, { method: 'POST' }),
+  toolAction: (id: string, action: 'install' | 'repair' | 'update') => request<Tool>(`/tools/${encodeURIComponent(id)}/${encodeURIComponent(action)}`, { method: 'POST' }),
   uninstallTool: (id: string) => request<Tool>(`/tools/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   cleanSystem: (options?: { logs?: boolean; cache?: boolean; vacuum?: boolean; all?: boolean }) =>
     request<{ reclaimed_bytes: number; logs_removed: number; cache_cleared: boolean; db_vacuumed: boolean; details?: string[]; errors?: string[] }>(
