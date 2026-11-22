@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 
@@ -96,4 +98,27 @@ func released() <-chan struct{} {
 	ch := make(chan struct{})
 	close(ch)
 	return ch
+}
+
+// TestPentestTargetRunsWithoutSourceFiles: a DAST target is scan signal on
+// its own, so an empty workspace still gets probed instead of failing.
+func TestPentestTargetRunsWithoutSourceFiles(t *testing.T) {
+	var hits int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer server.Close()
+	db, service, work := newSupervisionService(t, dastprobe.New())
+	if err := os.Remove(filepath.Join(work.RootPath, "main.py")); err != nil {
+		t.Fatal(err)
+	}
+	scan, err := service.DiscoverAndStartWithOptions(context.Background(), work, analyzers.ProfilePentest, nil, ScanOptions{TargetURL: server.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	final := waitForTerminalState(t, db, scan.ID)
+	if final.State == "failed" || hits == 0 {
+		t.Errorf("empty workspace with a target: state=%s hits=%d; want the probe to run", final.State, hits)
+	}
 }

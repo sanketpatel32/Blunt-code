@@ -243,8 +243,9 @@ func (s *Service) run(ctx context.Context, scan core.Scan, work core.Workspace, 
 	// discovery tracked dependency manifests: osv, trivy, and the license
 	// scanner all analyze inputs the per-file selection does not carry
 	// (lockfiles are smart-skipped as artifacts). Only a workspace with
-	// neither source files nor dependency inputs is truly unscannable.
-	if len(absoluteFiles) == 0 && len(scanDependencyInputs(scan)) == 0 {
+	// neither source files nor dependency inputs is truly unscannable -
+	// unless the scan names a DAST target, which needs no files at all.
+	if len(absoluteFiles) == 0 && len(scanDependencyInputs(scan)) == 0 && scanTargetURL(scan) == "" {
 		_ = s.db.UpdateScanState(context.Background(), scan.ID, "failed", "No supported source files were selected.")
 		s.emit(scan.ID, "scan.completed", map[string]any{"state": "failed"})
 		return
